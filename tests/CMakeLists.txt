@@ -33,10 +33,11 @@ esia_target_defaults(esia_testkit)
 esia_add_test(esia_testkit_tests support/test_image.cpp)
 target_link_libraries(esia_testkit_tests PRIVATE esia_testkit)
 
-# the FreeType + HarfBuzz text system with the fonts in tests/fonts (DroidSans, Karla); its golden
-# images (tests/text/golden) are CPU composites of the glyph quads, so they need no GPU
+# the FreeType + HarfBuzz text system with the fonts in tests/fonts (DroidSans, Karla, a Noto Sans SC subset) and the
+# platform's fallback chain; its golden images (tests/text/golden) are CPU composites of the glyph quads, so they need
+# no GPU
 if(TARGET esia_text_ft)
-    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp)
+    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp)
     target_link_libraries(esia_text_ft_tests PRIVATE esia_text_ft esia_testkit)
     target_compile_definitions(esia_text_ft_tests PRIVATE
         ESIA_TEST_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts"
