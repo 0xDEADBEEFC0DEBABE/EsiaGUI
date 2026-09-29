@@ -26,9 +26,8 @@ namespace esia::text
 {
     struct FreeTypeDesc
     {
-        bool lcdBgr = false;   // Antialiasing::Subpixel for panels whose stripes are ordered B-G-R
         int atlasPageSize = 2048;
-        int atlasMaxPages = 4;   // per kind (grayscale / sub-pixel) before the glyph atlas starts over
+        int atlasMaxPages = 4;   // before the glyph atlas starts over
     };
 
     // The text system keeps its glyph pages in `textures`, which must outlive it. Null if FreeType cannot start.

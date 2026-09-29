@@ -81,8 +81,6 @@ namespace esia::shaders
         {
         case rhi::ShaderProgram::UiGeometry: return {"esia_ui.hlsl", "UiVS", "UiPS"};
         case rhi::ShaderProgram::TextGray: return {"esia_ui.hlsl", "UiVS", "TextGrayPS"};
-        case rhi::ShaderProgram::TextLcd: return {"esia_ui.hlsl", "UiVS", "TextLcdPS"};
-        case rhi::ShaderProgram::TextLcdGray: return {"esia_ui.hlsl", "UiVS", "TextLcdGrayPS"};
         case rhi::ShaderProgram::Fx: return {"esia_fx.hlsl", "FxVS", "FxPS"};
         case rhi::ShaderProgram::Downsample: return {"esia_post.hlsl", "FullscreenVS", "DownsamplePS"};
         case rhi::ShaderProgram::LayerComposite: return {"esia_post.hlsl", "FullscreenVS", "LayerCompositePS"};

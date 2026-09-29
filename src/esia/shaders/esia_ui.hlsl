@@ -1,4 +1,4 @@
-// Esia - indexed UI geometry (images, lines, charts) and text. Programs UiGeometry, TextGray, TextLcd, TextLcdGray.
+// Esia - indexed UI geometry (images, lines, charts) and grayscale text. Programs UiGeometry, TextGray.
 #include "esia_common.hlsli"
 
 // esia::Vertex: attribute locations 0, 1, 2 (GL / Vulkan / Metal vertex descriptors)
@@ -79,38 +79,4 @@ float4 TextGrayPS(UiPSIn i) : SV_Target
 {
     const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).r;
     return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
-}
-
-// Sub-pixel coverage drawn into an alpha layer (glow layers): per-channel alpha cannot be stored there,
-// the grayscale coverage kept in A is used instead.
-float4 TextLcdGrayPS(UiPSIn i) : SV_Target
-{
-    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).a;
-    return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
-}
-
-// Sub-pixel (ClearType-style) text: one coverage per R/G/B stripe, composed per channel with dual-source
-// blending: target = ink * alpha + target * (1 - alpha), alpha being an RGB triple.
-// For SPIR-V (and GLSL / MSL made from it) tools/shaders/build_shaders.py rewrites SV_Target1 to location 0,
-// index 1: dual-source blending reads both outputs from attachment 0, and glslang has no [[vk::index]].
-struct TextLcdOut
-{
-    float4 color : SV_Target0;
-    float4 alpha : SV_Target1;
-};
-
-TextLcdOut TextLcdPS(UiPSIn i)
-{
-    float3 cov = ESIA_SAMPLE(gTex, gLinear, i.uv).rgb;
-    cov = lerp(dot(cov, 1.0 / 3.0).xxx, cov, gText.w);   // ClearType level (0 = grayscale)
-    const float k = WgtLightOnDarkContrast(gText.z, i.col.rgb);
-    float3 a;
-    a.r = WgtTextAlpha(WgtEnhanceContrast(cov.r, k), i.col.r, gText.x);
-    a.g = WgtTextAlpha(WgtEnhanceContrast(cov.g, k), i.col.g, gText.x);
-    a.b = WgtTextAlpha(WgtEnhanceContrast(cov.b, k), i.col.b, gText.x);
-    a *= i.col.a * WgtEdgeFade(WgtPixelPos(i.pos).y);
-    TextLcdOut o;
-    o.color = WgtOutputStraight(float4(i.col.rgb, 1.0));
-    o.alpha = float4(a, max(a.r, max(a.g, a.b)));
-    return o;
 }

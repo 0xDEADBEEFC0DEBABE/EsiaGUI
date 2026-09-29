@@ -1,5 +1,5 @@
 // The analytic rasterizer: exact area coverage (edges, sub-pixel offsets, area of arbitrary outlines), non-zero
-// winding, curve flattening within its tolerance, the sub-pixel (LCD) filter and the stripe order.
+// winding and curve flattening within its tolerance.
 #include "esia/text/glyph_raster.hpp"
 #include "esia_test.hpp"
 #include <algorithm>
@@ -38,13 +38,12 @@ namespace
     }
 
     // coverage (0..255) at absolute pixel (x, y); 0 outside the bitmap
-    int At(const GlyphBitmap& b, int x, int y, int channel = 0)
+    int At(const GlyphBitmap& b, int x, int y)
     {
         const int bx = x - b.left, by = y - b.top;
         if (bx < 0 || by < 0 || bx >= b.width || by >= b.height)
             return 0;
-        const int bpp = b.lcd ? 4 : 1;
-        return b.pixels[((std::size_t)by * b.width + bx) * bpp + channel];
+        return b.pixels[(std::size_t)by * b.width + bx];
     }
 
     double CoverageSum(const GlyphBitmap& b)
@@ -92,7 +91,7 @@ ESIA_TEST(Raster, PixelAlignedSquareIsExactWithEmptyBorders)
     AddRect(o, 2, 3, 7, 9);
     GlyphBitmap b;
     ESIA_CHECK(RasterizeGray(o, 0.0f, b));
-    ESIA_CHECK(!b.lcd && b.left == 1 && b.top == 2 && b.width == 8 && b.height == 8);
+    ESIA_CHECK(b.left == 1 && b.top == 2 && b.width == 8 && b.height == 8);
     ESIA_CHECK(b.pixels.size() == 64);
     for (int y = b.top; y < b.top + b.height; ++y)
         for (int x = b.left; x < b.left + b.width; ++x)
@@ -182,34 +181,6 @@ ESIA_TEST(Raster, NonZeroWinding)
     ESIA_CHECK_NEAR(CoverageSum(b), 100.0, 1e-9);
 }
 
-ESIA_TEST(Raster, SubpixelCoverageFringesAndStripeOrder)
-{
-    Outline sq;
-    AddRect(sq, 2, 3, 7, 9);
-    GlyphBitmap rgb, bgr;
-    ESIA_CHECK(RasterizeLcd(sq, 0.0f, false, rgb));
-    ESIA_CHECK(RasterizeLcd(sq, 0.0f, true, bgr));
-    ESIA_CHECK(rgb.lcd && rgb.pixels.size() == (std::size_t)rgb.width * rgb.height * 4);
-    ESIA_CHECK(rgb.left == 0 && rgb.width == 10);   // two empty columns left, three right (the filter's reach)
-    // the interior is fully covered in every stripe
-    for (int c = 0; c < 4; ++c)
-        ESIA_CHECK(At(rgb, 4, 5, c) == 255);
-    // left edge: the red stripe sees the least of the shape (FreeType's default filter weights), the blue the most
-    ESIA_CHECK(At(rgb, 2, 5, 0) == 170 && At(rgb, 2, 5, 1) == 247 && At(rgb, 2, 5, 2) == 255);
-    // the right edge mirrors it; the filter leaks a little into the pixels outside
-    ESIA_CHECK(At(rgb, 6, 5, 0) == 255 && At(rgb, 6, 5, 2) == 170);
-    ESIA_CHECK(At(rgb, 7, 5, 0) > 0 && At(rgb, 8, 5, 0) == 0);
-    // alpha is the grayscale coverage: the stripes' mean
-    for (int x = rgb.left; x < rgb.left + rgb.width; ++x)
-    {
-        const int mean = (At(rgb, x, 5, 0) + At(rgb, x, 5, 1) + At(rgb, x, 5, 2));
-        ESIA_CHECK(std::abs(At(rgb, x, 5, 3) * 3 - mean) <= 3);
-    }
-    // B-G-R panels get the stripes swapped
-    for (int x = rgb.left; x < rgb.left + rgb.width; ++x)
-        ESIA_CHECK(At(bgr, x, 5, 0) == At(rgb, x, 5, 2) && At(bgr, x, 5, 2) == At(rgb, x, 5, 0) && At(bgr, x, 5, 3) == At(rgb, x, 5, 3));
-}
-
 ESIA_TEST(Raster, EmptyAndOversizedOutlines)
 {
     Outline empty;
@@ -217,13 +188,11 @@ ESIA_TEST(Raster, EmptyAndOversizedOutlines)
     b.width = 3;
     ESIA_CHECK(RasterizeGray(empty, 0.0f, b));   // a space: valid, nothing to draw
     ESIA_CHECK(b.width == 0 && b.height == 0 && b.pixels.empty());
-    ESIA_CHECK(RasterizeLcd(empty, 0.0f, false, b) && b.width == 0);
     ESIA_CHECK(empty.Bounds().Empty());
 
     Outline huge;
     AddRect(huge, 0, 0, 5000, 20);
     ESIA_CHECK(!RasterizeGray(huge, 0.0f, b));
-    ESIA_CHECK(!RasterizeLcd(huge, 0.0f, false, b));
 
     // a contour that skips MoveTo starts at its first point
     Outline implicit;

@@ -56,8 +56,7 @@ namespace esia::render
         TextureId texture = 0;
         // Draw
         std::uint32_t idxCount = 0, idxOffset = 0;   // into FramePlan::indices
-        bool coverage = false;       // glyph coverage texture: a text pipeline
-        bool lcd = false;            // ... sub-pixel coverage: dual-source text pipeline
+        bool coverage = false;       // glyph coverage texture: the text pipeline
         // FxBatch
         std::uint32_t instStart = 0, instCount = 0;   // into FramePlan::instances
         std::uint32_t features = 0;  // union of the instances' fx::Feature bits (shader variants, Caps::fxFeatureVariants)

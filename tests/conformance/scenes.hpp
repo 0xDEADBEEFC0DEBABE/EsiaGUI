@@ -36,7 +36,6 @@ namespace esia::conformance
         float scale = 1.0f;                    // render-target pixels per UI unit
         rhi::Format format = rhi::Format::RGBA8_UNORM;
         int samples = 1;
-        bool needsDualSource = false;          // sub-pixel text: skipped where Caps::dualSourceBlend is false
         bool sampleable = true;                // HeadlessDesc::sampleable; false: every backdrop capture copies
         int fxInstancesPerRow = 0;             // RenderParams::maxFxInstancesPerRow (FxStorage::Texture on several rows)
         int callbacks = 0;                     // host callbacks the frame must run (SceneFrame::callbacks)
