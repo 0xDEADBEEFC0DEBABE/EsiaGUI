@@ -524,6 +524,15 @@ namespace esia::rhi::vulkan
         wrappedThisFrame_.push_back(id);
     }
 
+    // A sampleable wrapped image may be read before any Esia pass renders it (glass over what the host drew first:
+    // the direct read samples the target), and textures are bound inside passes where no barrier can go. So the
+    // frame's wrapped images enter SHADER_READ_ONLY at BeginFrame, like the backend's own resting textures.
+    void VulkanDevice::PrepareWrapped(std::uint32_t id, Tex& t)
+    {
+        Touch(id, t);
+        Rest(cmd_, t);
+    }
+
     // ------------------------------------------------------------------ uploads
     void VulkanDevice::BeginUploads(VkCommandBuffer cmd)
     {
@@ -757,10 +766,11 @@ namespace esia::rhi::vulkan
         {
             Tex& t = textures_[found->second];
             if (t.attachView == view && t.format == format && t.desc.width == width && t.desc.height == height && t.desc.samples == samples &&
-                t.desc.usage == (usage & ~(samples > 1 ? (std::uint32_t)TextureUsage_Sampled : 0u)))
+                t.desc.usage == ((usage | TextureUsage_RenderTarget) & ~(samples > 1 ? (std::uint32_t)TextureUsage_Sampled : 0u)))
             {
                 t.entry = entry;
                 t.exit = exit;
+                MarkWrapped(found->second, t);
                 return Texture{found->second};
             }
             DestroyTexture(Texture{found->second});   // recreated (a resized swap chain reuses handles)
@@ -791,9 +801,17 @@ namespace esia::rhi::vulkan
                 t.desc.usage &= ~(std::uint32_t)TextureUsage_Sampled;
         }
         const Texture handle{nextId_++};
-        textures_[handle.id] = t;
         wrapped_[image] = handle.id;
+        MarkWrapped(handle.id, textures_[handle.id] = t);
         return handle;
+    }
+
+    // Wrapped for the current frame, or for the next one when called between frames (vulkan.hpp: once per frame).
+    void VulkanDevice::MarkWrapped(std::uint32_t id, Tex& t)
+    {
+        t.wrapFrame = inFrame_ ? frame_ : frame_ + 1;
+        if (inFrame_ && !inPass_ && (t.desc.usage & TextureUsage_Sampled))
+            PrepareWrapped(id, t);
     }
 
     void VulkanDevice::UpdateTexture(Texture tex, const IRect& r, const void* data, int rowPitch)
@@ -1188,6 +1206,12 @@ namespace esia::rhi::vulkan
             vk_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s.queries, s.queriesUsed++);
         }
         RecordPending(cmd_, s.staging);
+        for (const auto& [image, id] : wrapped_)
+        {
+            Tex& t = textures_[id];
+            if (t.wrapFrame == frame_ && (t.desc.usage & TextureUsage_Sampled))
+                PrepareWrapped(id, t);
+        }
         return true;
     }
 

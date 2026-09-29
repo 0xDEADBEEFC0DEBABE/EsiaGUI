@@ -111,6 +111,7 @@ namespace esia::rhi::vulkan
             bool wrapped = false;
             VkImageLayout entry = VK_IMAGE_LAYOUT_UNDEFINED, exit = VK_IMAGE_LAYOUT_UNDEFINED;
             std::uint64_t frameSeen = 0;      // wrapped: the frame whose entry layout `layout` started from
+            std::uint64_t wrapFrame = 0;      // wrapped: the frame WrapImage was last called for
         };
         struct Buf
         {
@@ -232,6 +233,8 @@ namespace esia::rhi::vulkan
         void Transition(VkCommandBuffer cmd, Tex& t, VkImageLayout layout, bool discard = false);
         void Rest(VkCommandBuffer cmd, Tex& t);
         void Touch(std::uint32_t id, Tex& t);
+        void PrepareWrapped(std::uint32_t id, Tex& t);
+        void MarkWrapped(std::uint32_t id, Tex& t);
 
         bool Recording() const { return inFrame_ && !passStarted_; }
         void BeginUploads(VkCommandBuffer cmd);

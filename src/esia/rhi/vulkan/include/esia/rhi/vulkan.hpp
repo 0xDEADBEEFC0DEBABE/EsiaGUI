@@ -23,8 +23,10 @@
 // from it - without it, glass needs Sampled); Sampled when it was created with SAMPLED (and, for an *_SRGB format,
 // with VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT: the backend samples the raw bits through a UNORM view of its own). A
 // wrapped image is in `layoutOnEntry` when a frame first uses it and is left in `layoutOnExit` at EndFrame (UNDEFINED
-// on entry discards the contents). Wrapping is cached by VkImage: call it every frame for the swap-chain image of
-// that frame. DestroyTexture releases the wrapper only, never the host's image or view.
+// on entry discards the contents). Wrapping is cached by VkImage: call it every frame, before Renderer::Render, for
+// the image of that frame (the swap-chain image) - a sampleable image wrapped for the frame is moved to
+// SHADER_READ_ONLY_OPTIMAL when the frame begins, because glass may read what the host drew before Esia's first
+// pass. DestroyTexture releases the wrapper only, never the host's image or view.
 //
 // Frames
 //
