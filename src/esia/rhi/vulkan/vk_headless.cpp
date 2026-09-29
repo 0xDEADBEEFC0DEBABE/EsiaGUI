@@ -26,9 +26,17 @@ namespace esia::rhi::vulkan
             return v && std::strcmp(v, value) == 0;
         }
 
-        VKAPI_ATTR VkBool32 VKAPI_CALL OnValidationMessage(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT,
+        VKAPI_ATTR VkBool32 VKAPI_CALL OnValidationMessage(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT types,
                                                            const VkDebugUtilsMessengerCallbackDataEXT* data, void* user)
         {
+            // The loader reports through the same messenger with GENERAL messages: the layer manifests of other
+            // software on the machine (overlays of recorders and launchers: missing or duplicate JSON files), not this
+            // device's use of the API. Shown, not counted.
+            if (!(types & (VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)))
+            {
+                std::fprintf(stderr, "esia vulkan [loader] %s\n", data && data->pMessage ? data->pMessage : "");
+                return VK_FALSE;
+            }
             auto* log = static_cast<ValidationLog*>(user);
             ++log->messages;
             std::fprintf(stderr, "esia vulkan [%s] %s\n", severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT ? "validation error" : "validation warning",

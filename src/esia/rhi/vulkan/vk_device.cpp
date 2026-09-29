@@ -1143,29 +1143,41 @@ namespace esia::rhi::vulkan
     {
         if (inFrame_)
             return false;
-        Slot& s = slots_[(std::size_t)((frame_ + 1) % slots_.size())];
-        // the frame that used this slot before is done: the fence says so, or the host promised it (vulkan.hpp)
-        if (s.submitted)
+        // the host's device frames of one host frame (FrameDesc::hostFrame, host command buffers only) record into the
+        // same slot: it is recycled framesInFlight host frames later, however many targets the host renders per frame
+        const bool sharedSlot = desc.nativeContext && desc.hostFrame != 0 && desc.hostFrame == hostFrame_ && slot_;
+        hostFrame_ = desc.nativeContext ? desc.hostFrame : 0;
+        if (!sharedSlot)
+            slotCursor_ = (slotCursor_ + 1) % slots_.size();   // advances per slot taken, not per device frame
+        Slot& s = slots_[slotCursor_];
+        if (!sharedSlot)
         {
-            vk_.vkWaitForFences(desc_.device, 1, &s.fence, VK_TRUE, UINT64_MAX);
-            vk_.vkResetFences(desc_.device, 1, &s.fence);
-            s.submitted = false;
+            // the frame that used this slot before is done: the fence says so, or the host promised it (vulkan.hpp)
+            if (s.submitted)
+            {
+                vk_.vkWaitForFences(desc_.device, 1, &s.fence, VK_TRUE, UINT64_MAX);
+                vk_.vkResetFences(desc_.device, 1, &s.fence);
+                s.submitted = false;
+            }
+            completedFrame_ = std::max(completedFrame_, s.frame);
+            ReadTimestamps(s);
+            CollectGarbage();
         }
-        completedFrame_ = std::max(completedFrame_, s.frame);
-        ReadTimestamps(s);
-        CollectGarbage();
 
         ++frame_;
         slot_ = &s;
         s.frame = frame_;
-        ResetRing(s.staging);
-        ResetRing(s.uniforms);
-        if (s.uniforms.chunks.empty() && !AllocChunk(s.uniforms, kUniformChunk))
-            return false;
-        for (VkDescriptorPool p : s.descriptorPools)
-            vk_.vkResetDescriptorPool(desc_.device, p, 0);
-        s.descriptorPool = 0;
-        s.setsLeft = s.descriptorPools.empty() ? 0 : kSetsPerPool;
+        if (!sharedSlot)
+        {
+            ResetRing(s.staging);
+            ResetRing(s.uniforms);
+            if (s.uniforms.chunks.empty() && !AllocChunk(s.uniforms, kUniformChunk))
+                return false;
+            for (VkDescriptorPool p : s.descriptorPools)
+                vk_.vkResetDescriptorPool(desc_.device, p, 0);
+            s.descriptorPool = 0;
+            s.setsLeft = s.descriptorPools.empty() ? 0 : kSetsPerPool;
+        }
 
         cmd_ = static_cast<VkCommandBuffer>(desc.nativeContext);
         ownsCommands_ = cmd_ == VK_NULL_HANDLE;
@@ -1195,11 +1207,12 @@ namespace esia::rhi::vulkan
         inFrame_ = true;
         inPass_ = passStarted_ = false;
         wrappedThisFrame_.clear();
-        s.scopes.clear();
-        s.queriesUsed = 0;
         openScope_ = -1;
-        if (caps_.timestampQueries)
+        // a shared slot keeps timing: its profile covers the whole host frame (first to last timestamp)
+        if (caps_.timestampQueries && !sharedSlot)
         {
+            s.scopes.clear();
+            s.queriesUsed = 0;
             vk_.vkCmdResetQueryPool(cmd_, s.queries, 0, kMaxQueries);
             vk_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s.queries, s.queriesUsed++);
         }
@@ -1232,7 +1245,7 @@ namespace esia::rhi::vulkan
         }
         Submit(b, cmd_);
         Slot& s = *slot_;
-        if (caps_.timestampQueries)
+        if (caps_.timestampQueries && s.queriesUsed < kMaxQueries)   // a shared slot (hostFrame) fills up over its frames
         {
             vk_.vkCmdWriteTimestamp(cmd_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s.queries, s.queriesUsed++);
             s.timestampsPending = true;

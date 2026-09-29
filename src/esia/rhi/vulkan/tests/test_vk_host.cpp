@@ -292,6 +292,34 @@ namespace
         desc.debugUtils = host.messenger != VK_NULL_HANDLE;
         return vulkan::CreateDevice(desc, &error);
     }
+
+    // The scene rendered by a headless device; empty when this machine has no Vulkan device.
+    std::vector<std::uint8_t> HeadlessRendering(const conformance::Scene& scene)
+    {
+        std::vector<std::uint8_t> pixels;
+        std::string error;
+        HeadlessDevice h = vulkan::CreateHeadless(conformance::HeadlessDescOf(scene), vulkan::HeadlessOptions{}, error);
+        if (!h.device)
+        {
+            std::printf("  (no Vulkan device: %s)\n", error.c_str());
+            return pixels;
+        }
+        render::Renderer renderer(*h.device);
+        conformance::SceneFrame frame;
+        conformance::BuildScene(scene, frame);
+        ESIA_CHECK(renderer.Render(frame.data, &frame.textures, h.target, conformance::RenderParamsOf(scene)));
+        ESIA_CHECK(h.device->ReadPixels(h.target, IRect{0, 0, scene.width, scene.height}, pixels));
+        return pixels;
+    }
+
+    // `pixels` within the scene's conformance tolerance of `reference`
+    bool Matches(const conformance::Scene& scene, const std::vector<std::uint8_t>& pixels, const std::vector<std::uint8_t>& reference)
+    {
+        testkit::Image a(scene.width, scene.height), b(scene.width, scene.height);
+        a.rgba = pixels;
+        b.rgba = reference;
+        return testkit::Compare(a, b, scene.tolerance).pass;
+    }
 }
 
 ESIA_TEST(VulkanHost, HostDeviceImageAndCommandBuffers)
@@ -300,25 +328,9 @@ ESIA_TEST(VulkanHost, HostDeviceImageAndCommandBuffers)
     const int W = scene->width, H = scene->height;
 
     // the reference: the headless device (dynamic rendering where available) renders the same scene
-    std::vector<std::uint8_t> reference;
-    {
-        HeadlessDesc hd;
-        hd.width = W;
-        hd.height = H;
-        hd.format = scene->format;
-        std::string error;
-        HeadlessDevice h = vulkan::CreateHeadless(hd, vulkan::HeadlessOptions{}, error);
-        if (!h.device)
-        {
-            std::printf("  (no Vulkan device: %s)\n", error.c_str());
-            return;
-        }
-        render::Renderer renderer(*h.device);
-        conformance::SceneFrame frame;
-        conformance::BuildScene(*scene, frame);
-        ESIA_CHECK(renderer.Render(frame.data, &frame.textures, h.target));
-        ESIA_CHECK(h.device->ReadPixels(h.target, IRect{0, 0, W, H}, reference));
-    }
+    const std::vector<std::uint8_t> reference = HeadlessRendering(*scene);
+    if (reference.empty())
+        return;
 
     Host host;
     std::string error;
@@ -357,10 +369,60 @@ ESIA_TEST(VulkanHost, HostDeviceImageAndCommandBuffers)
                 ESIA_CHECK(target.End());
             }
             ESIA_CHECK(check.calls == 4 && check.matches == 4);
-            ESIA_CHECK(target.Pixels() == reference);
+            // the conformance tolerance, not identical bits: the application's device (Vulkan 1.1, render passes, other
+            // features) and the headless one round sRGB blends and the frost differently on real GPUs (NVIDIA: up to 4
+            // levels on 3 % of the channels, scattered; lavapipe: identical)
+            ESIA_CHECK(Matches(*scene, target.Pixels(), reference));
             GpuProfile profile;
             ESIA_CHECK(!dev->GetCaps().timestampQueries || renderer.Stats().gpu.valid || dev->ReadProfile(profile));
             dev->DestroyTexture(first);   // the wrapper only: the host's image and view stay
+        }
+    }
+    ESIA_CHECK(gHostMessages.load() == 0);
+    host.Destroy();
+}
+
+// A host that renders two targets per frame (FrameDesc::hostFrame) for more frames than it has in flight: the device
+// frames of one host frame share a slot, so the host's own fences (it waits for both targets' frame N - 2 before
+// recording frame N) are all the backend needs. Both images match the headless rendering.
+ESIA_TEST(VulkanHost, TwoTargetsPerHostFrame)
+{
+    const conformance::Scene* scene = conformance::FindScene("srgb_target");   // HostTarget's image is sRGB
+    const std::vector<std::uint8_t> reference = HeadlessRendering(*scene);
+    if (reference.empty())
+        return;
+    Host host;
+    std::string error;
+    const bool created = host.Create(error);
+    ESIA_CHECK(created);
+    if (created)
+    {
+        HostTarget a(host, scene->width, scene->height), b(host, scene->width, scene->height);
+        std::unique_ptr<Device> dev = CreateBackend(host, error);
+        ESIA_CHECK(dev != nullptr);
+        if (dev)
+        {
+            render::Renderer ra(*dev), rb(*dev);   // a renderer per target: each keeps its target's surfaces
+            for (std::uint64_t f = 1; f <= 5; ++f)
+            {
+                VkCommandBuffer cmds[2] = {a.Begin(), b.Begin()};
+                HostTarget* targets[2] = {&a, &b};
+                render::Renderer* renderers[2] = {&ra, &rb};
+                for (int i = 0; i < 2; ++i)
+                {
+                    conformance::SceneFrame frame;
+                    conformance::BuildScene(*scene, frame);
+                    render::RenderParams params = conformance::RenderParamsOf(*scene);
+                    params.frame.nativeContext = cmds[i];
+                    params.frame.hostFrame = f;
+                    ESIA_CHECK(renderers[i]->Render(frame.data, &frame.textures, targets[i]->Wrap(*dev, VK_IMAGE_LAYOUT_UNDEFINED), params));
+                }
+                ESIA_CHECK(a.End() && b.End());
+            }
+            ESIA_CHECK(Matches(*scene, a.Pixels(), reference));
+            ESIA_CHECK(Matches(*scene, b.Pixels(), reference));
+            dev->DestroyTexture(a.Wrap(*dev, VK_IMAGE_LAYOUT_UNDEFINED));
+            dev->DestroyTexture(b.Wrap(*dev, VK_IMAGE_LAYOUT_UNDEFINED));
         }
     }
     ESIA_CHECK(gHostMessages.load() == 0);

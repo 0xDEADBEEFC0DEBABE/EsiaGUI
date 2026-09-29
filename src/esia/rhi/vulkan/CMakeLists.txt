@@ -18,25 +18,30 @@ esia_target_defaults(esia_rhi_vulkan)
 esia_register_backend(vulkan esia_rhi_vulkan)
 
 if(BUILD_TESTING)
-    # unit tests; the conformance scenes are compiled in too, to check them on both render paths and to count the
+    # unit tests; they render the conformance scenes too, to check them on both render paths and to count the
     # validation messages of a whole device lifetime (the suite's own CTest cannot see those)
     esia_add_test(esia_rhi_vulkan_tests
         tests/test_vk_formats.cpp
         tests/test_vk_device.cpp
         tests/test_vk_scenes.cpp
-        tests/test_vk_host.cpp
-        ${ESIA_ROOT}/tests/conformance/scenes.cpp)
-    target_include_directories(esia_rhi_vulkan_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/conformance)
-    target_link_libraries(esia_rhi_vulkan_tests PRIVATE esia_rhi_vulkan esia_render esia_testkit)
+        tests/test_vk_host.cpp)
+    target_include_directories(esia_rhi_vulkan_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(esia_rhi_vulkan_tests PRIVATE esia_rhi_vulkan esia_conformance_scenes)
     target_compile_definitions(esia_rhi_vulkan_tests PRIVATE ESIA_VULKAN_TEST_OUT="${CMAKE_BINARY_DIR}/vulkan")
     # a validation message printed during device destruction has no scene left to fail: the output fails the test
     set_tests_properties(esia_rhi_vulkan_tests PROPERTIES FAIL_REGULAR_EXPRESSION "esia vulkan \\[validation")
 
     # the conformance suite again with render passes instead of dynamic rendering (the path of Vulkan 1.1 / 1.2
-    # devices without VK_KHR_dynamic_rendering)
-    add_test(NAME esia_conformance_vulkan_renderpass
-             COMMAND $<TARGET_FILE:esia_conformance> --backend vulkan --golden ${ESIA_ROOT}/tests/conformance/golden
-                     --out ${CMAKE_BINARY_DIR}/conformance-renderpass)
-    set_tests_properties(esia_conformance_vulkan_renderpass PROPERTIES ENVIRONMENT "ESIA_VULKAN_RENDER_PASS=1"
-                         FAIL_REGULAR_EXPRESSION "esia vulkan \\[validation")
+    # devices without VK_KHR_dynamic_rendering); --strict, exit code 77 and a --frames 3 twin as the core's tests
+    foreach(_frames 1 3)
+        set(_name esia_conformance_vulkan_renderpass)
+        if(_frames GREATER 1)
+            set(_name esia_conformance_vulkan_renderpass_frames)
+        endif()
+        add_test(NAME ${_name}
+                 COMMAND $<TARGET_FILE:esia_conformance> --backend vulkan --golden ${ESIA_ROOT}/tests/conformance/golden
+                         --out ${CMAKE_BINARY_DIR}/conformance-renderpass --frames ${_frames} --strict)
+        set_tests_properties(${_name} PROPERTIES ENVIRONMENT "ESIA_VULKAN_RENDER_PASS=1" SKIP_RETURN_CODE 77
+                             FAIL_REGULAR_EXPRESSION "esia vulkan \\[validation")
+    endforeach()
 endif()

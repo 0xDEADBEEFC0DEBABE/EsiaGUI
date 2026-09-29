@@ -28,11 +28,7 @@ namespace
     Rendered Render(const conformance::Scene& scene, bool dynamicRendering, int frames, std::uint32_t maxApiVersion = VK_API_VERSION_1_3)
     {
         Rendered r;
-        HeadlessDesc hd;
-        hd.width = scene.width;
-        hd.height = scene.height;
-        hd.format = scene.format;
-        hd.samples = scene.samples;
+        const HeadlessDesc hd = conformance::HeadlessDescOf(scene);
         vulkan::HeadlessOptions o;
         o.dynamicRendering = dynamicRendering;
         o.maxApiVersion = maxApiVersion;
@@ -52,7 +48,7 @@ namespace
             {
                 conformance::SceneFrame frame;   // a new frame each time: textures are created, used and released
                 conformance::BuildScene(scene, frame);
-                r.ok = renderer.Render(frame.data, &frame.textures, h.target);
+                r.ok = renderer.Render(frame.data, &frame.textures, h.target, conformance::RenderParamsOf(scene));
             }
             r.ok = r.ok && h.device->ReadPixels(h.target, IRect{0, 0, scene.width, scene.height}, r.pixels);
             r.stats = renderer.Stats();

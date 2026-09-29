@@ -86,6 +86,7 @@ namespace esia::rhi::vulkan
         void EndProfile() override;
         bool ReadProfile(GpuProfile& out) override;
         bool ReadPixels(Texture tex, const IRect& rect, std::vector<std::uint8_t>& rgba8) override;
+        std::uint32_t ValidationErrors() const override { return ValidationMessageCount(); }   // headless devices' messenger
 
         Texture Wrap(VkImage image, VkImageView view, VkFormat format, int width, int height, int samples, VkImageLayout entry,
                      VkImageLayout exit, std::uint32_t usage);
@@ -288,6 +289,8 @@ namespace esia::rhi::vulkan
         std::vector<Slot> slots_;
         Slot* slot_ = nullptr;
         std::uint64_t frame_ = 0, completedFrame_ = 0;
+        std::size_t slotCursor_ = 0;          // the slot of the current (host) frame
+        std::uint64_t hostFrame_ = 0;         // FrameDesc::hostFrame of the last frame (0: none, or the backend's own commands)
         bool inFrame_ = false, inPass_ = false, passStarted_ = false, ownsCommands_ = false;
         VkCommandBuffer cmd_ = VK_NULL_HANDLE;
         std::vector<std::uint32_t> wrappedThisFrame_;

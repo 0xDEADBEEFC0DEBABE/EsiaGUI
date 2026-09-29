@@ -34,7 +34,9 @@
 //   the whole frame into it (uploads, passes, copies, timestamps); the host submits it. Its ring buffers, descriptor
 //   pools and deferred releases are indexed by device frame modulo Desc::framesInFlight, so when BeginFrame is
 //   called for frame N the host must already have waited for frame N - framesInFlight (the usual fence per frame in
-//   flight; count one device frame per Renderer::Render).
+//   flight; count one device frame per Renderer::Render). A host that renders several targets per frame passes its
+//   frame number in FrameDesc::hostFrame (RenderParams::frame): the device frames of one host frame then share a
+//   slot, and the count is in host frames.
 //   With nativeContext = null the backend records into its own command buffers and submits them to Desc::queue at
 //   EndFrame, with a fence per frame in flight (the headless / test mode).
 //

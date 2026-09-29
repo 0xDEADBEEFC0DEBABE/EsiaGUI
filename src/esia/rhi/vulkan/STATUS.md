@@ -154,14 +154,34 @@ The validation layer found two real problems during the session, both fixed and 
 resource without a barrier between them (sync validation, WRITE_AFTER_WRITE), and a wrapped image sampled in its
 host entry layout (`783938a`).
 
+### Windows, NVIDIA (the local Windows session, with `esia-core` round 2)
+
+Windows 11, NVIDIA GeForce RTX 4080 SUPER (driver 610.88), LunarG Vulkan SDK 1.4.357 (its Khronos validation layer),
+clang-cl 22.1.8, `windows-clang-cl` preset with `-DESIA_WERROR=ON -DESIA_BACKEND_VULKAN=ON`: 0 warnings;
+`ctest` 11 / 11; `esia_conformance --strict` 18 / 18 with dynamic rendering, with `--frames 3`, and with render
+passes (`ESIA_VULKAN_RENDER_PASS=1`) and `--frames 3`: max delta 20 (shadows), mean <= 0.06; 0 validation messages.
+
+What the real machine showed, fixed on this branch:
+
+* The loader reports through the debug messenger too (GENERAL messages): the layer manifests of other software
+  (here RivaTuner's missing JSON, OBS / Epic overlays registered twice) counted as validation messages, failed every
+  test and refused `ReadPixels`. They are now printed as `esia vulkan [loader]` and not counted.
+* `Vulkan.MultisampledResolve` expected 128 for a 0.5 UNORM clear; NVIDIA gives 127 (half-way, both allowed).
+* `VulkanHost.HostDeviceImageAndCommandBuffers` compared the application's device (Vulkan 1.1, render passes) with
+  the headless one bit for bit; on NVIDIA they differ by up to 4 levels on 3 % of the channels, scattered over sRGB
+  blends and frost (lavapipe: identical). It uses the scene's conformance tolerance now.
+
+`FrameDesc::hostFrame` (core round 2) is adopted: in host mode the device frames of one host frame share a slot,
+and slots rotate per host frame. `VulkanHost.TwoTargetsPerHostFrame` renders two targets per host frame for five
+frames with two in flight; its first run caught the slot rotation still counting device frames (a descriptor pool
+reset while in use, reported by the validation layer).
+
 ## 4. Not verified
 
-* **No real GPU.** Everything ran on lavapipe (a CPU implementation). Real drivers differ where lavapipe is lenient:
+* **Other GPUs.** lavapipe (Linux) and NVIDIA (Windows) only. Real drivers differ where these are lenient:
   `LOAD_OP_DONT_CARE` really discards on tilers (the renderer's contract says nothing outside the drawn region is
-  read), memory types (lavapipe's are all host-visible), timings. The validation layer is the main guard here, not
-  the pixels.
-* **Windows** (native, NVIDIA / AMD / Intel drivers): only the mingw-w64 cross build and Wine's SKIP; the
-  `windows-clang-cl`, `windows-cross` (xwin) and `vs2022` builds were not tried.
+  read), memory types. AMD, Intel, Apple (MoltenVK) and mobile GPUs were not tried.
+* **Windows builds** other than `windows-clang-cl`: `windows-cross` (xwin) and MSVC were not tried.
 * **macOS / MoltenVK, Android**: not built. The headless creator enables `VK_KHR_portability_enumeration` /
   `VK_KHR_portability_subset` when present, untested.
 * **Validation layer newer than 1.3.275** (the SDK's current layers check more; lavapipe's device is 1.4 but the

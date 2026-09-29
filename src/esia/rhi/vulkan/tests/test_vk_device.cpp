@@ -265,7 +265,8 @@ ESIA_TEST(Vulkan, MultisampledResolve)
         ESIA_CHECK(d->ReadPixels(d.h.target, IRect{0, 0, 32, 16}, a));
         ESIA_CHECK(d->ReadPixels(copy, IRect{8, 8, 40, 24}, b));
         ESIA_CHECK(!a.empty() && a == b);
-        ESIA_CHECK(a.size() >= 4 && a[0] == 255 && a[1] == Encode(0.5f, IsSrgb(f)) && a[2] == 0);
+        // 0.5 lies half-way between two UNORM levels: NVIDIA's clear gives 127, lavapipe 128 (both allowed)
+        ESIA_CHECK(a.size() >= 4 && a[0] == 255 && std::abs(a[1] - Encode(0.5f, IsSrgb(f))) <= 1 && a[2] == 0);
         ESIA_CHECK(vulkan::ValidationMessages(*d.h.device) == 0);
     }
 }
