@@ -88,11 +88,11 @@ ESIA_TEST(MetalTables, BindingsAndVertexLayout)
     ESIA_CHECK(binding::ConstantIndex(ConstantSlot::Frame) == 0 && binding::ConstantIndex(ConstantSlot::Pass) == 1 &&
                binding::ConstantIndex(ConstantSlot::Draw) == 2);
     // Metal has buffer indices 0..30; the vertex buffer must not collide with the shaders' 0, 1, 2, 10
-    ESIA_CHECK(binding::kVertexBuffer <= 30 && binding::kVertexBuffer > binding::kFxData);
+    static_assert(binding::kVertexBuffer <= 30 && binding::kVertexBuffer > binding::kFxData);
     // samplers: Metal guarantees 16 per stage
-    ESIA_CHECK(binding::kSamplerLinear < 16 && binding::kSamplerPoint < 16);
+    static_assert(binding::kSamplerLinear < 16 && binding::kSamplerPoint < 16);
 
-    ESIA_CHECK(kUiVertexStride == sizeof(Vertex));
+    static_assert(kUiVertexStride == sizeof(Vertex));
     ESIA_CHECK(kUiVertexAttributes[0].offset == offsetof(Vertex, pos) && kUiVertexAttributes[0].format == mtl::VertexFormatFloat2);
     ESIA_CHECK(kUiVertexAttributes[1].offset == offsetof(Vertex, uv) && kUiVertexAttributes[1].format == mtl::VertexFormatFloat2);
     ESIA_CHECK(kUiVertexAttributes[2].offset == offsetof(Vertex, color) && kUiVertexAttributes[2].format == mtl::VertexFormatUChar4Normalized);
