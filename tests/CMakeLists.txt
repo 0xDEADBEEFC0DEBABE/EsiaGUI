@@ -6,8 +6,14 @@ esia_add_test(esia_core_tests
     core/test_draw_list.cpp
     core/test_texture.cpp
     core/test_input.cpp
-    core/test_context.cpp)
+    core/test_context.cpp
+    core/test_utf8.cpp)
 target_link_libraries(esia_core_tests PRIVATE esia::core)
+
+esia_add_test(esia_text_tests
+    text/test_glyph_raster.cpp
+    text/test_glyph_atlas.cpp)
+target_link_libraries(esia_text_tests PRIVATE esia::text)
 
 esia_add_test(esia_render_tests
     render/test_frame_plan.cpp

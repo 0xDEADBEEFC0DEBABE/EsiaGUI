@@ -4,7 +4,7 @@
 #   esia_rhi       render hardware interface + the recording null backend
 #   esia_shaders   precompiled shader library (src/esia/shaders/generated, see tools/shaders)
 #   esia_render    Painter, frame planner and renderer on the RHI
-#   esia_text      text interface; FreeType + HarfBuzz implementation when ESIA_TEXT_FREETYPE is ON
+#   esia_text      text interface, the analytic glyph rasterizer and the glyph atlas
 #   esia_rhi_<n>   one target per backend, from src/esia/rhi/<n>/ (ESIA_BACKEND_<N>)
 cmake_minimum_required(VERSION 3.24)
 
@@ -73,6 +73,14 @@ add_library(esia_render STATIC
 target_link_libraries(esia_render PUBLIC esia_core esia_rhi)
 esia_target_defaults(esia_render)
 add_library(esia::render ALIAS esia_render)
+
+# ------------------------------------------------------------------ text
+add_library(esia_text STATIC
+    text/glyph_raster.cpp
+    text/glyph_atlas.cpp)
+target_link_libraries(esia_text PUBLIC esia_core)
+esia_target_defaults(esia_text)
+add_library(esia::text ALIAS esia_text)
 
 # ------------------------------------------------------------------ RHI + backends
 add_library(esia_rhi STATIC
