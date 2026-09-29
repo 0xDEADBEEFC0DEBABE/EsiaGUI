@@ -67,7 +67,7 @@ namespace glass
                 }
                 list_->Close();   // BeginFrame resets it
                 rtvSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-                if (!swap_.Create(a.factory.Get(), queue_.Get(), hwnd, width, height, kBuffers, error))
+                if (!swap_.Create(a.factory.Get(), queue_.Get(), hwnd, width, height, kBuffers, DXGI_FORMAT_B8G8R8A8_UNORM, error))
                     return false;
                 if (FAILED(hr = swap_.Get()->QueryInterface(IID_PPV_ARGS(&swap3_))))   // GetCurrentBackBufferIndex
                 {

@@ -27,7 +27,7 @@ namespace glass
                     error = "D3D10CreateDevice failed: " + HrText(hr) + (o.debug ? " (is the debug layer installed? Graphics Tools)" : "");
                     return false;
                 }
-                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, error))
+                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, DXGI_FORMAT_R8G8B8A8_UNORM, error))
                     return false;
                 esia::rhi::d3d10::Desc d;
                 d.device = device_.Get();

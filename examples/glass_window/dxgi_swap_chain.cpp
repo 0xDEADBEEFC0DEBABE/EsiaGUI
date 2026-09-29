@@ -41,7 +41,8 @@ namespace glass
         return true;   // no hardware adapter: the device's own default (WARP, Wine's) is tried
     }
 
-    bool FlipSwapChain::Create(IDXGIFactory2* factory, IUnknown* device, HWND hwnd, int width, int height, UINT buffers, std::string& error)
+    bool FlipSwapChain::Create(IDXGIFactory2* factory, IUnknown* device, HWND hwnd, int width, int height, UINT buffers, DXGI_FORMAT format,
+                               std::string& error)
     {
         ComPtr<IDXGIFactory5> f5;
         BOOL allowTearing = FALSE;
@@ -51,7 +52,7 @@ namespace glass
         DXGI_SWAP_CHAIN_DESC1 sd = {};
         sd.Width = (UINT)width;
         sd.Height = (UINT)height;
-        sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        sd.Format = format;
         sd.SampleDesc.Count = 1;
         sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
         sd.BufferCount = buffers;
