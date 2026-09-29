@@ -320,10 +320,7 @@ namespace esia::render
                     o.texture = cmd.texture;
                     TextureInfo ti;
                     if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
-                    {
-                        o.lcd = (ti.flags & TextureFlags_LcdCoverage) != 0;
                         o.coverage = ti.Coverage();
-                    }
                     o.idxCount = cmd.count;
                     o.idxOffset = idxBase + cmd.first;
                     o.bounds = needBounds ? VertexBounds(*dl, cmd, map).Intersect(clip) : clip;

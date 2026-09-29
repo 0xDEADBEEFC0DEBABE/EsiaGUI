@@ -25,13 +25,11 @@
 
 namespace esia::render
 {
-    // How glyph coverage becomes alpha (the DirectWrite model; see TextGrayPS / TextLcdPS in esia_ui.hlsl).
+    // How glyph coverage becomes alpha (the DirectWrite model for grayscale text; see TextGrayPS in esia_ui.hlsl).
     struct TextComposition
     {
         float gamma = 1.8f;               // display gamma of the alpha correction (1.0 .. 2.2)
-        float grayscaleContrast = 0.5f;   // enhanced contrast (stem weight) of grayscale text
-        float clearTypeContrast = 0.5f;   // ... of sub-pixel text
-        float clearTypeLevel = 1.0f;      // 0 = sub-pixel pages drawn as grayscale, 1 = full sub-pixel
+        float grayscaleContrast = 0.5f;   // enhanced contrast (stem weight)
     };
 
     struct RenderParams

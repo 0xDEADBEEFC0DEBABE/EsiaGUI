@@ -8,7 +8,7 @@ ESIA_TEST(Textures, CreateUpdateCollect)
 {
     TextureRegistry reg;
     const std::uint8_t px[4 * 4] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    const TextureId id = reg.Create({TextureFormat::Alpha8, 4, 4, 0}, px);
+    const TextureId id = reg.Create({TextureFormat::Alpha8, 4, 4}, px);
     ESIA_CHECK(id != 0);
     const std::uint8_t sub[2] = {99, 98};
     ESIA_CHECK(reg.Update(id, 1, 2, 2, 1, sub));
@@ -27,8 +27,8 @@ ESIA_TEST(Textures, RowPitchAndZeroInit)
 {
     TextureRegistry reg;
     const std::uint32_t rows[2 * 3] = {1, 2, 0xDEAD, 3, 4, 0xDEAD};   // 2 pixels per row, pitch 3 pixels
-    const TextureId id = reg.Create({TextureFormat::RGBA8, 2, 2, 0}, rows, 12);
-    const TextureId z = reg.Create({TextureFormat::RGBA8, 2, 2, 0});
+    const TextureId id = reg.Create({TextureFormat::RGBA8, 2, 2}, rows, 12);
+    const TextureId z = reg.Create({TextureFormat::RGBA8, 2, 2});
     std::vector<TextureChange> ch;
     reg.TakeChanges(ch);
     ESIA_CHECK(ch.size() == 2 && ch[0].id == id && ch[1].id == z);
@@ -42,7 +42,7 @@ ESIA_TEST(Textures, RowPitchAndZeroInit)
 ESIA_TEST(Textures, DestroyBeforeCollectDropsEverything)
 {
     TextureRegistry reg;
-    const TextureId id = reg.Create({TextureFormat::RGBA8, 1, 1, 0});
+    const TextureId id = reg.Create({TextureFormat::RGBA8, 1, 1});
     reg.Destroy(id);
     std::vector<TextureChange> ch;
     reg.TakeChanges(ch);
@@ -53,7 +53,7 @@ ESIA_TEST(Textures, DestroyBeforeCollectDropsEverything)
 ESIA_TEST(Textures, DestroyAfterCollectIsQueued)
 {
     TextureRegistry reg;
-    const TextureId id = reg.Create({TextureFormat::RGBA8, 1, 1, 0});
+    const TextureId id = reg.Create({TextureFormat::RGBA8, 1, 1});
     std::vector<TextureChange> ch;
     reg.TakeChanges(ch);
     reg.Update(id, 0, 0, 1, 1, "abcd");
@@ -71,7 +71,7 @@ ESIA_TEST(Textures, ThreadSafeCreation)
     for (int t = 0; t < 4; ++t)
         threads.emplace_back([&] {
             for (int i = 0; i < 100; ++i)
-                reg.Create({TextureFormat::Alpha8, 2, 2, 0});
+                reg.Create({TextureFormat::Alpha8, 2, 2});
         });
     for (auto& t : threads)
         t.join();

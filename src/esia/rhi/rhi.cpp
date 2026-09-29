@@ -51,8 +51,6 @@ namespace esia::rhi
         {
         case ShaderProgram::UiGeometry: return "UiGeometry";
         case ShaderProgram::TextGray: return "TextGray";
-        case ShaderProgram::TextLcd: return "TextLcd";
-        case ShaderProgram::TextLcdGray: return "TextLcdGray";
         case ShaderProgram::Fx: return "Fx";
         case ShaderProgram::Downsample: return "Downsample";
         case ShaderProgram::LayerComposite: return "LayerComposite";

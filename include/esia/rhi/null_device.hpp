@@ -8,7 +8,7 @@
 //     first pass, copies inside a pass or between incompatible formats, sampling the bound target, scissors
 //     outside the target, pipelines the caps or the target do not allow ...
 // Caps are configurable, so the renderer's paths for every API family (texture instance storage, bottom-left
-// origin, no dual-source blending ...) are exercised here.
+// origin, half-pixel offset ...) are exercised here.
 #pragma once
 #include "esia/rhi/rhi.hpp"
 #include <memory>

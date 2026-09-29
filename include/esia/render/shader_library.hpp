@@ -25,7 +25,7 @@ namespace esia::shaders
         DxbcSm5,   // Direct3D 11 / 12 (fxc vs_5_0 / ps_5_0), structured buffer
         DxbcSm4,   // Direct3D 10 (fxc vs_4_0 / ps_4_0), RGBA32F texture
         Dxil,      // Direct3D 12 shader model 6 (DXC), structured buffer
-        DxbcSm3,   // Direct3D 9 (fxc vs_3_0 / ps_3_0 with the D3D9 backend's SM3 prelude), RGBA32F texture; no TextLcd
+        DxbcSm3,   // Direct3D 9 (fxc vs_3_0 / ps_3_0 with the D3D9 backend's SM3 prelude), RGBA32F texture
         Count
     };
     ESIA_API const char* FormatName(Format f);
