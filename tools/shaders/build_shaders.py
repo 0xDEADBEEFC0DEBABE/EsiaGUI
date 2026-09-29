@@ -20,6 +20,7 @@ Run this script after changing a shader; the generated files must be committed w
     python3 tools/shaders/build_shaders.py --fxc "wine fxc.exe" # + DXBC on Linux / macOS through Wine
     python3 tools/shaders/build_shaders.py --dxc dxc            # + DXIL
     python3 tools/shaders/build_shaders.py --check              # regenerate into a temp dir and diff (CI)
+    python3 tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1   # an A / B build (not to be committed)
 
 fxc and DXC are Microsoft's: fxc.exe / d3dcompiler_47.dll come with the Windows SDK (Windows only; under Wine with
 Microsoft's DLL), DXC also ships for Linux. Wine's own d3dcompiler_47 (vkd3d-shader, Ubuntu 24.04) compiles the UI
@@ -44,6 +45,7 @@ import tempfile
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 SRC = os.path.join(ROOT, 'src', 'esia', 'shaders')
 OUT = os.path.join(SRC, 'generated')
+DEFINES = []   # --define NAME=VALUE: extra macros for every compiler
 
 # rhi::ShaderProgram order (include/esia/rhi/rhi.hpp): name -> (file, vertex entry, pixel entry)
 PROGRAMS = [
@@ -92,7 +94,7 @@ def tool(name, override=None):
 def compile_spirv(glslang, file, entry, stage, storage, tmp):
     out = os.path.join(tmp, '%s_%s_%s.spv' % (os.path.splitext(file)[0], entry, storage))
     cmd = glslang + ['-D', '-V', '--target-env', 'vulkan1.0', '-S', 'vert' if stage == 'vs' else 'frag', '-e', entry,
-                     '-DESIA_SPIRV=1', '-o', out, os.path.join(SRC, file)]
+                     '-DESIA_SPIRV=1'] + ['-D' + d for d in DEFINES] + ['-o', out, os.path.join(SRC, file)]
     if storage == 'texture':
         cmd.insert(-1, '-DESIA_FX_STORAGE_TEXTURE=1')
     run(cmd)
@@ -183,8 +185,13 @@ def compile_fxc(fxc, file, entry, stage, profile, storage, tmp, prelude=None):
     wine = fxc[0].endswith('wine') or os.path.basename(fxc[0]) == 'wine'
     path = (lambda p: run(['winepath', '-w', p]).strip()) if wine else (lambda p: p)
     if prelude:
-        # esia_common.hlsli does #include ESIA_SHADER_PRELUDE: the file name in quotes, found through /I
-        defines += ['/DESIA_SHADER_PRELUDE="%s"' % os.path.basename(prelude), '/I', path(os.path.dirname(os.path.abspath(prelude)))]
+        # esia_common.hlsli includes "esia_shader_prelude.hlsli" when ESIA_SHADER_PRELUDE is defined (fxc cannot
+        # #include a macro): the backend's prelude is served under that name from a directory of its own
+        inc = os.path.join(tmp, 'prelude')
+        os.makedirs(inc, exist_ok=True)
+        shutil.copyfile(prelude, os.path.join(inc, 'esia_shader_prelude.hlsli'))
+        defines += ['/DESIA_SHADER_PRELUDE=1', '/I', path(inc)]
+    defines += ['/D' + d for d in DEFINES]
     flags = ['/Gec'] if profile == '3_0' else ['/Ges']
     run(fxc + ['/nologo', '/O3'] + flags + ['/T', '%s_%s' % (stage, profile), '/E', entry] + defines + ['/Fo', path(out), path(src)])
     return open(out, 'rb').read()
@@ -192,12 +199,13 @@ def compile_fxc(fxc, file, entry, stage, profile, storage, tmp, prelude=None):
 
 def compile_dxc(dxc, file, entry, stage, tmp):
     out = os.path.join(tmp, '%s.dxil' % entry)
-    run(dxc + ['-nologo', '-O3', '-T', '%s_6_0' % stage, '-E', entry, '-Fo', out, os.path.join(SRC, file)])
+    run(dxc + ['-nologo', '-O3', '-T', '%s_6_0' % stage, '-E', entry, '-Fo', out] + ['-D' + d for d in DEFINES] + [os.path.join(SRC, file)])
     return open(out, 'rb').read()
 
 
 # --------------------------------------------------------------------------------------------- output
-EXT = {'spirv': 'spv', 'glsl330': 'glsl', 'essl300': 'essl', 'msl': 'metal', 'dxbc_sm5': 'dxbc', 'dxbc_sm4': 'dxbc', 'dxil': 'dxil'}
+EXT = {'spirv': 'spv', 'glsl330': 'glsl', 'essl300': 'essl', 'msl': 'metal', 'dxbc_sm5': 'dxbc', 'dxbc_sm4': 'dxbc', 'dxbc_sm3': 'dxbc',
+       'dxil': 'dxil'}
 PROGRAM_NAMES = [p[0] for p in PROGRAMS]
 
 
@@ -234,6 +242,17 @@ def read_existing(fmt, out_dir):
             if os.path.exists(path):
                 res.append((pi, st, entry, open(path, 'rb').read(), False, []))
     return res
+
+
+def install(stage, out_dir):
+    """Moves a complete run from `stage` into `out_dir`: every format directory, then the table."""
+    for fmt, _ in FORMATS:
+        src, dst = os.path.join(stage, fmt), os.path.join(out_dir, fmt)
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        if os.path.isdir(src):
+            shutil.move(src, dst)
+    shutil.move(os.path.join(stage, 'esia_shader_table.cpp'), os.path.join(out_dir, 'esia_shader_table.cpp'))
 
 
 def write_table(produced, out_dir):
@@ -274,9 +293,12 @@ def main():
     ap.add_argument('--dxc', help='dxc command: adds dxil')
     ap.add_argument('--sm3-prelude', default=os.path.join(ROOT, 'src', 'esia', 'rhi', 'd3d9', 'esia_sm3_prelude.hlsli'),
                     help='SM3 prelude of the Direct3D 9 backend: with --fxc, adds dxbc_sm3 when the file exists')
+    ap.add_argument('--define', action='append', default=[], metavar='NAME=VALUE',
+                    help='an extra macro for every compiler, e.g. ESIA_FX_FETCH_ALL=1 (A / B builds)')
     ap.add_argument('--out', default=OUT)
     ap.add_argument('--check', action='store_true', help='generate into a temp dir and compare with the checked-in files')
     args = ap.parse_args()
+    DEFINES.extend(args.define)
 
     glslang = tool('glslangValidator', args.glslang)
     spirv_cross = tool('spirv-cross', args.spirv_cross)
@@ -288,7 +310,7 @@ def main():
 
     out_dir = tempfile.mkdtemp() if args.check else args.out
     os.makedirs(out_dir, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as stage:
         produced = {f: [] for f, _ in FORMATS}
         spv_cache = {}
         for pi, (prog, file, vs, ps) in enumerate(PROGRAMS):
@@ -317,14 +339,15 @@ def main():
                                                      False, []))
                 if dxc:
                     produced['dxil'].append((pi, st, entry, compile_dxc(dxc, file, entry, stage, tmp), False, []))
+        # everything goes to `stage` first and into place only when every format succeeded: a failing tool or
+        # format leaves the checked-in library as it was, never half rewritten
         for fmt, storage in FORMATS:
-            if produced[fmt]:
-                write_files(fmt, produced[fmt], out_dir)
-            else:
+            if not produced[fmt]:
                 produced[fmt] = read_existing(fmt, args.out)
-                if produced[fmt]:
-                    write_files(fmt, produced[fmt], out_dir)
-        write_table(produced, out_dir)
+            if produced[fmt]:
+                write_files(fmt, produced[fmt], stage)
+        write_table(produced, stage)
+        install(stage, out_dir)
 
     if args.check:
         bad = []

@@ -39,21 +39,29 @@ if(TARGET esia_text_ft)
         ESIA_TEXT_OUT_DIR="${CMAKE_BINARY_DIR}/text")
 endif()
 
-# conformance suite: every scene with every backend built into this binary (docs/backends/README.md)
-add_executable(esia_conformance conformance/conformance.cpp conformance/scenes.cpp)
-target_include_directories(esia_conformance PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/conformance)
-target_link_libraries(esia_conformance PRIVATE esia::render esia::backends esia_testkit)
+# conformance suite: every scene with every backend built into this binary (docs/backends/README.md). The scenes
+# are a library of their own: backend tests that render them with their API's checks link it too.
+add_library(esia_conformance_scenes STATIC conformance/scenes.cpp)
+target_include_directories(esia_conformance_scenes PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/conformance)
+target_link_libraries(esia_conformance_scenes PUBLIC esia::render esia_testkit)
+esia_target_defaults(esia_conformance_scenes)
+add_executable(esia_conformance conformance/conformance.cpp)
+target_link_libraries(esia_conformance PRIVATE esia_conformance_scenes esia::backends)
 esia_target_defaults(esia_conformance)
 set(ESIA_GOLDEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/conformance/golden)
 get_property(_esia_backends GLOBAL PROPERTY ESIA_BACKENDS)
 foreach(_b ${_esia_backends})
-    # the null backend's command-stream goldens live in core: a missing one is an error there
-    set(_strict "")
-    if(_b STREQUAL "null")
-        set(_strict --strict)
-    endif()
+    # --strict: every golden exists (the images from OpenGL on llvmpipe, the null logs from core), so a missing one
+    # fails. Exit code 77 = every scene skipped (no device for the backend here): CTest shows it as skipped.
     add_test(NAME esia_conformance_${_b}
-             COMMAND esia_conformance --backend ${_b} --golden ${ESIA_GOLDEN_DIR} --out ${CMAKE_BINARY_DIR}/conformance ${_strict})
+             COMMAND esia_conformance --backend ${_b} --golden ${ESIA_GOLDEN_DIR} --out ${CMAKE_BINARY_DIR}/conformance --strict)
+    set_tests_properties(esia_conformance_${_b} PROPERTIES SKIP_RETURN_CODE 77)
+    if(NOT _b STREQUAL "null")
+        # cross-frame: two poison frames on the same device first (the null backend's goldens are single frames)
+        add_test(NAME esia_conformance_${_b}_frames
+                 COMMAND esia_conformance --backend ${_b} --golden ${ESIA_GOLDEN_DIR} --out ${CMAKE_BINARY_DIR}/conformance-frames --frames 3 --strict)
+        set_tests_properties(esia_conformance_${_b}_frames PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endforeach()
 
 esia_add_test(esia_shader_tests shaders/test_shader_library.cpp)
