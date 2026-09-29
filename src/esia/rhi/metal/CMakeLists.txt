@@ -25,6 +25,15 @@ if(APPLE)
         set(CMAKE_OBJCXX_COMPILER ${CMAKE_CXX_COMPILER})
     endif()
     enable_language(OBJCXX)
+    # The backend's minimum (counter sampling, blit pass descriptors, sampleTimestamps): macOS 11 / iOS 14
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(_esia_metal_min 14.0)
+    else()
+        set(_esia_metal_min 11.0)
+    endif()
+    if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS _esia_metal_min)
+        message(FATAL_ERROR "The Metal backend needs CMAKE_OSX_DEPLOYMENT_TARGET ${_esia_metal_min} or later")
+    endif()
     add_library(esia_rhi_metal STATIC metal_device.mm)
     set_source_files_properties(metal_device.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core PRIVATE esia_shaders "-framework Metal" "-framework Foundation")
@@ -62,6 +71,13 @@ if(BUILD_TESTING)
                              -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/msl_check -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check/check_msl.cmake)
         endif()
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # metal_device.mm parsed as Objective-C++ with ARC against mock Foundation / Metal declarations
+        # (tests/objc_check): its syntax, types, bridging and warnings - not Apple's API itself
+        add_test(NAME esia_rhi_metal_objc_mock_check
+                 COMMAND ${CMAKE_CXX_COMPILER} -x objective-c++ -std=c++20 -fobjc-arc -fobjc-runtime=macosx-11.0 -fblocks -fsyntax-only
+                         -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor -Wno-missing-field-initializers -Werror
+                         -I${CMAKE_CURRENT_SOURCE_DIR}/tests/objc_check -I${CMAKE_CURRENT_SOURCE_DIR} -I${CMAKE_CURRENT_SOURCE_DIR}/include
+                         -I${ESIA_ROOT}/include ${CMAKE_CURRENT_SOURCE_DIR}/metal_device.mm)
         add_test(NAME esia_rhi_metal_msl_mock_check
                  COMMAND ${CMAKE_COMMAND} -DMODE=mock -DCLANG=${CMAKE_CXX_COMPILER} -DMSL_DIR=${ESIA_ROOT}/src/esia/shaders/generated/msl
                          -DMOCK_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/msl_check
