@@ -379,8 +379,16 @@ Implementations:
   overlong words), ellipsis trimming, alignment; WGT's uniform line box. FreeType only reads the unhinted outlines;
   they are covered by WGT's analytic rasterizer, now platform-free in `include/esia/text/glyph_raster.hpp`
   (exact area coverage, 4 horizontal sub-pixel phases) and packed by `GlyphAtlas` into the
-  `TextureRegistry`. Not yet: the Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left,
-  but the runs of a line are laid out left to right - fribidi / ICU in phase 2), color glyphs, system fonts.
+  `TextureRegistry`. FreeType 2.14.3 and HarfBuzz 14.5.0 are built from pinned sources where the system has
+  neither (`ESIA_TEXT_DEPS=auto|bundled|system`, `cmake/EsiaTextDeps.cmake`), so the same text system runs on
+  Windows too. Not yet: the Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left, but the
+  runs of a line are laid out left to right - fribidi / ICU in phase 2), color glyphs.
+* **System fonts** (`include/esia/text/system_fonts.hpp`, in `esia_text`; done): `FindSystemFont(family, weight,
+  style)` locates an installed face (file path + face index) - DirectWrite's system font collection on Windows, Core
+  Text descriptors on macOS, fontconfig or the standard font directories on Linux - and each platform has a default
+  fallback chain covering Latin, Chinese (Simplified first, then Traditional), Japanese, Korean and symbols, loaded
+  into any `TextSystem` with `AddFallbackFonts`. The lookup only finds files: the text system reads and rasterizes
+  them. Color emoji fonts are left out (outlines only).
 * **DirectWrite** (Windows): WGT's `src/text` (system font collection, per-character fallback, COLR emoji, the
   analytic rasterizer, the user's text parameters) moved behind the interface, without its ClearType-style
   sub-pixel filtering.
