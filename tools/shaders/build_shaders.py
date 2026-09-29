@@ -183,8 +183,12 @@ def compile_fxc(fxc, file, entry, stage, profile, storage, tmp, prelude=None):
     wine = fxc[0].endswith('wine') or os.path.basename(fxc[0]) == 'wine'
     path = (lambda p: run(['winepath', '-w', p]).strip()) if wine else (lambda p: p)
     if prelude:
-        # esia_common.hlsli does #include ESIA_SHADER_PRELUDE: the file name in quotes, found through /I
-        defines += ['/DESIA_SHADER_PRELUDE="%s"' % os.path.basename(prelude), '/I', path(os.path.dirname(os.path.abspath(prelude)))]
+        # esia_common.hlsli includes "esia_shader_prelude.hlsli" when ESIA_SHADER_PRELUDE is defined (fxc cannot
+        # #include a macro): the backend's prelude is served under that name from a directory of its own
+        inc = os.path.join(tmp, 'prelude')
+        os.makedirs(inc, exist_ok=True)
+        shutil.copyfile(prelude, os.path.join(inc, 'esia_shader_prelude.hlsli'))
+        defines += ['/DESIA_SHADER_PRELUDE=1', '/I', path(inc)]
     flags = ['/Gec'] if profile == '3_0' else ['/Ges']
     run(fxc + ['/nologo', '/O3'] + flags + ['/T', '%s_%s' % (stage, profile), '/E', entry] + defines + ['/Fo', path(out), path(src)])
     return open(out, 'rb').read()

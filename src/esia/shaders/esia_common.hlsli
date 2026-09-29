@@ -21,11 +21,12 @@
 
 // Portability hooks. The defaults below are shader model 4+ HLSL (every format of the shader library). A backend
 // whose shader model lacks something - Direct3D 9 / SM3: no integer bit operations, no SV_VertexID / SV_InstanceID,
-// no texture objects, no flat interpolation, constants in c registers - compiles these same sources with
-// ESIA_SHADER_PRELUDE naming a file of its own (e.g. /DESIA_SHADER_PRELUDE="\"esia_sm3_prelude.hlsli\"") that
-// defines the macros its way; everything it leaves undefined keeps the default. docs/backends/README.md lists them.
+// no texture objects, no flat interpolation, constants in c registers - defines the macros its way in a prelude of
+// its own; everything it leaves undefined keeps the default. docs/backends/README.md lists them. The prelude is
+// either prepended to the source, or included from here when ESIA_SHADER_PRELUDE is defined: under a fixed name
+// (served by the include handler or found through /I), because fxc / D3DCompile cannot #include a macro.
 #ifdef ESIA_SHADER_PRELUDE
-#include ESIA_SHADER_PRELUDE
+#include "esia_shader_prelude.hlsli"
 #endif
 
 #ifndef ESIA_BINDING

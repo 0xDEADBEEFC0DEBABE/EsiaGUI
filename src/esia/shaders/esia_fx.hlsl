@@ -31,17 +31,18 @@
 #define F_HALO         8192u
 #define F_CAUSTIC      16384u
 
-// Shape kinds (esia::fx::ShapeKind)
-#define SHAPE_RRECT    0u
-#define SHAPE_ARC      1u
-#define SHAPE_SEGMENT  2u
+// Shape kinds (esia::fx::ShapeKind) and paint kinds (esia::fx::PaintKind), compared with the flags row: plain
+// literals take the type of what they are compared with (a uint on SM4+, the float SM3 emulates it with), so
+// neither model warns about a signed / unsigned mismatch
+#define SHAPE_RRECT    0
+#define SHAPE_ARC      1
+#define SHAPE_SEGMENT  2
 
-// Paint kinds (esia::fx::PaintKind)
-#define PAINT_SOLID    0u
-#define PAINT_LINEAR   1u
-#define PAINT_RADIAL   2u
-#define PAINT_CONIC    3u
-#define PAINT_SPECTRUM 4u
+#define PAINT_SOLID    0
+#define PAINT_LINEAR   1
+#define PAINT_RADIAL   2
+#define PAINT_CONIC    3
+#define PAINT_SPECTRUM 4
 
 struct FxInst
 {
@@ -716,7 +717,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     acc *= I.misc.x * maskCov * WgtEdgeFade(spos.y);
     // soft falloffs (glows, shadows) span many pixels with few 8-bit levels: +-1/2 level of dither breaks
     // the banding (invisible elsewhere)
-    [branch] if (feat & (F_GLOW | F_SHADOW))
+    [branch] if (FX_HAS(feat, F_GLOW) || FX_HAS(feat, F_SHADOW))
         acc.rgb += (WgtHash(floor(spos) + 17.0) - 0.5) * (1.0 / 255.0) * saturate(acc.a * 8.0);
     acc.rgb = max(acc.rgb, 0.0);
     return WgtOutputPremul(acc);
