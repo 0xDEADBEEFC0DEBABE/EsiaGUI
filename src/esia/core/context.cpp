@@ -248,9 +248,12 @@ namespace esia
             {
                 order_.erase(std::remove(order_.begin(), order_.end(), w), order_.end());
                 it = windows_.erase(it);
+                continue;
             }
-            else
-                ++it;
+            // the same for child regions (their scroll state): no frame refers to them before the first Begin
+            for (auto c = w->childStates_.begin(); c != w->childStates_.end();)
+                c = frame_ - c->second.lastFrame > desc_.retainFrames ? w->childStates_.erase(c) : std::next(c);
+            ++it;
         }
     }
 

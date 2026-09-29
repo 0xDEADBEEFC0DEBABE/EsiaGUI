@@ -118,12 +118,12 @@ Rules at the boundaries:
 1. **Platform** (window thread or UI thread): native events become `InputEvent`s and are queued with
    `Context::QueueInput` (thread-safe).
 2. **UI thread** `Context::NewFrame(FrameParams)`: applies the queued input (a button that changes twice waits for
-   the next frame, so fast clicks are never lost), window move / resize, wheel scrolling, Tab focus; starts the
-   implicit root window.
+   the next frame, so fast clicks are never lost), window move / resize, the hit test of last frame's items, press
+   ownership, popup dismissal, wheel scrolling; starts the implicit root window.
 3. **Widgets** register items (`ItemAdd` / `ItemSize` / `ButtonBehavior`), keep springs, and draw with `Painter`
    into the current window's `DrawList`: geometry (text, lines, images) and FX instances in one ordered command
    list with clip rects, glow-layer and edge-fade brackets, host callbacks.
-4. `Context::EndFrame()`: click-to-focus, window dragging, the `DrawData` (background list, windows by layer and
+4. `Context::EndFrame()`: unclaimed keys (Tab navigation, Escape), click-to-focus, window dragging, the `DrawData` (background list, windows by layer and
    z-order, foreground list) and `PlatformRequests`.
 5. **Renderer** `Render(DrawData, TextureRegistry*, target, params)`:
    1. `Device::BeginFrame`; pending texture creates / updates / destroys go to the device;
@@ -137,18 +137,19 @@ Rules at the boundaries:
 
 ## 4. The UI core (replacing Dear ImGui)
 
-`esia::Context` (`include/esia/core/context.hpp`) is the immediate-mode machinery WGT takes from ImGui today,
-rewritten around what WGT uses:
+`esia::Context` (`include/esia/core/context.hpp`) is the immediate-mode machinery WGT took from ImGui, rewritten
+around what WGT uses. Its second version (the widget port's base) is designed in [UI_CORE.md](UI_CORE.md); in
+short:
 
 | ImGui today | Esia |
 | --- | --- |
 | `ImGuiID`, id stack, `###` / `##` labels | `esia::Id` (32-bit FNV-1a chained through the window's id stack), `HashLabel`, same label conventions |
-| `ImGuiIO` input, `AddMouseButtonEvent` ... | `InputEvent` queue (thread-safe) -> `InputState`: clicks, double clicks, drag thresholds, key repeat, text (UTF-32), IME composition, focus loss releases everything |
-| `ImGui::Begin` / `End`, z-order, focus, move / resize, `WindowRounding` ... | `Context::Begin` / `End` with `WindowOptions` (flags, layer, min / max size, padding): z-order per layer (background, normal, overlay, tooltip), focus and bring-to-front, drag-to-move on empty areas, resize from edges and corners with cursors, per-window clip and scroll |
-| `ItemSize`, `ItemAdd`, `ItemHoverable`, `ButtonBehavior` | the same four, with hover arbitration (allow-overlap yields to last frame's hovered item), active id with keep-alive, press on click / release / double click, repeat |
-| `SameLine`, `Indent`, `BeginGroup` / `EndGroup`, `GetContentRegionAvail` | the layout cursor: `SameLine`, `NewLine`, `Spacing`, `Indent`, groups (one item to the parent), `ContentRegionAvail` |
-| keyboard nav (partial) | keyboard focus: `SetKeyboardFocusId`, Tab / Shift+Tab over focusable items, click-away clears it |
-| `ImDrawList` + WGT's FX callbacks | `esia::DrawList`: 32-bit indices (no base vertex needed), geometry + FX instances + layers + fades + callbacks, clip and texture stacks, command merging |
+| `ImGuiIO` input, `AddMouseButtonEvent` ... | `InputEvent` queue (thread-safe) -> `InputState`: clicks and click counts, drag thresholds, key repeat, text (UTF-32), IME composition, focus loss cancels presses and invalidates the mouse |
+| `ImGui::Begin` / `End`, z-order, focus, move / resize, `WindowRounding` ... | `Context::Begin` / `End` with `WindowOptions` (flags, layer, min / max size, padding): z-order per layer (background, normal, overlay, tooltip), focus and bring-to-front, drag-to-move on empty areas, resize from edges and corners with cursors, per-window content clip and scroll, per-window DPI scale, auto-size, kept on screen, popups and tooltips |
+| `ItemSize`, `ItemAdd`, `ItemHoverable`, `ButtonBehavior` | the same four, with hover from a front-to-back hit test of last frame's item rects, press ownership per mouse button, disabled items that claim the hover, active id with keep-alive, press on click / release / double click, repeat; `ItemStatusOf` |
+| `SameLine`, `Indent`, `BeginGroup` / `EndGroup`, `GetContentRegionAvail` | containers with the layout cursor (`SameLine`, `NewLine`, `Spacing`, `Indent`) or a `LayoutProvider`, laid-out item reports, baselines, work rects, pixel snapping; child regions with clip and (smooth) scroll |
+| keyboard nav (partial) | keyboard focus: `SetKeyboardFocusId`, Tab / Shift+Tab over focusable items after the widgets, click-away clears it; key ownership (`ClaimKey`) |
+| `ImDrawList` + WGT's FX callbacks | `esia::DrawList`: 32-bit indices (no base vertex needed), geometry + FX instances + layers + fades + callbacks, clip and texture stacks, command merging, `Mark` / `MoveCommands` for backgrounds drawn after their content |
 | `ImTextureData` protocol | `TextureRegistry`: create / update / destroy from any thread, collected by the renderer once per frame |
 | `ImGuiPlatformIO` | `PlatformRequests` (cursor, capture flags, text input, IME rect) + clipboard callbacks in `ContextDesc` |
 
@@ -156,10 +157,10 @@ What ImGui did that Esia deliberately does not take over: ImGui's style (`ImGuiS
 `Theme` + `ItemStyle` of the widget layer), ImGui's widgets (every WGT widget is already WGT's own), `.ini`
 persistence (a service in phase 4), docking and multi-viewports (not needed by WGT).
 
-Still to come in the core with the widget port (phase 3): child regions / scroll areas as nested windows,
-`BeginPopup`-style overlays (built on `WindowLayer::Overlay` and focus), the item map WGT's auto layout keeps (the
-layout layer owns it; the core exposes `ItemAdd`), and text-editing helpers (the editor itself is WGT's own
-`ui/text_edit.cpp`, ported onto `InputState::Text` / `Composition` and `RequestTextInput`).
+Child regions are regions of their window's draw list (not nested windows), popups are `WindowLayer::Overlay`
+windows, and the per-window item map WGT's auto layout keeps is `Window::LaidOutItems()`. The text editor stays
+the widget layer's (WGT's `ui/text_edit.cpp`, ported onto `InputState::Text` / `Composition`, `MouseClickCount`,
+`ClaimKeyboard` and `RequestTextInput`).
 
 ## 5. The renderer
 

@@ -196,6 +196,39 @@ ESIA_TEST(Context, WindowGc)
         alive += h.ctx.FindWindow("doc " + std::to_string(i)) ? 1 : 0;
     ESIA_CHECK(alive <= 7);
     ESIA_CHECK(h.ctx.FindWindow("doc 19") && !h.ctx.FindWindow("doc 0"));
+
+    // a child region's scroll state goes the same way
+    float scroll = -1.0f;
+    auto frame = [&](bool child, bool request) {
+        h.Frame();
+        h.Win("host", {0, 0}, {300, 300});
+        if (child)
+        {
+            ChildOptions c;
+            c.size = {100, 100};
+            c.flags = ChildFlags_ScrollY;
+            h.ctx.BeginChild("list", c);
+            if (request)
+                h.ctx.SetScrollY(50);
+            for (int i = 0; i < 10; ++i)
+                h.ctx.ItemSize({50, 30});
+            scroll = h.ctx.Scroll().y;
+            h.ctx.EndChild();
+        }
+        h.ctx.End();
+        h.End();
+    };
+    frame(true, true);
+    frame(true, false);
+    ESIA_CHECK(scroll == 50.0f);
+    for (int i = 0; i < 3; ++i)
+        frame(false, false);
+    frame(true, false);
+    ESIA_CHECK(scroll == 50.0f);   // kept while recently used
+    for (int i = 0; i < 10; ++i)
+        frame(false, false);
+    frame(true, false);
+    ESIA_CHECK(scroll == 0.0f);    // freed, starts over
 }
 
 // bug 12: the first frame of a resize does not snap the edge to the pointer
