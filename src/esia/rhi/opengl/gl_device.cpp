@@ -95,8 +95,7 @@ namespace esia::rhi::opengl
                 gl_.LoadOptional(gl_.QueryCounter, "glQueryCounterEXT");
                 gl_.LoadOptional(gl_.GetQueryObjectui64v, "glGetQueryObjectui64vEXT");
             }
-            if (extra)
-                gl_.LoadOptional(gl_.InvalidateFramebuffer, "glInvalidateFramebuffer");
+            gl_.LoadOptional(gl_.InvalidateFramebuffer, "glInvalidateFramebuffer");   // GLES 3.0 core
             if (khrDebug)
             {
                 const bool core = v >= 32;
@@ -915,10 +914,9 @@ namespace esia::rhi::opengl
         pipe_ = nullptr;
         vb_ = ib_ = 0;
         inPass_ = true;
-        hostTouched_ = false;
         // a texture is never sampled while it is rendered: drop stale unit bindings of it (GL feedback loops)
         if (t->tex)
-            for (int u = 0; u < kTextureSlots; ++u)
+            for (int u = 0; u < kUnits; ++u)
                 if (unitTex_[u] == t->tex)
                     BindUnit(u, 0);
         RestorePassState();
@@ -937,15 +935,22 @@ namespace esia::rhi::opengl
         }
     }
 
-    // The pass's framebuffer, full viewport and scissor, sRGB encoding for sRGB targets - at BeginPass, and again
-    // after a host callback changed whatever it liked.
-    void GlDevice::RestorePassState()
+    // After a host callback: the fixed state again, before anything that draws or copies (the pass may have ended
+    // right after the callback).
+    void GlDevice::EnsureFixedState()
     {
         if (hostTouched_)
         {
             ApplyFixedState();
             hostTouched_ = false;
         }
+    }
+
+    // The pass's framebuffer, full viewport and scissor, sRGB encoding for sRGB targets - at BeginPass, and again
+    // after a host callback changed whatever it liked.
+    void GlDevice::RestorePassState()
+    {
+        EnsureFixedState();
         BindFramebuffer(GL_FRAMEBUFFER, pass_->fbo);
         gl_.Viewport(0, 0, pass_->desc.width, pass_->desc.height);
         SetScissorTest(true);
@@ -1138,6 +1143,7 @@ namespace esia::rhi::opengl
         if (!d || !s || d->desc.samples > 1 || r.Empty() || inPass_)
             return;
         OutsideFrame guard(*this);
+        EnsureFixedState();
         if (EnsureFbo(*d) == kUnknown || EnsureFbo(*s) == kUnknown)
             return;
         d->bottomUp = s->bottomUp;   // the copy keeps the source's row order
@@ -1261,6 +1267,7 @@ namespace esia::rhi::opengl
         if (owned_ && !inFrame_)
             owned_->MakeCurrent();
         OutsideFrame guard(*this);
+        EnsureFixedState();
         const Tex* from = t;
         if (EnsureFbo(*t) == kUnknown)
             return false;

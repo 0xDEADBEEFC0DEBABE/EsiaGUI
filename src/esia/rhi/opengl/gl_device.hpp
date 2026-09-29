@@ -160,6 +160,7 @@ namespace esia::rhi::opengl
         void RestoreHostState(const HostState& s);
         void ForgetGlState();
         void ApplyFixedState();
+        void EnsureFixedState();
         void RestorePassState();
         void BindFramebuffer(GLenum target, GLuint fbo);
         void BindUnit(int unit, GLuint tex);

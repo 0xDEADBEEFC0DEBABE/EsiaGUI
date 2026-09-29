@@ -477,7 +477,8 @@ ESIA_TEST(GlDevice, WrappedFramebuffers)
     }
 }
 
-// A host callback may change any state: what is drawn after it is unaffected.
+// A host callback may change any state: what is drawn after it (in the same pass, or after a capture that ended
+// the pass) is unaffected.
 namespace
 {
     const GlApi* gCallbackGl = nullptr;
@@ -514,6 +515,10 @@ namespace
         list->AddRectFilled(Rect(8, 40, 56, 44), Color::White().ToRgba8());
         if (withCallback)
             list->AddCallback(&MessUpState, nullptr);
+        // glass right after the callback: its capture ends the pass, copies and starts the pyramid's passes
+        GlassMaterial glass;
+        glass.blur = 4.0f;
+        p.Rect(Rect(2, 36, 62, 62), Style().Radius(8).Glass(glass));
         p.Rect(Rect(34, 4, 60, 30), Style().Fill(Color::Hex(0x30D158)).Radius(6).Shadow(Color::Black(0.5f), 4, Vec2(0, 2)));
         list->AddRectFilled(Rect(8, 50, 56, 54), Color::Hex(0x0A84FF).ToRgba8());
         dd = DrawData();
