@@ -1,0 +1,70 @@
+# Esia - the Metal RHI backend (macOS 11+ / iOS 14+, Apple silicon and Intel). ESIA_BACKEND_METAL, OFF by default.
+#
+#   esia_rhi_metal_core   the backend's logic in plain C++ (tables, planning, frames, profiling, the rhi::Device on
+#                         the Gpu layer): built and unit-tested on every host
+#   esia_rhi_metal        on Apple platforms: + metal_device.mm (the Gpu layer on Metal, host integration,
+#                         registration); elsewhere: a registration whose headless creator says why the conformance
+#                         suite skips Metal
+#
+# UNVERIFIED: needs macOS. The Apple part was written on Linux and never compiled (see STATUS.md).
+
+add_library(esia_rhi_metal_core STATIC
+    metal_tables.cpp
+    metal_planning.cpp
+    metal_frames.cpp
+    metal_profiler.cpp
+    metal_device_core.cpp)
+target_include_directories(esia_rhi_metal_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(esia_rhi_metal_core PUBLIC esia_rhi PRIVATE esia_shaders)
+esia_target_defaults(esia_rhi_metal_core)
+
+if(APPLE)
+    # Objective-C++ with ARC for metal_device.mm; the C++ compiler of the toolchain compiles it (Homebrew LLVM's
+    # clang or Apple's), so both languages agree on the standard library.
+    if(NOT CMAKE_OBJCXX_COMPILER)
+        set(CMAKE_OBJCXX_COMPILER ${CMAKE_CXX_COMPILER})
+    endif()
+    enable_language(OBJCXX)
+    add_library(esia_rhi_metal STATIC metal_device.mm)
+    set_source_files_properties(metal_device.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core PRIVATE esia_shaders "-framework Metal" "-framework Foundation")
+else()
+    add_library(esia_rhi_metal STATIC metal_unavailable.cpp)
+    target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core)
+endif()
+esia_target_defaults(esia_rhi_metal)
+esia_register_backend(metal esia_rhi_metal)
+
+if(BUILD_TESTING)
+    # The backend's logic through the real renderer and the conformance scenes, on a fake Gpu that enforces the
+    # Metal rules the backend relies on (and parses the generated MSL for each program's resources).
+    esia_add_test(esia_rhi_metal_tests
+        tests/test_metal_tables.cpp
+        tests/test_metal_planning.cpp
+        tests/test_metal_frames.cpp
+        tests/test_metal_profiler.cpp
+        tests/test_metal_msl.cpp
+        tests/test_metal_device.cpp
+        tests/msl_interface.cpp
+        tests/fake_metal_gpu.cpp
+        ${ESIA_ROOT}/tests/conformance/scenes.cpp)
+    target_include_directories(esia_rhi_metal_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests ${ESIA_ROOT}/tests/conformance)
+    target_link_libraries(esia_rhi_metal_tests PRIVATE esia_rhi_metal_core esia_shaders esia::render esia_testkit)
+    target_compile_definitions(esia_rhi_metal_tests PRIVATE ESIA_METAL_NULL_GOLDEN_DIR="${ESIA_ROOT}/tests/conformance/golden/null")
+
+    # The generated MSL (src/esia/shaders/generated/msl): on macOS compiled by Apple's compiler; elsewhere
+    # type-checked by clang against a mock of the Metal standard library (tests/msl_check, see its README).
+    if(APPLE)
+        find_program(ESIA_XCRUN xcrun)
+        if(ESIA_XCRUN)
+            add_test(NAME esia_rhi_metal_msl_compile
+                     COMMAND ${CMAKE_COMMAND} -DMODE=xcrun -DXCRUN=${ESIA_XCRUN} -DMSL_DIR=${ESIA_ROOT}/src/esia/shaders/generated/msl
+                             -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/msl_check -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check/check_msl.cmake)
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_test(NAME esia_rhi_metal_msl_mock_check
+                 COMMAND ${CMAKE_COMMAND} -DMODE=mock -DCLANG=${CMAKE_CXX_COMPILER} -DMSL_DIR=${ESIA_ROOT}/src/esia/shaders/generated/msl
+                         -DMOCK_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/msl_check
+                         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check/check_msl.cmake)
+    endif()
+endif()
