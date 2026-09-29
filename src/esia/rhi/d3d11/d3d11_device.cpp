@@ -533,9 +533,12 @@ namespace esia::rhi::d3d11
         bool BeginFrame(const FrameDesc&) override
         {
             ++frame_;
+            // with restoreHostState, what the frame changes is captured and put back (ClearState would also drop the
+            // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
             if (restore_)
                 host_.Capture(ctx_.Get());
-            ctx_->ClearState();
+            else
+                ctx_->ClearState();
             if (caps_.timestampQueries)
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
@@ -561,9 +564,10 @@ namespace esia::rhi::d3d11
                 // submitted now, so the queries complete even when nothing presents (headless, several targets)
                 ctx_->Flush();
             }
-            ctx_->ClearState();
             if (restore_)
                 host_.Restore(ctx_.Get());
+            else
+                ctx_->ClearState();
             DrainMessages();
         }
 
