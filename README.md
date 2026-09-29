@@ -10,7 +10,7 @@ The renderer and its backends work; widgets, windowing and a demo are the next p
 
 | Part | State |
 | --- | --- |
-| UI core (`src/esia/core`) | ids, input queue, windows, items, layout cursor, draw lists, texture registry; to be reworked before the widgets (phase 3) |
+| UI core (`src/esia/core`) | second version ([UI_CORE.md](docs/UI_CORE.md)): ids, input, windows with per-window DPI, front-to-back hit testing, press and key ownership, containers and layout providers, child scroll regions, popups and tooltips, per-id state, draw lists, texture registry |
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
 | Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with CJK fallback chains; grayscale antialiasing |
 | Backends (`src/esia/rhi/<name>`) | Direct3D 9 / 10 / 11 / 12, OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal (below) |
@@ -52,12 +52,13 @@ cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xw
 ## Documents
 
 * `docs/REWRITE.md`: the architecture (layers, renderer, RHI, shaders, text, threading, phases).
+* `docs/UI_CORE.md`: the UI core (input, hit testing, layout, windows, scrolling, popups) and how widgets use it.
 * `docs/REWRITE_STATUS.md`: what is done and verified, known issues, next steps.
 * `docs/backends/README.md`: how to write and test an RHI backend.
 
 ## Roadmap
 
-1. UI core, second version: the review's input fixes; layout, hit testing, input routing, scroll areas, popups.
+1. ~~UI core, second version~~: done (`docs/UI_CORE.md`); the widget port builds on it.
 2. Platform layers: Win32 first (windows, input, IME, DPI, clipboard, swap chains), then Cocoa and SDL / X11 /
    Wayland.
 3. Text: the bidi algorithm, a caret / grapheme query, per-language fallback (FreeType + HarfBuzz on every platform and

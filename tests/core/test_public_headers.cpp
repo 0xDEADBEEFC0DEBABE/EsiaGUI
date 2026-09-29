@@ -16,6 +16,8 @@
 #include "esia/core/draw_list.hpp"
 #include "esia/core/fx.hpp"
 #include "esia/core/input.hpp"
+#include "esia/core/layout.hpp"
+#include "esia/core/state.hpp"
 #include "esia/core/texture.hpp"
 #include "esia/render/frame_plan.hpp"
 #include "esia/render/painter.hpp"

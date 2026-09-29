@@ -180,7 +180,8 @@ ESIA_TEST(Context, ResizeFromCornerWithMinSize)
     frame();
     h.Move({350, 300});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("Sizer")->GetRect() == Rect(100, 100, 350, 300));
+    // grabbed 1 unit inside the corner: the corner keeps that distance to the pointer
+    ESIA_CHECK(h.ctx.FindWindow("Sizer")->GetRect() == Rect(100, 100, 351, 301));
     h.Move({0, 0});
     frame();
     ESIA_CHECK(h.ctx.FindWindow("Sizer")->GetRect() == Rect(100, 100, 180, 160));   // clamped to the min size
@@ -321,7 +322,7 @@ ESIA_TEST(Context, KeyboardFocusTabAndClickAway)
     frame();
 }
 
-ESIA_TEST(Context, OverlapAllowsLaterItem)
+ESIA_TEST(Context, LaterItemIsHitOnTop)
 {
     Harness h;
     bool first = false, second = false;
@@ -331,7 +332,7 @@ ESIA_TEST(Context, OverlapAllowsLaterItem)
         h.ctx.SetNextWindowSize({300, 300}, Cond::FirstUse);
         h.ctx.Begin("O");
         const Rect big(20, 20, 200, 200), small(50, 50, 80, 80);
-        first = h.ctx.ItemHoverable(h.ctx.GetId("big"), big, ItemFlags_AllowOverlap);
+        first = h.ctx.ItemHoverable(h.ctx.GetId("big"), big);
         second = h.ctx.ItemHoverable(h.ctx.GetId("small"), small);
         h.ctx.End();
         h.ctx.EndFrame();

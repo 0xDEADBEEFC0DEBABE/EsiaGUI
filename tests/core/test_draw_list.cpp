@@ -101,3 +101,34 @@ ESIA_TEST(DrawList, ConvexPolyFan)
     ESIA_CHECK(dl.Indices().size() == 9);
     ESIA_CHECK(dl.Vertices().size() == 5);
 }
+
+// A card draws its background after its content (the height is known at its end) and moves it under the content.
+ESIA_TEST(DrawList, MoveCommandsUnderEarlierContent)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 100, 100));
+    dl.AddRectFilled(Rect(0, 0, 5, 5), 0xFF0000FFu);    // before the card
+    const std::size_t under = dl.Mark();
+    dl.AddRectFilled(Rect(10, 10, 20, 20), 0xFF00FF00u);   // content: does not merge into the command before the mark
+    fx::Instance shape{};
+    dl.AddFx(shape);
+    ESIA_CHECK(dl.Commands().size() == 3);
+    const std::size_t bg = dl.Mark();
+    dl.AddRectFilled(Rect(8, 8, 30, 30), 0xFFFFFFFFu);     // the background, drawn last ...
+    dl.AddFx(shape);
+    ESIA_CHECK(dl.Commands().size() == 5);                 // ... in commands of its own (the mark stops merging)
+    dl.MoveCommands(bg, under);                             // ... and moved under the content
+    const auto& c = dl.Commands();
+    ESIA_CHECK(c.size() == 5);
+    ESIA_CHECK(c[0].kind == DrawCmdKind::Geometry && c[0].first == 0 && c[0].count == 6);
+    ESIA_CHECK(c[1].kind == DrawCmdKind::Geometry && c[1].first == 12 && c[1].count == 6);   // the background
+    ESIA_CHECK(c[2].kind == DrawCmdKind::Fx && c[2].first == 1 && c[2].count == 1);
+    ESIA_CHECK(c[3].kind == DrawCmdKind::Geometry && c[3].first == 6 && c[3].count == 6);     // the content
+    ESIA_CHECK(c[4].kind == DrawCmdKind::Fx && c[4].first == 0 && c[4].count == 1);
+    // what comes next never merges into a moved command
+    dl.AddRectFilled(Rect(0, 0, 1, 1), 0xFFFFFFFFu);
+    dl.AddFx(shape);
+    ESIA_CHECK(c.size() == 7 && c[5].first == 18 && c[6].first == 2);
+    dl.AddFx(shape);
+    ESIA_CHECK(c.size() == 7 && c[6].count == 2);          // ... but new commands merge again
+}
