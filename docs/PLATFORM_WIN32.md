@@ -218,6 +218,26 @@ Not verified here: anything on Windows or a real GPU, the IME (Wine has no Micro
 changes (only a fixed Wine DPI and synthetic `WM_DPICHANGED` in the tests), D3D12, the debug layers, `clang-cl`
 (`windows-clang-cl`) and MSVC builds, touch and pen, vsync / tearing behavior.
 
+### 5.1 On Windows (the local session)
+
+Windows 11 Pro, RTX 4080 SUPER (driver 32.0.16.1088) next to an AMD Radeon iGPU that drives the monitor (2560 x 1440 at
+150 %), clang-cl 22.1.8, MSVC 19.44, Vulkan SDK 1.4.357. Branch merged with `main` (text everywhere, UI core v2) and
+adapted to the core's new input API (`InputEvent::MouseLeave`, `EncodeUtf8`). Automated steps of section 6 only (6.1 -
+6.2, step 3); the interactive steps (6.3 - 6.8, the IME) are the owner's.
+
+| Check | Result |
+| --- | --- |
+| `windows-clang-cl` and `windows-msvc` (Debug), every backend, `-DESIA_WERROR=ON`, clean | 0 warnings once two Windows-only faults were fixed (below); `ctest` 35 / 35 on both, `esia_platform_win32_tests` 17 / 17 |
+| `glass_window --api <api> --debug --size 1100x700 --frames 30 --fixed-dt 0.016667 --screenshot <api>.png` | all six APIs: exit 0, `0 validation / debug-layer messages`, 1650 x 1050 px at scale 1.50. Direct3D 10 / 11 / 12 and Vulkan run on the RTX 4080 (high-performance preference); **Direct3D 9Ex and OpenGL run on the AMD iGPU**, the adapter of the window's monitor (D3D9 only enumerates adapters with outputs, WGL takes the ICD of the window's display). **D3D12's host ran for the first time.** The six images are identical but for the status line (API, adapter, fps): mean delta 0.007 (D3D10 / 12) to 0.42 (OpenGL) against D3D11 |
+
+Fixed on Windows:
+
+* **`GL/wglext.h`**: the Windows SDK has none (mingw-w64 has), so `host_opengl.cpp` did not compile with clang-cl or
+  MSVC; the host now defines the WGL constants it needs, as the backend's `gl_headless.cpp` does.
+* **Direct3D 10 swap chain**: `CreateSwapChainForHwnd` answered `E_INVALIDARG`. A Direct3D 10.0 device is refused any
+  `B8G8R8A8_UNORM` swap chain on Windows (flip or blt model, either factory call, NVIDIA and AMD alike; Wine accepts it);
+  `R8G8B8A8_UNORM` works. `FlipSwapChain::Create` takes the format; D3D10 passes `R8G8B8A8_UNORM`.
+
 ## 6. Test plan for the Windows session
 
 Windows 11, RTX 4080 SUPER, Microsoft Pinyin. Two monitors at different scales if available (e.g. 100 % and 150 %),
@@ -328,6 +348,11 @@ Run `glass_window --api d3d11` (then repeat 18 - 27 on opengl and vulkan). Switc
 
 For the UI core rework on `feat/ui-core-v2` (none of these were changed here):
 
+**After the merge with UI core v2** (the local session): 1 (`kNoMousePos`, `InputEvent::MouseLeave`), 5 (`RequestTextInput`
+leaves the cursor alone) and 9 (`Context::InputPending`, `PlatformRequests::inputPending`) are in the core. The platform
+and the example use the first two; the example renders every frame, so it needs no `InputPending`. 2, 3, 4, 6, 7, 8 and
+10 are still open.
+
 1. **Mouse leave is a negative position.** While captured, positions left of or above the window are legitimately
    negative; the core reads them as "outside" (`MouseValid` false: hover lost, `MouseDelta` zero, drag distance not
    updated). Wanted: an explicit leave event (or flag) so any coordinate is a position.
@@ -369,10 +394,10 @@ For the UI core rework on `feat/ui-core-v2` (none of these were changed here):
    `glass_window` links with `-Wl,--allow-multiple-definition` (MinGW only, when a D3D backend is built), which
    leaves one linker warning. The fix belongs to the backend (`std::shared_ptr<T>(new T)`) or to the toolchain
    (`-D__GXX_TYPEINFO_EQUALITY_INLINE=0` in `clang-mingw.cmake`); once it is in, drop the option.
-2. **D3D12 has not run**: under Wine Esia's root signature is refused (vkd3d); the host is untested.
+2. **D3D12 under Wine**: Esia's root signature is refused (vkd3d). On Windows the host runs (section 5.1).
 3. The IME behavior is designed from the documentation, Chromium's and WGT's code, and checked only with synthetic
    messages: section 6.7 decides.
-4. Negative positions during capture and the other core behaviors of section 7.
+4. The core behaviors of section 7 that are still open (2, 3, 4, 6, 7, 8, 10).
 5. The content of `glass_window`'s windows never overflows, so the wheel has nothing to scroll there: it is queued and
    unit-tested, not visible in the example.
 
