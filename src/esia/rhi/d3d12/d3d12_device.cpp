@@ -561,11 +561,18 @@ namespace esia::rhi::d3d12
                 log_.Log(LogLevel::Error, "BeginFrame: no command list (FrameDesc::nativeContext) and no queue (Desc::queue)");
                 return false;
             }
+            // host lists: the device frames of one host frame (FrameDesc::hostFrame) share a slot, recycled
+            // framesInFlight host frames later however many targets the host renders per frame
+            const bool sharedSlot = !ownFrame_ && desc.hostFrame != 0 && desc.hostFrame == hostFrame_ && frame_ > 0;
+            hostFrame_ = ownFrame_ ? 0 : desc.hostFrame;
             ++frame_;
+            if (!sharedSlot)
+                slotCursor_ = (slotCursor_ + 1) % slots_.size();   // per slot taken, not per device frame
             FrameSlot& s = Slot();
             if (ownFrame_)
                 Wait(s.fence);   // the slot's last own-list frame; host lists: the host waited (framesInFlight)
-            RecycleSlot(s);
+            if (!sharedSlot)
+                RecycleSlot(s);
             if (ownFrame_)
             {
                 s.allocator->Reset();
@@ -574,10 +581,14 @@ namespace esia::rhi::d3d12
             }
             else
                 cl_ = static_cast<ID3D12GraphicsCommandList*>(desc.nativeContext);
-            s.profile.Reset(frame_);
-            s.stamps = 0;
-            if (caps_.timestampQueries)
-                s.profile.frameStart = Stamp();
+            // a shared slot keeps timing: its profile covers the host frame (first device frame's start to the last end)
+            if (!sharedSlot)
+            {
+                s.profile.Reset(frame_);
+                s.stamps = 0;
+                if (caps_.timestampQueries)
+                    s.profile.frameStart = Stamp();
+            }
             FlushPending(cl_, s.ring);
             return true;
         }
@@ -792,6 +803,8 @@ namespace esia::rhi::d3d12
         }
 
         // ------------------------------------------------------------------ readback
+        std::uint32_t ValidationErrors() const override { return log_.Problems(); }
+
         bool ReadPixels(Texture tex, const IRect& r, std::vector<std::uint8_t>& rgba8) override
         {
             rgba8.clear();
@@ -956,7 +969,7 @@ namespace esia::rhi::d3d12
 
         // ------------------------------------------------------------------ frames and submissions
         FrameSlot& Slot() { return slots_[SlotIndex()]; }
-        UINT SlotIndex() const { return (UINT)(frame_ % slots_.size()); }
+        UINT SlotIndex() const { return (UINT)slotCursor_; }
 
         void RecycleSlot(FrameSlot& s)
         {
@@ -1270,6 +1283,8 @@ namespace esia::rhi::d3d12
 
         std::vector<FrameSlot> slots_;
         std::uint64_t frame_ = 0;
+        std::uint64_t hostFrame_ = 0;   // FrameDesc::hostFrame of the last frame (0: none, or an own-list frame)
+        std::size_t slotCursor_ = 0;    // the slot of the current (host) frame
         ComPtr<ID3D12Fence> fence_;
         UINT64 fenceValue_ = 0;
         HANDLE event_ = nullptr;

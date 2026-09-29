@@ -1,9 +1,13 @@
 // Direct3D 9: every program compiles for SM3 with the prelude (and the FX shader for the feature masks batches use,
-// glass included); a host render target surface wrapped, drawn into and read back; the host's state restored.
+// glass included); a host render target surface wrapped, drawn into and read back; the host's state restored;
+// FX variants built in the background.
+#include "esia/rhi/backend_registry.hpp"
 #include "esia/rhi/d3d9.hpp"
 #include "d3d_shader.hpp"
 #include "esia_test.hpp"
 #include <d3d9.h>
+
+void EsiaRegisterBackend_d3d9();
 
 using namespace esia;
 using esia::rhi::d3d::ComPtr;
@@ -21,13 +25,9 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
             std::fprintf(stderr, "%s\n", msg);
     };
     const rhi::d3d::Logger log(dd);
-    static const rhi::d3d::SourcePatch patch = {"esia_fx.hlsl", "[branch] if (feat & (F_GLOW | F_SHADOW))",
-                                                "[branch] if (FX_HAS(feat, F_GLOW) || FX_HAS(feat, F_SHADOW))"};
     rhi::d3d::ShaderRequest r;
     r.model = rhi::d3d::ShaderModel::Sm3;
     r.prelude = reinterpret_cast<const char*>(rhi::d3d9::blobs::esia_sm3_prelude_hlsli);
-    r.patches = &patch;
-    r.patchCount = 1;
     for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
     {
         if ((rhi::ShaderProgram)p == rhi::ShaderProgram::TextLcd || (rhi::ShaderProgram)p == rhi::ShaderProgram::Fx)
@@ -132,4 +132,46 @@ ESIA_TEST(D3D9Host, WrapDrawRestore)
         ESIA_CHECK(px[0] == 0 && px[1] == 0 && std::abs(px[2] - 128) <= 1 && px[3] == 255);
     dev->DestroyTexture(t);
     DestroyWindow(hwnd);
+}
+
+// Background FX variants (Caps::asyncPipelines): CreatePipeline returns at once with a Pending variant that compiles
+// on a worker; GetPipelineStatus makes its shaders on the render thread when it is done; it is never bound before.
+ESIA_TEST(D3D9Pipelines, BackgroundVariants)
+{
+    EsiaRegisterBackend_d3d9();
+    const rhi::BackendInfo* backend = rhi::FindBackend("d3d9");
+    rhi::HeadlessDesc hd;
+    hd.width = hd.height = 16;
+    std::string error;
+    rhi::HeadlessDevice h = backend ? backend->createHeadless(hd, error) : rhi::HeadlessDevice{};
+    if (!h.device)
+    {
+        std::printf("  skipped: no D3D9 device (%s)\n", error.c_str());
+        return;
+    }
+    ESIA_CHECK(h.device->GetCaps().asyncPipelines);
+    rhi::PipelineDesc d;
+    d.program = rhi::ShaderProgram::Fx;
+    d.layout = rhi::VertexLayout::None;
+    d.topology = rhi::Topology::TriangleStrip;
+    d.blend = rhi::BlendMode::Premultiplied;
+    d.fxFeatures = 0x105;   // a mask no other test of this process compiles: not in the compile cache
+    d.background = true;
+    const rhi::Pipeline p = h.device->CreatePipeline(d);
+    ESIA_CHECK((bool)p);
+    ESIA_CHECK(h.device->GetPipelineStatus(p) == rhi::PipelineStatus::Pending);   // an SM3 compile takes far longer
+    rhi::PipelineStatus status = rhi::PipelineStatus::Pending;
+    for (int i = 0; i < 6000 && status == rhi::PipelineStatus::Pending; ++i)
+    {
+        Sleep(10);
+        status = h.device->GetPipelineStatus(p);
+    }
+    ESIA_CHECK(status == rhi::PipelineStatus::Ready);
+    d.background = false;   // the full shader and every non-background pipeline: built in CreatePipeline
+    d.fxFeatures = 0;
+    const rhi::Pipeline full = h.device->CreatePipeline(d);
+    ESIA_CHECK(full && h.device->GetPipelineStatus(full) == rhi::PipelineStatus::Ready);
+    ESIA_CHECK(h.device->ValidationErrors() == 0);
+    h.device->DestroyPipeline(p);
+    h.device->DestroyPipeline(full);
 }

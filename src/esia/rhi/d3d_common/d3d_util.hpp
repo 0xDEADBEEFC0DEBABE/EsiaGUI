@@ -3,7 +3,9 @@
 // every backend can include it whatever else it builds with.
 #pragma once
 #include "esia/rhi/d3d_common.hpp"
+#include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -99,9 +101,13 @@ namespace esia::rhi::d3d
         void Printf(LogLevel level, const char* fmt, ...) const ESIA_PRINTF(3, 4);
         // "<what> failed: 0x887A0005 (DXGI_ERROR_DEVICE_REMOVED)"; returns false for FAILED(hr)
         bool Check(HRESULT hr, const char* what) const;
+        // Messages logged at warning or error level so far - the debug layers' and the backend's own (failed calls,
+        // refused requests): the device's Device::ValidationErrors. Copies of a logger share the count.
+        std::uint32_t Problems() const { return problems_->load(); }
 
     private:
         DebugDesc desc_;
+        std::shared_ptr<std::atomic<std::uint32_t>> problems_ = std::make_shared<std::atomic<std::uint32_t>>(0u);
     };
 
     const char* HResultName(HRESULT hr);

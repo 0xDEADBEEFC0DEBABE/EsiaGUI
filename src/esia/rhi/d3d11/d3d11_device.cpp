@@ -748,6 +748,8 @@ namespace esia::rhi::d3d11
         }
 
         // ------------------------------------------------------------------ readback
+        std::uint32_t ValidationErrors() const override { return log_.Problems(); }
+
         bool ReadPixels(Texture tex, const IRect& r, std::vector<std::uint8_t>& rgba8) override
         {
             rgba8.clear();

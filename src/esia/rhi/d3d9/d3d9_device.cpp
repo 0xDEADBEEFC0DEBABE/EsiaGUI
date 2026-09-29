@@ -4,8 +4,9 @@
 //   * instancing: SetStreamSourceFreq over a static stream of corner ids (0..3, indexed strip) and one of instance
 //     ids (0..n-1); the full-screen triangle from a static stream of 3 ids; FX instances in a dynamic A32B32G32R32F
 //     texture read with vertex texture fetch;
-//   * textures: render targets in D3DPOOL_DEFAULT (StretchRect copies and resolves only write render targets),
-//     everything else dynamic (uploaded with LockRect, read back the same way); RGBA8 is stored as A8R8G8B8
+//   * textures: render targets and copy destinations in D3DPOOL_DEFAULT (StretchRect copies and resolves only write
+//     render targets; their uploads go through UpdateSurface), everything else dynamic (uploaded with LockRect,
+//     read back the same way); RGBA8 is stored as A8R8G8B8
 //     (swizzled on upload and readback), R8 as L8;
 //   * half-pixel offset: gEsiaHalfPixel per pass target; sRGB targets with D3DRS_SRGBWRITEENABLE;
 //   * timestamps: D3DQUERYTYPE_TIMESTAMP / TIMESTAMPDISJOINT / TIMESTAMPFREQ, read a few frames later.
@@ -37,10 +38,6 @@ namespace esia::rhi::d3d9
 
         // A defect of the shared FX shader: one feature test uses integer bit operations instead of FX_HAS, which
         // SM3 cannot compile (STATUS.md, core change requests). Replaced before compilation; a no-op once fixed.
-        const d3d::SourcePatch kPatches[] = {
-            {"esia_fx.hlsl", "[branch] if (feat & (F_GLOW | F_SHADOW))", "[branch] if (FX_HAS(feat, F_GLOW) || FX_HAS(feat, F_SHADOW))"},
-        };
-
         D3DFORMAT D3DFormatOf(Format f)
         {
             switch (f)
@@ -221,7 +218,6 @@ namespace esia::rhi::d3d9
             TextureDesc desc;
             D3DFORMAT format = D3DFMT_UNKNOWN;
             bool renderTarget = false;           // D3DUSAGE_RENDERTARGET (else D3DUSAGE_DYNAMIC)
-            bool uploaded = false;
             IDirect3DSurface9* hostSurface = nullptr;   // wrapped host target: the key of wrapped_
         };
 
@@ -246,6 +242,10 @@ namespace esia::rhi::d3d9
             const Shader* ps = nullptr;
             IDirect3DVertexDeclaration9* decl = nullptr;
             PipelineDesc desc;
+            // a background FX variant (Caps::asyncPipelines): both stages compile on workers; GetPipelineStatus makes
+            // the shaders when they are done (vs / ps stay null until then, or for good when `failed`)
+            bool pending = false, failed = false;
+            d3d::ShaderRequest vr, pr;
         };
 
         struct ProfileSlot
@@ -302,7 +302,7 @@ namespace esia::rhi::d3d9
             // the glass variants of the FX shader take about 3.7k instruction slots (512 are guaranteed)
             static bool warned = false;   // once per process: every headless device of the conformance suite asks
             if (dc.MaxPixelShader30InstructionSlots < 4096 && !std::exchange(warned, true))
-                log_.Printf(LogLevel::Warning, "%lu pixel shader instruction slots: liquid-glass pipelines may fail to build",
+                log_.Printf(LogLevel::Info, "%lu pixel shader instruction slots: liquid-glass pipelines may fail to build",
                             (unsigned long)dc.MaxPixelShader30InstructionSlots);
 
             renderTargets_ = std::max<DWORD>(1, dc.NumSimultaneousRTs);
@@ -314,7 +314,10 @@ namespace esia::rhi::d3d9
             caps_.sampleRenderTarget = true;
             caps_.readback = true;
             caps_.runtimeEffects = true;
-            caps_.fxFeatureVariants = true;   // the whole FX shader exceeds SM3's 32 temporaries
+            // FX variants: a batch's variant is a fraction of the full shader (fill ~450 instruction slots, all ~5.4k),
+            // compiled in the background: the first frames draw with the full shader, started below
+            caps_.fxFeatureVariants = true;
+            caps_.asyncPipelines = true;
             caps_.maxTextureSize = (int)std::min(dc.MaxTextureWidth, dc.MaxTextureHeight);
             // FxFetch computes `instance % perRow` and `instance / perRow` in floats here (SM3 has no integers), and
             // fxc's float modulo is inexact for most divisors (6 % 682 comes out as 5.9999, truncated to the previous
@@ -353,6 +356,18 @@ namespace esia::rhi::d3d9
                 }
             }
             InitTimestamps();
+            // the full FX shader is the fallback of every variant still compiling: start it now, so that the first
+            // frame's CreatePipeline finds it done or in flight (the compile cache waits for it, never compiles twice)
+            d3d::ShaderRequest full;
+            full.program = ShaderProgram::Fx;
+            full.model = d3d::ShaderModel::Sm3;
+            full.prelude = reinterpret_cast<const char*>(blobs::esia_sm3_prelude_hlsli);
+            d3d::Bytecode started;
+            for (shaders::Stage s : {shaders::Stage::Vertex, shaders::Stage::Pixel})
+            {
+                full.stage = s;
+                d3d::CompileShaderAsync(full, log_, started);
+            }
             if (!ok)
                 error = "creating the D3D9 device objects failed";
             return ok;
@@ -375,7 +390,9 @@ namespace esia::rhi::d3d9
             t.desc = desc;
             t.desc.debugName = nullptr;
             t.format = fmt;
-            if (desc.usage & TextureUsage_RenderTarget)
+            // copy destinations too: StretchRect only writes render targets, and a texture made one at its first copy
+            // would lose what was uploaded into it (the renderer creates its backdrop copy zero-filled)
+            if (desc.usage & (TextureUsage_RenderTarget | TextureUsage_CopyDst))
             {
                 if (desc.samples > 1)
                 {
@@ -396,7 +413,7 @@ namespace esia::rhi::d3d9
             }
             else
             {
-                // dynamic: uploads lock it directly, ReadPixels too; it becomes a render target if a copy writes it
+                // dynamic: uploads lock it directly, ReadPixels too
                 if (!Supports(D3DUSAGE_DYNAMIC, fmt) ||
                     !log_.Check(dev_->CreateTexture((UINT)desc.width, (UINT)desc.height, 1, D3DUSAGE_DYNAMIC, fmt, D3DPOOL_DEFAULT, &t.tex, nullptr),
                                 "CreateTexture"))
@@ -449,7 +466,6 @@ namespace esia::rhi::d3d9
             Tex* t = textures_.Find(tex.id);
             if (!t || !data || r.Empty() || !t->tex)
                 return;
-            t->uploaded = true;
             RECT rc = {r.x0, r.y0, r.x1, r.y1};
             D3DLOCKED_RECT lr;
             if (!t->renderTarget)
@@ -529,10 +545,23 @@ namespace esia::rhi::d3d9
             vr.model = d3d::ShaderModel::Sm3;
             vr.fxFeatures = desc.program == ShaderProgram::Fx ? desc.fxFeatures : 0u;
             vr.prelude = reinterpret_cast<const char*>(blobs::esia_sm3_prelude_hlsli);
-            vr.patches = kPatches;
-            vr.patchCount = (int)(sizeof(kPatches) / sizeof(kPatches[0]));
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
+            if (desc.background && desc.program == ShaderProgram::Fx && desc.effect == 0 && desc.fxFeatures != 0)
+            {
+                // a variant takes up to seconds with D3DCompile on a real driver: the frame draws with a ready one
+                Pipe p;
+                p.desc = desc;
+                p.desc.effectSource = nullptr;
+                p.decl = fxDecl_.Get();
+                p.pending = true;
+                p.vr = vr;
+                p.pr = pr;
+                d3d::Bytecode started;
+                d3d::CompileShaderAsync(vr, log_, started);
+                d3d::CompileShaderAsync(pr, log_, started);
+                return Pipeline{pipelines_.Add(std::move(p))};
+            }
             d3d::Bytecode ps;
             if (desc.effect != 0)
             {
@@ -558,7 +587,30 @@ namespace esia::rhi::d3d9
             return Pipeline{pipelines_.Add(std::move(p))};
         }
 
-        void DestroyPipeline(Pipeline p) override { pipelines_.Remove(p.id); }
+        void DestroyPipeline(Pipeline p) override { pipelines_.Remove(p.id); }   // a pending compile ends in the cache
+
+        // The render thread asks: a background pipeline whose stages compiled gets its shader objects here.
+        PipelineStatus GetPipelineStatus(Pipeline p) const override
+        {
+            Pipe* pipe = pipelines_.Find(p.id);
+            if (!pipe || pipe->failed)
+                return PipelineStatus::Failed;
+            if (!pipe->pending)
+                return PipelineStatus::Ready;
+            d3d::Bytecode vs, ps;
+            const d3d::CompileState v = d3d::CompileShaderAsync(pipe->vr, log_, vs);
+            const d3d::CompileState f = d3d::CompileShaderAsync(pipe->pr, log_, ps);
+            if (v != d3d::CompileState::Failed && f != d3d::CompileState::Failed && (v == d3d::CompileState::Pending || f == d3d::CompileState::Pending))
+                return PipelineStatus::Pending;
+            pipe->pending = false;
+            if (vs && ps)
+            {
+                pipe->vs = ShaderOf(vs, true);
+                pipe->ps = ShaderOf(ps, false);
+            }
+            pipe->failed = !pipe->vs || !pipe->ps;
+            return pipe->failed ? PipelineStatus::Failed : PipelineStatus::Ready;
+        }
 
         // ------------------------------------------------------------------ frame
         bool BeginFrame(const FrameDesc&) override
@@ -654,8 +706,11 @@ namespace esia::rhi::d3d9
         void SetPipeline(Pipeline p) override
         {
             const Pipe* pipe = pipelines_.Find(p.id);
-            if (!pipe)
+            if (!pipe || !pipe->vs || !pipe->ps)
+            {
+                log_.Log(LogLevel::Error, "SetPipeline: a pipeline that is not Ready (GetPipelineStatus)");
                 return;
+            }
             if (hostTouched_)
                 ApplyPassState();
             pipe_ = pipe;
@@ -756,9 +811,11 @@ namespace esia::rhi::d3d9
             Tex* s = textures_.Find(src.id);
             if (!d || !s || r.Empty())
                 return;
-            // StretchRect only writes render targets: the destination (the backdrop copy) becomes one at its first copy
-            if (!d->renderTarget && !MakeRenderTarget(*d))
+            if (!d->renderTarget)
+            {
+                log_.Log(LogLevel::Error, "CopyTexture: the destination was not created with TextureUsage_CopyDst");
                 return;
+            }
             const RECT sr = {r.x0, r.y0, r.x1, r.y1};
             const RECT dr = {dstX, dstY, dstX + r.Width(), dstY + r.Height()};
             log_.Check(dev_->StretchRect(s->surface.Get(), &sr, d->surface.Get(), &dr, D3DTEXF_NONE), "StretchRect");
@@ -804,6 +861,8 @@ namespace esia::rhi::d3d9
         }
 
         // ------------------------------------------------------------------ readback
+        std::uint32_t ValidationErrors() const override { return log_.Problems(); }
+
         bool ReadPixels(Texture tex, const IRect& r, std::vector<std::uint8_t>& rgba8) override
         {
             rgba8.clear();
@@ -852,11 +911,9 @@ namespace esia::rhi::d3d9
             return SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, deviceType_, adapterFormat_, usage, D3DRTYPE_TEXTURE, fmt));
         }
 
-        // (Re)creates `t` as a render-target texture cleared to transparent black.
+        // Creates `t` as a render-target texture cleared to transparent black.
         bool MakeRenderTarget(Tex& t)
         {
-            if (t.uploaded)
-                log_.Log(LogLevel::Warning, "a texture with uploaded contents became a copy destination: its contents were dropped");
             ComPtr<IDirect3DTexture9> tex;
             ComPtr<IDirect3DSurface9> surface;
             if (!Supports(D3DUSAGE_RENDERTARGET, t.format) ||
@@ -871,7 +928,6 @@ namespace esia::rhi::d3d9
             t.tex = tex;
             t.surface = surface;
             t.renderTarget = true;
-            t.uploaded = false;
             return true;
         }
 
@@ -905,7 +961,7 @@ namespace esia::rhi::d3d9
             return true;
         }
 
-        const Shader* ShaderOf(const d3d::Bytecode& code, bool vertex)
+        const Shader* ShaderOf(const d3d::Bytecode& code, bool vertex) const
         {
             auto it = shaders_.find(code.get());
             if (it != shaders_.end())
@@ -1067,10 +1123,10 @@ namespace esia::rhi::d3d9
 
         d3d::HandleTable<Tex> textures_;
         d3d::HandleTable<Buf> buffers_;
-        d3d::HandleTable<Pipe> pipelines_;
+        mutable d3d::HandleTable<Pipe> pipelines_;   // mutable: GetPipelineStatus completes background builds
         std::unordered_map<IDirect3DSurface9*, std::uint32_t> wrapped_;
         // shader objects and their constant tables per bytecode (the process-wide cache keeps the keys alive)
-        std::unordered_map<const std::vector<std::uint8_t>*, Shader> shaders_;
+        mutable std::unordered_map<const std::vector<std::uint8_t>*, Shader> shaders_;
         ComPtr<IDirect3DVertexDeclaration9> uiDecl_, fxDecl_, fullscreenDecl_;
         ComPtr<IDirect3DVertexBuffer9> cornerIds_, fullscreenIds_, instanceIds_;
         UINT instanceIdCount_ = 0;

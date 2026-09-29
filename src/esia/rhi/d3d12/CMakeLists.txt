@@ -8,5 +8,5 @@ esia_register_backend(d3d12 esia_rhi_d3d12)
 
 if(BUILD_TESTING)
     esia_add_test(esia_rhi_d3d12_tests tests/test_d3d12_host.cpp)
-    target_link_libraries(esia_rhi_d3d12_tests PRIVATE esia_rhi_d3d12 d3d12)
+    target_link_libraries(esia_rhi_d3d12_tests PRIVATE esia_rhi_d3d12 esia_conformance_scenes d3d12)
 endif()

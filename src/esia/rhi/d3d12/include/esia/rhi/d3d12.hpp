@@ -13,9 +13,10 @@
 // * Two ways to run a frame:
 //   - FrameDesc::nativeContext = the host's ID3D12GraphicsCommandList (open, recording): the frame is recorded into
 //     it and the host executes it. Per-frame memory (constants, vertices, instances, uploads, descriptor tables) is
-//     a ring of `framesInFlight` slots, and a slot is reused framesInFlight device frames later: the host must have
-//     waited for that frame's GPU work by then. One Renderer::Render is one device frame, so a host that renders N
-//     targets per host frame with F host frames in flight passes framesInFlight = N * F.
+//     a ring of `framesInFlight` slots, and a slot is reused framesInFlight frames later: the host must have waited
+//     for that frame's GPU work by then. One Renderer::Render is one device frame; a host that renders several targets
+//     per frame passes its frame number in FrameDesc::hostFrame (RenderParams::frame), and the device frames of one
+//     host frame share a slot, so framesInFlight counts host frames (their lists executed in recording order).
 //   - nativeContext = null with Desc::queue: the device records into its own command list, executes it on `queue`
 //     at EndFrame and fences its ring slots itself (what the headless conformance device does).
 // * ReadPixels (tests, screenshots) needs Desc::queue: it records a copy on the device's own list, executes it and

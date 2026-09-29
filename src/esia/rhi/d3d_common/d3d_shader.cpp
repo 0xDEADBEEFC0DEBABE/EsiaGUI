@@ -40,21 +40,6 @@ namespace esia::rhi::d3d
             return dll;
         }
 
-        std::string Patched(const char* file, const char* text, const ShaderRequest& r)
-        {
-            std::string s = text;
-            for (int i = 0; i < r.patchCount; ++i)
-            {
-                const SourcePatch& p = r.patches[i];
-                if (std::strcmp(p.file, file) != 0)
-                    continue;
-                const std::size_t at = s.find(p.from);
-                if (at != std::string::npos)
-                    s.replace(at, std::strlen(p.from), p.to);
-            }
-            return s;
-        }
-
         // Serves #include "esia_common.hlsli" (the embedded sources) and "esia_user_effect.hlsli" (the effect).
         class Includes final : public ID3DInclude
         {
@@ -70,7 +55,7 @@ namespace esia::rhi::d3d
                     text = shaders::FindSource(name);
                 if (!text)
                     return E_FAIL;
-                files_.push_back(std::make_unique<std::string>(Patched(name, text, request_)));
+                files_.push_back(std::make_unique<std::string>(text));
                 *data = files_.back()->data();
                 *bytes = (UINT)files_.back()->size();
                 return S_OK;
@@ -138,7 +123,7 @@ namespace esia::rhi::d3d
             std::string source;
             if (r.prelude)
                 source = std::string(r.prelude) + "\n#line 1 \"" + src.file + "\"\n";
-            source += Patched(src.file, text, r);
+            source += text;
 
             const bool fx = r.program == ShaderProgram::Fx;
             const std::string features = std::to_string(r.fxFeatures) + "u";
@@ -270,7 +255,7 @@ namespace esia::rhi::d3d
         {
             std::shared_ptr<Entry> entry(new Entry);
             c.entries.emplace(key, entry);
-            // the worker owns a copy of the effect source (the prelude and patches are static data) and never logs:
+            // the worker owns a copy of the effect source (the prelude is static data) and never logs:
             // the host's callback and its user pointer may be gone before a compile of seconds ends
             std::thread([r = request, source = std::string(request.effectSource ? request.effectSource : ""), entry]() mutable {
                 r.effectSource = r.effectSource ? source.c_str() : nullptr;

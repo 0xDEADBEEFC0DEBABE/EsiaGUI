@@ -12,6 +12,8 @@ namespace esia::rhi::d3d
     // ------------------------------------------------------------------ logging
     void Logger::Log(LogLevel level, const std::string& message) const
     {
+        if (level != LogLevel::Info)
+            ++*problems_;
         if (desc_.log)
         {
             desc_.log(desc_.logUser, level, message.c_str());

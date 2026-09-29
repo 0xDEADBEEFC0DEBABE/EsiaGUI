@@ -14,20 +14,12 @@ namespace esia::rhi::d3d
 {
     enum class ShaderModel : std::uint8_t
     {
-        Sm3,   // vs_3_0 / ps_3_0, FX instances in a texture, the D3D9 backend's prelude and source fix-ups
+        Sm3,   // vs_3_0 / ps_3_0, FX instances in a texture, the D3D9 backend's prelude
         Sm4,   // vs_4_0 / ps_4_0, FX instances in a texture (D3D10)
         Sm5,   // vs_5_0 / ps_5_0, FX instances in a structured buffer (D3D11, D3D12)
     };
 
     using Bytecode = std::shared_ptr<const std::vector<std::uint8_t>>;
-
-    // A textual replacement applied to every source file before compilation (SM3 fix-ups of the shared sources).
-    struct SourcePatch
-    {
-        const char* file;
-        const char* from;
-        const char* to;
-    };
 
     struct ShaderRequest
     {
@@ -36,11 +28,9 @@ namespace esia::rhi::d3d
         ShaderModel model = ShaderModel::Sm5;
         std::uint32_t fxFeatures = 0;          // Fx: ESIA_FX_FEATURES (0 = every feature)
         const char* effectSource = nullptr;    // Fx pixel shader: the user effect (ESIA_CUSTOM_EFFECT)
-        // Sm3: the prelude, prepended to the program's source: fxc's preprocessor cannot `#include` a macro, so
-        // esia_common.hlsli's `#include ESIA_SHADER_PRELUDE` is not usable with D3DCompile (STATUS.md, core requests)
+        // Sm3: the prelude, prepended to the program's source (a #line keeps the program's file and line numbers in
+        // the compiler's messages)
         const char* prelude = nullptr;
-        const SourcePatch* patches = nullptr;
-        int patchCount = 0;
     };
 
     // Loads d3dcompiler_47.dll (once); false with the reason when it is missing.

@@ -148,14 +148,40 @@ Windows 11, NVIDIA GeForce RTX 4080 SUPER (driver 610.88), Graphics Tools debug 
 | `esia_rhi_d3d12_tests` and the d3d12 conformance run with GPU-based validation (`ESIA_D3D_DEBUG=2`) | pass, no message |
 
 D3D9 draws its glass on the real driver (the SM3 glass variants compile and fit); its first frames compile FX
-variants for up to 2.6 s each (`features 0x822` / `0x823` / `0x826`), which a host notices as hitches. fxc warns
-X3203 (signed / unsigned mismatch) at `esia_fx.hlsl(236)` in every SM3 FX compile (a core shader line).
+variants for up to 2.6 s each (`features 0x822` / `0x823` / `0x826`), which a host notices as hitches (fixed with
+the asynchronous variants below). fxc warns X3203 (signed / unsigned mismatch) at `esia_fx.hlsl(236)` in every SM3
+FX compile (a core shader line, fixed in core round 2).
 
 Fixed on this branch by the local session: `D3D12_HEAP_PROPERTIES` initialized in full (clang-cl's
 `-Wmissing-field-initializers` with the SDK's five-field struct), the `ID3DInclude` overrides `noexcept` (the SDK
 declares them `COM_DECLSPEC_NOTHROW`: `-Wmicrosoft-exception-spec`), and D3D12 render targets created with an
 optimized clear value of transparent black (every `ClearRenderTargetView` was a debug-layer warning without one; a
 host's clear in another color only draws `CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE`, left out of the log).
+
+### Core round 2 (the local Windows session)
+
+After merging `esia-core` round 2 (and `3a8d164`, public headers after `<windows.h>`), the backend follow-ups of
+`docs/REWRITE_STATUS.md` section 5:
+
+* **Shader patches removed.** The SM3 fix of `esia_fx.hlsl` line 719 is in core, so `kPatches` found nothing; with
+  no patch left, the whole mechanism (`SourcePatch`, `ShaderRequest::patches`) is gone rather than kept empty.
+* **`ValidationErrors()`** on all four devices: the logger counts what it reports at warning or error level (debug
+  layers, failed calls). D3D9's instruction-slot notice is information now. Copy destinations are render targets
+  from creation, so the renderer's zero-filled backdrop copy no longer loses its upload at the first copy (the
+  "contents were dropped" warning); a copy into a texture without `CopyDst` is an error.
+* **`FrameDesc::hostFrame` on D3D12**: the device frames of one host frame share a ring slot; slots rotate per slot
+  taken. `D3D12Host.TwoTargetsPerHostFrame` renders two targets per host frame for five frames with two in flight
+  and compares both with the headless rendering.
+* **D3D9 asynchronous variants** (`Caps::asyncPipelines`): FX variants compile on workers and stay `Pending` until
+  `GetPipelineStatus` (render thread) makes their shaders; the full FX shader starts compiling at device creation
+  (every pending batch's fallback). The single-frame D3D9 conformance run, a fresh device per scene, went from about
+  11.7 s to 5 s; no frame waits for a variant any more. Test: `D3D9Pipelines.BackgroundVariants`.
+
+Verified on the RTX 4080 SUPER: clang-cl 22.1.8 and MSVC 19.44 (`/W4 /WX`) with all four options, 0 warnings;
+`ctest` 20 / 20 (both compilers); with `ESIA_D3D_DEBUG=1`, `esia_conformance --strict`, single frame and
+`--frames 3`: d3d11, d3d12, d3d10 18 / 18, d3d9 17 + `text_lcd` SKIP, no debug-layer warning or error (they now fail
+scenes); D3D12 GPU-based validation clean. Largest differences from the llvmpipe goldens: D3D9 `srgb_msaa` 33 and
+`msaa_target` 25 (under 0.02 % of the pixels), everything else 20 or less.
 
 ## 4. Not verified
 
