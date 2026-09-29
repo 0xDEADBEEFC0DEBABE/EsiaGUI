@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WGT UI - MSBuild property sheet for Visual Studio projects that do not use CMake.
+
+  Visual Studio: View > Property Manager > right-click the project > Add Existing Property Sheet... > wgt.props
+  or in the .vcxproj:  <Import Project="<SDK root>\wgt.props" />
+
+  Adds the include directories, IMGUI_USER_CONFIG, C++20, /utf-8, links wgt.lib and copies wgt.dll next to
+  the built executable. Works for every configuration (a Debug build may use the Release wgt.dll).
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <WgtRoot>$(MSBuildThisFileDirectory)</WgtRoot>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(WgtRoot)include;$(WgtRoot)include\imgui;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>IMGUI_USER_CONFIG="wgt/imconfig_wgt.h";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(WgtRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>wgt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="WgtCopyRuntime" AfterTargets="Build">
+    <Copy SourceFiles="$(WgtRoot)bin\wgt.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

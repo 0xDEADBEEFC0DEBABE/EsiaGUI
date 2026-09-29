@@ -1,0 +1,16 @@
+# normalize text to LF in the repository; git picks the working-tree line endings per platform
+* text=auto
+
+# Visual Studio files keep CRLF
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.props text eol=crlf
+
+# binaries
+*.ttf binary
+*.otf binary
+*.png binary
+*.lib binary
+*.dll binary
+*.exe binary
