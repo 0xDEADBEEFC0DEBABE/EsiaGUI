@@ -218,8 +218,8 @@ the current Direct3D backends:
   (as WGT does). Sampling never decodes sRGB: a render target that is sRGB is sampled only through a raw view, and
   `CopyTexture` copies bits - the backdrop copy of an sRGB target is its `RawFormat`.
 * **Capabilities** (`rhi::Caps`) instead of API versions: FX instance storage, bottom-left origin, y-down clip
-  space, D3D9's half-pixel offset, dual-source blending, float render targets, sampling render targets, timestamps,
-  readback, runtime effects, FX feature variants, texture and instance-texture limits.
+  space, D3D9's half-pixel offset, float render targets, sampling render targets, timestamps, readback, runtime
+  effects, FX feature variants (and building them in the background), texture and instance-texture limits.
 * **Host callbacks**: `NativeRenderState()` returns the object host code records into (device context, command
   list / buffer, encoder, device); the backend forgets its bindings, the renderer binds again.
 * **Validation**: the null device (`include/esia/rhi/null_device.hpp`) checks every rule above - draws outside
@@ -246,7 +246,6 @@ What the renderer asks for, and how each API provides it. "Caps" names the `rhi:
 | Blur pyramid (levels 1..5, 13-tap downsample) | render-target textures, `A16B16G16R16F` if `D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING`, else A8R8G8B8 | RGBA16F RTs | RGBA16F RTs | RGBA16F RTs | RGBA16F FBOs | RGBA16F only with `EXT_color_buffer_half_float` - else RGBA8 (`Caps::floatRenderTargets = false`) | RGBA16F attachments | `rgba16Float` |
 | Glow layer + region clear | Clear program draw (scissored) | same | same (D3D11.1 `ClearView` would also do) | same | same | same | same (or `vkCmdClearAttachments`) | Clear program (Metal has no partial clear) |
 | Blend: straight / premultiplied / opaque | render states | blend states | blend states | PSO blend | `glBlendFuncSeparate` | same | pipeline blend | pipeline blend |
-| Blend: dual-source (sub-pixel text) | no -> grayscale coverage (`dualSourceBlend = false`) | `SRC1_COLOR` | `SRC1_COLOR` | `SRC1_COLOR` | `GL_SRC1_COLOR` (core 3.3) | `EXT_blend_func_extended`, else no | `dualSrcBlend` feature | `index(1)` output (macOS 10.12+, iOS 11+) |
 | Scissor | `D3DRS_SCISSORTESTENABLE` + `SetScissorRect` | RS scissor | RS scissor | `RSSetScissorRects` | `glScissor` (y flipped: bottom-left) | same | dynamic scissor | `setScissorRect` (within the attachment) |
 | sRGB targets | `D3DRS_SRGBWRITEENABLE`; sampling with `D3DSAMP_SRGBTEXTURE` off is raw | sRGB RTV, typeless resource for raw views | same | same | `GL_FRAMEBUFFER_SRGB` enabled for sRGB attachments | sRGB attachments always encode | `*_SRGB` formats | `*_sRGB` pixel formats |
 | Multisampled host targets | `StretchRect` resolve | resolve | resolve | resolve | blit resolve | blit resolve | `vkCmdResolveImage` | resolve texture / `copyFromTexture` after a resolve pass |
@@ -262,23 +261,21 @@ What the renderer asks for, and how each API provides it. "Caps" names the `rhi:
   (the backend reads the constant table from the bytecode), 512 pixel-shader instruction slots guaranteed (32768
   on current hardware). The whole FX shader may not fit a given profile: `Caps::fxFeatureVariants` lets the backend
   compile the FX shader per batch feature mask (`ESIA_FX_FEATURES`), so a batch of plain rounded rects never carries
-  the glass code. Use Direct3D 9Ex (no lost `D3DPOOL_DEFAULT` resources). No dual-source blending: sub-pixel pages
-  draw with their grayscale coverage. `StretchRect` only writes render-target surfaces, so the backdrop copy is a
-  render-target texture.
-* **Direct3D 10 / SM4.** Instancing, `SV_InstanceID`, dual-source blending and typed resources exist; structured
+  the glass code. Use Direct3D 9Ex (no lost `D3DPOOL_DEFAULT` resources). `StretchRect` only writes render-target
+  surfaces, so the backdrop copy is a render-target texture.
+* **Direct3D 10 / SM4.** Instancing, `SV_InstanceID` and typed resources exist; structured
   buffers do not, so FX instances come from a texture (`dxbc_sm4` is compiled with `ESIA_FX_STORAGE_TEXTURE`).
 * **Direct3D 11 / 12.** Everything; D3D12 manages barriers (render target <-> copy source / pixel-shader resource,
   pyramid levels between render target and shader resource), descriptor heaps, an upload ring per frame in flight
   and deferred releases, as WGT's D3D12 backend does today.
-* **OpenGL 3.3 vs 4.x.** 3.3 has what the renderer needs (UBOs, instancing, `texelFetch`, sampler objects,
-  dual-source blending, timer queries, `glBlitFramebuffer`). 4.x only makes it faster or simpler: SSBOs for
+* **OpenGL 3.3 vs 4.x.** 3.3 has what the renderer needs (UBOs, instancing, `texelFetch`, sampler objects, timer
+  queries, `glBlitFramebuffer`). 4.x only makes it faster or simpler: SSBOs for
   instances (a GLSL 430 variant), `glClipControl` (4.5) for a top-left origin and no flips, persistent mapping
   (4.4), DSA (4.5), texture views (4.3) for raw sRGB. The bottom-left origin is handled once, in the shaders
   (`WgtPixelPos`, `WgtRtUv`) and in the backend's rectangle conversion.
 * **OpenGL ES 3.0 / WebGL 2.** Like GL 3.3 minus: float render targets need `EXT_color_buffer_half_float` /
-  `EXT_color_buffer_float` (else RGBA8 pyramids and layers, some banding), dual-source blending needs
-  `EXT_blend_func_extended`, timestamps need `EXT_disjoint_timer_query`; `highp` everywhere (the generated ESSL
-  declares it).
+  `EXT_color_buffer_float` (else RGBA8 pyramids and layers, some banding), timestamps need
+  `EXT_disjoint_timer_query`; `highp` everywhere (the generated ESSL declares it).
 * **Vulkan.** A pass is a render pass (or dynamic rendering, 1.3); every texture has a tracked layout and the
   backend inserts the barriers the RHI implies (copy source / destination around `CopyTexture`, color attachment
   vs. shader read between a pyramid level's pass and the next level). Descriptor set 0 matches the binding model;
@@ -351,16 +348,21 @@ Binding numbers, identical everywhere:
 | `gFxData` | t7 | 10 (storage buffer / sampled image) | buffer 10 (device) | (texture) |
 | `gLinear` / `gPoint` | s0 / s1 | 11 / 12 | sampler 11 / 12 | (same) |
 | UI vertex (pos, uv, color) | `POSITION`, `TEXCOORD0`, `COLOR0` | locations 0 / 1 / 2 | attributes 0 / 1 / 2 (stage_in; put the vertex buffer at an index not listed above) | locations 0 / 1 / 2 |
-| Sub-pixel text outputs | `SV_Target0` / `SV_Target1` | location 0, index 0 / 1 | `color(0)`, `index(1)` | `location = 0, index = 1` |
 
 ## 9. Text
 
 `include/esia/text/text.hpp` is the interface Painter and widgets use: fonts (files, memory, fallback chain),
-`NewFrame(RasterParams)` (pixel density, grayscale / sub-pixel), `Measure`, `Draw` (glyph quads into a
-`DrawList`, rasterized at the scaled size under `PushScale`), `DrawGlyph` (icon fonts). A text system owns its
-glyph pages in the `TextureRegistry`: Alpha8 for grayscale, RGBA8 with `TextureFlags_LcdCoverage` for sub-pixel;
-the renderer picks the text program from the page's format, so text needs no special commands, and the gamma /
-contrast composition of WGT's text shaders (`TextComposition`, DirectWrite's model) applies to every backend.
+`NewFrame(RasterParams)` (pixel density), `Measure`, `Draw` (glyph quads into a `DrawList`, rasterized at the
+scaled size under `PushScale`), `DrawGlyph` (icon fonts). A text system owns its glyph pages in the
+`TextureRegistry`: Alpha8 coverage, which the renderer recognizes from the page's format and draws with its text
+program (`TextGray`), so text needs no special commands; the gamma / contrast composition of WGT's grayscale text
+shader (`TextComposition`, DirectWrite's model) applies to every backend.
+
+**No sub-pixel text.** By the owner's decision, Esia antialiases text in grayscale everywhere: there is no LCD /
+ClearType text - no per-stripe RGB coverage or stripe order (RGB / BGR, OLED layouts), no dual-source blending, no
+ClearType level or contrast. It was removed in core round 3 (the RHI's `TextLcd` / `TextLcdGray` programs,
+`BlendMode::DualSourceLcd` and `Caps::dualSourceBlend` with it). What stays is sub-pixel *positioning* - the
+quarter-pixel pen phases of the rasterizer and the atlas - and the grayscale gamma / contrast composition.
 
 Implementations:
 
@@ -370,11 +372,12 @@ Implementations:
   the added fonts; greedy line breaking (spaces, hyphens, CJK with a small kinsoku set, character breaks for
   overlong words), ellipsis trimming, alignment; WGT's uniform line box. FreeType only reads the unhinted outlines;
   they are covered by WGT's analytic rasterizer, now platform-free in `include/esia/text/glyph_raster.hpp`
-  (exact area coverage, 4 horizontal sub-pixel phases, the 5-tap LCD filter) and packed by `GlyphAtlas` into the
+  (exact area coverage, 4 horizontal sub-pixel phases) and packed by `GlyphAtlas` into the
   `TextureRegistry`. Not yet: the Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left,
   but the runs of a line are laid out left to right - fribidi / ICU in phase 2), color glyphs, system fonts.
 * **DirectWrite** (Windows): WGT's `src/text` (system font collection, per-character fallback, COLR emoji, the
-  analytic rasterizer, ClearType-style filtering, the user's text parameters) moved behind the interface.
+  analytic rasterizer, the user's text parameters) moved behind the interface, without its ClearType-style
+  sub-pixel filtering.
 * **Core Text** (Apple): system fonts and fallback, the same rasterizer.
 
 Every implementation feeds its outlines to the same rasterizer and atlas, so a glyph looks the same whichever
@@ -459,7 +462,7 @@ Cross-compiling the DirectX backends from Linux:
   comparison), shader library (completeness; GLSL / ESSL compiled and linked on the system driver through EGL),
   text (the rasterizer's exact coverage, the atlas, FreeType layout with the fonts in `third_party/imgui/misc/fonts`,
   and golden images of the glyph quads composited on the CPU - no GPU needed).
-* **Conformance suite** (`tests/conformance`, the scenes also a library for backend tests): 18 scenes built
+* **Conformance suite** (`tests/conformance`, the scenes also a library for backend tests): 17 scenes built
   through the public API, rendered by every backend built into the binary. Drawing backends are read back and
   compared with golden PNGs within per-scene tolerances (a share of differing pixels, a maximum and a mean channel
   difference); the null backend's command streams are compared with golden logs, and any RHI contract violation
@@ -503,7 +506,7 @@ Cross-compiling the DirectX backends from Linux:
   DirectX backends are cross-compiled; D3D9 / 10 / 11 also run the conformance suite under Wine (wined3d over
   llvmpipe) with Microsoft's `d3dcompiler_47.dll`, which tests the code paths but not a real driver; D3D12 does not
   start there. Real drivers: the local Windows run (NVIDIA, round 2).
-* **Text parity.** DirectWrite's system fallback, color emoji and ClearType tuning are Windows features; the
+* **Text parity.** DirectWrite's system fallback and color emoji are Windows features; the
   FreeType path must match WGT's rasterizer closely enough that screenshots stay within tolerance.
 * **sRGB targets blend in linear light.** Translucent content on an `*_SRGB` target looks different from a UNORM
   target (it does in WGT's D3D11 backend too); the conformance suite has a separate golden for it.
