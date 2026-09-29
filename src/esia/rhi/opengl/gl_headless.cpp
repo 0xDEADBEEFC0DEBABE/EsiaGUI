@@ -166,10 +166,11 @@ namespace esia::rhi::opengl
                 return nullptr;
             }
 #ifdef NDEBUG
-            const EGLint debug = 0;
+            constexpr bool kDebugContext = false;
 #else
-            const EGLint debug = EGL_TRUE;   // full KHR_debug output in debug builds
+            constexpr bool kDebugContext = true;   // full KHR_debug output in debug builds
 #endif
+            const EGLint debug = kDebugContext ? EGL_TRUE : 0;
             const EGLint glAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK,
                                         EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_CONTEXT_OPENGL_DEBUG, debug, EGL_NONE};
             const EGLint esAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0, EGL_CONTEXT_OPENGL_DEBUG, debug, EGL_NONE};
