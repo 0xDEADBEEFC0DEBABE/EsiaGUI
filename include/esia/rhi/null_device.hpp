@@ -23,6 +23,12 @@ namespace esia::rhi
         Caps caps;
         bool record = true;     // keep the log (validation runs either way)
         bool keepData = false;  // keep what was uploaded into buffers and textures (Data())
+        // Caps::asyncPipelines as a backend would do it: a PipelineDesc::background pipeline stays Pending for this
+        // many frames (BeginFrame calls), then turns Ready - or Failed with failBackground
+        int pendingFrames = 0;
+        bool failBackground = false;
+        bool refuseFxVariants = false;   // CreatePipeline returns {} for Fx pipelines with fxFeatures (SM3 overflow)
+        std::uint32_t refusePrograms = 0;   // ... and for these programs (bit 1 << ShaderProgram): broken backends
     };
 
     struct NullStats
@@ -47,6 +53,7 @@ namespace esia::rhi
         void DestroyBuffer(Buffer buf) override;
         Pipeline CreatePipeline(const PipelineDesc& desc) override;
         void DestroyPipeline(Pipeline p) override;
+        PipelineStatus GetPipelineStatus(Pipeline p) const override;
 
         bool BeginFrame(const FrameDesc& desc) override;
         void EndFrame() override;
@@ -68,6 +75,7 @@ namespace esia::rhi
         bool ReadProfile(GpuProfile& out) override;
         bool ReadPixels(Texture tex, const IRect& rect, std::vector<std::uint8_t>& rgba8) override;
         void* NativeRenderState() override;
+        std::uint32_t ValidationErrors() const override { return (std::uint32_t)errors_.size(); }
 
         // A texture standing for a host render target (what a real backend's WrapRenderTarget returns).
         Texture CreateHostTarget(int width, int height, Format format, bool sampleable, int samples = 1);
@@ -92,6 +100,7 @@ namespace esia::rhi
         std::string TexName(Texture t) const;
 
         Caps caps_;
+        NullOptions options_;
         bool record_ = true;
         bool keepData_ = false;
         std::unordered_map<std::uint32_t, std::vector<std::uint8_t>> data_;
@@ -99,6 +108,7 @@ namespace esia::rhi
         std::unordered_map<std::uint32_t, TextureDesc> textures_;
         std::unordered_map<std::uint32_t, BufferDesc> buffers_;
         std::unordered_map<std::uint32_t, PipelineDesc> pipelines_;
+        std::unordered_map<std::uint32_t, std::uint64_t> pipelineReadyAt_;   // background pipelines: first Ready frame
         bool inFrame_ = false, inPass_ = false, passStarted_ = false;
         Texture passTarget_;
         Pipeline pipeline_;

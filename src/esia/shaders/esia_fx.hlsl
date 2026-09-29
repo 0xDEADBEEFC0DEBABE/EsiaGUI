@@ -1,6 +1,7 @@
 // Esia - FX shape renderer (program Fx: FxVS + FxPS, 4-vertex triangle-strip quads, instanced).
-// Ported unchanged from WGT's src/shaders/wgt_fx.hlsl except for how instances arrive (FxLoad) and the pixel
-// position (WgtPixelPos: top-left pixels on every API).
+// Ported unchanged from WGT's src/shaders/wgt_fx.hlsl except for how instances arrive (the hot rows as flat varyings,
+// the others fetched where they are read: FxPixelRows, FX_FETCH) and the pixel position (WgtPixelPos: top-left pixels
+// on every API).
 //
 // Every WGT shape (rounded rect, capsule, circle, arc, segment, liquid merge) is one GPU instance.
 // The instance carries the full material: paint, stroke, drop/inner shadow, outer/inner glow,
@@ -31,17 +32,18 @@
 #define F_HALO         8192u
 #define F_CAUSTIC      16384u
 
-// Shape kinds (esia::fx::ShapeKind)
-#define SHAPE_RRECT    0u
-#define SHAPE_ARC      1u
-#define SHAPE_SEGMENT  2u
+// Shape kinds (esia::fx::ShapeKind) and paint kinds (esia::fx::PaintKind), compared with the flags row: plain
+// literals take the type of what they are compared with (a uint on SM4+, the float SM3 emulates it with), so
+// neither model warns about a signed / unsigned mismatch
+#define SHAPE_RRECT    0
+#define SHAPE_ARC      1
+#define SHAPE_SEGMENT  2
 
-// Paint kinds (esia::fx::PaintKind)
-#define PAINT_SOLID    0u
-#define PAINT_LINEAR   1u
-#define PAINT_RADIAL   2u
-#define PAINT_CONIC    3u
-#define PAINT_SPECTRUM 4u
+#define PAINT_SOLID    0
+#define PAINT_LINEAR   1
+#define PAINT_RADIAL   2
+#define PAINT_CONIC    3
+#define PAINT_SPECTRUM 4
 
 struct FxInst
 {
@@ -69,17 +71,52 @@ struct FxInst
     float4 custom;       // 21 user effect parameters
     float4 halo;         // 22 halo bounds: the outer glow fades out before reaching them
     uint4  flags;        // 23 x=features y=paint kind z=shape kind w=reserved
+    uint   index;        // the instance, where FX_FETCH reads the rows the pixel shader was not given
 };
 
-#define FX_FIELDS(X) \
-    X(0, rect) X(1, radii) X(2, fill0) X(3, fill1) X(4, fillParams) X(5, stroke) X(6, strokeParams) \
-    X(7, shadow) X(8, shadowParams) X(9, glow) X(10, glowParams) X(11, glass) X(12, glassTint) \
-    X(13, glassParams) X(14, shape) X(15, shape2) X(16, shape2Params) X(17, misc) X(18, uvRect) \
-    X(19, mask) X(20, maskParams) X(21, custom) X(22, halo)
+#define FX_ROW_rect          0u
+#define FX_ROW_radii         1u
+#define FX_ROW_fill0         2u
+#define FX_ROW_fill1         3u
+#define FX_ROW_fillParams    4u
+#define FX_ROW_stroke        5u
+#define FX_ROW_strokeParams  6u
+#define FX_ROW_shadow        7u
+#define FX_ROW_shadowParams  8u
+#define FX_ROW_glow          9u
+#define FX_ROW_glowParams   10u
+#define FX_ROW_glass        11u
+#define FX_ROW_glassTint    12u
+#define FX_ROW_glassParams  13u
+#define FX_ROW_shape        14u
+#define FX_ROW_shape2       15u
+#define FX_ROW_shape2Params 16u
+#define FX_ROW_misc         17u
+#define FX_ROW_uvRect       18u
+#define FX_ROW_mask         19u
+#define FX_ROW_maskParams   20u
+#define FX_ROW_custom       21u
+#define FX_ROW_halo         22u
+#define FX_ROW_flags        23u
 
-// Instances are not vertex attributes (24 would exceed the 16 that GL 3.3 / GLES 3 / D3D10 guarantee, and 24
-// interpolators exceed their varyings too): both stages fetch the fields they need from the instance data by
-// instance index. Row 23 (flags) holds the integer flags as float values (exact below 2^24).
+// The hot rows are what every pixel of every shape reads (bounds, radii, fill color, shape parameters, opacity and
+// the flags): the vertex shader fetches them and hands them to the pixel shader as flat varyings, the way WGT
+// passed its instance - 8 interpolators in all, within every target's budget (GL 3.3 / GLES 3 / D3D10: 15 - 16, SM3:
+// 10). The cold rows are fetched by the branches that read them (FX_FETCH), so a plain rounded rect reads none.
+// ESIA_FX_FETCH_ALL restores the previous path - all 24 rows fetched at the start of every pixel - for A / B timing.
+#define FX_HOT_ROWS(X) X(rect) X(radii) X(fill0) X(shape) X(misc)
+#define FX_COLD_ROWS(X) \
+    X(fill1) X(fillParams) X(stroke) X(strokeParams) X(shadow) X(shadowParams) X(glow) X(glowParams) X(glass) \
+    X(glassTint) X(glassParams) X(shape2) X(shape2Params) X(uvRect) X(mask) X(maskParams) X(custom) X(halo)
+#ifdef ESIA_FX_FETCH_ALL
+#define FX_FETCH(I, name)
+#else
+#define FX_FETCH(I, name) I.name = FxFetch(I.index, FX_ROW_##name);
+#endif
+
+// Instances are not vertex attributes (24 would exceed the 16 that GL 3.3 / GLES 3 / D3D10 guarantee): the
+// stages fetch the rows they need from the instance data by instance index. Row 23 (flags) holds the integer
+// flags as float values (exact below 2^24).
 #ifdef ESIA_FX_STORAGE_TEXTURE
 ESIA_TEXTURE(gFxData, t7, 10);
 float4 FxFetch(uint instance, uint field)
@@ -93,16 +130,6 @@ ESIA_BINDING(10) StructuredBuffer<float4> gFxData : register(t7);
 float4 FxFetch(uint instance, uint field) { return gFxData[instance * 24u + field]; }
 #endif
 
-FxInst FxLoad(uint instance)
-{
-    FxInst I;
-#define X(idx, name) I.name = FxFetch(instance, idx);
-    FX_FIELDS(X)
-#undef X
-    I.flags = (uint4)FxFetch(instance, 23u);
-    return I;
-}
-
 struct FxVSIn
 {
     ESIA_VERTEX_ID(vid);
@@ -114,7 +141,39 @@ struct FxPSIn
     float4 pos : SV_Position;
     float2 local : TEXCOORD0;
     ESIA_FLAT uint instance : TEXCOORD1;
+#ifndef ESIA_FX_FETCH_ALL
+    ESIA_FLAT float4 rect : TEXCOORD2;    // the hot rows
+    ESIA_FLAT float4 radii : TEXCOORD3;
+    ESIA_FLAT float4 fill0 : TEXCOORD4;
+    ESIA_FLAT float4 shape : TEXCOORD5;
+    ESIA_FLAT float4 misc : TEXCOORD6;
+    ESIA_FLAT uint4 flags : TEXCOORD7;
+#endif
 };
+
+// The instance as the pixel shader starts with it: the hot rows from the vertex shader, the cold ones zero until a
+// branch fetches them (or every row, with ESIA_FX_FETCH_ALL).
+FxInst FxPixelRows(FxPSIn i)
+{
+    FxInst I;
+    I.index = ESIA_FLAT_UINT(i.instance);
+#ifdef ESIA_FX_FETCH_ALL
+#define X(name) I.name = FxFetch(I.index, FX_ROW_##name);
+    FX_HOT_ROWS(X)
+    FX_COLD_ROWS(X)
+#undef X
+    I.flags = (uint4)FxFetch(I.index, FX_ROW_flags);
+#else
+#define X(name) I.name = i.name;
+    FX_HOT_ROWS(X)
+#undef X
+#define X(name) I.name = float4(0.0, 0.0, 0.0, 0.0);
+    FX_COLD_ROWS(X)
+#undef X
+    I.flags = (uint4)ESIA_FLAT_UINT(i.flags);
+#endif
+    return I;
+}
 
 FxPSIn FxVS(FxVSIn v)
 {
@@ -122,12 +181,13 @@ FxPSIn FxVS(FxVSIn v)
     // instance ids start at 0 in every draw on every API: the draw's first instance comes in the constants
     const uint instance = v.iid + (uint)gDrawInfo.x;
     o.instance = instance;
-    const float4 rect = FxFetch(instance, 0u);
-    const float4 strokeParams = FxFetch(instance, 6u);
-    const float4 shadowParams = FxFetch(instance, 8u);
-    const float4 glowParams = FxFetch(instance, 10u);
-    const float4 shape2 = FxFetch(instance, 15u);
-    const uint feat = (uint)FxFetch(instance, 23u).x;
+    const float4 rect = FxFetch(instance, FX_ROW_rect);
+    const float4 strokeParams = FxFetch(instance, FX_ROW_strokeParams);
+    const float4 shadowParams = FxFetch(instance, FX_ROW_shadowParams);
+    const float4 glowParams = FxFetch(instance, FX_ROW_glowParams);
+    const float4 shape2 = FxFetch(instance, FX_ROW_shape2);
+    const uint4 flags = (uint4)FxFetch(instance, FX_ROW_flags);
+    const uint feat = flags.x;
 
     float2 mn = rect.xy, mx = rect.zw;
     if FX_HAS(feat, F_MERGE)
@@ -146,20 +206,28 @@ FxPSIn FxVS(FxVSIn v)
     mx += pad;
     if FX_HAS(feat, F_MASK)
     {
-        const float4 mask = FxFetch(instance, 19u);
+        const float4 mask = FxFetch(instance, FX_ROW_mask);
         mn = max(mn, mask.xy - 1.0);
         mx = min(mx, mask.zw + 1.0);
     }
     // the halo bounds everything outside the shape except a drop shadow: skip the dead area
     if (FX_HAS(feat, F_HALO) && !(FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW)))
     {
-        const float4 halo = FxFetch(instance, 22u);
+        const float4 halo = FxFetch(instance, FX_ROW_halo);
         mn = max(mn, halo.xy - 1.0);
         mx = min(mx, halo.zw + 1.0);
     }
     float2 c = float2(ESIA_HAS(v.vid, 1u) ? mx.x : mn.x, ESIA_HAS(v.vid, 2u) ? mx.y : mn.y);
     o.pos = ESIA_CLIP_POSITION(float4(c * gXform.xy + gXform.zw, 0.0, 1.0));
     o.local = c;
+#ifndef ESIA_FX_FETCH_ALL
+    o.rect = rect;
+    o.radii = FxFetch(instance, FX_ROW_radii);
+    o.fill0 = FxFetch(instance, FX_ROW_fill0);
+    o.shape = FxFetch(instance, FX_ROW_shape);
+    o.misc = FxFetch(instance, FX_ROW_misc);
+    o.flags = flags;
+#endif
     return o;
 }
 
@@ -488,18 +556,26 @@ float4 WgtTexture(float2 uv) { return ESIA_SAMPLE(gTex, gLinear, uv); }
 
 float4 FxPS(FxPSIn i) : SV_Target
 {
-    FxInst I = FxLoad(ESIA_FLAT_UINT(i.instance));
+    FxInst I = FxPixelRows(i);
     uint feat = I.flags.x;
     const float2 spos = WgtPixelPos(i.pos);
     float2 p = i.local;
     float px = max(abs(ddx(p.x)) + abs(ddy(p.x)), 1e-4);
 
+    // the second shape of a liquid merge, the end points of a segment
+    [branch] if (I.flags.z == SHAPE_SEGMENT || FX_HAS(feat, F_MERGE))
+    {
+        FX_FETCH(I, shape2)
+        FX_FETCH(I, shape2Params)
+    }
     float d = ShapeSD(p, I);
     float cov = saturate(0.5 - d / px);
 
     float maskCov = 1.0;
     [branch] if FX_HAS(feat, F_MASK)
     {
+        FX_FETCH(I, mask)
+        FX_FETCH(I, maskParams)
         float2 mc = (I.mask.xy + I.mask.zw) * 0.5;
         float2 mh = max((I.mask.zw - I.mask.xy) * 0.5, 1e-3);
         float dm = SdRoundRect(p - mc, mh, I.maskParams.xxxx, I.maskParams.y);
@@ -515,6 +591,8 @@ float4 FxPS(FxPSIn i) : SV_Target
     // 1. drop shadow
     [branch] if (FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW) && !underOpaqueGlass)
     {
+        FX_FETCH(I, shadow)
+        FX_FETCH(I, shadowParams)
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
         float ds = ShapeSD(p - I.shadowParams.zw, I) - I.shadowParams.y;
         float a = 0.5 - 0.5 * WgtErf(ds / (sigma * 1.41421356));
@@ -524,10 +602,13 @@ float4 FxPS(FxPSIn i) : SV_Target
     // 2. outer glow
     [branch] if (FX_HAS(feat, F_GLOW) && !underOpaqueGlass)
     {
+        FX_FETCH(I, glow)
+        FX_FETCH(I, glowParams)
         float r = max(I.glowParams.x, 1e-3);
         float edgeFade = 1.0;
         [branch] if FX_HAS(feat, F_HALO)
         {
+            FX_FETCH(I, halo)
             // Neighbours in reach (halo bounds): the glow keeps its gaussian profile but its radius shrinks
             // towards each constrained side, so it has died out before the neighbour instead of being cut off.
             const float2 c = (I.rect.xy + I.rect.zw) * 0.5;
@@ -561,6 +642,10 @@ float4 FxPS(FxPSIn i) : SV_Target
     float rim = 0.0;
     [branch] if (FX_HAS(feat, F_GLASS) && cov > 0.0)
     {
+        FX_FETCH(I, glass)
+        FX_FETCH(I, glassTint)
+        FX_FETCH(I, glassParams)
+        FX_FETCH(I, shape2Params)
         GlassSample gs = EvalGlass(spos, p, d, I);
         rim = gs.rim;
         acc = Over(float4(gs.color * cov, cov), acc);
@@ -570,9 +655,15 @@ float4 FxPS(FxPSIn i) : SV_Target
     float4 fillColor = float4(0, 0, 0, 0);
     [branch] if FX_HAS(feat, F_FILL)
     {
+        [branch] if (I.flags.y != PAINT_SOLID)
+        {
+            FX_FETCH(I, fill1)
+            FX_FETCH(I, fillParams)
+        }
         fillColor = EvalPaint(p, I);
         [branch] if FX_HAS(feat, F_IMAGE)
         {
+            FX_FETCH(I, uvRect)
             float2 uvl = (p - I.rect.xy) / max(I.rect.zw - I.rect.xy, 1e-3);
             float2 tuv = lerp(I.uvRect.xy, I.uvRect.zw, uvl);
             fillColor *= ESIA_SAMPLE(gTex, gLinear, tuv);
@@ -587,6 +678,8 @@ float4 FxPS(FxPSIn i) : SV_Target
     // saturates softly towards white (never clips).
     [branch] if FX_HAS(feat, F_CAUSTIC)
     {
+        FX_FETCH(I, custom)
+        FX_FETCH(I, fill1)
         const float2 sz = max(I.rect.zw - I.rect.xy, 1e-3);
         const float2 q = (p - I.rect.xy) / sz;
         const float tm = (I.fill1.x >= 0.0 ? I.fill1.x : gTime.x) * I.custom.z;
@@ -637,6 +730,7 @@ float4 FxPS(FxPSIn i) : SV_Target
 
 #ifdef ESIA_CUSTOM_EFFECT
     {
+        FX_FETCH(I, custom)
         WgtFx fx;
         fx.pos = p;
         fx.size = max(I.rect.zw - I.rect.xy, 1e-3);
@@ -655,6 +749,8 @@ float4 FxPS(FxPSIn i) : SV_Target
     // 5. inner shadow
     [branch] if (FX_HAS(feat, F_SHADOW) && FX_HAS(feat, F_INNER_SHADOW))
     {
+        FX_FETCH(I, shadow)
+        FX_FETCH(I, shadowParams)
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
         float ds = ShapeSD(p - I.shadowParams.zw, I) + I.shadowParams.y;
         float a = (0.5 + 0.5 * WgtErf(ds / (sigma * 1.41421356))) * cov;
@@ -664,6 +760,8 @@ float4 FxPS(FxPSIn i) : SV_Target
     // 6. inner glow
     [branch] if FX_HAS(feat, F_INNER_GLOW)
     {
+        FX_FETCH(I, glow)
+        FX_FETCH(I, glowParams)
         float r = max(I.glowParams.z, 1e-3);
         float x = max(-d, 0.0) / r;
         float g = exp(-x * x * 2.2) * I.glowParams.w * cov;
@@ -676,6 +774,8 @@ float4 FxPS(FxPSIn i) : SV_Target
     // 8. stroke
     [branch] if FX_HAS(feat, F_STROKE)
     {
+        FX_FETCH(I, stroke)
+        FX_FETCH(I, strokeParams)
         float w = I.strokeParams.x;
         float align = I.strokeParams.y;
         float outer = d - w * align;
@@ -716,7 +816,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     acc *= I.misc.x * maskCov * WgtEdgeFade(spos.y);
     // soft falloffs (glows, shadows) span many pixels with few 8-bit levels: +-1/2 level of dither breaks
     // the banding (invisible elsewhere)
-    [branch] if (feat & (F_GLOW | F_SHADOW))
+    [branch] if (FX_HAS(feat, F_GLOW) || FX_HAS(feat, F_SHADOW))
         acc.rgb += (WgtHash(floor(spos) + 17.0) - 0.5) * (1.0 / 255.0) * saturate(acc.a * 8.0);
     acc.rgb = max(acc.rgb, 0.0);
     return WgtOutputPremul(acc);

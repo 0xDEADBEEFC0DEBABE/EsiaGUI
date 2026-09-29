@@ -47,7 +47,7 @@ namespace esia::rhi
         }
     }
 
-    NullDevice::NullDevice(const NullOptions& options) : caps_(options.caps), record_(options.record), keepData_(options.keepData) {}
+    NullDevice::NullDevice(const NullOptions& options) : caps_(options.caps), options_(options), record_(options.record), keepData_(options.keepData) {}
 
     const std::vector<std::uint8_t>* NullDevice::Data(Buffer b) const
     {
@@ -237,6 +237,16 @@ namespace esia::rhi
             Record(Fmt("create pipeline refused: runtime effect %u unsupported", d.effect));
             return {};
         }
+        if (options_.refusePrograms & (1u << (unsigned)d.program))
+        {
+            Record(Fmt("create pipeline refused: %s", ShaderProgramName(d.program)));
+            return {};
+        }
+        if (d.fxFeatures != 0 && options_.refuseFxVariants)
+        {
+            Record(Fmt("create pipeline refused: fx variant 0x%x", d.fxFeatures));
+            return {};
+        }
         if (d.program >= ShaderProgram::Count)
         {
             Error("CreatePipeline: bad program");
@@ -252,9 +262,12 @@ namespace esia::rhi
         pipelines_[p.id] = d;
         if (d.fxFeatures != 0 && (!caps_.fxFeatureVariants || d.program != ShaderProgram::Fx))
             Error("CreatePipeline: fxFeatures without Caps::fxFeatureVariants or on a non-Fx program");
-        Record(Fmt("create pipeline #%u %s %s %s %s%s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
+        const bool background = d.background && caps_.asyncPipelines;
+        if (background)
+            pipelineReadyAt_[p.id] = frame_ + (std::uint64_t)std::max(options_.pendingFrames, 0);
+        Record(Fmt("create pipeline #%u %s %s %s %s%s%s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
                    BlendName(d.blend), FormatName(d.targetFormat), d.effect ? Fmt(" effect=%u", d.effect).c_str() : "",
-                   d.fxFeatures ? Fmt(" features=0x%x", d.fxFeatures).c_str() : ""));
+                   d.fxFeatures ? Fmt(" features=0x%x", d.fxFeatures).c_str() : "", background ? " background" : ""));
         return p;
     }
 
@@ -262,11 +275,24 @@ namespace esia::rhi
     {
         if (pipelines_.erase(p.id) == 0)
             Error("DestroyPipeline: unknown pipeline");
+        pipelineReadyAt_.erase(p.id);
         Record(Fmt("destroy pipeline #%u", p.id));
     }
 
+    PipelineStatus NullDevice::GetPipelineStatus(Pipeline p) const
+    {
+        if (!pipelines_.count(p.id))
+            return PipelineStatus::Failed;
+        auto it = pipelineReadyAt_.find(p.id);
+        if (it == pipelineReadyAt_.end())
+            return PipelineStatus::Ready;   // built in CreatePipeline
+        if (frame_ < it->second)
+            return PipelineStatus::Pending;
+        return options_.failBackground ? PipelineStatus::Failed : PipelineStatus::Ready;
+    }
+
     // ------------------------------------------------------------------ frame
-    bool NullDevice::BeginFrame(const FrameDesc&)
+    bool NullDevice::BeginFrame(const FrameDesc& desc)
     {
         if (inFrame_)
             Error("BeginFrame inside a frame");
@@ -279,7 +305,7 @@ namespace esia::rhi
         for (bool& c : constantsSet_)
             c = false;
         ++frame_;
-        Record(Fmt("begin frame %llu", (unsigned long long)frame_));
+        Record(Fmt("begin frame %llu", (unsigned long long)frame_) + (desc.hostFrame ? Fmt(" host %llu", (unsigned long long)desc.hostFrame) : ""));
         return true;
     }
 
@@ -338,6 +364,8 @@ namespace esia::rhi
             Error("SetPipeline: unknown pipeline");
             return;
         }
+        if (GetPipelineStatus(p) != PipelineStatus::Ready)
+            Error(Fmt("SetPipeline: pipeline #%u is not ready (pending or failed)", p.id));
         const TextureDesc& t = textures_[passTarget_.id];
         if (it->second.targetFormat != t.format)
             Error(Fmt("SetPipeline: pipeline format %s, target %s", FormatName(it->second.targetFormat), FormatName(t.format)));

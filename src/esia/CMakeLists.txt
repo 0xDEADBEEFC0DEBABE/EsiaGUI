@@ -24,6 +24,11 @@ function(esia_target_defaults target)
     if(MSVC)   # cl and clang-cl
         target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8 /Zc:__cplusplus)
         target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            # clang-cl's /W4 is -Wall -Wextra: the graphics APIs' partial initializers (VkFooInfo i{sType},
+            # D3D12_HEAP_PROPERTIES hp = {type}) would warn, as on the GNU side below
+            target_compile_options(${target} PRIVATE -Wno-missing-field-initializers)
+        endif()
         if(ESIA_WERROR)
             target_compile_options(${target} PRIVATE /WX)
         endif()

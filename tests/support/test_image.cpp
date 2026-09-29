@@ -90,15 +90,23 @@ ESIA_TEST(TestKit, CompareWithTolerance)
     t.fraction = 0.015;
     CompareResult r = Compare(a, b, t);
     ESIA_CHECK(r.pass && r.maxDelta == 5 && r.differing == 0);
-    b.At(4, 4)[0] = 200;   // one pixel far off: 1 % of the image
+    b.At(4, 4)[0] = 140;   // one pixel off: 1 % of the image
     Image diff;
     r = Compare(a, b, t, &diff);
-    ESIA_CHECK(r.pass && r.differing == 1 && r.maxDelta == 100);
+    ESIA_CHECK(r.pass && r.differing == 1 && r.maxDelta == 40);
     ESIA_CHECK(diff.At(4, 4)[0] == 255 && diff.At(4, 4)[1] == 0);
-    t.maxDelta = 64;
+    b.At(4, 4)[0] = 200;   // far off: over the default maxDelta (48), although 1 % of the pixels may differ
     ESIA_CHECK(!Compare(a, b, t).pass);
+    t.maxDelta = 128;
+    ESIA_CHECK(Compare(a, b, t).pass);
     b.At(5, 5)[2] = 0;   // a second one: 2 % > 1.5 %
     t.maxDelta = 255;
     ESIA_CHECK(!Compare(a, b, t).pass);
     ESIA_CHECK(!Compare(a, Image(9, 10), t).sizeMatches);
+    // off by 2 in two channels everywhere: no pixel over `channel`, a mean of 1 over the default meanDelta (0.5)
+    Image c = a;
+    for (std::size_t i = 0; i < c.rgba.size(); i += 4)
+        c.rgba[i] = c.rgba[i + 1] = 102;
+    r = Compare(c, a, Tolerance());
+    ESIA_CHECK(!r.pass && r.differing == 0 && r.maxDelta == 2 && r.meanDelta == 1.0);
 }

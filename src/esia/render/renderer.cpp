@@ -2,6 +2,7 @@
 // The capture, pyramid and glow-layer logic is the one of WGT's src/backends/d3d11_backend.cpp, on the RHI.
 #include "esia/render/renderer.hpp"
 #include "gpu_constants.hpp"
+#include <bit>
 #include <cstring>
 #include <unordered_map>
 
@@ -87,6 +88,9 @@ namespace esia::render
         rhi::Texture copy, levels[kBackdropLevels], layer;
         int surfW = 0, surfH = 0;
         rhi::Format surfFormat = rhi::Format::Unknown;
+        // whether all of a pyramid level holds defined values: not when new, nor after a DontCare pass (a tiler
+        // stores garbage where the pass did not write)
+        bool levelDefined[kBackdropLevels] = {};
 
         // this frame
         rhi::Texture target;
@@ -98,7 +102,13 @@ namespace esia::render
         PxRect layerRegion;             // ... and the region to clear then
         fx::LayerParams activeLayer{};
         int captures = 0, budget = 64;
+        // where glass gets this target's backdrop: a copy (CopySrc), a direct read (Sampled), or nowhere
+        bool canCopy = false, canRead = false, backdrop = false;
+        // the pyramid passes keep what the levels hold outside the region they write (section "keepLevels" below)
+        bool keepLevels = false;
         int run = RunNone;
+        bool profile = true;
+        int profileScopes = 0, maxProfileScopes = 32;
 
         // what the current pass has bound (every pass starts empty, rhi.hpp)
         rhi::Texture passTarget;
@@ -126,6 +136,8 @@ namespace esia::render
             Release(copy);
             for (rhi::Texture& l : levels)
                 Release(l);
+            for (bool& d : levelDefined)
+                d = false;
             Release(layer);
             surfW = surfH = 0;
             surfFormat = rhi::Format::Unknown;
@@ -153,7 +165,7 @@ namespace esia::render
 
         rhi::Format LayerFormat() const { return caps.floatRenderTargets ? rhi::Format::RGBA16_FLOAT : rhi::Format::RGBA8_UNORM; }
 
-        rhi::Texture MakeTexture(int w, int h, rhi::Format f, std::uint32_t usage, const char* name)
+        rhi::Texture MakeTexture(int w, int h, rhi::Format f, std::uint32_t usage, const char* name, const void* data = nullptr)
         {
             rhi::TextureDesc d;
             d.width = w;
@@ -161,12 +173,12 @@ namespace esia::render
             d.format = f;
             d.usage = usage;
             d.debugName = name;
-            return dev.CreateTexture(d, nullptr, 0);
+            return dev.CreateTexture(d, data, 0);
         }
 
-        // The backdrop copy (glass) and the pyramid + layer (glass and glow layers), created before the first pass
-        // of the frame that needs them, at the target's size.
-        bool EnsureSurfaces(bool glass, bool glowLayer)
+        // The backdrop copy (glass on a copyable target) and the pyramid + layer (glass and glow layers), created
+        // before the first pass of the frame that needs them, at the target's size.
+        bool EnsureSurfaces(bool copyNeeded, bool glowLayer)
         {
             if (surfW != W || surfH != H || surfFormat != targetDesc.format)
                 ReleaseSurfaces();
@@ -175,12 +187,20 @@ namespace esia::render
             surfFormat = targetDesc.format;
             static const char* kLevelNames[kBackdropLevels] = {"", "pyramid-1", "pyramid-2", "pyramid-3", "pyramid-4", "pyramid-5"};
             bool ok = true;
-            if (glass && !copy)
-                ok = (bool)(copy = MakeTexture(W, H, rhi::RawFormat(targetDesc.format), rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst, "backdrop-copy"));
+            if (copyNeeded && !copy)
+            {
+                // zeroed: glass past the capture budget or a user effect may read where no capture copied yet
+                const rhi::Format f = rhi::RawFormat(targetDesc.format);
+                const std::vector<std::uint8_t> zeros((std::size_t)W * (std::size_t)H * (std::size_t)rhi::BytesPerPixel(f), 0);
+                ok = (bool)(copy = MakeTexture(W, H, f, rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst, "backdrop-copy", zeros.data()));
+            }
             for (int l = 1; ok && l < kBackdropLevels; ++l)
                 if (!levels[l])
+                {
                     ok = (bool)(levels[l] = MakeTexture(LevelSize(W, l), LevelSize(H, l), LayerFormat(), rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled,
                                                         kLevelNames[l]));
+                    levelDefined[l] = false;
+                }
             if (ok && glowLayer && !layer)
                 ok = (bool)(layer = MakeTexture(W, H, LayerFormat(), rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "glow-layer"));
             if (!ok)
@@ -248,8 +268,8 @@ namespace esia::render
         }
 
         // Vertex, index and FX instance data, once per frame before the first pass. Instances go to the GPU with
-        // their integer row (flags) as float values: the shaders read every row as float4 (FxLoad).
-        bool Upload()
+        // their integer row (flags) as float values: the shaders read every row as float4 (FxFetch).
+        bool Upload(int maxPerRow)
         {
             if (!plan.vertices.empty())
             {
@@ -266,9 +286,10 @@ namespace esia::render
                 return true;
             const bool texture = caps.fxStorage == rhi::FxStorage::Texture;
             fxPerRow = texture ? std::max(1, caps.maxFxDataWidth / (int)fx::kInstanceVec4Count) : 1;
+            if (texture && maxPerRow > 0)
+                fxPerRow = std::min(fxPerRow, maxPerRow);
             const std::size_t rows = texture ? (n + (std::size_t)fxPerRow - 1) / (std::size_t)fxPerRow : 1;
-            const std::size_t slots = texture ? rows * (std::size_t)fxPerRow : n;
-            staging.assign(slots * fx::kInstanceVec4Count * 4, 0.0f);
+            staging.resize(n * fx::kInstanceVec4Count * 4);
             for (std::size_t i = 0; i < n; ++i)
             {
                 float* dst = staging.data() + i * fx::kInstanceVec4Count * 4;
@@ -297,7 +318,13 @@ namespace esia::render
                 if (!fxTex)
                     return false;
             }
-            dev.UpdateTexture(fxTex, rhi::IRect{0, 0, w, h}, staging.data(), 0);
+            // the full rows, then the used part of the last one: the texels past the last instance are never read
+            const int rowPitch = w * (int)sizeof(float) * 4;
+            if (h > 1)
+                dev.UpdateTexture(fxTex, rhi::IRect{0, 0, w, h - 1}, staging.data(), rowPitch);
+            const std::size_t last = n - (std::size_t)(h - 1) * (std::size_t)fxPerRow;
+            dev.UpdateTexture(fxTex, rhi::IRect{0, h - 1, (int)(last * fx::kInstanceVec4Count), h},
+                              staging.data() + (std::size_t)(h - 1) * (std::size_t)fxPerRow * fx::kInstanceVec4Count * 4, rowPitch);
             return true;
         }
 
@@ -326,7 +353,7 @@ namespace esia::render
             fc.display[3] = sy;
             fc.time[0] = (float)std::fmod(dd.time, 3600.0);
             fc.time[1] = dd.deltaTime;
-            fc.time[2] = copy ? 1.0f : 0.0f;
+            fc.time[2] = backdrop ? 1.0f : 0.0f;
             fc.time[3] = rhi::IsSrgb(targetDesc.format) ? 1.0f : 0.0f;
             for (int l = 0; l < kBackdropLevels; ++l)
             {
@@ -418,7 +445,8 @@ namespace esia::render
             }
         }
 
-        rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0, std::uint32_t features = 0)
+        rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0, std::uint32_t features = 0,
+                                  bool background = false)
         {
             const PipelineKey key{program, blend, passFormat, passSamples, effect, features};
             auto it = pipelines.find(key);
@@ -442,6 +470,7 @@ namespace esia::render
             d.targetFormat = passFormat;
             d.samples = passSamples;
             d.fxFeatures = features;
+            d.background = background;
             if (effect != 0)
             {
                 auto e = effects.find(effect);
@@ -453,6 +482,38 @@ namespace esia::render
             const rhi::Pipeline p = dev.CreatePipeline(d);
             pipelines[key] = p;
             return p;
+        }
+
+        // An FX batch's pipeline: its feature variant (Caps::fxFeatureVariants) when it is ready. While the variant
+        // compiles in the background (Caps::asyncPipelines) a ready variant that covers the batch's features stands
+        // in - the smallest one - else the full shader; a refused or failed variant falls back to the full shader.
+        // The full shader is only asked for when it is needed: on SM3 it is the slowest compile of all.
+        rhi::Pipeline FxPipeline(std::uint32_t features)
+        {
+            if (features == 0)
+                return GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+            const rhi::Pipeline variant = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, 0, features, caps.asyncPipelines);
+            const rhi::PipelineStatus status = variant ? dev.GetPipelineStatus(variant) : rhi::PipelineStatus::Failed;
+            if (status == rhi::PipelineStatus::Ready)
+                return variant;
+            if (status == rhi::PipelineStatus::Failed)
+            {
+                ++stats.fxFallbacks;
+                return GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+            }
+            ++stats.fxPendingVariants;
+            rhi::Pipeline best;
+            int bestBits = 33;
+            for (const auto& [k, p] : pipelines)
+            {
+                if (k.program != rhi::ShaderProgram::Fx || k.effect != 0 || k.blend != rhi::BlendMode::Premultiplied || k.format != passFormat ||
+                    k.samples != passSamples || k.features == 0 || (k.features & features) != features || std::popcount(k.features) >= bestBits || !p ||
+                    dev.GetPipelineStatus(p) != rhi::PipelineStatus::Ready)
+                    continue;
+                best = p;
+                bestBits = std::popcount(k.features);
+            }
+            return best ? best : GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
         }
 
         bool BindPipeline(rhi::Pipeline p)
@@ -482,10 +543,12 @@ namespace esia::render
             return it != textures.end() ? it->second.tex : white;
         }
 
-        // t1..t6: the backdrop pyramid (white while there is none: every declared texture must be bound)
+        // t1..t6: the backdrop pyramid (white while there is none: every declared texture must be bound). A target
+        // that cannot be copied has no full-resolution level: level 1 stands in for it (blurrier, but valid).
         void BindBackdrop()
         {
-            BindTexture(rhi::kSlotBackdrop0, copy ? copy : white);
+            const bool substitute = backdrop && !canCopy && levels[1];
+            BindTexture(rhi::kSlotBackdrop0, copy ? copy : (substitute ? levels[1] : white));
             for (int l = 1; l < kBackdropLevels; ++l)
                 BindTexture(rhi::kSlotBackdrop0 + l, levels[l] ? levels[l] : white);
         }
@@ -517,19 +580,31 @@ namespace esia::render
             }
         }
 
+        // Timestamps around runs of one category (non-nesting). They stop after maxProfileScopes runs: two queries
+        // per switch between geometry and FX add up to hundreds in a busy frame.
         void ProfileRun(int kind)
         {
-            if (!caps.timestampQueries || kind == run)
+            if (!caps.timestampQueries || !profile || kind == run)
                 return;
             if (run != RunNone)
                 dev.EndProfile();
-            if (kind != RunNone)
+            run = RunNone;
+            if (kind != RunNone && profileScopes < maxProfileScopes)
+            {
                 dev.BeginProfile((rhi::ProfileCategory)kind);
-            run = kind;
+                ++profileScopes;
+                run = kind;
+            }
         }
 
         // ------------------------------------------------------------ post passes
         // Downsamples `source` (full resolution) into pyramid levels 1..levels inside `region` (pixels).
+        //
+        // keepLevels: a pass only writes its region and every read is clamped to the region refreshed last, so the
+        // levels normally start DontCare (tilers need not load them). But glass past the capture budget reuses the
+        // last capture, and a user effect may sample the backdrop outside its margin: both read what a level holds
+        // outside the region written this frame, which DontCare leaves undefined (garbage, NaN in RGBA16F). In such
+        // frames the passes load, and a level whose content is undefined is cleared instead.
         void BuildPyramid(rhi::Texture source, const PxRect& region, int count)
         {
             PyramidStep step = PyramidStep::First(region, W, H);
@@ -541,10 +616,14 @@ namespace esia::render
                 const PxRect written = step.Next(region, l, dw, dh);
                 if (written.Empty())
                     break;
-                // the pass only writes `written`, and every read is clamped to the region refreshed last: nothing
-                // outside it is ever read, so tilers need not load the level
-                BeginPass(levels[l], rhi::LoadOp::DontCare, frameMain, "pyramid");
-                BindPipeline(GetPipeline(rhi::ShaderProgram::Downsample, rhi::BlendMode::Opaque));
+                const rhi::LoadOp load = !keepLevels ? rhi::LoadOp::DontCare : levelDefined[l] ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
+                BeginPass(levels[l], load, frameMain, "pyramid");
+                levelDefined[l] = keepLevels;
+                if (!BindPipeline(GetPipeline(rhi::ShaderProgram::Downsample, rhi::BlendMode::Opaque)))
+                {
+                    EndPass();   // no downsample program: the levels keep what they had
+                    break;
+                }
                 EnsureFrame();
                 dev.SetScissor(rhi::IRect{(int)written.x0, (int)written.y0, (int)written.x1, (int)written.y1});
                 const PassConstants pc = step.Constants(srcW, srcH);
@@ -563,16 +642,17 @@ namespace esia::render
         void CaptureBackdrop(const PxRect& wanted, int count, bool needsLevel0)
         {
             const PxRect region = AlignCaptureRegion(wanted, W, H);
-            if (region.Empty() || !copy)
+            if (region.Empty())
                 return;
             ProfileRun(RunCapture);
             EndPass();
             // Glass that only reads blurred levels (frost) needs no full-resolution copy: the first downsample reads
-            // the render target directly - the same values, a copy's bandwidth saved
-            const bool direct = !needsLevel0 && caps.sampleRenderTarget && targetDesc.samples == 1 && (targetDesc.usage & rhi::TextureUsage_Sampled);
+            // the render target directly - the same values, a copy's bandwidth saved. A target that cannot be copied
+            // is read directly always; level 1 then stands in for level 0 (BindBackdrop), so it is always built.
+            const bool direct = canRead && (!needsLevel0 || !canCopy);
             if (direct)
             {
-                BuildPyramid(target, region, count);
+                BuildPyramid(target, region, canCopy ? count : std::max(count, 1));
                 ++stats.directCaptures;
             }
             else
@@ -659,7 +739,7 @@ namespace esia::render
         void DrawFx(const RenderOp& op)
         {
             // captures are planned per frame (FramePlan::PlanCaptures): one serves many glass batches
-            if (op.glass && !op.captureRegion.Empty() && copy)
+            if (op.glass && !op.captureRegion.Empty() && backdrop)
             {
                 if (captures < budget)
                 {
@@ -676,7 +756,7 @@ namespace esia::render
             rhi::Pipeline p = op.effect != 0 && caps.runtimeEffects ? GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, op.effect, features)
                                                                     : rhi::Pipeline{};
             if (!p)
-                p = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, 0, features);
+                p = FxPipeline(features);
             if (!BindPipeline(p) || !SetScissor(op.clip))
                 return;
             EnsureFrame();
@@ -698,6 +778,10 @@ namespace esia::render
 
         void RunCallback(const RenderOp& op)
         {
+            // a callback with nothing visible does not run: SetScissor would keep the previous scissor, and the host
+            // code would draw unclipped
+            if (ToScissor(op.clip, W, H).Empty())
+                return;
             ProfileRun(RunNone);
             EnsureContentPass();
             SetScissor(op.clip);
@@ -743,6 +827,10 @@ namespace esia::render
             H = targetDesc.height;
             if (W <= 0 || H <= 0 || !(targetDesc.usage & rhi::TextureUsage_RenderTarget))
                 return false;
+            // a Metal framebufferOnly drawable or a swap-chain image without TRANSFER_SRC cannot be copied: glass then
+            // reads it directly if it can be sampled, else it has no backdrop
+            canCopy = (targetDesc.usage & rhi::TextureUsage_CopySrc) != 0;
+            canRead = caps.sampleRenderTarget && targetDesc.samples == 1 && (targetDesc.usage & rhi::TextureUsage_Sampled) != 0;
             if (!dev.BeginFrame(params.frame))
                 return false;
             target = t;
@@ -759,8 +847,9 @@ namespace esia::render
             stats.vertices = (int)plan.vertices.size();
             stats.indices = (int)plan.indices.size();
 
-            if (plan.anyGlass || plan.anyLayer)
-                EnsureSurfaces(plan.anyGlass, plan.anyLayer);
+            const bool glass = plan.anyGlass && (canCopy || canRead);
+            const bool surfaces = (glass || plan.anyLayer) && EnsureSurfaces(glass && canCopy, plan.anyLayer);
+            backdrop = glass && surfaces;
             if (!white)
             {
                 const std::uint32_t px = 0xFFFFFFFFu;
@@ -771,11 +860,18 @@ namespace esia::render
                 d.debugName = "white";
                 white = dev.CreateTexture(d, &px, 0);
             }
-            const bool uploaded = Upload();
+            const bool uploaded = Upload(params.maxFxInstancesPerRow);
             FillFrameConstants(dd, params);
 
             captures = 0;
             budget = std::max(1, params.maxBackdropCaptures);
+            bool userEffects = false;
+            for (const RenderOp& op : plan.ops)
+                userEffects |= op.type == RenderOp::FxBatch && op.effect != 0;
+            keepLevels = backdrop && (plan.plannedCaptures > budget || (userEffects && caps.runtimeEffects));
+            profile = params.profile;
+            profileScopes = 0;
+            maxProfileScopes = std::max(0, params.maxProfileScopes);
             layerDepth = 0;
             layerPending = false;
             inPass = false;
