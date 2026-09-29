@@ -3,8 +3,10 @@
 // values), scissored draws, and GPU timestamps. A backend whose headless device cannot be created here is skipped.
 #include "esia/rhi/backend_registry.hpp"
 #include "esia_test.hpp"
+#include <chrono>
 #include <cstring>
 #include <string>
+#include <thread>
 
 using namespace esia;
 using namespace esia::rhi;
@@ -197,5 +199,41 @@ ESIA_TEST(D3DDevices, ScissoredDrawAndTimestamps)
             ESIA_CHECK(profile.categoryMs[(int)ProfileCategory::Layer] <= profile.totalMs + 1e-3f);
         }
         dev.DestroyPipeline(clear);
+    });
+}
+
+ESIA_TEST(D3DDevices, UserEffectPipeline)
+{
+    ForEachD3D([](Device& dev, Texture target) {
+        ESIA_CHECK(dev.GetCaps().runtimeEffects);
+        PipelineDesc pd;
+        pd.program = ShaderProgram::Fx;
+        pd.layout = VertexLayout::None;
+        pd.topology = Topology::TriangleStrip;
+        pd.blend = BlendMode::Premultiplied;
+        pd.targetFormat = dev.GetTextureDesc(target).format;
+        pd.effect = 1;
+        pd.effectSource = "float4 WgtEffect(WgtFx fx) { return float4(fx.uv, WgtTexture(fx.uv).b, 1.0) * fx.coverage; }";
+        // D3D9 builds FX variants: fill + custom effect
+        pd.fxFeatures = dev.GetCaps().fxFeatureVariants ? 0x1001u : 0u;
+        // compiled on a worker: {} until it is ready (the renderer asks again on a later frame)
+        Pipeline p;
+        for (int i = 0; i < 1200 && !p; ++i)
+        {
+            p = dev.CreatePipeline(pd);
+            if (!p)
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        ESIA_CHECK((bool)p);
+        if (p)
+            dev.DestroyPipeline(p);
+        // a source that does not compile never yields a pipeline, and never blocks
+        pd.effect = 2;
+        pd.effectSource = "float4 WgtEffect(WgtFx fx) { return undefined_thing; }";
+        for (int i = 0; i < 100; ++i)
+        {
+            ESIA_CHECK(!dev.CreatePipeline(pd));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
     });
 }
