@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -72,7 +73,8 @@ namespace esia::text
 
         struct Face
         {
-            std::vector<std::uint8_t> bytes;   // AddFontFile: the file (FreeType and HarfBuzz read it in place)
+            // AddFontFile: the file, which FreeType and HarfBuzz read in place; shared by the faces of a collection
+            std::shared_ptr<const std::vector<std::uint8_t>> file;
             FT_Face ft = nullptr;
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
@@ -236,22 +238,20 @@ namespace esia::text
             {
                 if (!path)
                     return 0;
-                // the path is UTF-8 on every platform
-                const std::filesystem::path utf8Path(std::u8string_view(reinterpret_cast<const char8_t*>(path)));
-                std::ifstream file(utf8Path, std::ios::binary | std::ios::ate);
-                if (!file)
-                    return 0;
-                const std::streamoff size = file.tellg();
-                if (size <= 0)
-                    return 0;
-                std::vector<std::uint8_t> bytes((std::size_t)size);
-                file.seekg(0);
-                if (!file.read(reinterpret_cast<char*>(bytes.data()), size))
-                    return 0;
+                // the faces of a collection (the CJK fonts of a system's fallback chain: 20 MB and more) share one copy
+                std::weak_ptr<const std::vector<std::uint8_t>>& cached = files_[path];
+                std::shared_ptr<const std::vector<std::uint8_t>> bytes = cached.lock();
+                if (!bytes)
+                {
+                    bytes = ReadFile(path);
+                    if (!bytes)
+                        return 0;
+                    cached = bytes;
+                }
                 return AddFace(std::move(bytes), nullptr, 0, faceIndex);
             }
 
-            FontId AddFontMemory(const void* data, std::size_t size, int faceIndex) override { return AddFace({}, data, size, faceIndex); }
+            FontId AddFontMemory(const void* data, std::size_t size, int faceIndex) override { return AddFace(nullptr, data, size, faceIndex); }
 
             void AddFallback(FontId font) override
             {
@@ -353,16 +353,33 @@ namespace esia::text
             }
 
         private:
-            FontId AddFace(std::vector<std::uint8_t> owned, const void* data, std::size_t size, int faceIndex)
+            static std::shared_ptr<const std::vector<std::uint8_t>> ReadFile(const char* path)
+            {
+                // the path is UTF-8 on every platform
+                std::ifstream file(std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(path))), std::ios::binary | std::ios::ate);
+                if (!file)
+                    return nullptr;
+                const std::streamoff size = file.tellg();
+                if (size <= 0)
+                    return nullptr;
+                // not make_shared: with mingw-w64's libstdc++ it duplicates std::type_info::operator== at link time
+                std::shared_ptr<std::vector<std::uint8_t>> bytes(new std::vector<std::uint8_t>((std::size_t)size));
+                file.seekg(0);
+                if (!file.read(reinterpret_cast<char*>(bytes->data()), size))
+                    return nullptr;
+                return bytes;
+            }
+
+            FontId AddFace(std::shared_ptr<const std::vector<std::uint8_t>> file, const void* data, std::size_t size, int faceIndex)
             {
                 if (faces_.size() >= kNoGlyph || faceIndex < 0)
                     return 0;
                 auto face = std::make_unique<Face>();
-                face->bytes = std::move(owned);
-                if (!face->bytes.empty())
+                face->file = std::move(file);
+                if (face->file)
                 {
-                    data = face->bytes.data();
-                    size = face->bytes.size();
+                    data = face->file->data();
+                    size = face->file->size();
                 }
                 if (!data || size == 0 || FT_New_Memory_Face(ft_, static_cast<const FT_Byte*>(data), (FT_Long)size, faceIndex, &face->ft) != 0)
                 {
@@ -850,6 +867,7 @@ namespace esia::text
             hb_buffer_t* buffer_ = nullptr;
             hb_unicode_funcs_t* unicode_ = nullptr;
             std::vector<std::unique_ptr<Face>> faces_;   // FontId - 1
+            std::unordered_map<std::string, std::weak_ptr<const std::vector<std::uint8_t>>> files_;   // AddFontFile's, by path
             std::vector<std::uint16_t> fallbacks_;
             GlyphAtlas atlas_;
             RasterParams params_;

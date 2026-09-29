@@ -8,12 +8,12 @@ create texture #6 40x30 RGBA16_FLOAT usage=3 pyramid-3
 create texture #7 20x15 RGBA16_FLOAT usage=3 pyramid-4
 create texture #8 10x8 RGBA16_FLOAT usage=3 pyramid-5
 create texture #9 1x1 RGBA8_UNORM usage=1 white
-create buffer #10 vertex 5280 bytes
+create buffer #10 vertex 4320 bytes
 create buffer #11 index 4096 bytes
-update buffer #10 3520 bytes
-update buffer #11 1056 bytes
-create buffer #12 fx 9216 bytes
-update buffer #12 6144 bytes
+update buffer #10 2880 bytes
+update buffer #11 864 bytes
+create buffer #12 fx 8064 bytes
+update buffer #12 5376 bytes
 pass #1 load ui
 create pipeline #13 Fx strip premul RGBA8_UNORM
 pipeline #13
@@ -82,7 +82,7 @@ texture t6 #8
 fx buffer #12
 constants draw: 0 0 0 0 | 3 0 0 0
 draw instanced 4 x 1
-scissor [16,16 176x136]
+scissor [28,28 152x112]
 constants draw: 0 0 0 0 | 4 0 0 0
 draw instanced 4 x 1
 create pipeline #16 TextGray list straight RGBA8_UNORM
@@ -116,14 +116,6 @@ pipeline #16
 texture t0 #2
 constants draw: 0 0 0 0 | 0 0 0 0
 draw indexed 18 from 114
-pipeline #13
-texture t0 #9
-constants draw: 0 0 0 0 | 8 0 0 0
-draw instanced 4 x 1
-pipeline #16
-texture t0 #2
-constants draw: 0 0 0 0 | 0 0 0 0
-draw indexed 24 from 132
 end pass
 pass #4 dont-care pyramid
 pipeline #15
@@ -169,17 +161,25 @@ texture t4 #6
 texture t5 #7
 texture t6 #8
 fx buffer #12
-constants draw: 0 0 0 0 | 9 0 0 0
+constants draw: 0 0 0 0 | 8 0 0 0
 draw instanced 4 x 1
-scissor [128,84 176x136]
-constants draw: 0 0 0 0 | 10 0 0 0
+scissor [140,96 152x112]
+constants draw: 0 0 0 0 | 9 0 0 0
 draw instanced 4 x 1
 pipeline #16
 texture t0 #2
 constants draw: 0 0 0 0 | 0 0 0 0
 vertex buffer #10
 index buffer #11
-draw indexed 24 from 156
+draw indexed 24 from 132
+pipeline #13
+texture t0 #9
+constants draw: 0 0 0 0 | 10 0 0 0
+draw instanced 4 x 1
+pipeline #16
+texture t0 #2
+constants draw: 0 0 0 0 | 0 0 0 0
+draw indexed 18 from 156
 pipeline #13
 texture t0 #9
 constants draw: 0 0 0 0 | 11 0 0 0
@@ -187,7 +187,7 @@ draw instanced 4 x 1
 pipeline #16
 texture t0 #2
 constants draw: 0 0 0 0 | 0 0 0 0
-draw indexed 18 from 180
+draw indexed 24 from 174
 pipeline #13
 texture t0 #9
 constants draw: 0 0 0 0 | 12 0 0 0
@@ -195,27 +195,11 @@ draw instanced 4 x 1
 pipeline #16
 texture t0 #2
 constants draw: 0 0 0 0 | 0 0 0 0
-draw indexed 24 from 198
-pipeline #13
-texture t0 #9
-constants draw: 0 0 0 0 | 13 0 0 0
-draw instanced 4 x 1
-pipeline #16
-texture t0 #2
-constants draw: 0 0 0 0 | 0 0 0 0
-draw indexed 18 from 222
-pipeline #13
-texture t0 #9
-constants draw: 0 0 0 0 | 14 0 0 0
-draw instanced 4 x 1
-pipeline #16
-texture t0 #2
-constants draw: 0 0 0 0 | 0 0 0 0
-draw indexed 24 from 240
+draw indexed 18 from 198
 pipeline #13
 scissor [0,0 320x240]
 texture t0 #9
-constants draw: 0 0 0 0 | 15 0 0 0
+constants draw: 0 0 0 0 | 13 0 0 0
 draw instanced 4 x 1
 end pass
 end frame

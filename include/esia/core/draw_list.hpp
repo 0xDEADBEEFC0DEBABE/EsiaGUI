@@ -85,6 +85,16 @@ namespace esia
         void EndFade();
         void AddCallback(DrawCallback callback, void* userData);
 
+        // ---- command order
+        // A position between commands: nothing drawn after it merges into a command before it. With MoveCommands
+        // a widget draws something after its content and moves it under the content (a card's background, whose
+        // height is known at its end). Marks are used last-in, first-out (a card in a card): moving commands to
+        // a mark shifts the positions after it.
+        std::size_t Mark();
+        // Moves commands [from, end) to position `to` (<= from), keeping their order. Vertices, indices and FX
+        // instances stay where they are: commands address them by range.
+        void MoveCommands(std::size_t from, std::size_t to);
+
         // ---- read access (renderer, tests)
         const std::vector<Vertex>& Vertices() const { return vtx_; }
         std::vector<Vertex>& Vertices() { return vtx_; }   // Painter::PopScale rewrites positions
@@ -107,6 +117,7 @@ namespace esia
         std::vector<fx::FadeParams> fades_;
         std::vector<Rect> clipStack_{Rect(-8192, -8192, 8192, 8192)};
         std::vector<TextureId> textureStack_;
+        std::size_t mergeBarrier_ = 0;   // commands before this index take no more primitives (Mark)
     };
 
     // One frame of output: draw lists in back-to-front order.
