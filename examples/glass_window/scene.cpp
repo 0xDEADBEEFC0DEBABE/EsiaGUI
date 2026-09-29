@@ -206,7 +206,9 @@ namespace glass
         {
             for (char32_t c : in.Text())
                 AppendUtf32(field_, c);
-            const bool ctrl = (in.Mods() & Mod_Ctrl) != 0;
+            // Mods() is the state after the frame's last key event: a Ctrl released in the same frame as the V it
+            // held down would turn Ctrl+V into V (docs/PLATFORM_WIN32.md, core requests)
+            const bool ctrl = (in.Mods() & Mod_Ctrl) || in.KeyReleased(Key::LeftCtrl) || in.KeyReleased(Key::RightCtrl);
             // while the IME composes, its keys are its own (they arrive as VK_PROCESSKEY and never get here)
             if (comp.empty())
             {
