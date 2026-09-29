@@ -178,18 +178,38 @@ for the cross build.
 Measured on llvmpipe: creating a device and compiling the programs a scene uses takes ~1.9 s with Mesa's shader
 cache disabled (`MESA_SHADER_CACHE_DISABLE=true`, mostly the 257 KB FX fragment shader), ~0.1 s with it.
 
+### Windows, NVIDIA (the local Windows session, after the cloud session)
+
+Windows 11, NVIDIA GeForce RTX 4080 SUPER, driver 610.88; clang-cl 22.1.8 + lld-link, `windows-clang-cl` preset
+with `-DESIA_WERROR=ON -DESIA_BACKEND_OPENGL=ON` (Debug): 0 warnings. GPU drivers on Windows ship no EGL, so every
+headless test was a SKIP (and still "passed", REWRITE_STATUS known issue); the headless path now creates its
+context through WGL first (`gl_headless.cpp`: a hidden window lends the pixel format; GLES through
+`WGL_EXT_create_context_es2_profile`), EGL remaining the fallback. On that driver:
+
+| Run | Result |
+| --- | --- |
+| `esia_rhi_opengl_tests` | 11 / 11 pass, 0 GL errors (the one reported error is `DebugOutputCountsErrors`' deliberate one); GPU times of the glass scene: 0.485 ms (`opengl`), 0.480 ms (`gles`) |
+| `esia_conformance --backend opengl --golden tests/conformance/golden --strict` | 14 / 14 PASS against the llvmpipe goldens: max delta 1 - 6 per scene (shadows: 20 on 0.003 % of the pixels), mean delta <= 0.09 |
+| the same with `--backend gles` (NVIDIA's ES 3.2 profile) | 14 / 14 PASS, the same numbers |
+
+Three things only the real driver showed, fixed on this branch: NVIDIA's ES profile lists
+`EXT_disjoint_timer_query` but rejects `GL_GPU_DISJOINT_EXT` (now probed once at creation); its timestamp queries
+of a headless frame never complete after a `glFlush` alone (headless frames now end with `glFinish`; hosts have
+their SwapBuffers); and the conformance scene table read a freed tolerance (fixed on `esia-core`, `3a8fe0a`).
+
 ## 4. Not verified
 
-* **No real GPU, no other driver.** Everything ran on Mesa llvmpipe only. NVIDIA, AMD, Intel, Apple, Adreno, Mali,
-  PowerVR and ANGLE were not tried; driver-specific behaviour (blit sRGB semantics before GL 4.4, precision of the
-  sRGB re-encode, timer query latency) is reasoned from the specs, not observed.
-* **No platform but Linux / EGL ran.** The Windows code (WGL default loader, `libEGL.dll` headless) was compiled
-  with mingw-w64 but never run; macOS (`dlsym` default loader, `libEGL.dylib`) and Android (`libEGL.so`) were not
-  compiled. The GLX branch of the Linux default loader was not exercised (the tests pass EGL's lookup).
+* **Other drivers.** Mesa llvmpipe (Linux) and NVIDIA (Windows) only. AMD, Intel, Apple, Adreno, Mali, PowerVR and
+  ANGLE were not tried; driver-specific behaviour (blit sRGB semantics before GL 4.4, precision of the sRGB
+  re-encode) is reasoned from the specs on the others.
+* **Platforms.** Linux / EGL and Windows / WGL ran. The `libEGL.dll` fallback on Windows (ANGLE) was not run; macOS
+  (`dlsym` default loader, `libEGL.dylib`) and Android (`libEGL.so`) were not compiled. The GLX branch of the Linux
+  default loader was not exercised (the tests pass EGL's lookup).
 * **`CreateDevice` on a host context** is exercised only indirectly (the headless path is `GlDevice` on an EGL
   context, and the tests act as the host with wrapped FBOs, host state and callbacks); no windowed application
   (GLFW / SDL, swap chains, the default framebuffer 0 as a target) was run.
-* **Performance**: no timing that means anything (llvmpipe).
+* **Performance**: no comparison with WGT's D3D11 numbers yet (the NVIDIA GPU times above are of a 320 x 240 test
+  scene).
 * **Desktop contexts older than 4.5**: Mesa gives a 4.5 core context when 3.3 is requested, so "3.3" is checked by
   restricting what the backend uses (`coreOnly`), not by a real 3.3 driver.
 
@@ -220,8 +240,9 @@ cache disabled (`MESA_SHADER_CACHE_DISABLE=true`, mostly the 257 KB FX fragment 
   `ESIA_GL_CORE_ONLY=1` to run the conformance suite on the GL 3.3 / GLES 3.0 minimum.
 * **Windows**: `cmake --preset windows-clang-cl -DESIA_BACKEND_OPENGL=ON` (or `vs2022` with the option). Hosts
   create the device on their WGL context (`Desc::getProcAddress` may stay null: `wglGetProcAddress` +
-  `opengl32.dll`). The headless tests need an EGL: put ANGLE's `libEGL.dll` / `libGLESv2.dll` next to the executables
-  to run the `gles` backend (ANGLE has no desktop GL, so `opengl` reports SKIP); without them both SKIP.
+  `opengl32.dll`). The headless tests use the GPU driver through WGL (`gles` needs
+  `WGL_EXT_create_context_es2_profile`: NVIDIA, AMD); where WGL cannot create a context they fall back to ANGLE's
+  `libEGL.dll` / `libGLESv2.dll` next to the executables (GLES only).
 * **macOS**: desktop GL 4.1 core through CGL / NSOpenGL (`macos-clang` preset + the option); the headless tests need
   ANGLE's `libEGL.dylib` (GLES) on the library path, else SKIP.
 * **Android / embedded Linux**: GLES 3.0+ through the platform's EGL (`libEGL.so`); pass `eglGetProcAddress` as

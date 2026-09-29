@@ -200,6 +200,7 @@ namespace esia::rhi::opengl
         bool ready_ = false;               // Init got far enough to create objects: the destructor releases them
         bool srgbDecodeControl_ = false;   // EXT_texture_sRGB_decode: sRGB textures can be sampled raw
         bool debugOutput_ = false;         // our KHR_debug callback is installed
+        bool disjointQuery_ = false;       // GL_GPU_DISJOINT_EXT can be read (GLES timer queries)
         int maxSamples_ = 1;
         GLint uboAlign_ = 256;
         std::uint32_t errors_ = 0;

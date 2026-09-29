@@ -126,6 +126,15 @@ namespace esia::rhi::opengl
         ready_ = true;
 
         OutsideFrame guard(*this);
+        // NVIDIA's WGL ES profile lists EXT_disjoint_timer_query but rejects GL_GPU_DISJOINT_EXT: probe it before our
+        // debug output is on (the error is cleared below) and treat a rejection as "never disjoint"
+        if (desc_.es && gl_.QueryCounter)
+        {
+            while (gl_.GetError() != GL_NO_ERROR) {}
+            GLint disjoint = 0;
+            gl_.GetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
+            disjointQuery_ = gl_.GetError() == GL_NO_ERROR;
+        }
         if (desc_.debug && gl_.DebugMessageCallback && gl_.DebugMessageControl)
         {
             gl_.Enable(GL_DEBUG_OUTPUT);
@@ -896,6 +905,10 @@ namespace esia::rhi::opengl
         if (!inFrame_)
             return;
         TimerEndFrame();
+        // a host's SwapBuffers submits and paces its frames; a headless context has none, and NVIDIA's driver completes
+        // the frame's timestamp queries only after a finish (a flush is not enough)
+        if (owned_)
+            gl_.Finish();
         CheckErrors("frame");
         if (desc_.restoreHostState)
             RestoreHostState(frameState_);
@@ -1392,7 +1405,7 @@ namespace esia::rhi::opengl
         if (!available)
             return false;
         s.pending = false;
-        if (desc_.es)
+        if (disjointQuery_)
         {
             GLint disjoint = 0;
             gl_.GetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
