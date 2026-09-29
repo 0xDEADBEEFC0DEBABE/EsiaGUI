@@ -1,7 +1,8 @@
 // glass_window - one graphics API's side of the example: its device, and the swap chain or surface of the window.
 //
 // A host runs on the render thread only. Per frame: BeginFrame (wait for a free buffer, wrap it as the RHI target),
-// Renderer::Render into Target() with FrameParams(), then EndFrame (submit, optionally read the image back, present).
+// Renderer::Render into Target() with Frame() as RenderParams::frame, then EndFrame (submit, optionally read the image
+// back, present).
 // The scene paints every pixel (its wallpaper is opaque), so no host clears its target.
 #pragma once
 #include "esia/rhi/rhi.hpp"
@@ -33,7 +34,7 @@ namespace glass
         // Waits for a free buffer and wraps it; false: skip this frame (swap chain being recreated).
         virtual bool BeginFrame() = 0;
         esia::rhi::Texture Target() const { return target_; }
-        virtual esia::rhi::FrameDesc FrameParams() { return {}; }
+        virtual esia::rhi::FrameDesc Frame() { return {}; }
         // Submits the frame's GPU work; `capture` (optional) receives the image as RGBA8 rows, then it is presented.
         bool EndFrame(std::vector<std::uint8_t>* capture)
         {

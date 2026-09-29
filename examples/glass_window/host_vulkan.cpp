@@ -133,7 +133,7 @@ namespace glass
                 return (bool)target_;
             }
 
-            esia::rhi::FrameDesc FrameParams() override
+            esia::rhi::FrameDesc Frame() override
             {
                 esia::rhi::FrameDesc f;
                 f.nativeContext = commands_[frame_ % kFramesInFlight];

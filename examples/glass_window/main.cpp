@@ -140,7 +140,7 @@ namespace
             scene.Frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps});
             ctx.EndFrame();
             esia::render::RenderParams rp;
-            rp.frame = host->FrameParams();
+            rp.frame = host->Frame();
             if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                 std::fprintf(stderr, "glass_window: the device refused frame %d\n", frame);
             platform.ApplyRequests(ctx.Requests());

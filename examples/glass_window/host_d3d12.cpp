@@ -108,7 +108,7 @@ namespace glass
                 return true;
             }
 
-            esia::rhi::FrameDesc FrameParams() override
+            esia::rhi::FrameDesc Frame() override
             {
                 esia::rhi::FrameDesc f;
                 f.nativeContext = list_.Get();
