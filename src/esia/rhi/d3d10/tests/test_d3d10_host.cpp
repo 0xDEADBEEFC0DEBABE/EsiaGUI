@@ -1,4 +1,4 @@
-// Direct3D 11 host integration: a host render target view wrapped (an sRGB view of typeless storage: sampleable
+// Direct3D 10 host integration: a host render target view wrapped (an sRGB view of typeless storage: sampleable
 // through its raw view), cached per view, drawn into, read back; the host's pipeline state restored after a frame.
 #include "esia/rhi/d3d10.hpp"
 #include "d3d_util.hpp"
