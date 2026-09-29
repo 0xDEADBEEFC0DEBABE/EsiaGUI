@@ -106,6 +106,8 @@ file(GLOB WGT_PUBLIC_HEADERS CONFIGURE_DEPENDS ${WGT_ROOT}/include/wgt/*.hpp ${W
 file(GLOB_RECURSE WGT_SOURCES CONFIGURE_DEPENDS
     ${WGT_ROOT}/src/*.cpp
     ${WGT_ROOT}/src/*.hpp)
+# src/esia is the rewrite, built by its own targets (ESIA_BUILD_CORE); the recursive glob would compile it into wgt.dll.
+list(FILTER WGT_SOURCES EXCLUDE REGEX "/src/esia/")
 
 add_library(wgt SHARED ${WGT_SOURCES} ${WGT_PUBLIC_HEADERS} ${IMGUI_SOURCES} ${WGT_SHADER_DEPS})
 add_dependencies(wgt wgt_shaders)
