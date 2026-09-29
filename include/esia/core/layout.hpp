@@ -54,6 +54,9 @@ namespace esia
         bool horizontal = false;
         float spacing = 8.0f;
         Align align = Align::Start;
+        // Center / End across the axis within the container's region (give the container a fixed or fill size)
+        // instead of the widest (tallest) child
+        bool alignInRegion = false;
 
         LayoutSlot Begin(Vec2 origin, const Rect& region) override;
         LayoutSlot Next(const LaidOutItem& child) override;

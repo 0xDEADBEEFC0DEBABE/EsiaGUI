@@ -286,3 +286,83 @@ ESIA_TEST(Child, FloatingAndClipInset)
     ESIA_CHECK(seen[2].floating && seen[2].depth == -1 && seen[2].rect == Rect(0, 340, 400, 400));   // the bar
     ESIA_CHECK(!seen[3].floating && seen[3].rect == Rect(0, 28, 200, 128));
 }
+
+// review: a fitted vertical stack centers its children against the widest one, and stays as wide as its content
+ESIA_TEST(Layout, StackCenterFitted)
+{
+    Harness h;
+    Rect r, second;
+    auto frame = [&](bool inRegion) {
+        h.Frame();
+        WindowOptions o;
+        o.padding = {0, 0};
+        h.Win("S", {0, 0}, {500, 300}, o);
+        StackLayout& L = h.ctx.State<StackLayout>(inRegion ? 2 : 1);
+        L.spacing = 0;
+        L.align = Align::Center;
+        L.alignInRegion = inRegion;
+        ContainerOptions co;
+        co.layout = &L;
+        co.fillWidth = inRegion;
+        h.ctx.BeginContainer(inRegion ? 2 : 1, co);
+        h.ctx.ItemSize({100, 20});
+        second = Rect::FromSize(h.ctx.CursorPos(), Vec2(50, 20));
+        h.ctx.ItemSize({50, 20});
+        r = h.ctx.EndContainer();
+        h.ctx.End();
+        h.End();
+    };
+    frame(false);
+    frame(false);
+    ESIA_CHECK(r == Rect(0, 0, 100, 40) && second.min.x == 25.0f);
+    frame(true);
+    frame(true);
+    ESIA_CHECK(r.Width() == 500.0f && second.min.x == 225.0f);
+}
+
+// review: a floating region's padding hides what is below it too, and the wheel over a scroll child's padding
+// scrolls that child
+ESIA_TEST(Child, PaddingIsPartOfTheRegion)
+{
+    Harness h;
+    ButtonResult content;
+    float listScroll = 0.0f;
+    auto frame = [&] {
+        h.Frame();
+        WindowOptions o;
+        o.padding = {0, 0};
+        h.Win("W", {0, 0}, {400, 400}, o);
+        content = h.Button("content", Rect(0, 0, 300, 200));
+        ChildOptions bar;
+        bar.flags = ChildFlags_Floating;
+        bar.rect = Rect(0, 0, 300, 60);
+        bar.padding = {10, 10};
+        h.ctx.BeginChild("bar", bar);
+        h.ctx.EndChild();
+        h.ctx.SetCursorPos({0, 220});
+        ChildOptions list;
+        list.size = {200, 100};
+        list.padding = {10, 10};
+        list.flags = ChildFlags_ScrollY;
+        h.ctx.BeginChild("list", list);
+        for (int i = 0; i < 20; ++i)
+            h.ctx.ItemSize({50, 22});
+        listScroll = h.ctx.Scroll().y;
+        h.ctx.EndChild();
+        h.ctx.End();
+        h.End();
+    };
+    h.Move({150, 5});   // in the bar's padding
+    frame();
+    frame();
+    ESIA_CHECK(!content.hovered);
+    h.Move({150, 100});
+    frame();
+    ESIA_CHECK(content.hovered);
+    h.Move({100, 225});   // the list's top padding
+    frame();
+    h.Wheel(0, -1);
+    frame();
+    frame();
+    ESIA_CHECK(listScroll == 48.0f && h.ctx.FindWindow("W")->Scroll().y == 0.0f);
+}

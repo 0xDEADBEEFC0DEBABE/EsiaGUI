@@ -8,6 +8,7 @@
 #include "esia/base/config.hpp"
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 
@@ -24,14 +25,20 @@ namespace esia
         template <class T>
         T& Get(Id id, std::uint64_t frame)
         {
-            Slot& s = slots_[Key{id, &Tag<T>::tag}];
-            if (!s.data)
+            const Key key{id, &Tag<T>::tag};
+            auto it = slots_.find(key);
+            if (it == slots_.end())
             {
-                s.data = new T();
-                s.destroy = [](void* p) { delete static_cast<T*>(p); };
+                // constructed before it is stored: a constructor that throws leaves nothing behind
+                auto data = std::make_unique<T>();
+                Slot slot;
+                slot.destroy = [](void* p) { delete static_cast<T*>(p); };
+                slot.data = data.get();
+                it = slots_.emplace(key, slot).first;
+                data.release();
             }
-            s.lastFrame = frame;
-            return *static_cast<T*>(s.data);
+            it->second.lastFrame = frame;
+            return *static_cast<T*>(it->second.data);
         }
 
         // Destroys the entries not used since `frame - retain`.
@@ -40,11 +47,12 @@ namespace esia
         std::size_t Size() const { return slots_.size(); }
 
     private:
-        // one address per type: identifies the type of an entry without RTTI
+        // one address per type: identifies the type of an entry without RTTI. Writable on purpose: identical
+        // read-only constants may be folded into one address by the linker (/OPT:ICF), mutable data is not.
         template <class T>
         struct Tag
         {
-            static constexpr char tag = 0;
+            static inline char tag = 0;
         };
         struct Key
         {

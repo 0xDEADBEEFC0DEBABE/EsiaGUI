@@ -290,33 +290,38 @@ namespace esia
         cs.lastFrame = frame_;
         const bool scrolls = (options.flags & (ChildFlags_ScrollX | ChildFlags_ScrollY)) != 0;
         const bool smooth = scrolls && (options.flags & ChildFlags_SmoothScroll);
-        if (hasNextScroll_)
+        cs.smooth = smooth;
+        if (scrolls)
         {
-            if (nextScroll_.x >= 0.0f)
-                cs.scroll.scroll.x = cs.scroll.target.x = nextScroll_.x;
-            if (nextScroll_.y >= 0.0f)
-                cs.scroll.scroll.y = cs.scroll.target.y = nextScroll_.y;
+            BeginScroll(cs.scroll, smooth);
+            ApplyNextScroll(cs.scroll, true);
+        }
+        else
+        {
+            cs.scroll = Window::ScrollState();
             hasNextScroll_ = false;
         }
-        if (scrolls)
-            BeginScroll(cs.scroll, smooth);
-        else
-            cs.scroll = Window::ScrollState();
         const Vec2 scroll = cs.scroll.scroll;
+
+        // the region as a whole, padding included, inside its parent's clip: what the wheel and HoveredChild see,
+        // and for a floating region what hides the content below it (hit below its own items, never scrolled)
+        const Rect parentClip = w->drawList_.ClipRect();
+        const int parentIndex = w->childStack_.empty() ? -1 : w->childStack_.back();
+        Vec2 outer, outerOwn;
+        ScrollOffsets(*w, w->children_, parentIndex, outer, outerOwn);
+        if (floating)
+        {
+            ++w->floating_;
+            RecordHit(*w, id, rect, ItemFlags_Background, true);
+        }
+        w->children_.push_back({id, parentIndex, rect.Intersect(parentClip), w->floating_, options.flags, outer});
+        const int index = (int)w->children_.size() - 1;
+        w->childStack_.push_back(index);
 
         const Rect content = rect.Expanded(-options.padding.x, -options.padding.y);
         const Rect& in = options.clipInset;
         w->drawList_.PushClipRect(Rect(content.min.x + in.min.x, content.min.y + in.min.y, content.max.x - in.max.x, content.max.y - in.max.y));
-        if (floating)
-            ++w->floating_;
         const Rect clip = w->drawList_.ClipRect();
-        const int parentIndex = w->childStack_.empty() ? -1 : w->childStack_.back();
-        w->children_.push_back({id, parentIndex, clip, w->floating_, options.flags});
-        const int index = (int)w->children_.size() - 1;
-        w->childStack_.push_back(index);
-        // a floating region hides what is below it: its empty area is hit (below its own items)
-        if (floating)
-            RecordHit(*w, id, rect, ItemFlags_Background);
 
         Window::Frame f;
         f.id = id;
@@ -380,32 +385,48 @@ namespace esia
     // ------------------------------------------------------------------ scrolling
     void Context::BeginScroll(Window::ScrollState& s, bool smooth)
     {
+        // the range measured last frame bounds the offset; a smooth area already glided in StepSmoothScrolls
         s.pending[0] = s.pending[1] = false;
-        if (!smooth)
-        {
-            s.scroll = Vec2(Clamp(s.scroll.x, 0.0f, s.max.x), Clamp(s.scroll.y, 0.0f, s.max.y));
+        s.scroll = Vec2(Clamp(s.scroll.x, 0.0f, s.max.x), Clamp(s.scroll.y, 0.0f, s.max.y));
+        if (smooth)
+            s.target = Vec2(Clamp(s.target.x, 0.0f, s.max.x), Clamp(s.target.y, 0.0f, s.max.y));
+        else
             s.target = s.scroll;
-            return;
-        }
-        // glide to the target (critically damped, frame-rate independent), on whole physical pixels
-        s.target = Vec2(Clamp(s.target.x, 0.0f, s.max.x), Clamp(s.target.y, 0.0f, s.max.y));
+    }
+
+    void Context::StepSmoothScrolls()
+    {
+        // Every smooth area used last frame glides to its target now, before the hit test (it sees where the content
+        // is): exponentially, frame-rate independent, on whole physical pixels of its window.
         const float tau = std::max(desc_.layout.scrollSmoothing, 1e-4f);
         const float k = 1.0f - std::exp(-input_.DeltaTime() / tau);
-        const float scale = Scale();
-        for (int a = 0; a < 2; ++a)
+        for (auto& w : windows_)
         {
-            float& v = a == 0 ? s.scroll.x : s.scroll.y;
-            const float t = a == 0 ? s.target.x : s.target.y;
-            // at least one physical pixel per frame: rounding would otherwise stall the tail short of the target
-            const float pixel = 1.0f / std::max(scale, 1e-3f);
-            float step = (t - v) * k;
-            if (std::fabs(step) < pixel)
-                step = std::copysign(std::min(pixel, std::fabs(t - v)), t - v);
-            v = std::round((v + step) / pixel) * pixel;
-            if (std::fabs(t - v) < pixel)
-                v = t;
-            else
-                animating_ = true;
+            if (!w->wasActive_)
+                continue;
+            const float pixel = 1.0f / std::max(w->scale_, 1e-3f);
+            for (auto& [id, cs] : w->childStates_)
+            {
+                if (!cs.smooth || cs.lastFrame + 1 != frame_)
+                    continue;
+                Window::ScrollState& s = cs.scroll;
+                for (int a = 0; a < 2; ++a)
+                {
+                    float& v = a == 0 ? s.scroll.x : s.scroll.y;
+                    const float t = Clamp(a == 0 ? s.target.x : s.target.y, 0.0f, a == 0 ? s.max.x : s.max.y);
+                    if (v == t)
+                        continue;
+                    // at least one pixel per frame: rounding would otherwise stall the tail short of the target
+                    float step = (t - v) * k;
+                    if (std::fabs(step) < pixel)
+                        step = std::copysign(std::min(pixel, std::fabs(t - v)), t - v);
+                    v = std::round((v + step) / pixel) * pixel;
+                    if (std::fabs(t - v) < pixel)
+                        v = std::round(t / pixel) * pixel;   // the pixel nearest the target: done
+                    else
+                        animating_ = true;
+                }
+            }
         }
     }
 
@@ -426,8 +447,28 @@ namespace esia
         if (smooth)
         {
             s.target = Vec2(Clamp(s.target.x, 0.0f, s.max.x), Clamp(s.target.y, 0.0f, s.max.y));
-            if (s.target.x != s.scroll.x || s.target.y != s.scroll.y)
+            const float pixel = 1.0f / std::max(Scale(), 1e-3f);
+            if (std::fabs(s.target.x - s.scroll.x) >= pixel || std::fabs(s.target.y - s.scroll.y) >= pixel)
                 animating_ = true;
+        }
+    }
+
+    void Context::ApplyNextScroll(Window::ScrollState& s, bool immediate)
+    {
+        // SetNextScroll: the offset this frame's layout starts at (when it has not started yet) and a request, so
+        // that the end of the area clamps it to the range its content measures now - also on its first frame
+        if (!hasNextScroll_)
+            return;
+        hasNextScroll_ = false;
+        for (int a = 0; a < 2; ++a)
+        {
+            const float v = a == 0 ? nextScroll_.x : nextScroll_.y;
+            if (v < 0.0f)
+                continue;
+            if (immediate)
+                (a == 0 ? s.scroll.x : s.scroll.y) = (a == 0 ? s.target.x : s.target.y) = v;
+            s.pending[a] = true;
+            (a == 0 ? s.request.x : s.request.y) = v;
         }
     }
 
@@ -507,8 +548,8 @@ namespace esia
         int innermost = -1;
         if (input_.MouseValid())
             for (int i = 0; i < (int)w->childrenPrev_.size(); ++i)
-                if (w->childrenPrev_[(std::size_t)i].clip.Contains(input_.MousePos()) &&
-                    (innermost < 0 || w->childrenPrev_[(std::size_t)i].layer >= w->childrenPrev_[(std::size_t)innermost].layer))
+                if ((innermost < 0 || w->childrenPrev_[(std::size_t)i].layer >= w->childrenPrev_[(std::size_t)innermost].layer) &&
+                    ChildClipNow(*w, (std::size_t)i).Contains(input_.MousePos()))
                     innermost = i;
         for (int a = 0; a < 2; ++a)
         {
@@ -559,8 +600,8 @@ namespace esia
             {
                 switch (align)
                 {
-                case Align::Center: off = (lastCross_ - last->size.y) * 0.5f; break;
-                case Align::End: off = lastCross_ - last->size.y; break;
+                case Align::Center: off = ((alignInRegion ? region_.Height() : lastCross_) - last->size.y) * 0.5f; break;
+                case Align::End: off = (alignInRegion ? region_.Height() : lastCross_) - last->size.y; break;
                 case Align::Baseline: off = (last->baseline >= 0.0f && lastBaseline_ >= 0.0f) ? lastBaseline_ - last->baseline : 0.0f; break;
                 default: break;
                 }
@@ -571,7 +612,8 @@ namespace esia
         float off = 0.0f;
         if (last)
         {
-            const float room = region_.Width() - last->size.x;
+            // against the widest child (a fitted stack stays as wide as its content), or the whole region
+            const float room = (alignInRegion ? region_.Width() : lastCross_) - last->size.x;
             if (align == Align::Center)
                 off = room * 0.5f;
             else if (align == Align::End)

@@ -110,10 +110,12 @@ namespace esia
         UpdatePopupsAtNewFrame();
         UpdateMoveResize();
         UpdateHoveredWindow();
+        // content moves before the hit test: it sees where last frame's items are now
+        StepSmoothScrolls();
+        UpdateWheel();
         HitTest();
         UpdatePressOwners();
         StartResize();
-        UpdateWheel();
 
         const Rect display(Vec2(0, 0), params.displaySize);
         background_.Reset(display);
@@ -375,14 +377,20 @@ namespace esia
             w->rect_.max = w->rect_.min + sz;
 
             // DPI: the scale of the monitor under the window; when it changes, the window keeps its physical size
-            const float scale = MonitorScale(w->rect_);
-            w->scaleChanged_ = w->scaleKnown_ && scale != w->scale_;
-            if (w->scaleChanged_ && w != root_ && !(w->flags_ & WindowFlags_AutoSize))
+            float scale = MonitorScale(w->rect_);
+            if (w->scaleKnown_ && scale != w->scale_ && w != root_ && !(w->flags_ & WindowFlags_AutoSize))
             {
                 sz = w->rect_.Size() * (scale / w->scale_);
                 sz = Vec2(Clamp(sz.x, w->minSize_.x, w->maxSize_.x), Clamp(sz.y, w->minSize_.y, w->maxSize_.y));
-                w->rect_.max = w->rect_.min + sz;
+                // hysteresis: the rescaled window must still be on the new monitor, or it would flip back and forth
+                // at the boundary (it is anchored at its top-left, where drags and SetNextWindowPos put it)
+                const Rect rescaled = Rect::FromSize(w->rect_.min, sz);
+                if (MonitorScale(rescaled) == scale)
+                    w->rect_ = rescaled;
+                else
+                    scale = w->scale_;
             }
+            w->scaleChanged_ = w->scaleKnown_ && scale != w->scale_;
             w->scale_ = scale;
             w->scaleKnown_ = true;
             if (fullyOnScreen)
@@ -400,15 +408,8 @@ namespace esia
             if (w->appearing_ && !(w->flags_ & WindowFlags_NoFocus))
                 FocusWindow(w);
 
-            if (hasNextScroll_)
-            {
-                if (nextScroll_.x >= 0.0f)
-                    w->scroll_.scroll.x = w->scroll_.target.x = nextScroll_.x;
-                if (nextScroll_.y >= 0.0f)
-                    w->scroll_.scroll.y = w->scroll_.target.y = nextScroll_.y;
-                hasNextScroll_ = false;
-            }
             BeginScroll(w->scroll_, false);
+            ApplyNextScroll(w->scroll_, true);
             w->drawList_.Reset(w->rect_);
             // items are visible and hoverable inside the content rect only; decorations draw with a wider clip
             w->drawList_.PushClipRect(w->ContentRect());
@@ -417,6 +418,8 @@ namespace esia
             w->childStack_.clear();
             InitRootFrame(*w);
         }
+        else
+            ApplyNextScroll(w->scroll_, false);   // appended to: its layout already started, the request lands at End
         hasNextPos_ = hasNextSize_ = false;
         stack_.push_back(w);
         return w;
@@ -478,10 +481,23 @@ namespace esia
         }
     }
 
+    Rect Context::ChildClipNow(const Window& w, std::size_t index) const
+    {
+        // a child region moves with its parents' scroll (a floating one stays where it floats)
+        const Window::ChildRecord& c = w.childrenPrev_[index];
+        if (c.flags & ChildFlags_Floating)
+            return c.clip;
+        Vec2 total, own;
+        ScrollOffsets(w, w.childrenPrev_, c.parent, total, own);
+        return c.clip.Translated(c.outer - total);
+    }
+
     void Context::HitTest()
     {
         // The front-most of last frame's items under the mouse, in the hovered window: a higher layer first
-        // (floating children, then content, background items last), then the item submitted (drawn) last.
+        // (floating children, then content, background items last), then the item submitted (drawn) last. Each
+        // record is where its item is now: shifted by how far its scroll areas moved since it was laid out (its clip
+        // by how far the areas around its own one moved).
         hitId_ = 0;
         hitFlags_ = 0;
         hoveredChild_ = 0;
@@ -491,19 +507,31 @@ namespace esia
         const Vec2 p = input_.MousePos();
         const Window::HitRecord* best = nullptr;
         for (const Window::HitRecord& h : w->hitsPrev_)
-            if (h.rect.Contains(p) && (!best || h.layer >= best->layer))
+        {
+            if (best && h.layer < best->layer)
+                continue;
+            Rect r = h.rect.Intersect(h.clip);
+            if (!h.fixed)
+            {
+                Vec2 total, own;
+                ScrollOffsets(*w, w->childrenPrev_, h.child, total, own);
+                const Vec2 moved = total - h.total, movedOwn = own - h.own;
+                r = h.rect.Translated(-moved).Intersect(h.clip.Translated(movedOwn - moved));
+            }
+            if (r.Contains(p))
                 best = &h;
+        }
         if (best)
         {
             hitId_ = best->id;
             hitFlags_ = best->flags;
         }
-        const Window::ChildRecord* child = nullptr;
-        for (const Window::ChildRecord& c : w->childrenPrev_)
-            if (c.clip.Contains(p) && (!child || c.layer >= child->layer))
-                child = &c;
-        if (child)
-            hoveredChild_ = child->id;
+        int child = -1;
+        for (std::size_t i = 0; i < w->childrenPrev_.size(); ++i)
+            if ((child < 0 || w->childrenPrev_[i].layer >= w->childrenPrev_[(std::size_t)child].layer) && ChildClipNow(*w, i).Contains(p))
+                child = (int)i;
+        if (child >= 0)
+            hoveredChild_ = w->childrenPrev_[(std::size_t)child].id;
     }
 
     void Context::UpdatePressOwners()

@@ -39,20 +39,56 @@ namespace esia
     Id Context::GetId(std::int64_t value) const { return HashInt(value, IdSeed()); }
 
     // ------------------------------------------------------------------ items
-    void Context::RecordHit(Window& w, Id id, const Rect& bb, std::uint32_t itemFlags)
+    void Context::ScrollOffsets(const Window& w, const std::vector<Window::ChildRecord>& records, int index, Vec2& total, Vec2& own) const
     {
-        // what the next frame's hit test sees: the part of the item inside the clip, on its layer (floating children
-        // above content, background items below the rest of their layer)
-        const Rect r = bb.Intersect(w.drawList_.ClipRect());
-        if (r.Empty())
-            return;
-        const int layer = w.floating_ * 2 + ((itemFlags & ItemFlags_Background) ? 0 : 1);
-        if (!w.hits_.empty() && w.hits_.back().id == id)
+        // the scroll offsets that move content in child record `index`: its scroll areas out to the window, stopping at
+        // a floating region (it floats over its parents' content, their scroll does not move it)
+        total = Vec2(0, 0);
+        bool haveOwn = false;
+        for (int i = index; i >= 0 && (std::size_t)i < records.size(); i = records[(std::size_t)i].parent)
         {
-            w.hits_.back() = {id, r, itemFlags, layer};
-            return;
+            const Window::ChildRecord& c = records[(std::size_t)i];
+            if (c.flags & (ChildFlags_ScrollX | ChildFlags_ScrollY))
+            {
+                const auto it = w.childStates_.find(c.id);
+                const Vec2 v = it != w.childStates_.end() ? it->second.scroll.scroll : Vec2(0, 0);
+                total += v;
+                if (!haveOwn)
+                    own = v;
+                haveOwn = true;
+            }
+            if (c.flags & ChildFlags_Floating)
+            {
+                if (!haveOwn)
+                    own = Vec2(0, 0);
+                return;
+            }
         }
-        w.hits_.push_back({id, r, itemFlags, layer});
+        total += w.scroll_.scroll;
+        if (!haveOwn)
+            own = w.scroll_.scroll;
+    }
+
+    void Context::RecordHit(Window& w, Id id, const Rect& bb, std::uint32_t itemFlags, bool fixed)
+    {
+        // what the next frame's hit test sees: the item inside the clip, on its layer (floating children above
+        // content, background items below the rest of their layer), with the scroll offsets it was laid out with
+        const Rect clip = w.drawList_.ClipRect();
+        if (bb.Intersect(clip).Empty())
+            return;
+        Window::HitRecord h;
+        h.id = id;
+        h.rect = bb;
+        h.clip = clip;
+        h.flags = itemFlags;
+        h.layer = w.floating_ * 2 + ((itemFlags & ItemFlags_Background) ? 0 : 1);
+        h.child = w.childStack_.empty() ? -1 : w.childStack_.back();
+        h.fixed = fixed;
+        ScrollOffsets(w, w.children_, h.child, h.total, h.own);
+        if (!w.hits_.empty() && w.hits_.back().id == id)
+            w.hits_.back() = h;
+        else
+            w.hits_.push_back(h);
     }
 
     bool Context::ItemAdd(Id id, const Rect& bb, std::uint32_t itemFlags)
@@ -152,6 +188,7 @@ namespace esia
                     continue;
                 SetActiveId(id);
                 activeButton_ = mb;
+                activeByMouse_ = true;
                 clickedNow = true;
                 r.clicks = input_.MouseClickCount(mb);
                 if (flags & ButtonFlags_FocusOnClick)
@@ -164,7 +201,11 @@ namespace esia
             }
         }
 
-        if (activeId_ == id && id != 0)
+        // an item made active another way (a key, a field that stays active) is not held by a mouse button: no
+        // "release" presses or deactivates it
+        if (activeId_ == id && id != 0 && !activeByMouse_)
+            activeAlive_ = true;
+        else if (activeId_ == id && id != 0)
         {
             activeAlive_ = true;
             if (input_.MouseDown(activeButton_))
@@ -229,7 +270,7 @@ namespace esia
                 const auto it = std::find_if(list->rbegin(), list->rend(), [id](const Window::HitRecord& h) { return h.id == id; });
                 if (it != list->rend())
                 {
-                    s.rect = it->rect;
+                    s.rect = it->rect.Intersect(it->clip);
                     s.disabled = (it->flags & ItemFlags_Disabled) != 0;
                     s.visible = list == &w->hits_;
                     break;
@@ -241,6 +282,7 @@ namespace esia
     void Context::SetActiveId(Id id)
     {
         activeId_ = id;
+        activeByMouse_ = false;
         activeSetThisFrame_ = id != 0;
         activeAlive_ = id != 0;
     }
@@ -267,35 +309,43 @@ namespace esia
     }
 
     // ------------------------------------------------------------------ keys
+    // Ownership never depends on the order widgets are submitted in: a claim is refused when another id claimed the
+    // key earlier this frame, or owned it last frame (it keeps it while it renews the claim; a newcomer gets it the
+    // frame after the old owner stops). So two claimants never both see a key.
     void Context::ClaimKey(Key key, Id owner)
     {
         if ((std::size_t)key >= keyOwner_.size() || owner == 0)
             return;
-        keyOwner_[(std::size_t)key] = owner;
+        const std::size_t k = (std::size_t)key;
         anyKeyClaim_ = true;
+        if (keyOwner_[k] == 0 && (keyOwnerPrev_[k] == 0 || keyOwnerPrev_[k] == owner))
+            keyOwner_[k] = owner;
     }
 
     void Context::ClaimKeyboard(Id owner)
     {
         if (owner == 0)
             return;
-        keyboardOwner_ = owner;
         anyKeyClaim_ = true;
+        if (keyboardOwner_ == 0 && (keyboardOwnerPrev_ == 0 || keyboardOwnerPrev_ == owner))
+            keyboardOwner_ = owner;
     }
 
     Id Context::KeyOwner(Key key) const
     {
-        // this frame's claims first; last frame's still hold for the widgets submitted before their owner
+        // The keyboard's owner (the editor that edits) outranks per-key claims: a dialog's Enter does not take the
+        // Enter of the multiline field inside it. This frame's claims, then last frame's (they still hold for the
+        // widgets submitted before their owner renews them).
         if ((std::size_t)key >= keyOwner_.size())
             return 0;
         const std::size_t k = (std::size_t)key;
-        if (keyOwner_[k] != 0)
-            return keyOwner_[k];
         if (keyboardOwner_ != 0)
             return keyboardOwner_;
-        if (keyOwnerPrev_[k] != 0)
-            return keyOwnerPrev_[k];
-        return keyboardOwnerPrev_;
+        if (keyboardOwnerPrev_ != 0)
+            return keyboardOwnerPrev_;
+        if (keyOwner_[k] != 0)
+            return keyOwner_[k];
+        return keyOwnerPrev_[k];
     }
 
     bool Context::KeyPressed(Key key, Id asker, bool repeat) const

@@ -470,3 +470,146 @@ ESIA_TEST(Context, ItemStatus)
     frame(ItemFlags_Disabled);
     ESIA_CHECK(s.disabled && !s.hovered);
 }
+
+// Two claimants of one key never both see it, whatever order they are submitted in; the keyboard's owner (an editor)
+// outranks a per-key claim (the dialog around it)
+ESIA_TEST(Context, KeyOwnershipConflicts)
+{
+    Harness h;
+    const Id a = 1, b = 2, editor = 3, dialog = 4;
+    int seenA = 0, seenB = 0;
+    bool swap = false;
+    auto frame = [&] {
+        h.Frame();
+        for (int i = 0; i < 2; ++i)
+        {
+            const Id who = (i == 0) != swap ? a : b;
+            h.ctx.ClaimKey(Key::Enter, who);
+            if (h.ctx.KeyPressed(Key::Enter, who, false))
+                ++(who == a ? seenA : seenB);
+        }
+        h.End();
+    };
+    h.KeyDown(Key::Enter);
+    frame();   // no owner before: the first claim of the frame wins
+    ESIA_CHECK(seenA == 1 && seenB == 0);
+    h.KeyUp(Key::Enter);
+    frame();
+    swap = true;   // b is submitted first now: a keeps the key it owned
+    h.KeyDown(Key::Enter);
+    frame();
+    ESIA_CHECK(seenA == 2 && seenB == 0);
+    h.KeyUp(Key::Enter);
+    frame();
+
+    bool editorSaw = false, dialogSaw = false;
+    auto nested = [&](bool editorFirst) {
+        h.Frame();
+        for (int i = 0; i < 2; ++i)
+        {
+            if ((i == 0) == editorFirst)
+            {
+                h.ctx.ClaimKeyboard(editor);
+                editorSaw = h.ctx.KeyPressed(Key::Enter, editor, false);
+            }
+            else
+            {
+                h.ctx.ClaimKey(Key::Enter, dialog);
+                dialogSaw = h.ctx.KeyPressed(Key::Enter, dialog, false);
+            }
+        }
+        h.End();
+    };
+    for (int order = 0; order < 2; ++order)
+    {
+        nested(order == 0);
+        h.KeyDown(Key::Enter);
+        nested(order == 0);
+        ESIA_CHECK(editorSaw && !dialogSaw);
+        h.KeyUp(Key::Enter);
+        nested(order == 0);
+    }
+}
+
+// Content that scrolls under a still mouse (the wheel, a glide) is hit where it is now, in the same frame
+ESIA_TEST(Context, HoverFollowsScrolledContent)
+{
+    Harness h;
+    ButtonResult rows[20];
+    Rect rects[20];
+    bool smooth = false;
+    auto frame = [&] {
+        h.Frame();
+        WindowOptions o;
+        o.padding = {0, 0};
+        h.Win("W", {0, 0}, {300, 300}, o);
+        ChildOptions c;
+        c.size = {200, 200};
+        c.flags = ChildFlags_ScrollY | (smooth ? ChildFlags_SmoothScroll : 0u);
+        h.ctx.BeginChild("list", c);
+        for (int i = 0; i < 20; ++i)
+        {
+            h.ctx.PushId(i);
+            rows[i] = h.Button("row", Vec2(180, 40));   // rows every 48 units
+            rects[i] = h.ctx.LastItemRect();
+            h.ctx.PopId();
+        }
+        h.ctx.EndChild();
+        h.ctx.End();
+        h.End();
+    };
+    h.Move({50, 60});   // row 1 (48..88)
+    frame();
+    frame();
+    ESIA_CHECK(rows[1].hovered);
+    h.Wheel(0, -1);     // 48 down: row 2 is under the mouse now
+    h.Down();
+    frame();
+    ESIA_CHECK(rows[2].hovered && rows[2].held && !rows[1].hovered);
+    h.Up();
+    frame();
+    ESIA_CHECK(rows[2].pressed);
+    // while a smooth scroll glides, every frame hovers the row that is under the mouse at that moment
+    smooth = true;
+    frame();
+    h.Wheel(0, -4);
+    bool alwaysRight = true, moved = false;
+    for (int f = 0; f < 30; ++f)
+    {
+        frame();
+        int hovered = -1, under = -1;
+        for (int i = 0; i < 20; ++i)
+        {
+            hovered = rows[i].hovered ? i : hovered;
+            under = rects[i].Contains(Vec2(50, 60)) ? i : under;   // where this frame's layout put the rows
+        }
+        alwaysRight = alwaysRight && hovered == under;
+        moved = moved || under > 3;
+    }
+    ESIA_CHECK(moved);
+    ESIA_CHECK(alwaysRight);
+}
+
+// an item made active by a key (not by a mouse press) is not "released" by ButtonBehavior
+ESIA_TEST(Context, KeyboardActivatedItemStaysActive)
+{
+    Harness h;
+    Id id = 0;
+    ButtonResult r;
+    auto frame = [&](bool activate) {
+        h.Frame();
+        h.Win("K", {0, 0}, {300, 300});
+        id = h.ctx.GetId("b");
+        if (activate)
+            h.ctx.SetActiveId(id);
+        r = h.Button("b", Rect(20, 20, 100, 60));
+        h.ctx.End();
+        h.End();
+    };
+    h.Move({30, 30});
+    frame(false);
+    frame(true);
+    frame(false);
+    ESIA_CHECK(h.ctx.ActiveId() == id && !r.pressed && !r.held);
+    h.ctx.ClearActiveId();
+}

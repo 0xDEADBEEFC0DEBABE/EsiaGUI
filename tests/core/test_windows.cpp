@@ -540,3 +540,147 @@ ESIA_TEST(Context, ScopeData)
     ESIA_CHECK(h.ctx.FindScopeData(&kStyle) == nullptr);
     h.End();
 }
+
+// review: a window at a monitor boundary does not flip between two scales every frame
+ESIA_TEST(Context, DpiBoundaryHysteresis)
+{
+    Harness h;
+    h.display = Vec2(2000, 1000);
+    h.ctx.SetMonitors({Monitor{Rect(0, 0, 1000, 1000), 2.0f}, Monitor{Rect(1000, 0, 2000, 1000), 1.0f}});
+    float x = 100.0f;
+    int changes = 0;
+    auto frame = [&] {
+        h.Frame();
+        h.ctx.SetNextWindowPos(Vec2(x, 100));
+        h.ctx.SetNextWindowSize({900, 400}, Cond::FirstUse);
+        h.ctx.Begin("M");
+        changes += h.ctx.CurrentWindow()->ScaleChanged() ? 1 : 0;
+        h.ctx.End();
+        h.End();
+    };
+    frame();
+    x = 600.0f;   // center at 1050, on the scale-1 monitor; halved (450) it would be back on the scale-2 one
+    for (int i = 0; i < 6; ++i)
+        frame();
+    ESIA_CHECK(changes == 0 && h.ctx.FindWindow("M")->Scale() == 2.0f && h.ctx.FindWindow("M")->GetRect().Width() == 900.0f);
+    x = 1200.0f;   // well onto it: switches once
+    for (int i = 0; i < 6; ++i)
+        frame();
+    ESIA_CHECK(changes == 1 && h.ctx.FindWindow("M")->Scale() == 1.0f && h.ctx.FindWindow("M")->GetRect().Width() == 450.0f);
+}
+
+// review: SetNextScroll on an area's first frame, past last frame's (empty) range
+ESIA_TEST(Context, SetNextScrollOnNewArea)
+{
+    Harness h;
+    float scroll = -1.0f;
+    auto frame = [&](bool set) {
+        h.Frame();
+        h.Win("W", {0, 0}, {300, 300});
+        if (set)
+            h.ctx.SetNextScroll({-1, 200});
+        ChildOptions c;
+        c.size = {200, 100};
+        c.flags = ChildFlags_ScrollY;
+        h.ctx.BeginChild("list", c);
+        for (int i = 0; i < 20; ++i)
+            h.ctx.ItemSize({50, 22});   // 592 tall: 492 to scroll
+        scroll = h.ctx.Scroll().y;
+        h.ctx.EndChild();
+        h.ctx.End();
+        h.End();
+    };
+    frame(true);
+    ESIA_CHECK(scroll == 200.0f);
+    frame(false);
+    ESIA_CHECK(scroll == 200.0f);   // kept: the end of the first frame clamped it to the range it measured
+
+    // a window appended to in the same frame: its layout already started, the request lands at its End (and does
+    // not leak into a later child)
+    h.Frame();
+    WindowOptions o;
+    o.padding = {0, 0};
+    h.Win("L", {0, 0}, {200, 100}, o);
+    h.ctx.End();
+    h.ctx.SetNextScroll({-1, 150});
+    h.ctx.Begin("L", o);
+    for (int i = 0; i < 20; ++i)
+        h.ctx.ItemSize({50, 22});
+    ChildOptions c;
+    c.size = {100, 50};
+    c.flags = ChildFlags_ScrollY;
+    h.ctx.BeginChild("c", c);
+    h.ctx.ItemSize({10, 200});
+    const float childScroll = h.ctx.Scroll().y;
+    h.ctx.EndChild();
+    h.ctx.End();
+    h.End();
+    ESIA_CHECK(childScroll == 0.0f && h.ctx.FindWindow("L")->Scroll().y == 150.0f);
+}
+
+// review: a fractional smooth-scroll target ends on a whole pixel, and the glide stops there
+ESIA_TEST(Child, SmoothScrollEndsOnPixel)
+{
+    Harness h;
+    float scroll = 0.0f;
+    bool request = false;
+    auto frame = [&] {
+        h.Frame();
+        h.Win("W", {0, 0}, {300, 300});
+        ChildOptions c;
+        c.size = {200, 100};
+        c.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
+        h.ctx.BeginChild("area", c);
+        if (request)
+            h.ctx.SetScrollY(40.3f);
+        request = false;
+        for (int i = 0; i < 20; ++i)
+            h.ctx.ItemSize({50, 22});
+        scroll = h.ctx.Scroll().y;
+        h.ctx.EndChild();
+        h.ctx.End();
+        h.End();
+    };
+    frame();
+    request = true;
+    frame();
+    for (int i = 0; i < 60 && h.ctx.Requests().animating; ++i)
+        frame();
+    ESIA_CHECK(!h.ctx.Requests().animating && scroll == 40.0f);
+}
+
+namespace
+{
+    int gThrow = 1;
+    struct Fragile
+    {
+        int v = 5;
+        Fragile()
+        {
+            if (gThrow > 0)
+            {
+                --gThrow;
+                throw 1;
+            }
+        }
+    };
+}
+
+// review: a constructor that throws leaves no half-made entry behind (collecting it would call a null destroy)
+ESIA_TEST(Context, StateStorageThrowingConstructor)
+{
+    StateStorage st;
+    bool threw = false;
+    try
+    {
+        st.Get<Fragile>(1, 1);
+    }
+    catch (int)
+    {
+        threw = true;
+    }
+    ESIA_CHECK(threw && st.Size() == 0);
+    ESIA_CHECK(st.Get<Fragile>(1, 2).v == 5 && st.Size() == 1);
+    st.Collect(1000, 10);
+    ESIA_CHECK(st.Size() == 0);
+}

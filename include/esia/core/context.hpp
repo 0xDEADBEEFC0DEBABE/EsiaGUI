@@ -241,24 +241,33 @@ namespace esia
             bool smooth = false;
             std::vector<std::pair<const void*, const void*>> scope;
         };
+        // An item as the next frame's hit test sees it. Content moves when a scroll area it is in scrolls (the wheel,
+        // a glide, SetScroll*) before the next layout: the hit test shifts the record by how far its scroll areas
+        // moved since it was recorded.
         struct HitRecord
         {
             Id id;
-            Rect rect;
+            Rect rect;                    // unclipped
+            Rect clip;
             std::uint32_t flags;
             int layer;
+            int child;                    // innermost child record it is in, -1 = the window's content
+            bool fixed;                   // does not scroll (a floating region's own area)
+            Vec2 total, own;              // scroll offsets when recorded: all its areas', its innermost area's
         };
         struct ChildRecord
         {
             Id id;
             int parent;                   // index of the enclosing child record, -1 = the window
-            Rect clip;
+            Rect clip;                    // its rect inside its parent's clip
             int layer;
             std::uint32_t flags;
+            Vec2 outer;                   // its parents' scroll offsets when recorded
         };
         struct ChildState
         {
             ScrollState scroll;
+            bool smooth = false;
             std::uint64_t lastFrame = 0;
         };
 
@@ -477,7 +486,11 @@ namespace esia
         Id MoveId(const Window& w) const { return HashString("#move", w.id_); }
         Id ResizeId(const Window& w) const { return HashString("#resize", w.id_); }
         bool PressBlocked() const;       // a held press belongs to the host or to a popup dismissal
-        void RecordHit(Window& w, Id id, const Rect& bb, std::uint32_t itemFlags);
+        void RecordHit(Window& w, Id id, const Rect& bb, std::uint32_t itemFlags, bool fixed = false);
+        void ScrollOffsets(const Window& w, const std::vector<Window::ChildRecord>& records, int index, Vec2& total, Vec2& own) const;
+        Rect ChildClipNow(const Window& w, std::size_t index) const;
+        void StepSmoothScrolls();
+        void ApplyNextScroll(Window::ScrollState& s, bool immediate);
         void ClosePopupsFrom(std::size_t index);
         int PopupIndex(Id id) const;
 
@@ -525,6 +538,7 @@ namespace esia
         Id hoveredChild_ = 0;
         Id activeId_ = 0;
         bool activeAlive_ = false, activeSetThisFrame_ = false;
+        bool activeByMouse_ = false;       // ButtonBehavior activated it with a mouse button (activeButton_)
         MouseButton activeButton_ = MouseButton::Left;
         Id focusId_ = 0;
         bool focusAlive_ = false, focusClaimed_ = false, textInputRequested_ = false;

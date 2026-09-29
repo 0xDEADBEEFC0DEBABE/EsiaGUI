@@ -47,11 +47,12 @@ code. The architecture around the core (renderer, RHI, text) is in [REWRITE.md](
    last frame lose focus and drag; windows unused for `ContextDesc::retainFrames` frames are freed (with their
    child and item records), and so is unused `State<T>` storage;
 3. popups that were not submitted last frame close; window move / resize is updated;
-4. the **hit test** (section 4): the hovered window and the front-most item under the mouse from last frame's
-   rects; then per-button **press ownership** for the buttons pressed this frame (section 5), and a click outside
-   the open popups dismisses them;
-5. a resize starts from a window edge; the wheel goes to the innermost scroll area under the mouse that can scroll
-   that way (section 8);
+4. content moves: smooth scroll areas glide a step, the wheel goes to the innermost scroll area under the mouse that
+   can scroll that way (section 8);
+5. the **hit test** (section 4): the hovered window and the front-most item under the mouse from last frame's
+   rects, shifted by how far their scroll areas just moved; then per-button **press ownership** for the buttons
+   pressed this frame (section 5), a click outside the open popups dismisses them, and a resize starts from a window
+   edge;
 6. the implicit root window begins (items submitted outside any `Begin` land on it).
 
 Widgets then submit windows and items. `Context::EndFrame()`:
@@ -97,7 +98,10 @@ core walks last frame's records front to back - windows by layer and z-order, in
 above content, `ItemFlags_Background` items below the others, later-submitted above earlier-submitted (what is drawn
 on top is hit on top) - and the first record under the mouse is **the hit item**. `ItemHoverable(id)` is true when
 `id` is the hit item and the mouse is inside its rect *now* (an item that moved away this frame loses the hover at
-once). An item that did not exist last frame may take the hover when no recorded item is under the mouse, so a new
+once). A record remembers the scroll offsets of the areas it was laid out in: when content moves under a still
+mouse (the wheel, a smooth glide, `SetScrollY`) the hit test shifts the record by how far they moved, so the row
+now under the mouse hovers and takes a click in that very frame. An item that did not exist last frame may take
+the hover when no recorded item is under the mouse, so a new
 item under a still mouse is not a frame late. This replaces the one-frame overlap trick (`AllowOverlap` yielding to
 last frame's hovered id): overlapping items, rows with controls on them, floating bars and popups get the right
 hover in every frame, including the frame a touch moves and presses at once. `ItemFlags_AllowOverlap` and
@@ -108,7 +112,8 @@ it, a drag on them does not move the window), but `ItemHoverable` returns false 
 nor activates. An item that becomes disabled while active is deactivated by its `ItemAdd`. `ButtonBehavior` takes
 the item flags; when called right after `ItemAdd` for the same id it also uses the flags given there.
 
-**Buttons.** `ButtonBehavior` activates on a click of an enabled mouse button over the item, holds while the button
+**Buttons.** An item made active another way (`SetActiveId` from a key, a field that stays active) is kept alive by
+`ButtonBehavior` but not treated as held or released by a mouse button. `ButtonBehavior` activates on a click of an enabled mouse button over the item, holds while the button
 is down (`held`), and presses on release over the item (default), on click (`ButtonFlags_PressOnClick`), on a double
 click (`ButtonFlags_PressOnDoubleClick`). `ButtonFlags_Repeat` presses on the click, then repeatedly after
 `InputConfig::keyRepeatDelay` at `keyRepeatRate` while held over the item, and never on the release.
@@ -141,8 +146,11 @@ bool KeyPressed(Key key, Id asker = 0, bool repeat = true) const;   // false whe
 bool KeyDown(Key key, Id asker = 0) const;
 ```
 
-A claim made during frame N is seen by every query after it in frame N and by all of frame N+1, so the order in
-which widgets are submitted does not matter. A multiline editor claims Tab and keeps it; a dialog claims Enter and
+A claim made during frame N is seen by every query after it in frame N and by all of frame N+1. Ownership has a
+fixed precedence, so the order in which widgets are submitted does not decide it and two claimants never both see a
+key: the keyboard's owner (`ClaimKeyboard`, the editor that edits) outranks per-key claims; within a frame the first
+claim of a key wins; last frame's owner keeps the key while it renews its claim (a newcomer gets it the frame after
+the owner stops claiming). A multiline editor claims Tab and keeps it; a dialog claims Enter and
 Escape before its buttons ask for them; a popup's Escape is only used when nobody claimed it.
 
 **Tab navigation runs last.** Tab / Shift+Tab are handled in `EndFrame`, after every widget had its chance to claim
@@ -194,7 +202,9 @@ where the next child goes; the cursor and the work rect move there. Nested conta
 provider object belongs to the widget layer (typically in `State<T>(id)`, so it keeps last frame's measurements, as
 WGT's `LayoutCache` did). The core ships one provider, `StackLayout` (vertical or horizontal, spacing, alignment
 including text baselines), used by its tests and as the reference implementation; WGT's stacks, adaptive stacks,
-grids and flows become providers in `esia_ui`.
+grids and flows become providers in `esia_ui`. `StackLayout` centers (or end-aligns) its children across the axis
+against the widest / tallest child measured last frame, so a fitted stack stays as wide as its content;
+`alignInRegion` aligns them in the container's region instead (give the container a fixed or fill size).
 
 **Every laid-out item is reported.** `ItemSize` produces a `LaidOutItem {rect, baseline, depth, window, container,
 floating}`; it goes to the container's provider, to the observer set with `SetItemObserver(fn)` (WGT's
@@ -228,7 +238,9 @@ a pixel boundary, so text and hairlines stay crisp. Integer layouts at scale 1 a
 * **DPI per window**: `Context::SetMonitors(std::vector<Monitor>)` (rect in UI units, scale = physical pixels per
   UI unit). A window's `Scale()` is the scale of the monitor under its center (without monitors,
   `FrameParams::framebufferScale.x`); `ScaleChanged()` is true for the frame it changed, and the window's size is
-  scaled by the ratio so its content keeps its physical size. `Context::Scale()` is the current window's scale:
+  scaled by the ratio (anchored at its top-left) so its content keeps its physical size. With hysteresis: the
+  switch happens only when the rescaled window is still centered on the new monitor, so a window on a boundary
+  does not flip between two scales every frame. `Context::Scale()` is the current window's scale:
   widget metrics (`Theme::metrics.scale`) and the layout's pixel snapping use it.
 
 ## 8. Child regions and scrolling
@@ -258,13 +270,13 @@ drag-to-scroll checks it with `HoveredId() == 0`.
 | `SetScrollX(x)`, `SetScrollY(y)` | deferred: applied when the area ends, clamped to the range measured **this** frame (content that grows in the same frame can be scrolled to at once) |
 | `SetScrollHereX/Y(ratio)` | the cursor's position at `ratio` of the visible content (0 top, 0.5 center, 1 bottom) |
 | `ScrollToRect(rect, align)`, `ScrollToItem(align)` | the smallest scroll that shows the rect (`align` < 0), or the rect at `align` of the view |
-| `SetNextScroll(Vec2)` | the next `Begin` / `BeginChild` starts at this offset (a negative component is left alone) |
+| `SetNextScroll(Vec2)` | the next `Begin` / `BeginChild` starts at this offset (a negative component is left alone), clamped at its end to the range measured then, so it works on an area's first frame (restoring a saved position); on a window already begun this frame it is a request for its `End` |
 
 The wheel goes to the innermost scroll area under the mouse (from last frame's records) that can still move in that
 direction, else outward to its parents and the window; Shift+wheel scrolls horizontally. With
 `ChildFlags_SmoothScroll` the offset follows its target (exponentially, time constant
 `LayoutMetrics::scrollSmoothing` seconds, at least one physical pixel per frame so the tail never stalls) on whole
-physical pixels; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
+physical pixels, ending on the pixel nearest the target; the glide steps in `NewFrame`, before the hit test; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
 banding and the scroll indicator stay in the widget layer (WGT's `ScrollAreaEnd`), on `ActiveId` and
 `SetScrollY`.
 
@@ -452,6 +464,17 @@ Each has a regression test in `tests/core` (the probe scenario).
 | 11 | negative position = no mouse | `kNoMousePos` sentinel | `Input.NegativePositionsAreValid`, `Context.DragPastLeftEdge` |
 | 12 | button index, `AppendUtf8`, resize snap, windows off screen | bounds checks, `DecodeUtf8`, grab offset, `keepOnScreen` | `Input.ButtonIndexBounds`, `Input.TextUtf8`, `Context.ResizeKeepsGrabOffset`, `Context.KeepOnScreen` |
 
+An independent review of the implementation found seven more problems, fixed with a test each: key claims that
+depended on submission order (`Context.KeyOwnershipConflicts`), a window flipping scale on a monitor boundary
+(`Context.DpiBoundaryHysteresis`), a floating region's padding not hiding what is below it and the wheel over a
+scroll child's padding scrolling its parent (`Child.PaddingIsPartOfTheRegion`), `SetNextScroll` lost on a new area
+(`Context.SetNextScrollOnNewArea`), a fitted `StackLayout` centering in its parent's width
+(`Layout.StackCenterFitted`), hover lost while content scrolls under a still mouse
+(`Context.HoverFollowsScrolledContent`), and `State<T>` type tags a linker may fold plus a throwing constructor
+leaving a broken entry (`Context.StateStorageThrowingConstructor`); also an item activated by a key being "released"
+(`Context.KeyboardActivatedItemStaysActive`) and a smooth scroll ending between pixels
+(`Child.SmoothScrollEndsOnPixel`).
+
 ## 15. Public API changes
 
 Against `main` before this work (`81ce5dc`):
@@ -471,7 +494,7 @@ Against `main` before this work (`81ce5dc`):
   `ItemFlags_Background`, `ItemStatus`, `ItemStatusOf`, `LastItemStatus`; `ClaimKey`, `ClaimKeyboard`,
   `KeyOwner`, `KeyPressed`, `KeyDown`; containers (`BeginContainer`, `EndContainer`, `ContainerOptions`,
   `WorkRect`, `CurrentDepth`, `LineBaseline`, `AlignToLineBaseline`, `SetItemObserver`) and `layout.hpp`
-  (`LayoutProvider`, `LayoutSlot`, `LaidOutItem`, `StackLayout`); child regions (`BeginChild`, `EndChild`,
+  (`LayoutProvider`, `LayoutSlot`, `LaidOutItem`, `Align`, `StackLayout`); child regions (`BeginChild`, `EndChild`,
   `ChildOptions`, `ChildFlags_`, `HoveredChild`); scrolling (`Scroll`, `ScrollMax`, `SetScrollHereX/Y`, `ScrollToRect`,
   `ScrollToItem`, `SetNextScroll`); popups (`OpenPopup`, `ClosePopup`, `IsPopupOpen`, `BeginPopup`, `EndPopup`,
   `CloseCurrentPopup`, `PopupOptions`, `BeginTooltip`, `EndTooltip`); `State<T>`, `SetScopeData`,
