@@ -229,35 +229,44 @@ jobs:
 
       # what the summary cannot show: one process per Direct3D 9 scene (a crash names its scene), the adapter as
       # dxdiag sees it, and the images of failed scenes as base64 in the log (the artifact has the same files)
+      # what the summary cannot show: the adapter as dxdiag sees it, the stack of the crashing Direct3D 9 and
+      # Vulkan runs under full page heap (the first bad heap access faults where it happens), and the images of
+      # failed scenes as base64 in the log (the artifact has the same files)
       - name: Diagnostics
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: |
-          $bin = "${{ matrix.bin }}"
+          $bin = (Resolve-Path "${{ matrix.bin }}").Path
           $golden = "tests/conformance/golden"
           dxdiag /whql:off /t "$PWD/logs/dxdiag.txt" | Out-Null
-          Start-Sleep -Seconds 2
           for ($i = 0; $i -lt 30 -and -not (Test-Path logs/dxdiag.txt); $i++) { Start-Sleep -Seconds 2 }
           if (Test-Path logs/dxdiag.txt) {
-            Select-String -Path logs/dxdiag.txt -Pattern 'Card name|Chip type|Driver Model|DDI Version|Feature Levels|Direct3D Acceleration|Driver File Version' | ForEach-Object { $_.Line.Trim() }
+            Select-String -Path logs/dxdiag.txt -Pattern 'Card name|Driver Model|DDI Version|Feature Levels|Direct3D Acceleration|Driver File Version' | ForEach-Object { $_.Line.Trim() }
           }
-          $scenes = & "$bin/esia_conformance.exe" --list | Select-String '^  (\S+)\s+\d+x\d+' | ForEach-Object { $_.Matches[0].Groups[1].Value }
-          foreach ($debug in '1', '0') {
-            $env:ESIA_D3D_DEBUG = $debug
-            foreach ($sc in $scenes) {
-              $out = & "$bin/esia_conformance.exe" --backend d3d9 --scene $sc --golden $golden --out "build/diag/d3d9-debug$debug" 2>&1
-              '{0,-3} d3d9 ESIA_D3D_DEBUG={1} {2,-16} exit 0x{3:X8} :: {4}' -f '', $debug, $sc, $LASTEXITCODE, (($out | ForEach-Object { "$_" }) -join ' | ')
-            }
-            $out = & "$bin/esia_conformance.exe" --backend d3d12 --scene glow_layer --golden $golden --out "build/diag/d3d12-debug$debug" 2>&1
-            "d3d12 ESIA_D3D_DEBUG=$debug glow_layer exit $LASTEXITCODE :: $(($out | Select-String 'glow_layer') -join ' | ')"
+          $dbg = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64"
+          "debuggers: $(Test-Path "$dbg\cdb.exe") $dbg"
+          $env:_NT_SYMBOL_PATH = "srv*$env:RUNNER_TEMP\symbols*https://msdl.microsoft.com/download/symbols;$bin"
+          & "$dbg\gflags.exe" /p /enable esia_conformance.exe /full
+          & "$dbg\gflags.exe" /p /enable esia_rhi_vulkan_tests.exe /full
+          $runs = @(
+            @('esia_conformance.exe', '--backend d3d9 --scene shapes --golden ' + $golden + ' --out build/diag/d3d9'),
+            @('esia_conformance.exe', '--backend vulkan --scene shapes --golden ' + $golden + ' --out build/diag/vulkan'),
+            @('esia_rhi_vulkan_tests.exe', '')
+          )
+          foreach ($r in $runs) {
+            "::group::cdb $($r[0]) $($r[1])"
+            & "$dbg\cdb.exe" -g -G -lines -c ".lines -e; .exr -1; kpn 40; ~* kn 12; q" "$bin\$($r[0])" $r[1].Split(' ', [StringSplitOptions]::RemoveEmptyEntries) 2>&1 |
+              Select-String -NotMatch '^(ModLoad|Symbol search path|Executable search path|\*\*\*)' | ForEach-Object { $_.Line }
+            "exit $LASTEXITCODE"
+            "::endgroup::"
           }
-          Get-ChildItem -Recurse build/${{ matrix.preset }}/conformance*, build/diag -Filter *.diff.png -ErrorAction SilentlyContinue | ForEach-Object {
+          & "$dbg\gflags.exe" /p /disable esia_conformance.exe
+          & "$dbg\gflags.exe" /p /disable esia_rhi_vulkan_tests.exe
+          Get-ChildItem -Recurse build/${{ matrix.preset }}/conformance -Filter *.diff.png -ErrorAction SilentlyContinue | ForEach-Object {
             foreach ($f in $_.FullName, ($_.FullName -replace '\.diff\.png$', '.png')) {
-              if (Test-Path $f) {
-                "BEGIN-BASE64 $f"
-                [Convert]::ToBase64String([IO.File]::ReadAllBytes($f)) -split '(.{1,4000})' | Where-Object { $_ }
-                "END-BASE64 $f"
-              }
+              "BEGIN-BASE64 $f"
+              [Convert]::ToBase64String([IO.File]::ReadAllBytes($f)) -split '(.{1,4000})' | Where-Object { $_ }
+              "END-BASE64 $f"
             }
           }
 
