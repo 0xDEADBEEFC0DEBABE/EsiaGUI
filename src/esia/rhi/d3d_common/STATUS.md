@@ -85,7 +85,8 @@ Run under Wine 9.0 + Xvfb against the OpenGL session's goldens (`origin/esia-ope
 | srgb_target | PASS (1) | PASS (2) | PASS (2) | PASS (4) |
 | msaa_target | PASS (1) | PASS (1) | PASS (1) | PASS (3) |
 
-"0.000 % pixels over the tolerance" everywhere; the numbers are the largest channel difference (of 255). The
+Re-run after the review fixes (`1678669`): the same, every scene PASS. "0.000 % pixels over the tolerance"
+everywhere; the numbers are the largest channel difference (of 255). The
 images were also inspected by eye (contact sheets of every scene per backend). Before the goldens existed the
 backends were compared with each other: D3D10 is pixel-identical to D3D11 (so the texture-storage FX path
 matches the structured buffer), D3D12 within 4, D3D9 within 2.
@@ -123,6 +124,17 @@ Tried and blocked: the `windows-cross` preset (clang-cl + xwin) - the egress pro
 `download.visualstudio.microsoft.com` and `aka.ms`, so xwin cannot fetch the MSVC CRT / Windows SDK (the core
 session hit the same). The MSVC-ABI build (clang-cl, MSVC) is therefore unverified.
 
+### Independent review
+
+A second agent in this session reviewed the four backends and `d3d_common` against `rhi.hpp`, the guide and the
+renderer's call order (read-only). It found no D3D12 state-tracking or barrier error in the renderer's call
+sequences. It reported: a use-after-free risk when effect workers called the host's log callback; the D3D12
+resolve temporary inheriting the MSAA 4 MB alignment (would fail on Windows, not on vkd3d); descriptor-budget
+exhaustion; a debug-layer warning from the optimized clear value; D3D10 / 11 predication and D3D11 UAVs across
+`restoreHostState`; D3D9 non-maskable MSAA surfaces and X8R8G8B8 readback alpha; render targets 1..3 on D3D9
+devices with fewer. All fixed in `1678669`, except the timestamp slot reuse (known issue 15, accepted). An
+earlier finding, `ClearState` dropping host state that the backup does not capture, was fixed in `2c73c92`.
+
 ## 4. Not verified
 
 * **Any real Windows driver** (the RTX 4080 SUPER run is the local session's), and the D3D debug layers:
@@ -143,7 +155,7 @@ session hit the same). The MSVC-ABI build (clang-cl, MSVC) is therefore unverifi
    glass fits `ps_3_0` (all 14 other features together: 1.7k slots); glass fits with up to about seven other
    features (`0xFF`: 4k slots), but e.g. glass + stroke + shadow + glow + inner glow + image + shimmer + inner
    shadow (`0x1FF`) exceeds the 32 temporary registers (X4505; `D3DCOMPILE_PREFER_FLOW_CONTROL`,
-   `SKIP_OPTIMIZATION`, `IEEE_STRICTNESS` do not help). Such a batch gets no pipeline and is not drawn (the
+   `SKIP_OPTIMIZATION`, `OPTIMIZATION_LEVEL0` do not help). Such a batch gets no pipeline and is not drawn (the
    renderer skips batches without a pipeline). See core request 5.
 2. **Two core defects worked around** in the backends: fxc cannot `#include` a macro (the SM3 prelude is
    prepended to the source), and one feature test in `esia_fx.hlsl` uses integer bit operations (patched in the
@@ -166,13 +178,24 @@ session hit the same). The MSVC-ABI build (clang-cl, MSVC) is therefore unverifi
 9. **Shader compile time**: the FX pixel shader compiles in about 2.4 s (SM4 / SM5) or 0.3 - 6 s per variant
    (SM3), once per process (no disk cache); D3D9 compiles variants lazily, the first frame that meets a new mask
    stalls. DXBC generated with fxc on Windows and checked in (core follow-up) removes the SM4 / SM5 cost.
-10. **User-effect workers are detached threads**: a process exiting during a compile ends them (the cache is
-    never destroyed, so nothing dangles).
+10. **User-effect workers are detached threads**: a process exiting during a compile ends them. They never call
+    the host's log callback (their message is logged by the next device call that sees the result), and the
+    cache they write is never destroyed, so nothing they touch dangles.
 11. **Direct3D 9 has no debug layer on Windows 10 / 11**: `DebugDesc::debugLayer` only adds compile logs there.
 12. `X3203 signed/unsigned mismatch` warnings of the SM3 compiles appear in the log with `ESIA_D3D_DEBUG` (the
     shared sources compare float-emulated uints with unsigned literals); harmless.
 13. No device-loss handling (core known issue 6): a D3D9 device must be 9Ex in practice, a removed D3D10 / 11 /
     12 device fails every call.
+14. **Limits**: D3D12 has 4096 CPU SRV descriptors (live sampled textures; `CreateTexture` fails beyond) and
+    16384 shader-visible descriptors per frame (a new 7-descriptor table only when the bindings differ from the
+    last table of the frame; a draw beyond the budget is skipped and logged).
+15. **Timestamp slots are reused after 4 frames** (D3D9 / 10 / 11): a GPU more than 4 frames behind loses those
+    frames' numbers, and the D3D11 debug layer then warns that queries were reissued before being read
+    (`QUERY_BEGIN/END_ABANDONING_PREVIOUS_RESULTS`). Harmless; seen only when the GPU lags far behind.
+16. **D3D10 / 11 host state**: `restoreHostState` covers what the frame changes (input assembler, shaders, VS / PS
+    resources, constants and samplers, rasterizer, blend, depth-stencil, viewports, scissors, render targets and
+    D3D11's output-merger UAVs, predication - the frame runs unpredicated). Stream-output targets the host leaves
+    bound are not unbound and would capture the frame's geometry.
 
 ## 6. Core change requests
 
@@ -258,8 +281,9 @@ Expected: every scene PASS, `text_lcd` SKIP on d3d9 only. On a failure, look at 
 
 **What to watch in particular**
 
-* D3D12 debug layer: resource-state errors (copies, resolves, `ReadPixels`), descriptor heap and root signature
-  messages, and the host-command-list test (`esia_rhi_d3d12_tests`); GPU-based validation once.
+* D3D12 debug layer: resource-state errors (copies, resolves, `ReadPixels` of `msaa_target` - the resolve
+  temporary's alignment was fixed without a Windows run), descriptor heap and root signature messages, and the
+  host-command-list test (`esia_rhi_d3d12_tests`); GPU-based validation once.
 * D3D11 / 10: SRV / RTV hazard warnings between pyramid passes, `ResolveSubresource` format errors on the
   `msaa_target` and `srgb_target` scenes.
 * D3D9: that `glass` / `windows` / `hidpi` / `light_streak` draw their glass (the variants must fit the GPU's
