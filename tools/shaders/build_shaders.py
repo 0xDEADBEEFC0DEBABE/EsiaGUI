@@ -197,7 +197,8 @@ def compile_dxc(dxc, file, entry, stage, tmp):
 
 
 # --------------------------------------------------------------------------------------------- output
-EXT = {'spirv': 'spv', 'glsl330': 'glsl', 'essl300': 'essl', 'msl': 'metal', 'dxbc_sm5': 'dxbc', 'dxbc_sm4': 'dxbc', 'dxil': 'dxil'}
+EXT = {'spirv': 'spv', 'glsl330': 'glsl', 'essl300': 'essl', 'msl': 'metal', 'dxbc_sm5': 'dxbc', 'dxbc_sm4': 'dxbc', 'dxbc_sm3': 'dxbc',
+       'dxil': 'dxil'}
 PROGRAM_NAMES = [p[0] for p in PROGRAMS]
 
 
@@ -234,6 +235,17 @@ def read_existing(fmt, out_dir):
             if os.path.exists(path):
                 res.append((pi, st, entry, open(path, 'rb').read(), False, []))
     return res
+
+
+def install(stage, out_dir):
+    """Moves a complete run from `stage` into `out_dir`: every format directory, then the table."""
+    for fmt, _ in FORMATS:
+        src, dst = os.path.join(stage, fmt), os.path.join(out_dir, fmt)
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        if os.path.isdir(src):
+            shutil.move(src, dst)
+    shutil.move(os.path.join(stage, 'esia_shader_table.cpp'), os.path.join(out_dir, 'esia_shader_table.cpp'))
 
 
 def write_table(produced, out_dir):
@@ -288,7 +300,7 @@ def main():
 
     out_dir = tempfile.mkdtemp() if args.check else args.out
     os.makedirs(out_dir, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as stage:
         produced = {f: [] for f, _ in FORMATS}
         spv_cache = {}
         for pi, (prog, file, vs, ps) in enumerate(PROGRAMS):
@@ -317,14 +329,15 @@ def main():
                                                      False, []))
                 if dxc:
                     produced['dxil'].append((pi, st, entry, compile_dxc(dxc, file, entry, stage, tmp), False, []))
+        # everything goes to `stage` first and into place only when every format succeeded: a failing tool or
+        # format leaves the checked-in library as it was, never half rewritten
         for fmt, storage in FORMATS:
-            if produced[fmt]:
-                write_files(fmt, produced[fmt], out_dir)
-            else:
+            if not produced[fmt]:
                 produced[fmt] = read_existing(fmt, args.out)
-                if produced[fmt]:
-                    write_files(fmt, produced[fmt], out_dir)
-        write_table(produced, out_dir)
+            if produced[fmt]:
+                write_files(fmt, produced[fmt], stage)
+        write_table(produced, stage)
+        install(stage, out_dir)
 
     if args.check:
         bad = []
