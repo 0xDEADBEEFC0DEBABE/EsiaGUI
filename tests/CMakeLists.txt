@@ -28,6 +28,17 @@ esia_target_defaults(esia_testkit)
 esia_add_test(esia_testkit_tests support/test_image.cpp)
 target_link_libraries(esia_testkit_tests PRIVATE esia_testkit)
 
+# the FreeType + HarfBuzz text system with the fonts Dear ImGui ships (third_party/imgui/misc/fonts); its golden
+# images (tests/text/golden) are CPU composites of the glyph quads, so they need no GPU
+if(TARGET esia_text_ft)
+    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp)
+    target_link_libraries(esia_text_ft_tests PRIVATE esia_text_ft esia_testkit)
+    target_compile_definitions(esia_text_ft_tests PRIVATE
+        ESIA_TEST_FONT_DIR="${ESIA_ROOT}/third_party/imgui/misc/fonts"
+        ESIA_TEXT_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/text/golden"
+        ESIA_TEXT_OUT_DIR="${CMAKE_BINARY_DIR}/text")
+endif()
+
 # conformance suite: every scene with every backend built into this binary (docs/backends/README.md)
 add_executable(esia_conformance conformance/conformance.cpp conformance/scenes.cpp)
 target_include_directories(esia_conformance PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/conformance)

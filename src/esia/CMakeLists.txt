@@ -5,11 +5,12 @@
 #   esia_shaders   precompiled shader library (src/esia/shaders/generated, see tools/shaders)
 #   esia_render    Painter, frame planner and renderer on the RHI
 #   esia_text      text interface, the analytic glyph rasterizer and the glyph atlas
+#   esia_text_ft   FreeType + HarfBuzz text system (ESIA_TEXT_FREETYPE, when both libraries are found)
 #   esia_rhi_<n>   one target per backend, from src/esia/rhi/<n>/ (ESIA_BACKEND_<N>)
 cmake_minimum_required(VERSION 3.24)
 
 option(ESIA_WERROR "Treat compiler warnings as errors in Esia targets" OFF)
-option(ESIA_TEXT_FREETYPE "Build the FreeType + HarfBuzz text backend" ON)
+option(ESIA_TEXT_FREETYPE "Build the FreeType + HarfBuzz text system (skipped when they are not found)" ON)
 option(ESIA_SHADERS_REGENERATE "Recompile the shader library at build time (needs glslangValidator, spirv-cross)" OFF)
 
 set(ESIA_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
@@ -81,6 +82,32 @@ add_library(esia_text STATIC
 target_link_libraries(esia_text PUBLIC esia_core)
 esia_target_defaults(esia_text)
 add_library(esia::text ALIAS esia_text)
+
+# FreeType + HarfBuzz: system packages on Linux / macOS (libfreetype-dev libharfbuzz-dev, brew freetype harfbuzz),
+# vcpkg or the like on Windows. Cross builds usually have neither: the text system is then left out, not an error.
+if(ESIA_TEXT_FREETYPE)
+    find_package(Freetype QUIET)
+    find_package(harfbuzz CONFIG QUIET)
+    if(NOT TARGET harfbuzz::harfbuzz)
+        find_path(ESIA_HARFBUZZ_INCLUDE_DIR hb.h PATH_SUFFIXES harfbuzz)
+        find_library(ESIA_HARFBUZZ_LIBRARY harfbuzz)
+        if(ESIA_HARFBUZZ_INCLUDE_DIR AND ESIA_HARFBUZZ_LIBRARY)
+            add_library(harfbuzz::harfbuzz UNKNOWN IMPORTED)
+            set_target_properties(harfbuzz::harfbuzz PROPERTIES
+                IMPORTED_LOCATION ${ESIA_HARFBUZZ_LIBRARY}
+                INTERFACE_INCLUDE_DIRECTORIES ${ESIA_HARFBUZZ_INCLUDE_DIR})
+        endif()
+    endif()
+    if(TARGET Freetype::Freetype AND TARGET harfbuzz::harfbuzz)
+        add_library(esia_text_ft STATIC text/ft/ft_text_system.cpp)
+        target_link_libraries(esia_text_ft PUBLIC esia_text PRIVATE Freetype::Freetype harfbuzz::harfbuzz)
+        esia_target_defaults(esia_text_ft)
+        add_library(esia::text_ft ALIAS esia_text_ft)
+        message(STATUS "Esia text: FreeType ${FREETYPE_VERSION_STRING} + HarfBuzz")
+    else()
+        message(STATUS "Esia text: FreeType or HarfBuzz not found - esia_text_ft is not built")
+    endif()
+endif()
 
 # ------------------------------------------------------------------ RHI + backends
 add_library(esia_rhi STATIC

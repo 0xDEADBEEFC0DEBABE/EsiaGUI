@@ -91,7 +91,7 @@ strategy, how the public API migrates, and the phases. What exists today is summ
 | `esia_rhi` | `include/esia/rhi`, `src/esia/rhi` | - | `rhi::Device` interface, caps, formats, backend registry, null device | done |
 | `esia_shaders` | `src/esia/shaders` | rhi | HLSL sources + generated SPIR-V / GLSL / ESSL / MSL (+ DXBC / DXIL once built on Windows), lookup table | done |
 | `esia_rhi_<api>` | `src/esia/rhi/<api>` | rhi, shaders | one backend each; the DirectX branch shares `src/esia/rhi/d3d_common` | backend sessions |
-| `esia_text` | `include/esia/text`, `src/esia/text` | core | `text::TextSystem` interface; FreeType + HarfBuzz implementation | interface done, FT stretch |
+| `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no bidi algorithm, color glyphs or system fonts yet) |
 | `esia_ui` | `include/esia/ui`, `src/esia/ui` | core, render, text | port of `src/ui` (controls, lists, windows, navigation, overlay, selection, text edit, auto layout), `Theme`, `ItemStyle`, `anim` | phase 3 |
 | `esia_platform_<os>` | `src/esia/platform/<os>` | core | window, input / IME translation, clipboard, DPI, cursor, frame pacing | phase 4 |
 | `wgt` (compat) | `src/compat` | everything | the `wgt::` API on Esia, so existing hosts recompile | phase 5 |
@@ -362,12 +362,21 @@ contrast composition of WGT's text shaders (`TextComposition`, DirectWrite's mod
 
 Implementations:
 
-* **FreeType + HarfBuzz** (`esia_text_ft`): every platform, the only one on Linux / Android / consoles. FreeType
-  renders unhinted outlines with exact coverage (WGT's analytic rasterizer approach), HarfBuzz shapes (kerning,
-  ligatures, complex scripts, bidi runs through ICU / fribidi later), fallback across the added fonts.
+* **FreeType + HarfBuzz** (`esia_text_ft`, `include/esia/text/freetype.hpp`; done): every platform, the only one
+  on Linux / Android / consoles. HarfBuzz shapes in design units (kerning, ligatures, marks, complex scripts),
+  scaled to the size in float - unhinted, linear layout at every pixel density; per-character fallback through
+  the added fonts; greedy line breaking (spaces, hyphens, CJK with a small kinsoku set, character breaks for
+  overlong words), ellipsis trimming, alignment; WGT's uniform line box. FreeType only reads the unhinted outlines;
+  they are covered by WGT's analytic rasterizer, now platform-free in `include/esia/text/glyph_raster.hpp`
+  (exact area coverage, 4 horizontal sub-pixel phases, the 5-tap LCD filter) and packed by `GlyphAtlas` into the
+  `TextureRegistry`. Not yet: the Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left,
+  but the runs of a line are laid out left to right - fribidi / ICU in phase 2), color glyphs, system fonts.
 * **DirectWrite** (Windows): WGT's `src/text` (system font collection, per-character fallback, COLR emoji, the
   analytic rasterizer, ClearType-style filtering, the user's text parameters) moved behind the interface.
 * **Core Text** (Apple): system fonts and fallback, the same rasterizer.
+
+Every implementation feeds its outlines to the same rasterizer and atlas, so a glyph looks the same whichever
+library read the font.
 
 Editing (grapheme-cluster caret movement, selection, undo, IME composition drawn inline) is WGT's
 `ui/text_edit.cpp`, ported onto the interface plus a grapheme / caret query the interface gains in phase 3.
@@ -445,7 +454,9 @@ Cross-compiling the DirectX backends from Linux:
 
 * **Unit tests** (CTest, no GPU): core (ids, input, windows, items, layout, draw lists, textures), renderer (planner
   decisions, Painter encoding, the command streams of every technique on the null device), test kit (PNG, image
-  comparison), shader library (completeness; GLSL / ESSL compiled and linked on the system driver through EGL).
+  comparison), shader library (completeness; GLSL / ESSL compiled and linked on the system driver through EGL),
+  text (the rasterizer's exact coverage, the atlas, FreeType layout with the fonts in `third_party/imgui/misc/fonts`,
+  and golden images of the glyph quads composited on the CPU - no GPU needed).
 * **Conformance suite** (`tests/conformance`): 14 scenes built through the public API, rendered by every backend
   built into the binary. Drawing backends are read back and compared with golden PNGs within per-scene tolerances;
   the null backend's command streams are compared with golden logs, and any RHI contract violation fails. The
