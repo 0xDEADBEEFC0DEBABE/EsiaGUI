@@ -29,7 +29,8 @@ namespace
                 std::printf("  %s skipped: %s\n", b.name, error.c_str());
                 continue;
             }
-            f(b.name, *h.device, h.target);
+            std::printf("  %s\n", b.name);
+            f(*h.device, h.target);
         }
     }
 
@@ -75,8 +76,7 @@ namespace
 
 ESIA_TEST(D3DDevices, UploadAndReadback)
 {
-    ForEachD3D([](const char* name, Device& dev, Texture) {
-        std::printf("  %s\n", name);
+    ForEachD3D([](Device& dev, Texture) {
         const std::uint32_t use = TextureUsage_Sampled | TextureUsage_CopyDst | TextureUsage_RenderTarget | TextureUsage_CopySrc;
         // 2 x 2 of each format, rows top first: (10,20,30,40) (50,60,70,80) / (90,...)
         const std::uint8_t rgba[16] = {10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160};
@@ -86,7 +86,7 @@ ESIA_TEST(D3DDevices, UploadAndReadback)
             ESIA_CHECK((bool)t);
             std::vector<std::uint8_t> px;
             ESIA_CHECK(dev.ReadPixels(t, IRect{0, 0, 2, 2}, px) && px.size() == 16);
-            // BGRA8 memory holds B first: the channels come back swapped, as stored
+            // uploads are bytes in the format's own order (B first for BGRA8); readback always returns RGBA
             if (px.size() == 16)
                 ESIA_CHECK(f == Format::BGRA8_UNORM ? (px[0] == 30 && px[2] == 10 && px[15] == 160) : std::memcmp(px.data(), rgba, 16) == 0);
             dev.DestroyTexture(t);
@@ -117,7 +117,7 @@ ESIA_TEST(D3DDevices, UploadAndReadback)
 
 ESIA_TEST(D3DDevices, ClearsCopiesAndResolves)
 {
-    ForEachD3D([](const char*, Device& dev, Texture) {
+    ForEachD3D([](Device& dev, Texture) {
         const std::uint32_t rt = TextureUsage_RenderTarget | TextureUsage_CopySrc | TextureUsage_Sampled;
         // an sRGB target stores the clear color as given (stored values, not linear ones)
         const Texture s = Make(dev, 16, 16, Format::RGBA8_SRGB, rt);
@@ -156,7 +156,7 @@ ESIA_TEST(D3DDevices, ClearsCopiesAndResolves)
 
 ESIA_TEST(D3DDevices, ScissoredDrawAndTimestamps)
 {
-    ForEachD3D([](const char*, Device& dev, Texture target) {
+    ForEachD3D([](Device& dev, Texture target) {
         PipelineDesc pd;
         pd.program = ShaderProgram::Clear;
         pd.layout = VertexLayout::None;

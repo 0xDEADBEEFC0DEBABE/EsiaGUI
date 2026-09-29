@@ -5,3 +5,8 @@ target_include_directories(esia_rhi_d3d11 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc
 target_link_libraries(esia_rhi_d3d11 PUBLIC esia_rhi_d3d_common PRIVATE d3d11 dxgi dxguid)
 esia_target_defaults(esia_rhi_d3d11)
 esia_register_backend(d3d11 esia_rhi_d3d11)
+
+if(BUILD_TESTING)
+    esia_add_test(esia_rhi_d3d11_tests tests/test_d3d11_host.cpp)
+    target_link_libraries(esia_rhi_d3d11_tests PRIVATE esia_rhi_d3d11 d3d11)
+endif()
