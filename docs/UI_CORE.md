@@ -43,12 +43,15 @@ code. The architecture around the core (renderer, RHI, text) is in [REWRITE.md](
 
 1. the queued input is applied to `InputState` (a second change of the same button or key waits for the next
    frame, `InputPending()` tells the host);
-2. windows that were not submitted last frame lose focus, hover and drag; windows unused for
-   `ContextDesc::retainFrames` frames are freed (with their child and item records), and so is `State<T>` storage;
-3. per-button **press ownership** is recorded for the buttons pressed this frame (section 5);
-4. window move / resize are updated, the **hit test** runs (section 4): the hovered window and the hovered item from
-   last frame's rects, front to back; popups are dismissed by a click away;
-5. the wheel goes to the innermost scroll area under the mouse that can scroll that way (section 8);
+2. last frame's hit, child and laid-out records become the ones this frame reads; windows that were not submitted
+   last frame lose focus and drag; windows unused for `ContextDesc::retainFrames` frames are freed (with their
+   child and item records), and so is unused `State<T>` storage;
+3. popups that were not submitted last frame close; window move / resize is updated;
+4. the **hit test** (section 4): the hovered window and the front-most item under the mouse from last frame's
+   rects; then per-button **press ownership** for the buttons pressed this frame (section 5), and a click outside
+   the open popups dismisses them;
+5. a resize starts from a window edge; the wheel goes to the innermost scroll area under the mouse that can scroll
+   that way (section 8);
 6. the implicit root window begins (items submitted outside any `Begin` land on it).
 
 Widgets then submit windows and items. `Context::EndFrame()`:
@@ -88,8 +91,8 @@ it. `ItemAdd` returns whether the item overlaps the current clip, so an item scr
 title bar) is neither visible nor hoverable. Window decorations (surface, shadow, header) are drawn with an explicit
 wider clip: `PushClipRect(window->GetRect(), false)`, or the shadow's extent.
 
-**Hit testing, front to back.** Every item that `ItemAdd`s with an id, or asks `ItemHoverable` / `ButtonBehavior`,
-is recorded in its window with its rect clipped to the current clip, its flags and its hit layer. At `NewFrame` the
+**Hit testing, front to back.** Every item that asks `ItemHoverable` / `ButtonBehavior` (and every disabled item
+`ItemAdd`ed with an id) is recorded in its window with its rect clipped to the current clip, its flags and its hit layer. At `NewFrame` the
 core walks last frame's records front to back - windows by layer and z-order, inside a window floating children
 above content, `ItemFlags_Background` items below the others, later-submitted above earlier-submitted (what is drawn
 on top is hit on top) - and the first record under the mouse is **the hit item**. `ItemHoverable(id)` is true when
@@ -160,11 +163,16 @@ its depth and its scope data. A container's `End` restores its parent: no widget
 layout.
 
 ```cpp
-struct ContainerOptions { LayoutProvider* layout = nullptr; Vec2 size; Vec2 padding; };
+struct ContainerOptions { LayoutProvider* layout = nullptr; Vec2 size; bool fillWidth = false; Vec2 padding; };
 void BeginContainer(Id id, const ContainerOptions& options = {});
 Rect EndContainer();                        // laid out as one item of the parent; returns its rect
 void BeginGroup();  void EndGroup();        // a container with the cursor layout and no id
 ```
+
+`size` > 0 is fixed per axis, otherwise the container fits its content; `fillWidth` takes the available width (minus
+`|size.x|` when `size.x` < 0: WGT's `width = -N` cards). A fitted container offers its children what its parent
+offers it. The container is laid out as one item of its parent with its padding, and with the baseline of its first
+child (or the provider's).
 
 **The cursor layout** (no provider) is the default: items go below each other with `LayoutMetrics::itemSpacing`,
 `SameLine`, `NewLine`, `Spacing`, `Indent` work as before, `SetCursorPos` places the next item explicitly.
@@ -226,7 +234,7 @@ a pixel boundary, so text and hairlines stay crisp. Integer layouts at scale 1 a
 ## 8. Child regions and scrolling
 
 ```cpp
-struct ChildOptions { Vec2 size; Vec2 padding; std::uint32_t flags; float clipTop = 0, clipBottom = 0; Rect rect; };
+struct ChildOptions { Vec2 size; Vec2 padding; std::uint32_t flags; Rect clipInset; Rect rect; };
 bool BeginChild(std::string_view id, const ChildOptions& options = {});   // false: clipped away (EndChild anyway)
 void EndChild();
 ```
@@ -235,8 +243,12 @@ A child region is a container with its own clip rect and scroll offset, drawn in
 separate window, so the draw order is the submission order). `size`: > 0 fixed, 0 = what is available, < 0 = what is
 available minus that. `ChildFlags_ScrollX` / `ScrollY` make it a scroll area; `ChildFlags_NoWheel` keeps the wheel
 out; `ChildFlags_Floating` places it at `rect` over the content without advancing the parent's layout (WGT's tab
-bar and search bar) and hit-tests it above the window's other items; `clipTop` / `clipBottom` move the clip in (a
-rounded window's corners). The child's rect is reported to the parent as one item (floating: flagged, depth -1).
+bar and search bar) and hit-tests it above the window's other items (its empty area too, so nothing below it
+hovers); `clipInset` moves the clip in from the content rect (left, top, right, bottom; negative moves it out, e.g.
+into the padding as WGT's half-padding clip did) - a rounded window's corners. Ids inside a child are the child's own
+(its id is pushed). The child's rect is reported to the parent as one item (floating: flagged, depth -1).
+`HoveredChild()` is the innermost child region under the mouse (from last frame's records): a scroll area's
+drag-to-scroll checks it with `HoveredId() == 0`.
 
 **Scrolling** applies to the innermost scroll area being submitted (a scroll child, else the window):
 
@@ -250,8 +262,9 @@ rounded window's corners). The child's rect is reported to the parent as one ite
 
 The wheel goes to the innermost scroll area under the mouse (from last frame's records) that can still move in that
 direction, else outward to its parents and the window; Shift+wheel scrolls horizontally. With
-`ChildFlags_SmoothScroll` the offset follows its target (critically damped, `LayoutMetrics::scrollSmoothing`
-seconds) and snaps to physical pixels; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
+`ChildFlags_SmoothScroll` the offset follows its target (exponentially, time constant
+`LayoutMetrics::scrollSmoothing` seconds, at least one physical pixel per frame so the tail never stalls) on whole
+physical pixels; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
 banding and the scroll indicator stay in the widget layer (WGT's `ScrollAreaEnd`), on `ActiveId` and
 `SetScrollY`.
 
@@ -382,7 +395,7 @@ painter.Rect(w->GetRect(), surfaceStyle);
 c.PopClipRect();
 ... header items ...
 ChildOptions body; body.padding = {pad, pad}; body.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
-body.clipBottom = cornerCut;
+body.clipInset = Rect(-halfPad, headerH > cut ? 0.0f : cut, -halfPad, cut);
 c.BeginChild("##content", body);
 ... content; EndWindow: c.EndChild(); c.End();
 ```
@@ -430,14 +443,14 @@ Each has a regression test in `tests/core` (the probe scenario).
 | 2 | `wantCaptureMouse` ignores where a press started | press ownership per button | `Context.PressOwnershipGameDrag`, `Context.PressOwnershipUiDragOut` |
 | 3 | `ContentRegionAvail().y` grows with the scroll | the work rect moves with the scroll on both axes | `Context.ContentRegionAvailIgnoresScroll` |
 | 4 | repeat buttons: no press on click, extra press on release | press on click, repeats, none on release | `Context.RepeatButton` |
-| 5 | disabled items: window drag, hover, flags, deactivation | disabled items are hit, flags reach `ButtonBehavior`, `ItemAdd` deactivates | `Context.DisabledItem*` |
+| 5 | disabled items: window drag, hover, flags, deactivation | disabled items are hit, flags reach `ButtonBehavior`, `ItemAdd` deactivates | `Context.DisabledItemBlocksWindowDrag`, `Context.DisabledItemClaimsHover`, `Context.DisabledWhileActiveIsDeactivated` |
 | 6 | touch taps hit the wrong item | front-to-back hit test with this frame's position | `Context.TouchTapHitsItemUnderIt` |
 | 7 | deferred input invisible to the host | `InputPending()`, `PlatformRequests::inputPending` | `Context.InputPending` |
-| 8 | scrolling: stale clamp, no targets, window-wide clip | deferred clamp, `SetScrollHere*` / `ScrollTo*` / `SetNextScroll`, content clip | `Context.SetScrollClampsToThisFrame`, `Context.ScrollTargets`, `Context.ContentClip*` |
-| 9 | window focus lifecycle | reappearing windows come to the front, dangling focus / drag cleared, unused windows freed | `Context.Reopened*`, `Context.WindowGc` |
+| 8 | scrolling: stale clamp, no targets, window-wide clip | deferred clamp, `SetScrollHere*` / `ScrollTo*` / `SetNextScroll`, content clip | `Context.SetScrollClampsToThisFrame`, `Context.ScrollTargets`, `Context.ContentClipVisibility` |
+| 9 | window focus lifecycle | reappearing windows come to the front, dangling focus / drag cleared, unused windows freed | `Context.ReopenedWindowComesToFront`, `Context.FocusAndDragClearedWhenWindowGone`, `Context.WindowGc` |
 | 10 | text cursor everywhere while a field has focus | `RequestTextInput` does not set the cursor | `Context.TextCursorOnlyOverField` |
 | 11 | negative position = no mouse | `kNoMousePos` sentinel | `Input.NegativePositionsAreValid`, `Context.DragPastLeftEdge` |
-| 12 | button index, `AppendUtf8`, resize snap, windows off screen | bounds checks, `DecodeUtf8`, grab offset, `keepOnScreen` | `Input.ButtonIndexBounds`, `Input.TextUtf8`, `Context.ResizeKeepsGrabOffset`, `Context.KeepOnScreen*` |
+| 12 | button index, `AppendUtf8`, resize snap, windows off screen | bounds checks, `DecodeUtf8`, grab offset, `keepOnScreen` | `Input.ButtonIndexBounds`, `Input.TextUtf8`, `Context.ResizeKeepsGrabOffset`, `Context.KeepOnScreen` |
 
 ## 15. Public API changes
 
@@ -454,12 +467,12 @@ Against `main` before this work (`81ce5dc`):
 * **Added**: input (`kNoMousePos`, `InputEvent::MouseLeave`, `MouseClickCount`, `MouseCanceled`), `EncodeUtf8`;
   `Cond::Appearing`, `SetNextWindowPos` pivot, `WindowFlags_AutoSize`, `Window::Hidden`, `Scale`,
   `ScaleChanged`, `LaidOutItems`, `Context::SetMonitors`, `Scale`, `InputPending`; `PlatformRequests::inputPending`,
-  `animating`; `LayoutMetrics::keepOnScreen`, `scrollSmoothing`, `tooltipOffset`; `ContextDesc::retainFrames`;
+  `animating`; `Monitor`; `LayoutMetrics::keepOnScreen`, `scrollSmoothing`, `tooltipOffset`; `ContextDesc::retainFrames`;
   `ItemFlags_Background`, `ItemStatus`, `ItemStatusOf`, `LastItemStatus`; `ClaimKey`, `ClaimKeyboard`,
   `KeyOwner`, `KeyPressed`, `KeyDown`; containers (`BeginContainer`, `EndContainer`, `ContainerOptions`,
   `WorkRect`, `CurrentDepth`, `LineBaseline`, `AlignToLineBaseline`, `SetItemObserver`) and `layout.hpp`
   (`LayoutProvider`, `LayoutSlot`, `LaidOutItem`, `StackLayout`); child regions (`BeginChild`, `EndChild`,
-  `ChildOptions`, `ChildFlags_`); scrolling (`Scroll`, `ScrollMax`, `SetScrollHereX/Y`, `ScrollToRect`,
+  `ChildOptions`, `ChildFlags_`, `HoveredChild`); scrolling (`Scroll`, `ScrollMax`, `SetScrollHereX/Y`, `ScrollToRect`,
   `ScrollToItem`, `SetNextScroll`); popups (`OpenPopup`, `ClosePopup`, `IsPopupOpen`, `BeginPopup`, `EndPopup`,
   `CloseCurrentPopup`, `PopupOptions`, `BeginTooltip`, `EndTooltip`); `State<T>`, `SetScopeData`,
   `FindScopeData`; `DrawList::Mark`, `MoveCommands`.
