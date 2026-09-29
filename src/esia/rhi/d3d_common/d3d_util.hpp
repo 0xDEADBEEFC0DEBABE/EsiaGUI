@@ -107,7 +107,9 @@ namespace esia::rhi::d3d
 
     private:
         DebugDesc desc_;
-        std::shared_ptr<std::atomic<std::uint32_t>> problems_ = std::make_shared<std::atomic<std::uint32_t>>(0u);
+        // not make_shared: its control block compares type_info, which clang with mingw-w64's libstdc++ 13 defines
+        // twice (a duplicate symbol at link time in the windows-mingw-cross build)
+        std::shared_ptr<std::atomic<std::uint32_t>> problems_{new std::atomic<std::uint32_t>(0u)};
     };
 
     const char* HResultName(HRESULT hr);
