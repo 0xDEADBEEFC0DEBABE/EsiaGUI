@@ -8,8 +8,9 @@
 //      * FX batches as one instanced draw each (4-vertex strips; instance data in a buffer or RGBA32F texture),
 //      * before a glass batch the planner marked: the backdrop capture - end the pass, copy the capture region out
 //        of the target (or read the target directly when no glass reads the full-resolution level and the target
-//        can be sampled), build only the pyramid levels the batch needs (13-tap downsample, taps clamped to the
-//        refreshed region), resume the pass,
+//        can be sampled, or when it cannot be copied: pyramid level 1 then stands in for level 0), build only the
+//        pyramid levels the batch needs (13-tap downsample, taps clamped to the refreshed region), resume the pass;
+//        a target that can be neither copied nor sampled has no backdrop,
 //      * glow layers: an offscreen RGBA16F layer (only the touched region cleared), its pyramid, and the content +
 //        bloom composite back onto the target,
 //      * edge fades as per-draw constants, host callbacks with the backend's native state;
@@ -35,9 +36,17 @@ namespace esia::render
 
     struct RenderParams
     {
-        rhi::FrameDesc frame;             // the backend's recording context (command list / buffer ...), if it needs one
+        rhi::FrameDesc frame;             // the backend's recording context and the host's frame number, if it needs them
         TextComposition text;
         int maxBackdropCaptures = 64;     // per frame; past it, glass reuses the last capture (Stats().overBudget)
+        // GPU time per category (Caps::timestampQueries). Every switch between categories costs two timestamps, so
+        // after maxProfileScopes of them the rest of the frame counts in totalMs only. Off: the frame total only.
+        bool profile = true;
+        int maxProfileScopes = 32;
+        // FxStorage::Texture: at most this many instances per row of the instance texture (0 = what
+        // Caps::maxFxDataWidth allows). The conformance suite uses it to run the multi-row path with a few shapes;
+        // keep it a power of two (SM3 computes the row with a float modulo that is exact only then).
+        int maxFxInstancesPerRow = 0;
     };
 
     struct RenderStats
@@ -52,6 +61,8 @@ namespace esia::render
         int vertices = 0;
         int indices = 0;
         bool overBudget = false;          // maxBackdropCaptures was reached this frame
+        int fxFallbacks = 0;              // FX batches drawn with the full shader: their variant was refused or failed
+        int fxPendingVariants = 0;        // FX batches drawn with a substitute while their variant compiles (asyncPipelines)
         rhi::GpuProfile gpu;              // the latest GPU times the device returned (a few frames old)
     };
 

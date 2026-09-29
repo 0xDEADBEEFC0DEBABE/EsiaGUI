@@ -33,12 +33,18 @@ namespace esia::testkit
 
     // How far a rendering may be from its golden: GPUs and APIs differ in filtering precision, float16 pyramids and
     // rounding, never in what is drawn where. A pixel "differs" when a channel is more than `channel` away; the
-    // image passes when at most `fraction` of the pixels differ and no channel is more than `maxDelta` away.
+    // image passes when at most `fraction` of the pixels differ, no channel is more than `maxDelta` away and the mean
+    // channel difference is at most `meanDelta`.
+    // The fraction alone lets through what the other two catch: a missing hairline or glyph is a few hundred pixels
+    // off by ~200 (maxDelta), a wrong blend, gamma or blur radius moves most pixels by a little, under `channel`
+    // (meanDelta). The defaults leave headroom over an NVIDIA GPU's D3D9 - 12, GL, GLES and Vulkan renderings
+    // against the llvmpipe goldens: max delta 25 (D3D9 msaa_target, on 0.02 % of the pixels), mean delta <= 0.09.
     struct Tolerance
     {
         int channel = 8;
         double fraction = 0.005;
-        int maxDelta = 128;
+        int maxDelta = 48;
+        double meanDelta = 0.5;
     };
 
     struct CompareResult
