@@ -7,16 +7,6 @@
 #include "font_test_util.hpp"
 #include "ft_test_util.hpp"
 
-#if defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
-
 using namespace esia;
 using namespace esia::texttest;
 
@@ -187,27 +177,12 @@ ESIA_TEST(FreeTypeCjk, RendersTheGoldenImage)
 }
 
 // ------------------------------------------------------------------ the platform's fallback chain
-namespace
-{
-    // Windows and macOS ship every font of their chain; Linux distributions (and Wine) install what they choose
-    bool ChainIsComplete()
-    {
-#if defined(__APPLE__)
-        return true;
-#elif defined(_WIN32)
-        return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") == nullptr;
-#else
-        return false;
-#endif
-    }
-}
-
 ESIA_TEST(SystemFonts, FallbackChainCoversEveryScript)
 {
     const std::vector<text::SystemFont> fonts = text::FindDefaultFallbackFonts();
     if (fonts.empty())
     {
-        ESIA_CHECK(!ChainIsComplete());
+        ESIA_CHECK(!PlatformShipsItsChain());
         std::printf("  skipped: no font of the default fallback chain is installed\n");
         return;
     }
@@ -232,7 +207,7 @@ ESIA_TEST(SystemFonts, FallbackChainCoversEveryScript)
         ts->DrawGlyph(dl, {ids.empty() ? 0 : ids[0], 24.0f}, s.c, Vec2(20, 20), Color::Black());
         if (!dl.Empty())
             continue;
-        std::printf("  %s: no installed font of the chain covers %s (U+%04X)\n", ChainIsComplete() ? "FAILED" : "skipped", s.script, (unsigned)s.c);
-        ESIA_CHECK(!ChainIsComplete());
+        std::printf("  %s: no installed font of the chain covers %s (U+%04X)\n", PlatformShipsItsChain() ? "FAILED" : "skipped", s.script, (unsigned)s.c);
+        ESIA_CHECK(!PlatformShipsItsChain());
     }
 }

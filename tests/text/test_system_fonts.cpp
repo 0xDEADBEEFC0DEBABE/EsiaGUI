@@ -104,7 +104,8 @@ ESIA_TEST(SystemFonts, PlatformLookup)
         const std::optional<text::SystemFont> font = text::FindSystemFont(family);
         if (!font)
         {
-            std::printf("  not installed: %.*s\n", (int)family.size(), family.data());
+            std::printf("  %s: %.*s is not installed\n", PlatformShipsItsChain() ? "FAILED" : "skipped", (int)family.size(), family.data());
+            ESIA_CHECK(!PlatformShipsItsChain());
             continue;
         }
         ++found;
@@ -112,7 +113,9 @@ ESIA_TEST(SystemFonts, PlatformLookup)
         std::error_code ec;
         ESIA_CHECK(std::filesystem::is_regular_file(std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(font->path.data()), font->path.size())), ec));
         ESIA_CHECK(font->faceIndex >= 0 && !font->family.empty());
-        // asking for the family it reports finds the same face
+        // asking for the family it reports finds the same face (not for system-ui: macOS reports a hidden family)
+        if (family == text::kSystemUiFamily)
+            continue;
         const std::optional<text::SystemFont> again = text::FindSystemFont(font->family, font->weight, font->style);
         ESIA_CHECK(again && again->path == font->path && again->faceIndex == font->faceIndex);
     }
@@ -135,6 +138,6 @@ ESIA_TEST(SystemFonts, PlatformLookup)
 
     const std::vector<text::SystemFont> fonts = text::FindDefaultFallbackFonts();
     ESIA_CHECK((int)fonts.size() <= found && (found == 0) == fonts.empty());
-    if (found == 0)
-        std::printf("  skipped: no font of this platform's fallback chain is installed\n");
+    if (PlatformShipsItsChain())
+        ESIA_CHECK(text::FindSystemFont(text::kSystemUiFamily).has_value());
 }

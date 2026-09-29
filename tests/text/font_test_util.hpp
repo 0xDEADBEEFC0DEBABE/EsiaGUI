@@ -1,7 +1,17 @@
-// Font files for the text tests: reading a font, and a font collection (.ttc) put together from single fonts, with
-// the weight and style of each face changeable - the lookup's face selection and FreeType's collection support are
-// tested with the fonts in tests/fonts, without a collection file in the repository.
+// Font files for the text tests: reading a font, a font collection (.ttc) put together from single fonts, with the
+// weight and style of each face changeable - the lookup's face selection and FreeType's collection support are tested
+// with the fonts in tests/fonts, without a collection file in the repository -, and which platforms must have their
+// fallback chain installed.
 #pragma once
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -11,6 +21,19 @@
 namespace esia::texttest
 {
     inline const std::string kFonts = ESIA_TEST_FONT_DIR;
+
+    // Windows and macOS ship every font of their fallback chain (system_fonts.hpp): a missing one fails there. Linux
+    // distributions (and Wine) install what they choose: a missing one is reported and skipped.
+    inline bool PlatformShipsItsChain()
+    {
+#if defined(__APPLE__)
+        return true;
+#elif defined(_WIN32)
+        return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") == nullptr;
+#else
+        return false;
+#endif
+    }
 
     inline std::vector<std::uint8_t> ReadFile(const std::string& path)
     {

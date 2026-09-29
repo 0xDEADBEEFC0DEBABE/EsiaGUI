@@ -112,6 +112,8 @@ FT_USE_MODULE( FT_Module_Class, psnames_module_class )
 FT_USE_MODULE( FT_Module_Class, pshinter_module_class )
 FT_USE_MODULE( FT_Module_Class, sfnt_module_class )
 ")
+    # base: the portable stdio stream and debug files, and the two API files the drivers call into (bitmaps from
+    # the SFNT loader, named instances of variable fonts from the TrueType one)
     add_library(esia_freetype STATIC
         ${ft}/src/base/ftsystem.c
         ${ft}/src/base/ftinit.c
@@ -134,6 +136,10 @@ FT_USE_MODULE( FT_Module_Class, sfnt_module_class )
     add_library(esia_harfbuzz STATIC ${hb}/src/harfbuzz.cc)
     target_include_directories(esia_harfbuzz SYSTEM PUBLIC ${hb}/src)
     target_compile_features(esia_harfbuzz PRIVATE cxx_std_11)
+    if(MSVC)
+        # as HarfBuzz's own builds: one translation unit of everything exceeds the default section count (C1128)
+        target_compile_options(esia_harfbuzz PRIVATE /bigobj /utf-8)
+    endif()
     if(NOT WIN32)
         find_package(Threads REQUIRED)
         target_compile_definitions(esia_harfbuzz PRIVATE HAVE_PTHREAD)
