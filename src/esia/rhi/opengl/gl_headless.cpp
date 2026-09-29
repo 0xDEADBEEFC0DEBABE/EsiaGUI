@@ -1,6 +1,6 @@
 // Esia OpenGL backend - headless devices for tests (EGL, no window) and the registration of the two backends.
 //
-// EGL is loaded at runtime (libEGL.so.1; libEGL.dll / libEGL.dylib, e.g. ANGLE's, elsewhere), so the backend links
+// EGL is loaded at runtime (libEGL.so.1 or libEGL.so; libEGL.dll / libEGL.dylib, e.g. ANGLE's, elsewhere), so the backend links
 // no GL or EGL library and a machine without EGL only skips the conformance suite. The display is Mesa's
 // surfaceless platform when offered (EGL_MESA_platform_surfaceless: llvmpipe in the cloud sessions, no X or
 // Wayland needed), else the default display; the context is made current without a surface
@@ -76,7 +76,9 @@ namespace esia::rhi::opengl
                 void* lib = dlopen("libEGL.dylib", RTLD_NOW | RTLD_LOCAL);
                 auto sym = [&](const char* n) { return lib ? dlsym(lib, n) : nullptr; };
 #else
-                void* lib = dlopen("libEGL.so.1", RTLD_NOW | RTLD_LOCAL);
+                void* lib = dlopen("libEGL.so.1", RTLD_NOW | RTLD_LOCAL);   // glvnd / Mesa
+                if (!lib)
+                    lib = dlopen("libEGL.so", RTLD_NOW | RTLD_LOCAL);       // Android
                 auto sym = [&](const char* n) { return lib ? dlsym(lib, n) : nullptr; };
 #endif
                 if (!lib)
