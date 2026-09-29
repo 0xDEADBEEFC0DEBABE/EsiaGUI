@@ -1,0 +1,132 @@
+// Vulkan backend: the conformance scenes rendered by the renderer on both render paths (dynamic rendering, render
+// passes) must give identical pixels, with no validation message over a whole device lifetime (the messenger prints
+// them; CTest fails on that output too). Several frames on one device exercise the frame slots: rings reused,
+// fences waited for, deferred releases, timestamps read back.
+#include "esia/render/renderer.hpp"
+#include "esia/rhi/vulkan.hpp"
+#include "esia_test.hpp"
+#include "image.hpp"
+#include "scenes.hpp"
+#include <cstdio>
+#include <filesystem>
+#include <string>
+
+using namespace esia;
+using namespace esia::rhi;
+
+namespace
+{
+    struct Rendered
+    {
+        bool available = false, ok = false, dynamicRendering = false;
+        std::vector<std::uint8_t> pixels;
+        std::uint32_t validation = 0;
+        GpuProfile profile;
+        render::RenderStats stats;
+    };
+
+    Rendered Render(const conformance::Scene& scene, bool dynamicRendering, int frames, std::uint32_t maxApiVersion = VK_API_VERSION_1_3)
+    {
+        Rendered r;
+        const HeadlessDesc hd = conformance::HeadlessDescOf(scene);
+        vulkan::HeadlessOptions o;
+        o.dynamicRendering = dynamicRendering;
+        o.maxApiVersion = maxApiVersion;
+        std::string error;
+        HeadlessDevice h = vulkan::CreateHeadless(hd, o, error);
+        if (!h.device)
+        {
+            std::printf("  (no Vulkan device: %s)\n", error.c_str());
+            return r;
+        }
+        r.available = true;
+        r.dynamicRendering = vulkan::UsesDynamicRendering(*h.device);
+        {
+            render::Renderer renderer(*h.device);
+            r.ok = true;
+            for (int f = 0; f < frames && r.ok; ++f)
+            {
+                conformance::SceneFrame frame;   // a new frame each time: textures are created, used and released
+                conformance::BuildScene(scene, frame);
+                r.ok = renderer.Render(frame.data, &frame.textures, h.target, conformance::RenderParamsOf(scene));
+            }
+            r.ok = r.ok && h.device->ReadPixels(h.target, IRect{0, 0, scene.width, scene.height}, r.pixels);
+            r.stats = renderer.Stats();
+            h.device->ReadProfile(r.profile);
+        }
+        r.validation = vulkan::ValidationMessages(*h.device);
+        return r;
+    }
+
+    void Save(const conformance::Scene& scene, const std::vector<std::uint8_t>& pixels, const char* suffix)
+    {
+        std::filesystem::create_directories(ESIA_VULKAN_TEST_OUT);
+        testkit::Image image(scene.width, scene.height);
+        image.rgba = pixels;
+        testkit::WritePng(std::string(ESIA_VULKAN_TEST_OUT) + "/" + scene.name + suffix + ".png", image);
+    }
+}
+
+ESIA_TEST(VulkanScenes, BothRenderPathsAgree)
+{
+    for (const conformance::Scene& scene : conformance::Scenes())
+    {
+        const Rendered a = Render(scene, true, 1);
+        if (!a.available)
+            return;
+        const Rendered b = Render(scene, false, 1);
+        ESIA_CHECK(a.ok && b.ok);
+        ESIA_CHECK(a.validation == 0 && b.validation == 0);
+        if (a.pixels != b.pixels)
+        {
+            std::printf("  %s: dynamic rendering and render passes differ\n", scene.name);
+            Save(scene, a.pixels, "-dynamic");
+            Save(scene, b.pixels, "-renderpass");
+        }
+        ESIA_CHECK(a.pixels == b.pixels);
+    }
+}
+
+// Five frames on one device (two frames in flight) end in the same image as one frame, and the GPU times of the
+// finished frames come back.
+ESIA_TEST(VulkanScenes, FramesInFlight)
+{
+    for (const char* name : {"glass", "glow_layer", "windows"})
+    {
+        const conformance::Scene* scene = conformance::FindScene(name);
+        const Rendered one = Render(*scene, true, 1);
+        if (!one.available)
+            return;
+        const Rendered five = Render(*scene, true, 5);
+        ESIA_CHECK(one.ok && five.ok);
+        ESIA_CHECK(one.pixels == five.pixels);
+        ESIA_CHECK(five.validation == 0);
+        ESIA_CHECK(five.profile.valid && five.profile.totalMs > 0.0f);
+        ESIA_CHECK(five.stats.gpu.valid);   // the renderer read it too (a frame or more behind)
+        float sum = 0.0f;
+        for (float ms : five.profile.categoryMs)
+            sum += ms;
+        const float* c = five.profile.categoryMs;
+        std::printf("  %-10s GPU %.2f ms: capture %.2f, layer %.2f, fx %.2f, fx-glass %.2f, geometry %.2f\n", name, five.profile.totalMs, c[0], c[1], c[2],
+                    c[3], c[4]);
+        ESIA_CHECK(sum > 0.0f && sum <= five.profile.totalMs * 1.01f);
+    }
+}
+
+// Devices older than 1.3: dynamic rendering through VK_KHR_dynamic_rendering (1.2), plus its dependencies on 1.1.
+ESIA_TEST(VulkanScenes, OlderApiVersions)
+{
+    for (const char* name : {"glass", "text", "msaa_target"})
+    {
+        const conformance::Scene* scene = conformance::FindScene(name);
+        const Rendered v13 = Render(*scene, true, 1);
+        if (!v13.available)
+            return;
+        for (std::uint32_t version : {VK_API_VERSION_1_1, VK_API_VERSION_1_2})
+        {
+            const Rendered old = Render(*scene, true, 1, version);
+            ESIA_CHECK(old.ok && old.validation == 0 && old.dynamicRendering);
+            ESIA_CHECK(old.pixels == v13.pixels);
+        }
+    }
+}
