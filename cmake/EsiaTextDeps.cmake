@@ -27,8 +27,13 @@ set(ESIA_HARFBUZZ_SHA256 b7132e148358a45185c9feafd049dbaf243649d3c44414b3534d9c9
 
 # ------------------------------------------------------------------ system packages
 function(_esia_find_system_text_deps)
-    find_package(Freetype QUIET)
+    # HarfBuzz first: vcpkg's harfbuzz config loads freetype's config (targets freetype and Freetype::Freetype),
+    # which refuses to load after FindFreetype has defined Freetype::Freetype ("Some (but not all) targets in this
+    # export set were already defined")
     find_package(harfbuzz CONFIG QUIET)
+    if(NOT TARGET Freetype::Freetype)
+        find_package(Freetype QUIET)
+    endif()
     if(NOT TARGET harfbuzz::harfbuzz)
         find_path(ESIA_HARFBUZZ_INCLUDE_DIR hb.h PATH_SUFFIXES harfbuzz)
         find_library(ESIA_HARFBUZZ_LIBRARY harfbuzz)
