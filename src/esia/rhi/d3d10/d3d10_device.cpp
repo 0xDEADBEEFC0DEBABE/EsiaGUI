@@ -51,6 +51,8 @@ namespace esia::rhi::d3d10
             ComPtr<ID3D10InputLayout> layout;
             ID3D10RenderTargetView* rtvs[D3D10_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
             ComPtr<ID3D10DepthStencilView> dsv;
+            ComPtr<ID3D10Predicate> predicate;
+            BOOL predicateValue = FALSE;
 
             void Capture(ID3D10Device* c)
             {
@@ -73,6 +75,9 @@ namespace esia::rhi::d3d10
                 c->IAGetVertexBuffers(0, 1, &vb, &vbStride, &vbOffset);
                 c->IAGetInputLayout(&layout);
                 c->OMGetRenderTargets(D3D10_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
+                // the frame runs unpredicated: a host predicate would silently skip its draws and copies
+                c->GetPredication(&predicate, &predicateValue);
+                c->SetPredication(nullptr, FALSE);
             }
 
             template <class T, std::size_t N>
@@ -86,6 +91,7 @@ namespace esia::rhi::d3d10
             void Restore(ID3D10Device* c)
             {
                 c->OMSetRenderTargets(D3D10_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv.Get());
+                c->SetPredication(predicate.Get(), predicateValue);
                 c->RSSetScissorRects(scissorCount, scissors);
                 c->RSSetViewports(viewportCount, viewports);
                 c->RSSetState(rs.Get());

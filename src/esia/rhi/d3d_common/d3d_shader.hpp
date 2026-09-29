@@ -51,6 +51,8 @@ namespace esia::rhi::d3d
 
     // User effects compile on a worker thread so that a new effect never stalls a frame: Pending until the
     // bytecode is ready (the renderer asks again on a later frame), Failed for good once the source was rejected.
+    // The worker never logs (the host's callback may be gone by then): the first call that sees the result logs
+    // the compiler's message through `log`, on the caller's thread.
     enum class CompileState { Pending, Ready, Failed };
     CompileState CompileShaderAsync(const ShaderRequest& request, const Logger& log, Bytecode& out);
 

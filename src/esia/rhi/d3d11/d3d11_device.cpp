@@ -52,6 +52,9 @@ namespace esia::rhi::d3d11
             ComPtr<ID3D11InputLayout> layout;
             ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
             ComPtr<ID3D11DepthStencilView> dsv;
+            ComPtr<ID3D11Predicate> predicate;
+            BOOL predicateValue = FALSE;
+            ID3D11UnorderedAccessView* uavs[D3D11_PS_CS_UAV_REGISTER_COUNT] = {};
 
             void Capture(ID3D11DeviceContext* c)
             {
@@ -75,7 +78,11 @@ namespace esia::rhi::d3d11
                 c->IAGetIndexBuffer(&ib, &ibFormat, &ibOffset);
                 c->IAGetVertexBuffers(0, 1, &vb, &vbStride, &vbOffset);
                 c->IAGetInputLayout(&layout);
-                c->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv);
+                // UAVs share the output slots with the render targets: both are put back together
+                c->OMGetRenderTargetsAndUnorderedAccessViews(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv, 0, D3D11_PS_CS_UAV_REGISTER_COUNT, uavs);
+                // the frame runs unpredicated: a host predicate would silently skip its draws and copies
+                c->GetPredication(&predicate, &predicateValue);
+                c->SetPredication(nullptr, FALSE);
             }
 
             template <class T, std::size_t N>
@@ -88,7 +95,14 @@ namespace esia::rhi::d3d11
 
             void Restore(ID3D11DeviceContext* c)
             {
-                c->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, dsv.Get());
+                UINT targets = 0;
+                for (UINT i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
+                    if (rtvs[i])
+                        targets = i + 1;
+                const UINT keepCounts[D3D11_PS_CS_UAV_REGISTER_COUNT] = {~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u, ~0u};
+                c->OMSetRenderTargetsAndUnorderedAccessViews(targets, rtvs, dsv.Get(), targets, D3D11_PS_CS_UAV_REGISTER_COUNT - targets, uavs + targets,
+                                                             keepCounts);
+                c->SetPredication(predicate.Get(), predicateValue);
                 c->RSSetScissorRects(scissorCount, scissors);
                 c->RSSetViewports(viewportCount, viewports);
                 c->RSSetState(rs.Get());
@@ -115,6 +129,7 @@ namespace esia::rhi::d3d11
                 ReleaseAll(vsCb);
                 ReleaseAll(psCb);
                 ReleaseAll(rtvs);
+                ReleaseAll(uavs);
                 *this = HostState();
             }
         };

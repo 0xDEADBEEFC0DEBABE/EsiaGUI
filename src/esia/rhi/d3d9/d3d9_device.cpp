@@ -305,6 +305,7 @@ namespace esia::rhi::d3d9
                 log_.Printf(LogLevel::Warning, "%lu pixel shader instruction slots: liquid-glass pipelines may fail to build",
                             (unsigned long)dc.MaxPixelShader30InstructionSlots);
 
+            renderTargets_ = std::max<DWORD>(1, dc.NumSimultaneousRTs);
             caps_.fxStorage = FxStorage::Texture;
             caps_.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm3;
             caps_.halfPixelOffset = true;
@@ -435,7 +436,8 @@ namespace esia::rhi::d3d9
             t.hostSurface = surface;
             t.desc.width = (int)sd.Width;
             t.desc.height = (int)sd.Height;
-            t.desc.samples = sd.MultiSampleType == D3DMULTISAMPLE_NONE ? 1 : (int)sd.MultiSampleType;
+            // D3DMULTISAMPLE_NONMASKABLE is 1: still multisampled (resolved by copies, never sampled)
+            t.desc.samples = sd.MultiSampleType == D3DMULTISAMPLE_NONE ? 1 : std::max(2, (int)sd.MultiSampleType);
             t.desc.usage = TextureUsage_RenderTarget | TextureUsage_CopySrc | (texture && t.desc.samples == 1 ? TextureUsage_Sampled : 0u);
             const std::uint32_t id = textures_.Add(std::move(t));
             wrapped_[surface] = id;
@@ -622,7 +624,7 @@ namespace esia::rhi::d3d9
                 dev_->SetTexture(i, nullptr);
             dev_->SetTexture(D3DVERTEXTEXTURESAMPLER0, nullptr);
             dev_->SetRenderTarget(0, t->surface.Get());   // also sets the viewport and scissor to the whole target
-            for (DWORD i = 1; i < 4; ++i)
+            for (DWORD i = 1; i < renderTargets_; ++i)
                 dev_->SetRenderTarget(i, nullptr);
             dev_->SetDepthStencilSurface(nullptr);
             pass_ = t;
@@ -838,6 +840,9 @@ namespace esia::rhi::d3d9
                 return false;
             d3d::ConvertToRgba8(layout, lr.pBits, (std::size_t)lr.Pitch, r.Width(), r.Height(), rgba8);
             sys->UnlockRect();
+            if (t->format == D3DFMT_X8R8G8B8)   // the X byte is undefined: opaque
+                for (std::size_t i = 3; i < rgba8.size(); i += 4)
+                    rgba8[i] = 255;
             return true;
         }
 
@@ -1055,6 +1060,7 @@ namespace esia::rhi::d3d9
         UINT adapter_ = 0;
         D3DDEVTYPE deviceType_ = D3DDEVTYPE_HAL;
         D3DFORMAT adapterFormat_ = D3DFMT_X8R8G8B8;
+        DWORD renderTargets_ = 1;   // D3DCAPS9::NumSimultaneousRTs
         bool restore_ = true;
         d3d::Logger log_;
         Caps caps_;

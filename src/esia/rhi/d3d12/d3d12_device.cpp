@@ -319,12 +319,11 @@ namespace esia::rhi::d3d12
             rd.Format = f.storage;
             rd.SampleDesc.Count = (UINT)desc.samples;
             rd.Flags = rt ? D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET : D3D12_RESOURCE_FLAG_NONE;
-            D3D12_CLEAR_VALUE clear = {};
-            clear.Format = f.rtv;
             // render targets start as render targets (and are cleared first), the others as copy destinations
             t.state = rt ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_COPY_DEST;
             const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT};
-            if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, t.state, rt ? &clear : nullptr, IID_PPV_ARGS(&t.res)),
+            // no optimized clear value: LoadOp::Clear takes any color, and a mismatch is a debug-layer warning
+            if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, t.state, nullptr, IID_PPV_ARGS(&t.res)),
                             "CreateCommittedResource (texture)"))
             {
                 DrainMessages();
@@ -1122,25 +1121,32 @@ namespace esia::rhi::d3d12
             tableDirty_ = true;
         }
 
-        // The t0..t6 table of the next draw: a fresh copy in the frame's part of the shader-visible heap when a
-        // binding changed since the last draw.
+        // The t0..t6 table of the next draw: when a binding changed since the last draw, the same bindings as the
+        // last table copied this frame are reused, else a fresh copy goes into the frame's part of the shader-visible
+        // heap (7 descriptors; 16384 per frame).
         bool FlushTable()
         {
             if (!tableDirty_)
                 return true;
             FrameSlot& s = Slot();
-            if (s.tableOffset + kTableSlots > kTableDescriptorsPerFrame)
-            {
-                log_.Log(LogLevel::Error, "out of shader-visible descriptors this frame: draw skipped");
-                return false;
-            }
             const UINT inc = srvs_.inc;
-            const UINT first = SlotIndex() * kTableDescriptorsPerFrame + s.tableOffset;
-            s.tableOffset += kTableSlots;
-            D3D12_CPU_DESCRIPTOR_HANDLE dst = {tables_->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
-            for (UINT i = 0; i < kTableSlots; ++i)
-                dev_->CopyDescriptorsSimple(1, {dst.ptr + (SIZE_T)i * inc}, srvs_.Cpu(bound_[i]), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-            cl_->SetGraphicsRootDescriptorTable(RootTextures, {tables_->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc});
+            if (tableFrame_ != frame_ || std::memcmp(tableBound_, bound_, sizeof(bound_)) != 0)
+            {
+                if (s.tableOffset + kTableSlots > kTableDescriptorsPerFrame)
+                {
+                    log_.Log(LogLevel::Error, "out of shader-visible descriptors this frame: draw skipped");
+                    return false;
+                }
+                const UINT first = SlotIndex() * kTableDescriptorsPerFrame + s.tableOffset;
+                s.tableOffset += kTableSlots;
+                const D3D12_CPU_DESCRIPTOR_HANDLE dst = {tables_->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
+                for (UINT i = 0; i < kTableSlots; ++i)
+                    dev_->CopyDescriptorsSimple(1, {dst.ptr + (SIZE_T)i * inc}, srvs_.Cpu(bound_[i]), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                tableGpu_ = {tables_->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc};
+                tableFrame_ = frame_;
+                std::memcpy(tableBound_, bound_, sizeof(bound_));
+            }
+            cl_->SetGraphicsRootDescriptorTable(RootTextures, tableGpu_);
             tableDirty_ = false;
             return true;
         }
@@ -1153,6 +1159,8 @@ namespace esia::rhi::d3d12
             rd.SampleDesc.Quality = 0;
             rd.Format = d3d::DxgiTypeless(t.resolveFormat);
             rd.Flags = D3D12_RESOURCE_FLAG_NONE;
+            rd.Alignment = 0;   // the multisampled resource's 4 MB placement alignment is invalid for one sample
+            rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
             const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT};
             ComPtr<ID3D12Resource> tmp;
             if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_RESOLVE_DEST, nullptr, IID_PPV_ARGS(&tmp)),
@@ -1272,6 +1280,10 @@ namespace esia::rhi::d3d12
         bool ownFrame_ = false, hostTouched_ = false, tableDirty_ = true;
         Tex* pass_ = nullptr;
         int bound_[kTableSlots] = {};
+        // the last table copied into the shader-visible heap (valid for its frame)
+        int tableBound_[kTableSlots] = {};
+        D3D12_GPU_DESCRIPTOR_HANDLE tableGpu_ = {};
+        std::uint64_t tableFrame_ = 0;
     };
 
     std::unique_ptr<Device> CreateDevice(const Desc& desc, std::string* error)

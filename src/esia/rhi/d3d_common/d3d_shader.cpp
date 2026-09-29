@@ -106,18 +106,35 @@ namespace esia::rhi::d3d
             return k;
         }
 
-        Bytecode Compile(const ShaderRequest& r, const Logger& log)
+        // What a compile produced, and the message to log for it (effects compile on workers, which never call the
+        // host's log callback: the device that asks next logs it, on the render thread).
+        struct Compiled
         {
+            Bytecode code;
+            LogLevel level = LogLevel::Info;
+            std::string message;
+        };
+
+        void Report(const Compiled& c, const Logger& log)
+        {
+            if (!c.message.empty() && (c.level != LogLevel::Info || log.DebugLayer()))
+                log.Log(c.level, c.message);
+        }
+
+        Compiled Compile(const ShaderRequest& r)
+        {
+            Compiled out;
             CompilerDll& dll = Dll();
             if (!dll.compile)
             {
-                log.Log(LogLevel::Error, dll.error);
-                return nullptr;
+                out.level = LogLevel::Error;
+                out.message = dll.error;
+                return out;
             }
             const shaders::ProgramSource src = shaders::SourceOf(r.program);
             const char* text = shaders::FindSource(src.file);
             if (!text)
-                return nullptr;
+                return out;
             std::string source;
             if (r.prelude)
                 source = std::string(r.prelude) + "\n#line 1 \"" + src.file + "\"\n";
@@ -151,15 +168,18 @@ namespace esia::rhi::d3d
             std::snprintf(what, sizeof(what), "%s (%s%s%s)", EntryOf(r), ShaderProfile(r.model, r.stage), variant, effect ? ", user effect" : "");
             if (FAILED(hr) || !code)
             {
-                log.Printf(LogLevel::Error, "D3DCompile %s failed (0x%08lX): %s", what, (unsigned long)hr,
-                           errors ? static_cast<const char*>(errors->GetBufferPointer()) : "no message");
-                return nullptr;
+                char head[192];
+                std::snprintf(head, sizeof(head), "D3DCompile %s failed (0x%08lX): ", what, (unsigned long)hr);
+                out.level = LogLevel::Error;
+                out.message = std::string(head) + (errors ? static_cast<const char*>(errors->GetBufferPointer()) : "no message");
+                return out;
             }
-            if (log.DebugLayer())
-                log.Printf(LogLevel::Info, "compiled %s in %.0f ms%s%s", what, ms, errors ? ": " : "",
-                           errors ? static_cast<const char*>(errors->GetBufferPointer()) : "");
+            char head[192];
+            std::snprintf(head, sizeof(head), "compiled %s in %.0f ms", what, ms);
+            out.message = std::string(head) + (errors ? std::string(": ") + static_cast<const char*>(errors->GetBufferPointer()) : std::string());
             const auto* b = static_cast<const std::uint8_t*>(code->GetBufferPointer());
-            return Bytecode(new std::vector<std::uint8_t>(b, b + code->GetBufferSize()));
+            out.code = Bytecode(new std::vector<std::uint8_t>(b, b + code->GetBufferSize()));
+            return out;
         }
 
         // One entry per key, shared by every device of the process: a compile in progress (on this thread, another
@@ -168,7 +188,8 @@ namespace esia::rhi::d3d
         struct Entry
         {
             bool done = false;
-            Bytecode code;
+            bool reported = false;   // a worker's message was logged
+            Compiled result;
         };
 
         struct Cache
@@ -185,11 +206,11 @@ namespace esia::rhi::d3d
             return *c;
         }
 
-        void Finish(Cache& c, Entry& e, Bytecode code)
+        void Finish(Cache& c, Entry& e, Compiled result)
         {
             {
                 std::lock_guard lock(c.mutex);
-                e.code = std::move(code);
+                e.result = std::move(result);
                 e.done = true;
             }
             c.finished.notify_all();
@@ -227,35 +248,46 @@ namespace esia::rhi::d3d
             {
                 entry = it->second;
                 c.finished.wait(lock, [&] { return entry->done; });
-                return entry->code;
+                return entry->result.code;
             }
             entry.reset(new Entry);
+            entry->reported = true;   // compiled here, on the caller's thread: logged right away
             c.entries.emplace(key, entry);
         }
-        Finish(c, *entry, Compile(request, log));
-        return entry->code;
+        Compiled result = Compile(request);
+        Report(result, log);
+        Finish(c, *entry, std::move(result));
+        return entry->result.code;
     }
 
     CompileState CompileShaderAsync(const ShaderRequest& request, const Logger& log, Bytecode& out)
     {
         Cache& c = TheCache();
         const std::string key = KeyOf(request);
-        std::lock_guard lock(c.mutex);
+        std::unique_lock lock(c.mutex);
         auto it = c.entries.find(key);
         if (it == c.entries.end())
         {
             std::shared_ptr<Entry> entry(new Entry);
             c.entries.emplace(key, entry);
-            // the worker owns a copy of the effect source (the prelude and patches are static data)
-            std::thread([r = request, source = std::string(request.effectSource ? request.effectSource : ""), log, entry]() mutable {
+            // the worker owns a copy of the effect source (the prelude and patches are static data) and never logs:
+            // the host's callback and its user pointer may be gone before a compile of seconds ends
+            std::thread([r = request, source = std::string(request.effectSource ? request.effectSource : ""), entry]() mutable {
                 r.effectSource = r.effectSource ? source.c_str() : nullptr;
-                Finish(TheCache(), *entry, Compile(r, log));
+                Finish(TheCache(), *entry, Compile(r));
             }).detach();
             return CompileState::Pending;
         }
-        if (!it->second->done)
+        Entry& e = *it->second;
+        if (!e.done)
             return CompileState::Pending;
-        out = it->second->code;
+        out = e.result.code;
+        if (!std::exchange(e.reported, true))
+        {
+            const Compiled result = e.result;
+            lock.unlock();   // the log callback may take its time (or compile something)
+            Report(result, log);
+        }
         return out ? CompileState::Ready : CompileState::Failed;
     }
 }
