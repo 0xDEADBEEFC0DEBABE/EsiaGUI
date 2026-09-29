@@ -22,3 +22,5 @@ src/esia/shaders/generated/**/*.dxil binary
 src/esia/shaders/generated/**/*.glsl text eol=lf
 src/esia/shaders/generated/**/*.essl text eol=lf
 src/esia/shaders/generated/**/*.metal text eol=lf
+# conformance goldens of the null backend: recorded command streams, compared line by line
+tests/conformance/golden/**/*.log text eol=lf

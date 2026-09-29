@@ -11,6 +11,8 @@ CMakeUserPresets.json
 
 # logs and demo / tool output written next to the executable or the working directory
 *.log
+# ... but the conformance suite's recorded command streams are goldens (tests/conformance/golden/null)
+!/tests/conformance/golden/**/*.log
 wgt_stats.txt
 wgt_debug_layer.txt
 imgui.ini

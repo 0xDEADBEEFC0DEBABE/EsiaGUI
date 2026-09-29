@@ -1,0 +1,52 @@
+create texture #1 320x240 RGBA8_UNORM usage=7 host-target
+begin frame 1
+create texture #2 64x64 RGBA8_UNORM usage=9 image
+create texture #3 1x1 RGBA8_UNORM usage=1 white
+create buffer #4 vertex 4096 bytes
+create buffer #5 index 4096 bytes
+update buffer #4 240 bytes
+update buffer #5 72 bytes
+create buffer #6 fx 4608 bytes
+update buffer #6 3072 bytes
+pass #1 load ui
+create pipeline #7 Fx strip premul RGBA8_UNORM
+pipeline #7
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 0
+texture t0 #3
+texture t1 #3
+texture t2 #3
+texture t3 #3
+texture t4 #3
+texture t5 #3
+texture t6 #3
+fx buffer #6
+constants draw: 0 0 0 0 | 0 0 0 0
+draw instanced 4 x 1
+scissor [10,10 140x100]
+constants draw: 0 0 0 0 | 1 0 0 0
+draw instanced 4 x 1
+scissor [60,40 90x70]
+constants draw: 0 0 0 0 | 2 0 0 0
+draw instanced 4 x 1
+create pipeline #8 UiGeometry list straight RGBA8_UNORM
+pipeline #8
+constants draw: 0 0 0 0 | 0 0 0 0
+vertex buffer #4
+index buffer #5
+draw indexed 6 from 0
+pipeline #7
+scissor [170,10 140x100]
+constants draw: 0 0 0 0 | 3 0 0 0
+draw instanced 4 x 1
+scissor [0,0 320x240]
+constants draw: 0 0 0 0 | 4 0 0 0
+draw instanced 4 x 2
+texture t0 #2
+constants draw: 0 0 0 0 | 6 0 0 0
+draw instanced 4 x 2
+pipeline #8
+constants draw: 0 0 0 0 | 0 0 0 0
+draw indexed 12 from 6
+end pass
+end frame
