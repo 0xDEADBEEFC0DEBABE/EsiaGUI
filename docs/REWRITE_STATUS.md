@@ -20,7 +20,15 @@ core test passes; merged into scratch copies of the backend branches, the OpenGL
 lavapipe) and the Direct3D 9 / 10 / 11 suites (under Wine) pass `--strict` in both modes (section 2). The backend
 branches were not changed: what they had to adopt is in section 5 (the local session has done it, section 3).
 
+**Text on every platform** (branch `feat/text-everywhere`, after round 3): FreeType and HarfBuzz are built from pinned
+sources wherever the system has none, so the text system and its tests now build and run on Windows too; a system font
+lookup and a fallback chain per platform cover Chinese, Japanese and Korean; CJK tests with a Noto Sans SC subset.
+
+**UI core v2** (branch `feat/ui-core-v2`): the UI core reworked for the widget port; the design is
+[UI_CORE.md](UI_CORE.md).
+
 * [UI core v2](#ui-core-v2)
+* [Text on every platform](#text-on-every-platform-feattext-everywhere)
 * [0. Round 3: sub-pixel text removed](#0-round-3-sub-pixel-text-removed)
 * [1. Round 2: what changed](#1-round-2-what-changed)
 * [2. Verified in round 2](#2-verified-in-round-2)
@@ -119,6 +127,112 @@ source or generated file was changed.
    against the WGT reference screenshots (branch `reference/wgt-1.1`).
 4. The platform layers (phase 4) feed `InputEvent::MouseLeave`, focus events and `SetMonitors`, and honor
    `PlatformRequests::inputPending` / `animating` in their event loops.
+
+## Text on every platform (`feat/text-everywhere`)
+
+Before this branch `esia_text_ft` was built only where FreeType and HarfBuzz were installed as system packages: on
+Windows it was skipped, and its tests had never run there. The owner writes Chinese, so CJK text had to work.
+
+### What changed
+
+| Part | Where | What |
+| --- | --- | --- |
+| Bundled dependencies | `cmake/EsiaTextDeps.cmake`, `src/esia/CMakeLists.txt` | `ESIA_TEXT_DEPS=auto` (default: the system's packages when both are found, else built from source), `bundled` or `system` (an error when missing). FreeType 2.14.3 and HarfBuzz 14.5.0 are fetched with `FetchContent` (URL + SHA256; FreeType from SourceForge with savannah as the second URL, HarfBuzz from its GitHub release). Esia defines the targets itself (`SOURCE_SUBDIR` points to a directory without a `CMakeLists.txt`, so the projects' own scripts do not run: no install rules, no optional-library probes, no HarfBuzz "CMake is unsupported" warning): FreeType's TrueType, CFF, SFNT, PSAux, PSNames and PSHinter modules with FreeType's `ftoption.h` minus its internal zlib and LZW (WOFF 1, compressed PCF), no bzip2 / libpng / Brotli / HarfBuzz; HarfBuzz's amalgamated `harfbuzz.cc` with no glib / ICU / FreeType / Graphite / platform shaper (`/bigobj /utf-8` on MSVC, as its own builds). Both are static, compiled with `-w` / `/W0` and never Esia's flags; their headers are system includes, so `-DESIA_WERROR=ON` concerns Esia's code only. Offline: `FETCHCONTENT_SOURCE_DIR_ESIA_FREETYPE` / `..._ESIA_HARFBUZZ` point at extracted archives. `ESIA_TEXT_FREETYPE=OFF` still leaves the text system out. |
+| System fonts | `include/esia/text/system_fonts.hpp` (new), `src/esia/text/font_file.*`, `system_fonts*.cpp` (in `esia_text`) | `FindSystemFont(family, weight, style)` returns the file path (UTF-8), face index, family, weight and style of an installed face, or nothing (a family is never substituted); `FindFontInDirectories` does the same in given directories; `DefaultFallbackFamilies()` / `FindDefaultFallbackFonts()` give the platform's chain, `AddSystemFont` / `AddFallbackFonts` load fonts into a `TextSystem`; `kSystemUiFamily` ("system-ui") names the UI font. Windows: DirectWrite's system font collection, only to locate files (`IDWriteLocalFontFileLoader`); macOS: Core Text descriptors with the family mandatory, their URLs, the collection face found by PostScript name; Linux: fontconfig when found (`ESIA_TEXT_FONTCONFIG`, optional; substitutes are rejected, generic names such as `sans-serif` allowed), else one scan of `$XDG_DATA_HOME/fonts`, `~/.fonts`, `$XDG_DATA_DIRS/fonts`, `/usr/share/fonts`, `/usr/local/share/fonts`, `/system/fonts`. Families match any localized name ASCII case-insensitively; the face is chosen by style, then by weight with the CSS rules. A small portable reader of the `name`, `OS/2` and `head` tables (collections included) serves the scans and the macOS face lookup. |
+| Chains | `system_fonts_<platform>.cpp` | Windows: Segoe UI, Microsoft YaHei, Microsoft JhengHei, Yu Gothic, Malgun Gothic, Segoe UI Symbol. macOS: system-ui (SF), Helvetica Neue, PingFang SC, PingFang TC, Hiragino Sans, Apple SD Gothic Neo, Apple Symbols. Linux: Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback (the last two for distributions without Noto CJK). Simplified Chinese comes first among the CJK fonts. |
+| FreeType text system | `src/esia/text/ft/ft_text_system.cpp` | The faces of one collection file share one copy of it (the CJK fonts of a chain are 20 MB and more: Noto Sans CJK's SC / TC / JP / KR faces were four copies). No interface change. |
+| Tests | `tests/text`, `tests/fonts`, the text part of `tests/CMakeLists.txt` | `NotoSansSC-Subset.otf`: 87 characters of Noto Sans SC (OFL, CFF outlines, 18 KB) made with `pyftsubset` (command and character list in `tests/fonts/README.md`). `test_ft_cjk.cpp`: CJK shaping (one full-width glyph per character, the ideographic space), fallback from DroidSans to Noto with DroidSans' line box, line breaks between ideographs with the kinsoku rules, CJK trimming, the golden image `ft_cjk.png` (Chinese mixed with Latin, wrapped, trimmed, centered; Traditional characters and kana), and the platform chain covering Latin, Simplified and Traditional Chinese, kana, Hangul and symbols. `test_system_fonts.cpp` (in `esia_text_tests`): lookups in `tests/fonts`, collections and the CSS weight / style choice on `.ttc` files the test assembles from the test fonts (`font_test_util.hpp`), and the platform lookup (no substitution for a missing family, every chain family found, localized names, Tahoma on Windows and Wine). A chain font or script that is missing fails on Windows and macOS, which ship them, and is reported as "skipped" on Linux and under Wine. `test_ft_text.cpp` gained a collection test; its draw-list and golden helpers moved to `ft_test_util.hpp`. |
+
+The text interface (`text.hpp`, `freetype.hpp`) is unchanged; `system_fonts.hpp` is new and only builds on it.
+
+### Verified here (Linux, clang 18.1.3, CMake 3.28.3)
+
+The archives downloaded in this cloud environment (SourceForge and GitHub releases; savannah answered 403, the
+second URL is a fallback only). SHA256 are those of the downloaded archives.
+
+| Command | Result |
+| --- | --- |
+| `cmake --preset linux-clang -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled`, `cmake --build --preset linux-clang`, `ctest --preset linux-clang` | configure without CMake warnings, 0 compiler warnings (Esia's and the dependencies'); 7 / 7: core 39, text 13, render 42, testkit 5, text_ft 19, `esia_conformance_null` 17 scenes, shader 1 (no `libegl-dev` here: the GLSL link test is left out) |
+| the same with `-DESIA_TEXT_DEPS=system` (FreeType 2.13.2, HarfBuzz 8.3.0) | 0 warnings, 7 / 7; both goldens (`ft_gray`, `ft_cjk`) pass with either FreeType / HarfBuzz |
+| `linux-clang-release`, both `bundled` and `system`, `-DESIA_WERROR=ON` | 0 warnings, 7 / 7 each |
+| `cmake -S . -B <dir> -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/clang-linux.cmake -DESIA_WERROR=ON -DESIA_TEXT_FONTCONFIG=OFF -DESIA_TEXT_DEPS=system`, build `esia_text_tests esia_text_ft_tests`, run both | the directory scan finds what fontconfig finds (DejaVu Sans, WenQuanYi Zen Hei `wqy-zenhei.ttc` face 0, its Chinese name too); 13 + 19 pass |
+| `cmake --preset windows-mingw-cross -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled`, `cmake --build --preset windows-mingw-cross` | 0 warnings; `esia_text_ft_tests.exe` is built for Windows for the first time |
+| `WINEDEBUG=-all wine build/windows-mingw-cross/bin/<test>.exe` (Wine 9.0) | core 39, text 13, render 42, testkit 5, shader 1, **text_ft 19** (both goldens), all pass; `esia_conformance.exe --backend null --strict` 17 / 17. DirectWrite under Wine finds Tahoma (`Z:\usr\share\wine\fonts\tahoma.ttf`) and the host's DejaVu Sans and WenQuanYi Zen Hei (also by "文泉驛正黑"); none of the Windows chain is installed there, so the chain tests report "skipped" |
+
+On this Linux machine the chain found DejaVu Sans and WenQuanYi Zen Hei, which cover every script of the test (Noto
+is not installed).
+
+### Verified on Windows (the local session: Windows 11, RTX 4080 SUPER, clang-cl 22.1.8, MSVC 19.44)
+
+Steps 1 - 4 of the Windows test plan below, on `0c5fad2`, clean build directories, every backend on, `ESIA_D3D_DEBUG=1`.
+
+| Command | Result |
+| --- | --- |
+| `cmake --preset windows-clang-cl -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled -DESIA_BACKEND_<all>=ON`, build, `ctest --preset windows-clang-cl` | configure downloads both archives, no CMake warning; 0 compiler warnings (Esia, FreeType, HarfBuzz; no `D9025`); **34 / 34** (Metal's two conformance runs skipped as before), `esia_text_ft_tests` built and run with clang-cl for the first time |
+| the same with `--preset windows-msvc`, `windows-msvc-debug` and `windows-msvc-release`, `ctest` Debug and Release | 0 compiler warnings (only MSBuild's `MSB8029`, because the build directory was under `%TEMP%`); 34 / 34 in both configurations |
+| `esia_text_tests.exe SystemFonts`, `esia_text_ft_tests.exe SystemFonts` | 4 + 1 pass, no "skipped" line. Chain: `SEGOEUI.TTF`, `MSYH.TTC` face 0, `MSJH.TTC` face 0, `YUGOTHR.TTC` face 0, `MALGUN.TTF`, `SEGUISYM.TTF`; "Microsoft YaHei = 微软雅黑" |
+| a probe on `FindSystemFont` / `FindFontInDirectories` / `AddSystemFont` | YaHei 700 → `MSYHBD.TTC`, YaHei 300 → `MSYHL.TTC` (290); Segoe UI italic → `SEGOEUII.TTF`, bold italic → `SEGOEUIZ.TTF`, 600 → `SEGUISB.TTF`; `system-ui` → Segoe UI; `宋体` and `SimSun` → `SIMSUN.TTC`; Arial 900 → `ARIBLK.TTF`; "Comic Sans" (not a family) → nothing; fonts installed for the current user only (Source Sans 3 400 / 600 in `%LOCALAPPDATA%\Microsoft\Windows\Fonts`) found; a font in a directory named `字体 测试` found by `FindFontInDirectories` and loaded through its UTF-8 path (`你好，世界` at 20 → 100 x 28.96); the whole chain loaded (6 fonts) measures Latin, Simplified and Traditional Chinese, kana, Hangul and ★ together |
+| `ft_cjk.png` written by the Windows runs | matches the golden; line breaks keep closing punctuation off the start of a line |
+
+Found on Windows, not fixed here (see "Known gaps"): the weight DirectWrite reports is not always the weight of the face
+that is loaded. `SimSun` at 700 returns `SIMSUN.TTC` face 0 with weight 700: DirectWrite simulates the bold, the file
+is regular. Variable fonts (`Segoe UI Variable Text` → `SEGUIVAR.TTF`, `Noto Serif CJK SC` → `NotoSerifCJK-VF.ttf.ttc`
+face 2) report the named instance's weight (400 or 700) for the same face index, and FreeType loads the font's default
+instance.
+
+### Not verified
+
+* **macOS**: `system_fonts_apple.cpp` has never been compiled (no Apple SDK here); expect small fixes.
+* **`windows-cross`** (clang-cl from Linux with xwin) with the bundled dependencies.
+* **Windows, optional step 5**: vcpkg's FreeType / HarfBuzz with `-DESIA_TEXT_DEPS=system`, and the offline configure.
+
+### Windows test plan (the local session: Windows 11, clang-cl 22 and MSVC 19.44)
+
+1. `cmake --preset windows-clang-cl -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled`, `cmake --build --preset windows-clang-cl`,
+   `ctest --preset windows-clang-cl --output-on-failure`: configure downloads both archives, no warning from Esia's
+   code, from the FreeType / HarfBuzz headers or from the dependencies' own compiles (no `D9025` about an
+   overridden `/W` level); `esia_text_tests` and `esia_text_ft_tests` pass.
+2. The same with MSVC: `cmake --preset windows-msvc -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled`,
+   `cmake --build --preset windows-msvc-debug` and `--preset windows-msvc-release`, `ctest --preset windows-msvc`.
+3. `build\windows-clang-cl\bin\esia_text_tests.exe SystemFonts` prints the six chain families with their files
+   (expected under `C:\Windows\Fonts`: `segoeui.ttf`, `msyh.ttc` face 0, `msjh.ttc` face 0, `YuGothR.ttc`,
+   `malgun.ttf`, `seguisym.ttf`), "Microsoft YaHei = 微软雅黑" with the same file, and passes;
+   `esia_text_ft_tests.exe SystemFonts` passes with no "skipped" line (on real Windows the chain must cover Latin,
+   Simplified and Traditional Chinese, kana, Hangul and symbols: a missing script fails).
+4. Spot checks worth a line in the report: `FindSystemFont("Microsoft YaHei", 700)` gives `msyhbd.ttc`;
+   `FindSystemFont("Segoe UI", 400, FontStyle::Italic)` gives `segoeuii.ttf`; a font installed for the current user only
+   (`%LOCALAPPDATA%\Microsoft\Windows\Fonts`) is found; a path with non-ASCII characters loads (the paths are
+   UTF-8).
+5. Optional: `-DESIA_TEXT_DEPS=system -DCMAKE_PREFIX_PATH=<vcpkg>/installed/x64-windows` with vcpkg's `freetype` and
+   `harfbuzz`; and offline configure with `-DFETCHCONTENT_SOURCE_DIR_ESIA_FREETYPE=<dir>
+   -DFETCHCONTENT_SOURCE_DIR_ESIA_HARFBUZZ=<dir>`.
+
+### macOS test plan
+
+`brew install llvm lld cmake ninja`, then `cmake --preset macos-clang -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled`,
+`cmake --build --preset macos-clang`, `ctest --preset macos-clang --output-on-failure`. `esia_text_tests SystemFonts`
+should list system-ui (`SFNS.ttf`, face 0), Helvetica Neue (`HelveticaNeue.ttc`), PingFang SC and PingFang TC (one
+`PingFang.ttc`, two different faces), Hiragino Sans, Apple SD Gothic Neo and Apple Symbols; `esia_text_ft_tests
+SystemFonts` must pass without "skipped" lines. Then the same with `-DESIA_TEXT_DEPS=system` after `brew install
+freetype harfbuzz`.
+
+### Known gaps
+
+* **Color emoji** (COLR, CBDT, sbix, SVG) are out of scope: the rasterizer draws outlines, so no emoji font is in the
+  chains.
+* **Han unification**: one chain for every language, Simplified Chinese first; Japanese text gets Chinese glyph forms
+  for shared ideographs where the chain has both. A per-language chain (from the text's language tag or the user's
+  locale) is future work.
+* **Fonts are found once**: the Windows collection and the Linux directory scan are taken at the first lookup; fonts
+  installed later need a restart. `AddFallbackFonts` loads every chain font into memory up front (collection faces
+  share one copy); loading a fallback only when a character needs it is future work.
+* **Security**: font files are parsed by FreeType and HarfBuzz as before; the lookup's own table reader is bounded
+  (faces, name table size, every read checked against the file size).
+* **Simulated and variable faces on Windows** (found by the local session): `SystemFont::weight` / `style` come from
+  DirectWrite, which counts its bold / oblique simulations (`IDWriteFont::GetSimulations`) and the named instances of
+  variable fonts. The text system then loads the plain face (regular glyphs, or the variable font's default
+  instance). Either report the face's own weight and style (and skip simulated matches), or carry the named instance
+  (FreeType's face index `instance << 16 | face`) and the simulation in `SystemFont`.
 
 ## 0. Round 3: sub-pixel text removed
 
@@ -380,8 +494,9 @@ CTest properties (`esia-vulkan` request 2, optional).
 4. **Glass over the capture budget** reuses the last capture: the pyramid levels are now loaded rather than
    undefined, and the backdrop copy holds the previous frames' content outside this frame's captures (stale but
    defined).
-5. **Text.** No Unicode bidi algorithm, no color glyphs, no system fonts, no caret / grapheme query yet; glyphs are
-   rasterized before the clip test. (The text tests' fonts moved to `tests/fonts` when WGT was removed.)
+5. **Text.** No Unicode bidi algorithm, no color glyphs (so no color emoji), no caret / grapheme query yet; glyphs are
+   rasterized before the clip test; one fallback chain for every language (Han unification, "Text on every
+   platform"). (The text tests' fonts moved to `tests/fonts` when WGT was removed.)
 6. **Zero-filled uploads.** `TextureRegistry::Create(info, nullptr)` queues a zero-filled CPU copy of the whole
    texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
 7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
@@ -395,7 +510,7 @@ CTest properties (`esia-vulkan` request 2, optional).
 sudo apt-get install -y clang lld cmake ninja-build python3 \
     glslang-tools spirv-cross spirv-tools \
     libegl-dev libgles-dev libgl-dev mesa-utils \
-    libfreetype-dev libharfbuzz-dev
+    libfreetype-dev libharfbuzz-dev libfontconfig-dev   # optional: without them FreeType / HarfBuzz are built from source
 cmake --preset linux-clang && cmake --build --preset linux-clang && ctest --preset linux-clang
 # release: linux-clang-release; warnings as errors: -DESIA_WERROR=ON; a backend: -DESIA_BACKEND_OPENGL=ON
 python3 tools/shaders/build_shaders.py          # after a shader change: regenerate the library (commit the output)
@@ -403,7 +518,8 @@ python3 tools/shaders/build_shaders.py --check  # CI: the checked-in library mat
 build/linux-clang/bin/esia_conformance --backend null --golden tests/conformance/golden --strict
 ```
 
-Without `libegl-dev` the GLSL link test is left out; without FreeType / HarfBuzz the text system and its tests are.
+Without `libegl-dev` the GLSL link test is left out. FreeType and HarfBuzz come from the system when both are found and
+are built from source otherwise (`-DESIA_TEXT_DEPS=bundled` always, `system` never; the first configure downloads them).
 Vulkan on the CPU: `apt-get install mesa-vulkan-drivers libvulkan-dev vulkan-validationlayers` (lavapipe). The D3D
 backends under Wine: `apt-get install wine64 xvfb`, build `windows-mingw-cross`, put Microsoft's
 `d3dcompiler_47.dll` next to the executables, then `WINEDLLOVERRIDES=d3dcompiler_47=n xvfb-run -a wine
@@ -414,8 +530,8 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
 * **On Windows**: the LLVM installer (`clang-cl`, `lld-link` on `PATH`) plus the MSVC build tools and Windows SDK for
   the STL, CRT and headers; from an "x64 Native Tools Command Prompt":
   `cmake --preset windows-clang-cl && cmake --build --preset windows-clang-cl && ctest --preset windows-clang-cl`.
-  For the text system, point `CMAKE_PREFIX_PATH` at a FreeType + HarfBuzz installation (e.g. vcpkg's installed tree);
-  without it `esia_text_ft` is skipped. The local session used clang-cl 22.1.8 and MSVC 19.44.
+  FreeType and HarfBuzz are built from source unless `CMAKE_PREFIX_PATH` points at an installation of both (e.g.
+  vcpkg's installed tree, with `-DESIA_TEXT_DEPS=system`). The local session used clang-cl 22.1.8 and MSVC 19.44.
 * **From Linux, MSVC ABI** (`windows-cross`): `cargo install xwin --locked`, then
   `xwin --accept-license --arch x86_64 splat --output ~/.xwin` (needs download.visualstudio.microsoft.com),
   `cmake --preset windows-cross -DXWIN_DIR=$HOME/.xwin && cmake --build --preset windows-cross` (tests off: they
@@ -428,7 +544,7 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
 
 ### macOS
 
-`brew install llvm lld cmake ninja glslang spirv-cross spirv-tools freetype harfbuzz`, then
+`brew install llvm lld cmake ninja glslang spirv-cross spirv-tools` (`freetype harfbuzz` optional), then
 `cmake --preset macos-clang && cmake --build --preset macos-clang && ctest --preset macos-clang` (not tried here).
 
 ## 8. Round 1: the core
@@ -460,7 +576,8 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
    run Metal on a Mac.
 3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
    batches, DXBC generated and checked in.
-4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query; DirectWrite and Core Text behind
-   the interface, feeding the shared rasterizer.
+4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query, per-language fallback and fallback
+   fonts loaded on demand; DirectWrite and Core Text behind the interface, feeding the shared rasterizer. The Windows
+   and macOS runs of the "Text on every platform" test plans come first.
 5. **Phases 3 - 4**: widgets on the core (Esia's own API: WGT and its `wgt::` compatibility layer are dropped),
    platform layers and services. WGT itself was removed from the tree (tag `wgt-1.1-final`).

@@ -12,7 +12,7 @@ The renderer and its backends work; widgets, windowing and a demo are the next p
 | --- | --- |
 | UI core (`src/esia/core`) | second version ([UI_CORE.md](docs/UI_CORE.md)): ids, input, windows with per-window DPI, front-to-back hit testing, press and key ownership, containers and layout providers, child scroll regions, popups and tooltips, per-id state, draw lists, texture registry |
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
-| Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system; grayscale antialiasing |
+| Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with CJK fallback chains; grayscale antialiasing |
 | Backends (`src/esia/rhi/<name>`) | Direct3D 9 / 10 / 11 / 12, OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal (below) |
 | Widgets, platform layer, demo | not yet: WGT's widgets are ported in phase 3, window / input / IME layers in phase 4 |
 
@@ -61,12 +61,14 @@ cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xw
 1. ~~UI core, second version~~: done (`docs/UI_CORE.md`); the widget port builds on it.
 2. Platform layers: Win32 first (windows, input, IME, DPI, clipboard, swap chains), then Cocoa and SDL / X11 /
    Wayland.
-3. Text: FreeType + HarfBuzz bundled on every platform, system font lookup.
+3. Text: the bidi algorithm, a caret / grapheme query, per-language fallback (FreeType + HarfBuzz on every platform and
+   the system font lookup are done).
 4. Widgets: WGT's iOS-style controls, themes, per-component styles, animations and auto layout on the new core,
    compared with the WGT reference screenshots; then the demo.
 5. Packaging (`find_package(esia)`), API reference, Metal verified on a Mac, CI.
 
 ## Third-party
 
-The text tests use DroidSans (Apache License 2.0) and Karla (SIL Open Font License 1.1) in `tests/fonts`.
-FreeType and HarfBuzz are found on the system when `ESIA_TEXT_FREETYPE` is on.
+The text tests use DroidSans (Apache License 2.0), Karla and a subset of Noto Sans SC (SIL Open Font License 1.1) in
+`tests/fonts`. With `ESIA_TEXT_FREETYPE` on (the default), FreeType (FreeType License) and HarfBuzz (MIT) come from the
+system or are downloaded and built from source at configure time: `ESIA_TEXT_DEPS=auto|bundled|system`.
