@@ -67,12 +67,19 @@ Every review item of the task (the 12 bugs) and every new piece has a unit test:
 content rect). Each of the scene's two windows has a last row that lies entirely in the bottom padding (Settings: y
 148 - 170 under a content rect ending at 140; Library: 216 - 238 under 208): it is culled, and the windows' scissors
 are their content rects (`[28,28 152x112]`, `[140,96 152x112]`) instead of the window rects. Only
-`golden/null/windows.log` was regenerated; the other 16 logs are byte-identical. **The image golden
-`golden/windows.png` was not regenerated** (the task allows only the null log): rendered with OpenGL / GLES on Mesa
-llvmpipe here, all 16 other scenes still match their goldens at max delta 0, and `windows` differs exactly in the two
-culled 4-pixel stripes (2.12 % of the pixels, max delta 194, over the 1 % / 48 tolerance). Until `windows.png` is
-regenerated (`esia_conformance --backend opengl --golden tests/conformance/golden --update`, on llvmpipe, reviewed),
-every drawing backend's `windows` scene fails; the candidate image was produced but not committed.
+`golden/null/windows.log` was regenerated; the other 16 logs are byte-identical. The cloud session left the image
+golden `golden/windows.png` alone (the task allowed only the null log): rendered with OpenGL / GLES on Mesa llvmpipe,
+all 16 other scenes still matched their goldens at max delta 0, and `windows` differed exactly in the two culled
+stripes (2.12 % of the pixels, max delta 194, over the 1 % / 48 tolerance).
+
+**`golden/windows.png` updated by the local session.** On the RTX 4080 SUPER all seven drawing backends failed
+`windows` identically: the same 1634 pixels over 10, in two boxes, `(28,142)-(192,156)` and `(140,216)-(303,219)`. In
+the old golden those are the culled rows' blue bars, drawn into the bottom padding and, for Library, past the
+window's rounded bottom edge; the new images clip them to the content rect. The new golden is the old llvmpipe image
+with only those two boxes, grown by 2 pixels (4555 pixels), taken from the 4080's OpenGL rendering. The seven
+backends agree within 4 inside the boxes, and the 4080 is within 6 of llvmpipe outside them. Every other pixel is
+still llvmpipe's. Every drawing backend now passes `windows` at max delta 5 - 6. CI's llvmpipe job (`feat/ci`) is the
+check that llvmpipe agrees inside the boxes too.
 
 ### Verified
 
@@ -92,10 +99,20 @@ Mesa 25.2.8 (llvmpipe through EGL). Fresh build directories, at `fbc86aa` (the c
 `python3 tools/shaders/build_shaders.py --check` could not run (no glslangValidator / spirv-cross here); no shader
 source or generated file was changed.
 
+### Verified on Windows (the local session: Windows 11, RTX 4080 SUPER, clang-cl 22.1.8, MSVC 19.44)
+
+On `feat/ui-core-v2` with `main` (text on every platform) merged in: clean build directories, every backend on,
+`-DESIA_WERROR=ON`, `ESIA_D3D_DEBUG=1`.
+
+| Command | Result |
+| --- | --- |
+| `windows-clang-cl`, build, `ctest` | 0 warnings; before the new `windows.png`: 18 / 34, every drawing backend's conformance runs failing `windows` only (above); after it **34 / 34** (Metal's conformance skipped as before) |
+| `windows-msvc`, `windows-msvc-debug`, `ctest --preset windows-msvc` | 0 compiler warnings; 34 / 34 |
+| `esia_conformance --backend <each> --scene windows --strict` | opengl / gles / d3d9 / d3d10 / d3d11 / d3d12 max delta 6, vulkan 5 |
+
 ### Not verified
 
-* No GPU and no Windows machine: the drawing backends were not run except OpenGL / GLES on llvmpipe for the
-  `windows` measurement above; `windows-clang-cl`, `windows-cross` (xwin) and MSVC were not built.
+* `windows-cross` (xwin) was not built.
 * The API has not been exercised by real widgets yet: the WGT port (phase 3) is its first user, and UI_CORE.md
   section 12 shows how the widgets map, not ported code.
 
@@ -123,8 +140,8 @@ source or generated file was changed.
    `RequestTextInput` and its own `SetMouseCursor`.
 2. Styling: `Theme`, `ItemStyle` and `ui::Next()` in `esia_ui`; scope styles through `SetScopeData` on containers,
    state colors from `ItemStatusOf`, metrics scaled by `Context::Scale()` (per window).
-3. Decide and regenerate `golden/windows.png` (above), and add conformance scenes drawn by the ported widgets
-   against the WGT reference screenshots (branch `reference/wgt-1.1`).
+3. Add conformance scenes drawn by the ported widgets against the WGT reference screenshots (branch
+   `reference/wgt-1.1`). (`golden/windows.png` has been updated, above.)
 4. The platform layers (phase 4) feed `InputEvent::MouseLeave`, focus events and `SetMonitors`, and honor
    `PlatformRequests::inputPending` / `animating` in their event loops.
 
@@ -501,6 +518,13 @@ CTest properties (`esia-vulkan` request 2, optional).
    texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
 7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
    their owners.
+8. **Direct3D 12 after OpenGL in one process, with the debug layer** (found by the local session, NVIDIA 4080 SUPER).
+   `esia_conformance --backend opengl --backend d3d12` (or `gles` first) with `ESIA_D3D_DEBUG=1` skips every D3D12
+   scene: `D3D12CreateDevice` returns `DXGI_ERROR_DEVICE_RESET`. Without the debug layer, or with any other backend
+   first, D3D12 runs. The likely cause: NVIDIA's OpenGL driver creates a D3D12 device of its own in the process,
+   enabling the debug layer afterwards removes the devices that exist, and D3D12 hands out one device per adapter.
+   CTest runs each backend in its own process, so the suite never meets it. To do: run D3D12 before OpenGL in
+   `esia_conformance`, or report this cause in the skip reason.
 
 ## 7. Building and testing
 
