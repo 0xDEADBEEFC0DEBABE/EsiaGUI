@@ -140,7 +140,6 @@ namespace esia::rhi::vulkan
         caps_.framebufferOriginBottomLeft = false;
         caps_.clipSpaceYDown = true;   // no negative viewport: the renderer flips its projection instead
         caps_.halfPixelOffset = false;
-        caps_.dualSourceBlend = desc_.dualSrcBlend;
         caps_.floatRenderTargets = (half.optimalTilingFeatures & layerNeeds) == layerNeeds;
         caps_.sampleRenderTarget = true;
         caps_.timestampQueries = timestampBits > 0 && timestampNs_ > 0.0;
@@ -1007,13 +1006,6 @@ namespace esia::rhi::vulkan
             blend.srcColorBlendFactor = blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
             blend.dstColorBlendFactor = blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
             break;
-        case BlendMode::DualSourceLcd:
-            blend.blendEnable = VK_TRUE;
-            blend.srcColorBlendFactor = VK_BLEND_FACTOR_SRC1_COLOR;
-            blend.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
-            blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC1_ALPHA;
-            blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
-            break;
         }
         VkPipelineColorBlendStateCreateInfo blendState{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
         blendState.attachmentCount = 1;
@@ -1051,8 +1043,6 @@ namespace esia::rhi::vulkan
     {
         // no runtime compilation here (Caps::runtimeEffects / fxFeatureVariants are false): the renderer falls back
         if (d.effect != 0 || d.fxFeatures != 0 || d.program >= ShaderProgram::Count)
-            return {};
-        if (d.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
             return {};
         if (d.samples > 1 && (props_.limits.framebufferColorSampleCounts & SampleBits(d.samples)) == 0)
             return {};

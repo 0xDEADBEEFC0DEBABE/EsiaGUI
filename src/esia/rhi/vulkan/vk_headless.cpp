@@ -291,7 +291,6 @@ namespace esia::rhi::vulkan
             std::erase_if(dexts, [](const char* e) { return std::strcmp(e, "VK_KHR_portability_subset") != 0; });
 
         VkPhysicalDeviceFeatures2 enabled{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-        enabled.features.dualSrcBlend = supported.features.dualSrcBlend;
         VkPhysicalDeviceDynamicRenderingFeaturesKHR drOn{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR};
         drOn.dynamicRendering = VK_TRUE;
         enabled.pNext = dynamicRendering ? &drOn : nullptr;
@@ -312,7 +311,6 @@ namespace esia::rhi::vulkan
         own.device = true;
         auto getQueue = reinterpret_cast<PFN_vkGetDeviceQueue>(vk.vkGetDeviceProcAddr(desc.device, "vkGetDeviceQueue"));
         getQueue(desc.device, desc.queueFamily, 0, &desc.queue);
-        desc.dualSrcBlend = supported.features.dualSrcBlend == VK_TRUE;
         desc.dynamicRendering = dynamicRendering;
         desc.framesInFlight = options.framesInFlight;
 

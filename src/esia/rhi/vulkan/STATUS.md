@@ -40,8 +40,7 @@ Everything the task lists:
 * **Instanced SDF / FX quads with per-draw constants**: `vkCmdDraw(4, n)` on a strip, FX instances in a storage
   buffer at binding 10 (`Caps::fxStorage = Buffer`), Frame / Pass / Draw constants as `UNIFORM_BUFFER_DYNAMIC`
   bindings 0-2 with offsets into a per-frame-slot uniform ring (inline: every draw sees the latest values).
-* **Indexed geometry and text**: the 20-byte UI vertex layout, 32-bit indices; `TextLcd` with dual-source blending
-  (`dualSrcBlend` feature), the gray programs otherwise.
+* **Indexed geometry and text**: the 20-byte UI vertex layout, 32-bit indices; text with the grayscale programs.
 * **Textures and render targets**: one-mip 2D images, device-local; uploads through a staging ring recorded before
   the frame's first pass (updates outside frames are kept on the CPU until the next frame / readback records them);
   new textures are zero-filled so they can be bound at once; sRGB images are `MUTABLE_FORMAT` with a UNORM view for
@@ -91,7 +90,6 @@ tests/conformance/golden | tar -x -C <dir>`; not committed here), `--strict`:
 | glass | PASS | PASS | 3 | 0.000 % |
 | glow_layer | PASS | PASS | 1 | 0.000 % |
 | text | PASS | PASS | 0 | 0.000 % |
-| text_lcd | PASS | PASS | 1 | 0.000 % |
 | edge_fade | PASS | PASS | 0 | 0.000 % |
 | clipping | PASS | PASS | 0 | 0.000 % |
 | windows | PASS | PASS | 3 | 0.000 % |
@@ -100,7 +98,7 @@ tests/conformance/golden | tar -x -C <dir>`; not committed here), `--strict`:
 | srgb_target | PASS | PASS | 4 | 0.000 % |
 | msaa_target | PASS | PASS | 3 | 0.000 % |
 
-No scene SKIPs on lavapipe (it has dual-source blending, RGBA16F blending, 4x MSAA, sRGB). The two paths give
+No scene SKIPs on lavapipe (it has RGBA16F blending, 4x MSAA, sRGB). The two paths give
 byte-identical images (unit test `VulkanScenes.BothRenderPathsAgree`, and the two runs above print identical
 lines). Before the goldens existed, all 14 images of an `--out` run were inspected by eye (orientation, glass blur
 and refraction, bloom, text, scissors, sRGB and MSAA variants); `msaa_target` was within 1 / 255 of `glass`.
@@ -175,6 +173,14 @@ What the real machine showed, fixed on this branch:
 and slots rotate per host frame. `VulkanHost.TwoTargetsPerHostFrame` renders two targets per host frame for five
 frames with two in flight; its first run caught the slot rotation still counting device frames (a descriptor pool
 reset while in use, reported by the validation layer).
+
+### Core round 3 (grayscale text only)
+
+Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): no dual-source blending, no
+`dualSrcBlend` feature (`Desc::dualSrcBlend` is gone from the host API: hosts need no optional feature now), no
+TextLcd pipelines; `OlderApiVersions` checks the grayscale `text` scene where it checked `text_lcd`. On the
+RTX 4080 SUPER after the merge (`esia-core` `ac37883`), SDK 1.4.357 validation: ctest 11 / 11; `--strict` 17 / 17
+with dynamic rendering, with `--frames 3`, and with render passes and `--frames 3`; 0 validation messages.
 
 ## 4. Not verified
 

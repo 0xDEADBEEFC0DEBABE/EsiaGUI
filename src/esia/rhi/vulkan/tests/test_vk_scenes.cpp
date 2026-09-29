@@ -116,7 +116,7 @@ ESIA_TEST(VulkanScenes, FramesInFlight)
 // Devices older than 1.3: dynamic rendering through VK_KHR_dynamic_rendering (1.2), plus its dependencies on 1.1.
 ESIA_TEST(VulkanScenes, OlderApiVersions)
 {
-    for (const char* name : {"glass", "text_lcd", "msaa_target"})
+    for (const char* name : {"glass", "text", "msaa_target"})
     {
         const conformance::Scene* scene = conformance::FindScene(name);
         const Rendered v13 = Render(*scene, true, 1);

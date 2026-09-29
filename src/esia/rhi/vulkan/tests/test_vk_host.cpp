@@ -52,7 +52,6 @@ namespace
         VkDevice device = VK_NULL_HANDLE;
         std::uint32_t family = 0;
         VkQueue queue = VK_NULL_HANDLE;
-        bool dualSrcBlend = false;
 
         bool Create(std::string& error)
         {
@@ -100,11 +99,6 @@ namespace
             vk.vkGetPhysicalDeviceQueueFamilyProperties(gpu, &n, families.data());
             while (family < n && !(families[family].queueFlags & VK_QUEUE_GRAPHICS_BIT))
                 ++family;
-            VkPhysicalDeviceFeatures2 f{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-            vk.vkGetPhysicalDeviceFeatures2(gpu, &f);
-            dualSrcBlend = f.features.dualSrcBlend == VK_TRUE;
-            VkPhysicalDeviceFeatures enabled{};
-            enabled.dualSrcBlend = f.features.dualSrcBlend;
             const float priority = 1.0f;
             VkDeviceQueueCreateInfo qi{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
             qi.queueFamilyIndex = family;
@@ -112,8 +106,7 @@ namespace
             qi.pQueuePriorities = &priority;
             VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
             dci.queueCreateInfoCount = 1;
-            dci.pQueueCreateInfos = &qi;
-            dci.pEnabledFeatures = &enabled;
+            dci.pQueueCreateInfos = &qi;   // no features: an application that needs none of the optional ones
             if (family >= n || vk.vkCreateDevice(gpu, &dci, nullptr, &device) != VK_SUCCESS || !vk.LoadDevice(device, false, false, error))
                 return false;
             vk.vkGetDeviceQueue(device, family, 0, &queue);
@@ -288,7 +281,6 @@ namespace
         desc.queue = host.queue;
         desc.apiVersion = VK_API_VERSION_1_1;
         desc.framesInFlight = HostTarget::kFrames;
-        desc.dualSrcBlend = host.dualSrcBlend;
         desc.debugUtils = host.messenger != VK_NULL_HANDLE;
         return vulkan::CreateDevice(desc, &error);
     }

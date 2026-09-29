@@ -6,8 +6,7 @@
 //   d.instance = instance; d.physicalDevice = gpu; d.device = device; d.queueFamily = family; d.queue = queue;
 //   d.apiVersion = VK_API_VERSION_1_3;      // what the device was created with (>= 1.1)
 //   d.framesInFlight = 2;                   // the host's own frames in flight (see "Frames" below)
-//   d.dualSrcBlend = true;                  // the features / extensions the host enabled on `device`
-//   d.dynamicRendering = true;
+//   d.dynamicRendering = true;              // the features / extensions the host enabled on `device`
 //   std::unique_ptr<esia::rhi::Device> dev = esia::rhi::vulkan::CreateDevice(d, &error);
 //
 // The backend loads every entry point through Desc::getInstanceProcAddr (null: it opens the system loader itself),
@@ -66,7 +65,6 @@ namespace esia::rhi::vulkan
         int framesInFlight = 2;
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;            // null: the backend keeps its own
         // What the host enabled on `device` (the backend only uses what is enabled):
-        bool dualSrcBlend = false;       // VkPhysicalDeviceFeatures::dualSrcBlend: sub-pixel text
         bool dynamicRendering = false;   // Vulkan 1.3 dynamicRendering or VK_KHR_dynamic_rendering; else render passes
         bool debugUtils = false;         // VK_EXT_debug_utils on the instance: resources get their debug names
     };
