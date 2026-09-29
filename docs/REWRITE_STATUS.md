@@ -1,21 +1,26 @@
 # Esia rewrite - status of `esia-core`
 
-Where the ImGui-free rewrite stands after core round 2 (2026-09-29). The plan is [REWRITE.md](REWRITE.md); how to
+Where the ImGui-free rewrite stands after core round 3 (2026-09-29). The plan is [REWRITE.md](REWRITE.md); how to
 write a backend is [backends/README.md](backends/README.md).
 
-**In one paragraph.** Round 1 built phase 0: the UI core without Dear ImGui, the RHI with a validating null device,
-the shader pipeline, the renderer with WGT's techniques, the conformance suite, the text interface with FreeType +
-HarfBuzz, the LLVM toolchains and the two documents (section 8). Four backend sessions then wrote OpenGL / GLES,
-Vulkan, Metal and Direct3D 9 / 10 / 11 / 12 on their own branches, and a local Windows session ran them on an NVIDIA
-RTX 4080 SUPER (section 3). Round 2 fixed on `esia-core` what those sessions and an independent review found: the
-clang-cl build, the image goldens in core, a conformance suite that cannot mistake a skip for a pass and fails on
-API validation messages, new scenes and a cross-frame mode, pyramid levels that stay defined when glass reuses a
-capture, fallbacks for refused and still-compiling FX variants, targets that cannot be copied, the SM3 shader
-defects, and the FX shader's per-pixel fetch of all 24 instance rows (section 1). Everything builds warning-free
-with clang 18 and every core test passes; merged into scratch copies of the backend branches, the OpenGL, GLES and
-Vulkan suites (llvmpipe / lavapipe) and the Direct3D 9 / 10 / 11 suites (under Wine) pass `--strict` in both modes
-(section 2). The backend branches were not changed: what they must adopt is in section 5.
+**Round 3.** By the owner's decision, sub-pixel (LCD / ClearType) text was removed from Esia: text is antialiased
+in grayscale everywhere (section 0). The backends must delete their dual-source code after merging (section 0,
+"Backend follow-ups"); the grayscale scenes render bit-identical.
 
+**Before that, in one paragraph.** Round 1 built phase 0: the UI core without Dear ImGui, the RHI with a validating null
+device, the shader pipeline, the renderer with WGT's techniques, the conformance suite, the text interface with
+FreeType + HarfBuzz, the LLVM toolchains and the two documents (section 8). Four backend sessions then wrote OpenGL /
+GLES, Vulkan, Metal and Direct3D 9 / 10 / 11 / 12 on their own branches, and a local Windows session ran them on an
+NVIDIA RTX 4080 SUPER (section 3). Round 2 fixed on `esia-core` what those sessions and an independent review found: the
+clang-cl build, the image goldens in core, a conformance suite that cannot mistake a skip for a pass and fails on API
+validation messages, new scenes and a cross-frame mode, pyramid levels that stay defined when glass reuses a capture,
+fallbacks for refused and still-compiling FX variants, targets that cannot be copied, the SM3 shader defects, and the FX
+shader's per-pixel fetch of all 24 instance rows (section 1). Everything builds warning-free with clang 18 and every
+core test passes; merged into scratch copies of the backend branches, the OpenGL, GLES and Vulkan suites (llvmpipe /
+lavapipe) and the Direct3D 9 / 10 / 11 suites (under Wine) pass `--strict` in both modes (section 2). The backend
+branches were not changed: what they had to adopt is in section 5 (the local session has done it, section 3).
+
+* [0. Round 3: sub-pixel text removed](#0-round-3-sub-pixel-text-removed)
 * [1. Round 2: what changed](#1-round-2-what-changed)
 * [2. Verified in round 2](#2-verified-in-round-2)
 * [3. Results on Windows (the local session)](#3-results-on-windows-the-local-session)
@@ -25,6 +30,75 @@ Vulkan suites (llvmpipe / lavapipe) and the Direct3D 9 / 10 / 11 suites (under W
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## 0. Round 3: sub-pixel text removed
+
+**By the owner's decision, Esia has no sub-pixel (LCD / ClearType) text any more: text is antialiased in grayscale
+everywhere.** Gone: per-stripe RGB coverage and the RGB / BGR stripe order, dual-source blending, the ClearType level
+and contrast (and with them anything about OLED stripe layouts). Kept: sub-pixel *positioning* (the quarter-pixel pen
+phases of the rasterizer and the atlas) and the grayscale gamma / contrast composition. The legacy WGT code (`src/`,
+`include/wgt`, `examples`, the root `CMakeLists.txt`'s legacy shaders) and its documents (`README.md`, `docs/API.md`,
+`ARCHITECTURE.md`, `INTEGRATION.md`) still describe WGT's ClearType text: a separate task on another branch.
+
+Commits: `3527cae` text - `fbc8b95` renderer, core textures, conformance - `c7eabc7` RHI and shaders - `273459e`
+docs - and the `[cloud-done]` commit with this file.
+
+| Where | Removed |
+| --- | --- |
+| RHI (`rhi.hpp`, `rhi.cpp`) | `BlendMode::DualSourceLcd`, `ShaderProgram::TextLcd` / `TextLcdGray` (the programs after them are renumbered: `Fx` 2, `Downsample` 3, `LayerComposite` 4, `Clear` 5 - the RHI makes no ABI promise yet), `Caps::dualSourceBlend` |
+| Null device | its dual-source refusal and the TextLcd / dual-source pairing check |
+| Shaders | `TextLcdPS`, `TextLcdGrayPS`, `TextLcdOut` (`esia_ui.hlsl`); `gText.zw` unused (0). The library regenerated: the 16 TextLcd / TextLcdGray files (SPIR-V, GLSL, ESSL, MSL) gone, the table shorter, every other generated file byte-identical. `build_shaders.py` lost the dual-source SPIR-V patch (Location 1 -> Index 1), the GLES `blend_func_extended` line and the D3D9 TextLcd exception |
+| Renderer, frame planner | LCD batches (`RenderOp::lcd`), the LCD-inside-glow-layer fallback, dual-source pipeline requests - text always draws with `TextGray`; `TextComposition::clearTypeContrast` / `clearTypeLevel` |
+| Core textures | `TextureFlags_LcdCoverage`, and with it `TextureInfo::flags` (it had no other flag); `Coverage()` means Alpha8 |
+| Text | `RasterizeLcd` (the 5-tap LCD filter, the stripe order), `GlyphBitmap::lcd`, the atlas's sub-pixel pages (`PageCount()` has no argument), `text::Antialiasing` / `RasterParams::antialiasing`, `FreeTypeDesc::lcdBgr` |
+| Tests | the `text_lcd` scene with `golden/text_lcd.png` and `golden/null/text_lcd.log` (and `Scene::needsDualSource`, the harness's dual-source skip), the LCD filter / stripe-order test, `tests/text/golden/ft_lcd.png`; the atlas, FreeType, frame-plan and renderer tests keep their grayscale halves |
+| Docs | REWRITE.md (caps, API table, limits per API, bindings, text section, risks) and the backend guide (caps table, programs and blend modes, the GL / GLES / SPIR-V / D3D9 notes, the conformance SKIP rules) |
+
+The null goldens changed only in the frame constants' `gText.zw` (ClearType contrast and level): `0.5 1` became
+`0 0` on the `constants frame` lines of the 17 logs - checked line by line, nothing else changed in any command
+stream. The image goldens are unchanged.
+
+### Verified in round 3
+
+Same container and tools as section 2; the core at `273459e` (the code of the final commit), fresh build directories.
+
+| Command | Result |
+| --- | --- |
+| `cmake --preset linux-clang -DESIA_WERROR=ON`, build, `ctest --preset linux-clang` | 0 warnings; 8 / 8: core 39, text 9, render 42, testkit 5, text_ft 12, `esia_conformance_null` (17 scenes, `--strict`), shader 1, GLSL / ESSL link 1 (every program now links on GL and GLES) |
+| the same with `linux-clang-release` | 0 warnings, 8 / 8 |
+| `cmake --preset windows-mingw-cross -DESIA_WERROR=ON`, build; the test executables under Wine | 0 warnings; core 39, text 9, render 42, testkit 5, shader 1 pass; `esia_conformance.exe --backend null --strict` 17 / 17 |
+| `python3 tools/shaders/build_shaders.py --check` | `generated shaders are up to date` |
+| `esia_conformance --backend null --golden tests/conformance/golden --strict` | 17 / 17 (Debug and Release) |
+| `esia_text_ft_tests` | the FreeType text golden `ft_gray.png` renders bit-identical |
+| `esia-opengl` (`0093194`) with this `esia-core` merged in a scratch worktree (never pushed) and the backend's dual-source code deleted there (11 lines of follow-up 1 below; the unused `GL_SRC1_*` constants left) | `linux-clang -DESIA_WERROR=ON -DESIA_BACKEND_OPENGL=ON`: 0 warnings, ctest 13 / 13; `--strict` and `--frames 3` on llvmpipe: `opengl` and `gles` 17 / 17 each, their images identical to the round-2 renders (max delta 0 on all 17; the scenes with their own golden at max delta 0 against it); with `ESIA_GL_CORE_ONLY=1` 17 / 17 each too, no skip left (`text_lcd` was the only one) |
+| `esia-vulkan` (`c31bb35`), the same way (follow-up 2's device and test parts; the `dualSrcBlend` feature request left in) | 0 warnings, ctest 13 / 13 on lavapipe with the validation layer; `--strict` and `--frames 3`, dynamic rendering and render passes: 17 / 17 each, max delta 4, 0 validation messages; the dynamic-rendering images identical to the round-2 renders (max delta 0) |
+
+Not run in round 3: Metal and Direct3D (their dual-source code was not removed in a scratch copy), the Windows builds,
+real GPUs.
+
+### Backend follow-ups (round 3)
+
+After merging this `esia-core`, each backend deletes its dual-source blend state and caps and its `TextLcd` /
+`TextLcdGray` pipelines; it does not compile before that.
+
+1. **OpenGL**: `caps_.dualSourceBlend` (`GL_EXT_blend_func_extended`), the `GL_SRC1_COLOR` blend case and the
+   dual-source refusal (`gl_device.cpp`), the `GL_SRC1_*` constants (`gl_api.hpp`); in `test_gl_device.cpp` the
+   `needsDualSource` skips and the `dualSourceBlend` caps check.
+2. **Vulkan**: `caps_.dualSourceBlend`, the `DualSourceLcd` blend case and refusal (`vk_device.cpp`), the
+   `dualSrcBlend` feature (`Desc::dualSrcBlend` in `vulkan.hpp`, `vk_headless.cpp`, `test_vk_host.cpp`); in
+   `test_vk_device.cpp` the TextLcd programs of `ProgramDesc` and the dual-source expectation, and in
+   `test_vk_scenes.cpp` `OlderApiVersions`, which asks for `text_lcd` (`FindScene` now returns null there).
+3. **Metal**: the `[[color(0), index(1)]]` output: `dualSourceBlend` in `metal_gpu.hpp`, `metal_device.mm` and
+   `metal_device_core.cpp`, the `DualSourceLcd` blend state (`metal_tables.cpp`), the TextLcd checks in
+   `metal_planning.cpp`; tests: `test_metal_msl.cpp`'s second-output expectation, `test_metal_planning.cpp`,
+   `test_metal_tables.cpp`, the fake GPU's `index(1)` handling.
+4. **Direct3D 10 / 11 / 12**: `c.dualSourceBlend = true`, the dual-source blend states (`D3D1x_BLEND_SRC1_*`), and
+   the `(desc.blend == DualSourceLcd) != (desc.program == TextLcd)` check in each `CreatePipeline`.
+5. **Direct3D 9**: `caps_.dualSourceBlend = false`, its refusal of `TextLcd` / `DualSourceLcd` and the blend case; in
+   `test_d3d9.cpp` the TextLcd exception of the program loop and the `!dualSourceBlend` check.
+6. **Every backend**: tests, SKIP rules and STATUS text that mention `text_lcd` (17 scenes now, none skipped for a
+   capability). `ShaderProgram` values after `TextGray` moved down by two: the backends name them symbolically (a
+   search found no stored numbers), so rebuilding is enough.
 
 ## 1. Round 2: what changed
 
@@ -277,7 +351,7 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
 | 2. UI core without ImGui | `include/esia/{base,core}`, `src/esia/core` | ids (FNV-1a id stack, `##` / `###` labels), thread-safe input queue and input state, context (windows with layers and z-order, focus, move / resize, items with hover / active arbitration, layout cursor, groups, clipping, scrolling, keyboard focus), draw lists with the FX stream, the texture registry, UTF-8 decoding |
 | 3. RHI | `include/esia/rhi`, `src/esia/rhi` | `rhi::Device` (resources, frames, passes that start with nothing bound, fixed binding model, copies, readback, profiling, host callbacks, validation counts, background pipelines), `Caps` instead of API versions, `RawFormat`, the backend registry, the null device that records the command stream and enforces the call-order and binding rules |
 | 4. Renderer | `include/esia/render`, `src/esia/render`, `src/esia/shaders` | `Painter` (WGT's, byte-identical `fx::Instance`), `FramePlan` (batching, dirty rectangles, look-ahead capture merging, levels per capture), `Renderer` (region-limited captures, the direct render-target read, the pyramid, B-spline frost sampling, glow layers with region clears, lazy passes, FX feature variants, GPU profile categories); one HLSL source, SPIR-V / GLSL 330 / ESSL 300 / MSL generated by `tools/shaders/build_shaders.py` and checked in, the HLSL embedded for runtime compilation, the Direct3D 9 hooks |
-| 5. Conformance suite | `tests/conformance`, `tests/support` | 18 scenes (14 in round 1) through the public API, image goldens and null command-stream goldens, a self-contained PNG codec and comparison |
+| 5. Conformance suite | `tests/conformance`, `tests/support` | 17 scenes (14 in round 1, 18 in round 2; round 3 removed `text_lcd`) through the public API, image goldens and null command-stream goldens, a self-contained PNG codec and comparison |
 | 6. Backend guide | `docs/backends/README.md` | files and CMake, host integration headers, the RHI call by call, caps per API, binding numbers, recipes for every API, the LLVM toolchains, the conformance suite, a checklist |
 | 7. Text (stretch) | `include/esia/text`, `src/esia/text` | `text::TextSystem`; WGT's analytic rasterizer made platform-free; the glyph atlas on the texture registry; `esia_text_ft`: FreeType + HarfBuzz shaping, fallback, line breaking, trimming, alignment, with two golden images |
 | Toolchains | `CMakePresets.json`, `cmake/toolchains` | `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross` (clang-cl + lld-link + xwin), `windows-mingw-cross` (clang + mingw-w64); the MSVC presets `vs2022` / `release` / `debug` unchanged |
@@ -291,8 +365,9 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
 
 ## 9. Next
 
-1. **Backends**: merge `esia-core` into each backend branch and do section 5; then merge the backends (OpenGL
-   first), each passing `--strict` and `--frames 3` with `ValidationErrors` implemented.
+1. **Backends**: merge `esia-core` into each backend branch and delete the dual-source code (section 0, "Backend
+   follow-ups"); then merge the backends (OpenGL first), each passing `--strict` and `--frames 3` with
+   `ValidationErrors` implemented.
 2. **Measure** Esia against WGT's legacy D3D11 backend on the same UI (needs the widget port or a scene in WGT's API);
    run Metal on a Mac.
 3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
