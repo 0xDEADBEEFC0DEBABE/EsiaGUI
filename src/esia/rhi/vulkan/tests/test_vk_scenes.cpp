@@ -108,6 +108,9 @@ ESIA_TEST(VulkanScenes, FramesInFlight)
         float sum = 0.0f;
         for (float ms : five.profile.categoryMs)
             sum += ms;
+        const float* c = five.profile.categoryMs;
+        std::printf("  %-10s GPU %.2f ms: capture %.2f, layer %.2f, fx %.2f, fx-glass %.2f, geometry %.2f\n", name, five.profile.totalMs, c[0], c[1], c[2],
+                    c[3], c[4]);
         ESIA_CHECK(sum > 0.0f && sum <= five.profile.totalMs * 1.01f);
     }
 }
