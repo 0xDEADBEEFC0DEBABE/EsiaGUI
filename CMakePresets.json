@@ -58,6 +58,14 @@
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl-xwin.cmake",
       "cacheVariables": { "BUILD_TESTING": "OFF" },
       "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-mingw-cross",
+      "displayName": "Esia - Windows x64 from Linux, clang + ld.lld + mingw-w64 (compile / link check when xwin is unavailable)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/windows-mingw-cross",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-mingw.cmake",
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     }
   ],
   "buildPresets": [
@@ -67,7 +75,8 @@
     { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
     { "name": "macos-clang", "configurePreset": "macos-clang" },
     { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl" },
-    { "name": "windows-cross", "configurePreset": "windows-cross" }
+    { "name": "windows-cross", "configurePreset": "windows-cross" },
+    { "name": "windows-mingw-cross", "configurePreset": "windows-mingw-cross" }
   ],
   "testPresets": [
     { "name": "linux-clang", "configurePreset": "linux-clang", "output": { "outputOnFailure": true } },

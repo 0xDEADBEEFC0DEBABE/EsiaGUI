@@ -1,6 +1,9 @@
 # Esia tests (CTest): unit tests of the core, renderer and RHI, and the backend conformance suite.
 add_library(esia_test_main STATIC esia_test.cpp)
 target_include_directories(esia_test_main PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# the static MinGW libstdc++ (posix threads model) needs winpthreads in every executable
+find_package(Threads REQUIRED)
+target_link_libraries(esia_test_main PUBLIC Threads::Threads)
 esia_target_defaults(esia_test_main)
 
 function(esia_add_test name)
