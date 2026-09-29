@@ -13,7 +13,8 @@
 * fails when a test failed, unless every scene it failed is a --known-failure 'TEST_REGEX:SCENE:REASON' (SCENE '*'
   for a test that fails without scene lines, e.g. a crash): those are listed with their reason and the scene's
   numbers, and a known failure that no longer fails is reported so its entry can go. The job's ctest step leaves
-  the verdict to this script (it reads the JUnit file, which has every result).
+  the verdict to this script (it reads the JUnit file, which has every result);
+* lists the tests a job does not run at all (--not-run 'TEST_REGEX:REASON', the same regex as its ctest -E).
 """
 import argparse
 import os
@@ -29,6 +30,8 @@ def main():
     ap.add_argument('junit')
     ap.add_argument('--require', action='append', default=[], help='regex (full match) of tests that must run')
     ap.add_argument('--known-failure', action='append', default=[], help="'TEST_REGEX:SCENE:REASON'")
+    ap.add_argument('--not-run', action='append', default=[],
+                    help="'TEST_REGEX:REASON': tests the job excludes from ctest (-E), listed with the reason")
     ap.add_argument('--title', default='ctest')
     args = ap.parse_args()
 
@@ -80,6 +83,13 @@ def main():
                 used[0] = True
                 return reason
         return None
+
+    if args.not_run:
+        lines += ['', '**Not run on this runner** (excluded from ctest by the workflow):', '',
+                  '| Tests | Why |', '| --- | --- |']
+        for entry in args.not_run:
+            test_rx, reason = entry.split(':', 1)
+            lines.append('| `%s` | %s |' % (test_rx.replace('|', '\\|'), reason.replace('|', '/')))
 
     errors = []
     excused = []
