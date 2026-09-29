@@ -13,8 +13,31 @@ project(WafflingGameToolkit VERSION 1.1.0 LANGUAGES CXX)
 #       cpack --config build/CPackSourceConfig.cmake              ->  WGT-<version>-src.zip
 # ------------------------------------------------------------------------------
 
-if(NOT WIN32)
-    message(FATAL_ERROR "WGT UI targets Windows (DirectX 11 / 12).")
+# ------------------------------------------------------------------------------
+# Esia (the ImGui-free rewrite, docs/REWRITE.md) lives next to the current toolkit:
+#   WGT_BUILD_LEGACY : wgt.dll and its examples, exactly as before (Windows + MSVC + fxc)
+#   ESIA_BUILD_CORE  : the portable Esia libraries, tests and backends (src/esia, tests)
+# With MSVC on Windows the defaults build only wgt.dll, so that build is unchanged. Everywhere else (clang,
+# clang-cl, Linux, macOS) the defaults build only Esia.
+# ------------------------------------------------------------------------------
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(_wgt_legacy_default ON)
+else()
+    set(_wgt_legacy_default OFF)
+endif()
+option(WGT_BUILD_LEGACY "Build the current wgt.dll (Dear ImGui based; Windows, needs fxc)" ${_wgt_legacy_default})
+if(_wgt_legacy_default)
+    set(_esia_default OFF)
+else()
+    set(_esia_default ON)
+endif()
+option(ESIA_BUILD_CORE "Build the Esia core, renderer, RHI backends and tests" ${_esia_default})
+
+if(WGT_BUILD_LEGACY AND NOT WIN32)
+    message(FATAL_ERROR "WGT UI targets Windows (DirectX 11 / 12). Configure with -DWGT_BUILD_LEGACY=OFF to build Esia only.")
+endif()
+if(NOT WGT_BUILD_LEGACY AND NOT ESIA_BUILD_CORE)
+    message(FATAL_ERROR "Nothing to build: enable WGT_BUILD_LEGACY and / or ESIA_BUILD_CORE.")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -26,6 +49,16 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 option(WGT_BUILD_EXAMPLES "Build the demo application and example plugin" ON)
+
+if(ESIA_BUILD_CORE)
+    add_subdirectory(src/esia)
+    include(CTest)
+    if(BUILD_TESTING)
+        add_subdirectory(tests)
+    endif()
+endif()
+
+if(WGT_BUILD_LEGACY)
 
 include(cmake/WgtShaders.cmake)
 
@@ -162,3 +195,4 @@ set(CPACK_SOURCE_IGNORE_FILES
     "\\.user$"
     "\\.log$")
 include(CPack)
+endif()   # WGT_BUILD_LEGACY
