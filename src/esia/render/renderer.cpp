@@ -248,7 +248,7 @@ namespace esia::render
         }
 
         // Vertex, index and FX instance data, once per frame before the first pass. Instances go to the GPU with
-        // their integer row (flags) as float values: the shaders read every row as float4 (FxLoad).
+        // their integer row (flags) as float values: the shaders read every row as float4 (FxFetch).
         bool Upload()
         {
             if (!plan.vertices.empty())

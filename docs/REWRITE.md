@@ -192,6 +192,8 @@ the current Direct3D backends:
   something draws: an empty pass costs a full-target load and store on tile-based GPUs);
 * FX instances go to the GPU as float4 rows, in a structured / storage buffer or an RGBA32F texture
   (`Caps::fxStorage`); the batch's first instance is a per-draw constant (no API needs base-instance support).
+  The vertex shader hands the rows every pixel reads to the pixel shader as flat varyings; the others are fetched
+  only by the branches of the features that use them (section 16).
 
 ## 6. The render hardware interface (RHI)
 
@@ -479,11 +481,19 @@ Cross-compiling the DirectX backends from Linux:
 ## 16. Risks and open questions
 
 * **SM3 instruction budget.** The whole FX shader may exceed what a D3D9 profile accepts; the variant mechanism
-  exists for that, but the D3D9 backend has to prove it with fxc on Windows.
-* **FX instance fetch in the pixel shader.** WGT passed the instance to the pixel shader as 24 flat interpolants
-  (D3D11 has 32); Esia fetches the fields from the instance buffer / texture (GL 3.3 / GLES 3 / D3D10 guarantee 16).
-  Compilers drop unused loads, but the cost against WGT must be measured with the GPU profile categories on
-  D3D11; an interpolant variant (`ESIA_FX_INTERPOLANTS`) can be added for APIs with 32 varyings if needed.
+  exists for that. Measured with Microsoft's compiler: since the hot rows arrive as varyings even the mask with all
+  15 features compiles for `ps_3_0` (5.4k slots; before, glass with seven other features - `0x1FF` - ran out of
+  temporary registers), within the 32k slots of current GPUs but far over the 512 SM3 guarantees - D3D9 on older
+  hardware stays a risk.
+* **FX instance data.** WGT passed the whole instance to the pixel shader as 24 flat interpolants (D3D11 has 32);
+  GL 3.3 / GLES 3 / D3D10 guarantee 15 - 16 and SM3 10. The first Esia shader fetched all 24 rows at the start of
+  every pixel - an über-shader keeps every load its branches might need, so "unused loads are dropped" did not
+  hold, and a plain rounded rect paid 24 fetches per pixel. Now the vertex shader fetches the six hot rows (rect,
+  radii, fill color, shape parameters, opacity, flags) and passes them as flat varyings (8 interpolators with the
+  position and instance index), and each branch fetches the cold rows it reads: a solid shape reads nothing per
+  pixel. `ESIA_FX_FETCH_ALL` restores the old path for A / B timing with the GPU profile categories
+  (`tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1`, or the define in a backend's runtime
+  compilation); both paths render the same pixels.
 * **Metal from a Linux session.** It cannot be compiled or run there; the Metal backend needs a macOS machine
   (`macos-clang` preset, `xcrun metal` to validate the MSL) before it is trusted.
 * **D3D shaders from a Linux session.** DXBC comes from a Windows run (or `D3DCompile` at runtime); the DirectX
