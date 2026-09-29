@@ -195,12 +195,14 @@ scenes); D3D12 GPU-based validation clean. Largest differences from the llvmpipe
 
 ## 5. Known issues
 
-1. **SM3 cannot hold every FX feature combination.** Measured with Microsoft's compiler: every mask without
-   glass fits `ps_3_0` (all 14 other features together: 1.7k slots); glass fits with up to about seven other
-   features (`0xFF`: 4k slots), but e.g. glass + stroke + shadow + glow + inner glow + image + shimmer + inner
-   shadow (`0x1FF`) exceeds the 32 temporary registers (X4505; `D3DCOMPILE_PREFER_FLOW_CONTROL`,
-   `SKIP_OPTIMIZATION`, `OPTIMIZATION_LEVEL0` do not help). Such a batch gets no pipeline and is not drawn (the
-   renderer skips batches without a pipeline). See core request 5.
+1. **Resolved: SM3 holds every FX feature combination.** The first session measured glass + eight features
+   (`0x1FF`) over the 32 temporary registers (X4505), so such a batch was not drawn. The core's hot-row change
+   (round 2, `f7156e4`: the six hot instance rows arrive as read-only input registers) freed them. Checked on the
+   RTX 4080 SUPER with Microsoft's compiler and the D3D9 driver: `0xFF`, `0x1FF`, `0x9FF`, `0x3FFF`, `0x7FFF` (all 15
+   features) and the full shader compile for `ps_3_0` and create as driver shaders; a batch of glass + eight
+   features (`0x9bf`) renders within max delta 16 (0.013 % of the pixels) of D3D11; and every conformance scene's
+   first frame, drawn with the full shader while its variants compile, matches its golden. A variant that failed
+   anyway would now be drawn with the full shader (core round 2), never skipped.
 2. **Two core defects worked around** in the backends: fxc cannot `#include` a macro (the SM3 prelude is
    prepended to the source), and one feature test in `esia_fx.hlsl` uses integer bit operations (patched in the
    source text for SM3 only, a no-op once fixed). Core requests 1 and 2.
