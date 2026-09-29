@@ -122,15 +122,42 @@ not re-run here:
 | Metal (portable parts) | clang-cl 22.1.8, `ESIA_WERROR=ON`: 0 warnings, 8 / 8 tests (the fake-GPU tests drive all 14 scenes; the conformance run SKIPs Metal) |
 | Vulkan | did not build with clang-cl and `ESIA_WERROR=ON` before `cb67f8c` (missing-field-initializer warnings); no Windows result recorded |
 
+### After round 2 (the local session, same machine)
+
+Each backend branch merged this `esia-core` and took its follow-ups (section 5); the results are in their STATUS
+files and commits (`0093194` OpenGL, `eb8348c` Metal, `c31bb35` Vulkan, `60773c9` Direct3D). In short: every
+backend passes all 18 scenes with `--strict`, single frame and `--frames 3`, with its API's validation counted
+(`ValidationErrors`) - OpenGL and GLES (0 GL errors), Vulkan with dynamic rendering and with render passes (SDK
+1.4.357 validation, 0 messages), D3D11 / 12 / 10 (debug layers, D3D12 GPU-based validation) - except D3D9's
+`text_lcd` SKIP; largest delta 33 (D3D9 `srgb_msaa`, 0.016 % of the pixels). Found on the real machine: the Vulkan
+loader's messages about other software's layer manifests counted as validation errors, the D3D9 backdrop copy lost
+its zero upload at its first copy, and the public headers did not compile after `<windows.h>` without `NOMINMAX`
+(`3a8d164`).
+
+**FX fetch, measured** (section 1, 4.4): D3D11, conformance scenes scaled 8x to 2560 x 1920, medians of 400 frames,
+three alternating runs of each build (`ESIA_FX_FETCH_ALL` for the old path), identical to 0.01 ms between runs:
+
+| Scene | Fx, hot rows (ms) | Fx, every row (ms) | FxGlass, hot rows | FxGlass, every row |
+| --- | --- | --- | --- | --- |
+| shapes | 8.94 | 10.46 (-14.5 %) | - | - |
+| gradients | 7.23 | 8.81 (-17.9 %) | - | - |
+| shadows | 11.63 | 14.13 (-17.7 %) | - | - |
+| glass | 7.70 | 8.99 (-14.3 %) | 10.29 - 10.57 | 11.74 - 11.80 (-11 %) |
+| hidpi | 8.89 | 10.35 (-14.1 %) | 3.77 - 3.80 | 4.28 (-12 %) |
+
+The capture category varies between runs (2.6 - 10 ms for the same frames) and is left out. Not measured: WGT's
+legacy D3D11 backend on the same content (it takes WGT's own API), and the A / B on GL, GLES and Vulkan (their
+libraries need `build_shaders.py --define ESIA_FX_FETCH_ALL=1`).
+
 ## 4. Not verified
 
 * **No GPU here.** Nothing in this round ran on a hardware GPU. OpenGL / GLES and Vulkan ran on Mesa's CPU drivers,
   Direct3D 9 / 10 / 11 only under Wine (wined3d on llvmpipe), Direct3D 12 not at all (it does not start under
   Wine), Metal not at all (it cannot be compiled on Linux; its portable parts and mocks ran). No claim is made here
   that the D3D, Metal or Win32 code works on real drivers; section 3 is the local session's report.
-* **Performance.** The FX fetch restructure (4.4) was not timed: pixels are identical, the per-pixel fetches of a
-  solid shape went from 24 to 0, but the GPU time was not measured. `ESIA_FX_FETCH_ALL` is there for the A / B run
-  on the RTX 4080 with the GPU profile categories.
+* **Performance.** The FX fetch restructure (4.4) was timed on D3D11 only (section 3: FX batches 14 - 18 % faster,
+  glass batches 11 - 12 %); GL, GLES and Vulkan were not A / B timed, and nothing was compared with WGT's legacy
+  D3D11 backend.
 * **Windows builds of this round.** The clang-cl flag (`cb67f8c`) was added without a Windows machine; the
   `windows-clang-cl`, `windows-cross` and MSVC builds of the round-2 core were not run here.
 * **The new RHI features have no backend yet**: `asyncPipelines`, `hostFrame` and `ValidationErrors` are exercised
@@ -266,8 +293,8 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
 
 1. **Backends**: merge `esia-core` into each backend branch and do section 5; then merge the backends (OpenGL
    first), each passing `--strict` and `--frames 3` with `ValidationErrors` implemented.
-2. **Measure** the FX fetch on the RTX 4080 (`ESIA_FX_FETCH_ALL` A / B with the GPU profile categories) and against
-   WGT's D3D11 numbers; run the new scenes on the real drivers and Metal on a Mac.
+2. **Measure** Esia against WGT's legacy D3D11 backend on the same UI (needs the widget port or a scene in WGT's API);
+   run Metal on a Mac.
 3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
    batches, DXBC generated and checked in.
 4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query; DirectWrite and Core Text behind
