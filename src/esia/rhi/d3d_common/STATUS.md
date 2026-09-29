@@ -135,13 +135,31 @@ exhaustion; a debug-layer warning from the optimized clear value; D3D10 / 11 pre
 devices with fewer. All fixed in `1678669`, except the timestamp slot reuse (known issue 15, accepted). An
 earlier finding, `ClearState` dropping host state that the backup does not capture, was fixed in `2c73c92`.
 
+### Windows, NVIDIA (the local Windows session, after the cloud session)
+
+Windows 11, NVIDIA GeForce RTX 4080 SUPER (driver 610.88), Graphics Tools debug layers, the section 7 plan:
+
+| Run | Result |
+| --- | --- |
+| `windows-clang-cl`, clang-cl 22.1.8, `-DESIA_WERROR=ON`, all four options | 0 warnings, after two fixes the Windows SDK headers needed (below) |
+| MSVC 19.44, `/W4 /WX`, all four options, Debug | 0 warnings; `ctest` 16 / 16 |
+| the six backend test executables, `ESIA_D3D_DEBUG=1` | all pass; no debug-layer warning or error (the compile errors in the log are the tests' deliberately broken user effect) |
+| `esia_conformance --strict` against `esia-opengl`'s goldens, `ESIA_D3D_DEBUG=1` | d3d11, d3d12, d3d10: 14 / 14 PASS (max delta 1 - 6; shadows 20 on <= 0.003 % of the pixels); d3d9: 13 PASS + `text_lcd` SKIP (msaa_target max delta 25 on 0.018 %) |
+| `esia_rhi_d3d12_tests` and the d3d12 conformance run with GPU-based validation (`ESIA_D3D_DEBUG=2`) | pass, no message |
+
+D3D9 draws its glass on the real driver (the SM3 glass variants compile and fit); its first frames compile FX
+variants for up to 2.6 s each (`features 0x822` / `0x823` / `0x826`), which a host notices as hitches. fxc warns
+X3203 (signed / unsigned mismatch) at `esia_fx.hlsl(236)` in every SM3 FX compile (a core shader line).
+
+Fixed on this branch by the local session: `D3D12_HEAP_PROPERTIES` initialized in full (clang-cl's
+`-Wmissing-field-initializers` with the SDK's five-field struct), the `ID3DInclude` overrides `noexcept` (the SDK
+declares them `COM_DECLSPEC_NOTHROW`: `-Wmicrosoft-exception-spec`), and D3D12 render targets created with an
+optimized clear value of transparent black (every `ClearRenderTargetView` was a debug-layer warning without one; a
+host's clear in another color only draws `CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE`, left out of the log).
+
 ## 4. Not verified
 
-* **Any real Windows driver** (the RTX 4080 SUPER run is the local session's), and the D3D debug layers:
-  D3D12 barrier / state tracking, descriptor lifetimes and the host-command-list mode were exercised by vkd3d
-  only; wined3d is far more permissive than real D3D9 / 10 / 11 drivers.
-* **clang-cl and MSVC builds** (Windows SDK headers instead of mingw-w64's; MSVC `/W4` warnings such as C4458 /
-  C4244 that clang does not have).
+* **Other Windows drivers** (AMD, Intel) and WARP; D3D9 only on NVIDIA.
 * **D3D9 on real hardware**: wined3d reports 512 pixel-shader instruction slots but does not enforce them; the
   glass variants of the FX shader need about 3.6k - 4k (NVIDIA / AMD SM3+ parts report 32768). Vertex texture
   fetch of `A32B32G32R32F`, `StretchRect` from `X8R8G8B8` back buffers into `A8R8G8B8`, `UpdateSurface` into

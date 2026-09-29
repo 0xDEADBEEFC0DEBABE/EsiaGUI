@@ -61,7 +61,7 @@ namespace esia::rhi::d3d
         public:
             explicit Includes(const ShaderRequest& r) : request_(r) {}
 
-            HRESULT STDMETHODCALLTYPE Open(D3D_INCLUDE_TYPE, LPCSTR name, LPCVOID, LPCVOID* data, UINT* bytes) override
+            HRESULT STDMETHODCALLTYPE Open(D3D_INCLUDE_TYPE, LPCSTR name, LPCVOID, LPCVOID* data, UINT* bytes) noexcept override
             {
                 const char* text = nullptr;
                 if (std::strcmp(name, "esia_user_effect.hlsli") == 0)
@@ -76,7 +76,7 @@ namespace esia::rhi::d3d
                 return S_OK;
             }
 
-            HRESULT STDMETHODCALLTYPE Close(LPCVOID) override { return S_OK; }
+            HRESULT STDMETHODCALLTYPE Close(LPCVOID) noexcept override { return S_OK; }
 
         private:
             const ShaderRequest& request_;

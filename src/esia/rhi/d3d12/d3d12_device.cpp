@@ -94,7 +94,7 @@ namespace esia::rhi::d3d12
                 }
                 Chunk c;
                 c.size = std::max(kUploadChunk, AlignUp(size + align, 65536));
-                const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_UPLOAD};
+                const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
                 const D3D12_RESOURCE_DESC d = BufferResource(c.size);
                 if (FAILED(dev->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &d, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&c.res))))
                     return {};
@@ -321,9 +321,13 @@ namespace esia::rhi::d3d12
             rd.Flags = rt ? D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET : D3D12_RESOURCE_FLAG_NONE;
             // render targets start as render targets (and are cleared first), the others as copy destinations
             t.state = rt ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_COPY_DEST;
-            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT};
-            // no optimized clear value: LoadOp::Clear takes any color, and a mismatch is a debug-layer warning
-            if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, t.state, nullptr, IID_PPV_ARGS(&t.res)),
+            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
+            // transparent black is what the renderer and this backend clear to (layers, zero-filled creates); without an
+            // optimized clear value every clear is a debug-layer warning, and a host's LoadOp::Clear in another color
+            // only draws a performance note, which DrainMessages leaves out
+            D3D12_CLEAR_VALUE clear = {};
+            clear.Format = f.rtv;
+            if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, t.state, rt ? &clear : nullptr, IID_PPV_ARGS(&t.res)),
                             "CreateCommittedResource (texture)"))
             {
                 DrainMessages();
@@ -796,7 +800,7 @@ namespace esia::rhi::d3d12
                 return false;
             const int bpp = BytesPerPixel(t->desc.format);
             const UINT pitch = (UINT)AlignUp((UINT64)r.Width() * (UINT64)bpp, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_READBACK};
+            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_READBACK, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
             const D3D12_RESOURCE_DESC bd = BufferResource((UINT64)pitch * (UINT64)r.Height());
             ComPtr<ID3D12Resource> readback;
             if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback)),
@@ -898,7 +902,7 @@ namespace esia::rhi::d3d12
             D3D12_QUERY_HEAP_DESC hd = {};
             hd.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
             hd.Count = (UINT)slots_.size() * kMaxStamps;
-            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_READBACK};
+            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_READBACK, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
             const D3D12_RESOURCE_DESC bd = BufferResource((UINT64)hd.Count * sizeof(std::uint64_t));
             caps_.timestampQueries = q && SUCCEEDED(q->GetTimestampFrequency(&frequency_)) && frequency_ != 0 &&
                                      SUCCEEDED(dev_->CreateQueryHeap(&hd, IID_PPV_ARGS(&queries_))) &&
@@ -1161,7 +1165,7 @@ namespace esia::rhi::d3d12
             rd.Flags = D3D12_RESOURCE_FLAG_NONE;
             rd.Alignment = 0;   // the multisampled resource's 4 MB placement alignment is invalid for one sample
             rd.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT};
+            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
             ComPtr<ID3D12Resource> tmp;
             if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_RESOLVE_DEST, nullptr, IID_PPV_ARGS(&tmp)),
                             "CreateCommittedResource (resolve)"))
@@ -1238,6 +1242,8 @@ namespace esia::rhi::d3d12
                 auto* m = reinterpret_cast<D3D12_MESSAGE*>(buf.data());
                 if (size == 0 || FAILED(info_->GetMessage(i, m, &size)))
                     continue;
+                if (m->ID == D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE)
+                    continue;   // a clear in a color other than the optimized one: slower on some GPUs, not wrong
                 const LogLevel level = m->Severity <= D3D12_MESSAGE_SEVERITY_ERROR ? LogLevel::Error
                                        : m->Severity == D3D12_MESSAGE_SEVERITY_WARNING ? LogLevel::Warning
                                                                                          : LogLevel::Info;
