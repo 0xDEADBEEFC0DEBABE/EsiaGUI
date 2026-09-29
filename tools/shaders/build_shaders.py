@@ -7,7 +7,7 @@
       |                                  |-- SPIRV-Cross ------------------> essl300  (OpenGL ES 3.0 / WebGL 2)
       |                                  '-- SPIRV-Cross ------------------> msl      (Metal 2.0)
       |-- fxc (Windows, or under Wine) --------------------------------------> dxbc_sm5 (D3D11 / D3D12), dxbc_sm4 (D3D10)
-      |-- fxc + the D3D9 backend's SM3 prelude ------------------------------> dxbc_sm3 (D3D9; no TextLcd)
+      |-- fxc + the D3D9 backend's SM3 prelude ------------------------------> dxbc_sm3 (D3D9)
       '-- DXC (optional) ----------------------------------------------------> dxil     (D3D12 SM 6)
 
 The output is checked in, so backends build without any shader tool: src/esia/shaders/generated/<format>/
@@ -37,7 +37,6 @@ import os
 import re
 import shlex
 import shutil
-import struct
 import subprocess
 import sys
 import tempfile
@@ -51,14 +50,11 @@ DEFINES = []   # --define NAME=VALUE: extra macros for every compiler
 PROGRAMS = [
     ('UiGeometry', 'esia_ui.hlsl', 'UiVS', 'UiPS'),
     ('TextGray', 'esia_ui.hlsl', 'UiVS', 'TextGrayPS'),
-    ('TextLcd', 'esia_ui.hlsl', 'UiVS', 'TextLcdPS'),
-    ('TextLcdGray', 'esia_ui.hlsl', 'UiVS', 'TextLcdGrayPS'),
     ('Fx', 'esia_fx.hlsl', 'FxVS', 'FxPS'),
     ('Downsample', 'esia_post.hlsl', 'FullscreenVS', 'DownsamplePS'),
     ('LayerComposite', 'esia_post.hlsl', 'FullscreenVS', 'LayerCompositePS'),
     ('Clear', 'esia_post.hlsl', 'FullscreenVS', 'ClearPS'),
 ]
-DUAL_SOURCE = {'TextLcdPS'}
 
 # shaders::Format order (include/esia/render/shader_library.hpp): name -> FX instance storage
 FORMATS = [
@@ -98,37 +94,7 @@ def compile_spirv(glslang, file, entry, stage, storage, tmp):
     if storage == 'texture':
         cmd.insert(-1, '-DESIA_FX_STORAGE_TEXTURE=1')
     run(cmd)
-    data = open(out, 'rb').read()
-    if entry in DUAL_SOURCE:
-        data = dual_source(data)
-        open(out, 'wb').write(data)
-    return out, data
-
-
-def dual_source(spv):
-    """SV_Target1 -> Location 0, Index 1 (glslang has no [[vk::index]]): dual-source blending on attachment 0."""
-    words = list(struct.unpack('<%dI' % (len(spv) // 4), spv))
-    outputs = set()
-    i = 5
-    while i < len(words):   # OpVariable (59) in the Output storage class (3)
-        n, op = words[i] >> 16, words[i] & 0xFFFF
-        if op == 59 and words[i + 3] == 3:
-            outputs.add(words[i + 2])
-        i += n
-    res, i, patched = words[:5], 5, False
-    while i < len(words):
-        n, op = words[i] >> 16, words[i] & 0xFFFF
-        ins = words[i:i + n]
-        if op == 71 and n == 4 and ins[2] == 30 and ins[3] == 1 and ins[1] in outputs:   # OpDecorate Location 1
-            res += [ins[0], ins[1], 30, 0]
-            res += [(4 << 16) | 71, ins[1], 32, 1]                                         # OpDecorate Index 1
-            patched = True
-        else:
-            res += ins
-        i += n
-    if not patched:
-        sys.exit('dual-source patch: no Location 1 output found')
-    return struct.pack('<%dI' % len(res), *res)
+    return out, open(out, 'rb').read()
 
 
 # --------------------------------------------------------------------------------------------- SPIRV-Cross
@@ -154,9 +120,6 @@ def cross(spirv_cross, spv, fmt, stage, entry, tmp):
         text = text.replace('precision mediump float;', 'precision highp float;')
         if 'mediump' in text or 'lowp' in text:
             sys.exit('%s %s: reduced precision left in the ESSL' % (entry, stage))
-    if fmt == 'essl300' and 'index = 1' in text:
-        # dual-source blending on GLES needs EXT_blend_func_extended (the backend only builds TextLcd with it)
-        text = text.replace('#version 300 es\n', '#version 300 es\n#extension GL_EXT_blend_func_extended : require\n', 1)
     return text
 
 
@@ -334,7 +297,7 @@ def main():
                 if fxc:
                     produced['dxbc_sm5'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '5_0', 'buffer', tmp), False, []))
                     produced['dxbc_sm4'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '4_0', 'texture', tmp), False, []))
-                    if os.path.exists(args.sm3_prelude) and prog not in ('TextLcd',):   # D3D9 has no dual-source blending
+                    if os.path.exists(args.sm3_prelude):
                         produced['dxbc_sm3'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '3_0', 'texture', tmp, args.sm3_prelude),
                                                      False, []))
                 if dxc:
