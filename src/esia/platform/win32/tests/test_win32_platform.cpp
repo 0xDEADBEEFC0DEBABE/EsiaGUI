@@ -140,6 +140,12 @@ ESIA_TEST(Win32Platform, LosingTheCaptureReleasesTheButtons)
     ESIA_CHECK(f.Frame().MouseDown(MouseButton::X1));
     f.Send(WM_CAPTURECHANGED, 0, 0);   // another window took it
     ESIA_CHECK(!f.Frame().MouseDown(MouseButton::X1));
+    // a capture the host holds is not the platform's: its changes do not end the UI's press
+    f.Send(WM_XBUTTONUP, MAKEWPARAM(0, XBUTTON1), MAKELPARAM(5, 5));
+    ::SetCapture(f.hwnd);
+    f.Send(WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(5, 5));
+    ::ReleaseCapture();   // sends WM_CAPTURECHANGED
+    ESIA_CHECK(f.Frame().MouseDown(MouseButton::Left));
 }
 
 ESIA_TEST(Win32Platform, WheelNotches)

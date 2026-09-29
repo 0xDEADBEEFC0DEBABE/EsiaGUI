@@ -116,7 +116,7 @@ namespace esia::platform::win32
           destroyMessage(::RegisterWindowMessageW(L"EsiaPlatformWin32.Destroy")),
           uiScale(d.uiScale > 0.0f ? d.uiScale : 1.0f)
     {
-        const LPCWSTR shapes[] = {IDC_ARROW, IDC_IBEAM, IDC_HAND, IDC_SIZEWE, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZENESW, IDC_SIZEALL};
+        static const LPCWSTR shapes[] = {IDC_ARROW, IDC_IBEAM, IDC_HAND, IDC_SIZEWE, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZENESW, IDC_SIZEALL};
         static_assert(std::size(shapes) == (std::size_t)MouseCursor::ResizeAll + 1, "one system cursor per MouseCursor");
         for (std::size_t i = 0; i < std::size(shapes); ++i)
             cursors[i] = ::LoadCursorW(nullptr, shapes[i]);
@@ -543,8 +543,9 @@ namespace esia::platform::win32
             m.OnMouseButton(w, GET_XBUTTON_WPARAM(wparam) == XBUTTON1 ? MouseButton::X1 : MouseButton::X2, false, lparam);
             return false;
         case WM_CAPTURECHANGED:
-            // another window took the capture mid-press (a dialog, a drag and drop): the press is over
-            if ((HWND)lparam != w && m.buttonsDown != 0)
+            // another window took our capture mid-press (a dialog, a drag and drop): the press is over. A capture
+            // the host set itself is the host's business.
+            if ((HWND)lparam != w && m.capturedMouse)
             {
                 m.ReleaseButtons();
                 m.LeaveIfOutside(w);

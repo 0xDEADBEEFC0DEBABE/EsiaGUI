@@ -38,6 +38,8 @@
 //       return r;                                         // the platform answered it (IME, cursor ...)
 //   if (IsMouseMessage(msg) && platform.WantCaptureMouse()) ...   // the UI has the mouse: the game ignores it
 //
+// Its message loop must call TranslateMessage: that is what feeds the IME and turns key presses into WM_CHAR.
+//
 // Threading rules
 //   * Window thread = the thread that created the HWND. Attach, Detach, HandleMessage, CreateAppWindow and
 //     RunMessageLoop run there, and everything that must touch the window happens there: capture, mouse-leave
