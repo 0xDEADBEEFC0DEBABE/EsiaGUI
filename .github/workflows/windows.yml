@@ -23,8 +23,8 @@ env:
     d3d10warp!ShaderConv::CContext::EmitDstInstruction from Translate_TEXLDL, under DrawIndexedPrimitive)
   NOT_RUN_VULKAN: >-
     esia_rhi_vulkan_tests|esia_conformance_vulkan.*:mesa-dist-win's lavapipe corrupts its own heap on Windows (page heap:
-    corrupted start stamp in RtlFreeHeap from vulkan_lvp.dll's vkFreeMemory and its queue thread); the same tests are
-    clean under AddressSanitizer with lavapipe on Linux
+    corrupted start stamp in RtlFreeHeap from vulkan_lvp.dll's vkFreeMemory and its queue thread, with or without the
+    validation layer); the same tests are clean under AddressSanitizer with lavapipe on Linux
   # Scenes that fail only on WARP: recorded with their numbers, not hidden by a wider tolerance
   KNOWN_WARP: >-
     esia_conformance_d3d12(_frames)?:glow_layer:WARP's D3D12 only - a 1-pixel column (x 133, y 42-111) of glow from
@@ -255,6 +255,7 @@ jobs:
       - name: Diagnostics
         if: ${{ !cancelled() }}
         continue-on-error: true
+        timeout-minutes: 15
         run: |
           $bin = (Resolve-Path "${{ matrix.bin }}").Path
           $golden = "tests/conformance/golden"
