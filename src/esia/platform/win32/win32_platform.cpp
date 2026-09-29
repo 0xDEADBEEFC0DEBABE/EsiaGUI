@@ -1,5 +1,6 @@
 // Esia - Win32 platform layer: messages -> InputEvents, PlatformRequests -> the window (esia/platform/win32.hpp).
 #include "win32_platform.hpp"
+#include "esia/base/utf8.hpp"
 #include <windowsx.h>
 #include <algorithm>
 #include <cmath>
@@ -162,8 +163,8 @@ namespace esia::platform::win32
         if (p == lastMousePos)
             return;
         lastMousePos = p;
-        // While captured the position may be negative (dragged past the left / top edge), which the core also
-        // reads as "outside the window": the drag goes on, hover is lost until the mouse is back (core request).
+        // While captured the position may be negative (dragged past the left / top edge): an ordinary position for
+        // the core, which reads only kNoMousePos (InputEvent::MouseLeave) as "no mouse".
         Queue(InputEvent::MouseMove(p));
     }
 
@@ -218,8 +219,8 @@ namespace esia::platform::win32
         if (::PtInRect(&rc, pt) && ::WindowFromPoint(screen) == w)
             return;
         mouseInside = false;
-        lastMousePos = Vec2(-1, -1);
-        Queue(InputEvent::MouseMove(lastMousePos));
+        lastMousePos = Vec2(kNoMousePos, kNoMousePos);
+        Queue(InputEvent::MouseLeave());
     }
 
     // ------------------------------------------------------------------ keyboard, text, focus
@@ -266,7 +267,7 @@ namespace esia::platform::win32
         if (cp < 0x20 || cp == 0x7F)
             return;
         std::string utf8;
-        AppendUtf32(utf8, cp);
+        EncodeUtf8(utf8, cp);
         Queue(InputEvent::TextEvent(std::move(utf8)));
     }
 
@@ -473,7 +474,7 @@ namespace esia::platform::win32
         m.owned = false;
         m.trackingLeave = m.mouseInside = m.textInput = false;
         m.caretHeight = 0;
-        m.lastMousePos = Vec2(-1, -1);
+        m.lastMousePos = Vec2(kNoMousePos, kNoMousePos);
         m.cursor = MouseCursor::Arrow;
         m.imeRect = Rect();
         std::lock_guard lock(m.requestMutex);
@@ -525,8 +526,8 @@ namespace esia::platform::win32
             if (m.buttonsDown == 0)   // captured: moves keep coming, LeaveIfOutside runs at the release
             {
                 m.mouseInside = false;
-                m.lastMousePos = Vec2(-1, -1);
-                m.Queue(InputEvent::MouseMove(m.lastMousePos));
+                m.lastMousePos = Vec2(kNoMousePos, kNoMousePos);
+                m.Queue(InputEvent::MouseLeave());
             }
             return false;
         // double clicks come as a second down (with CS_DBLCLKS): the core detects double clicks itself
@@ -649,7 +650,7 @@ namespace esia::platform::win32
                 ::SetWindowPos(w, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
             }
             m.PublishClientRect(w);   // the size and the scale change together, even without a WM_SIZE
-            m.lastMousePos = Vec2(-1, -1);
+            m.lastMousePos = Vec2(kNoMousePos, kNoMousePos);
             m.PlaceIme(w);
             return m.owned;
         }

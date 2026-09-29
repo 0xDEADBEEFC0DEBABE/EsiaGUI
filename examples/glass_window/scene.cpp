@@ -1,5 +1,6 @@
 // glass_window - the scene (scene.hpp): everything in UI units; the renderer scales it by FrameParams::framebufferScale.
 #include "scene.hpp"
+#include "esia/base/utf8.hpp"
 #include "esia/render/painter.hpp"
 #include <cmath>
 #include <cstdio>
@@ -205,7 +206,7 @@ namespace glass
         if (focused)
         {
             for (char32_t c : in.Text())
-                AppendUtf32(field_, c);
+                EncodeUtf8(field_, c);
             // Mods() is the state after the frame's last key event: a Ctrl released in the same frame as the V it
             // held down would turn Ctrl+V into V (docs/PLATFORM_WIN32.md, core requests)
             const bool ctrl = (in.Mods() & Mod_Ctrl) || in.KeyReleased(Key::LeftCtrl) || in.KeyReleased(Key::RightCtrl);
@@ -271,11 +272,6 @@ namespace glass
         const Rect caret(Vec2(caretX, origin.y), Vec2(caretX + 1.5f, origin.y + lineH));
         if (std::fmod(in.Time(), 1.0) < 0.6)
             p.Rect(caret, Style().Fill(Color::White()));
-        // RequestTextInput would make the whole UI show the I-beam while the field has the keyboard: keep the
-        // shape the rest of the frame chose when the mouse is elsewhere
-        const MouseCursor elsewhere = ctx.Requests().cursor;
         ctx.RequestTextInput(caret);
-        if (!b.hovered)
-            ctx.SetMouseCursor(elsewhere);
     }
 }

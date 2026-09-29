@@ -44,7 +44,7 @@ namespace esia::platform::win32
         std::uint32_t buttonsDown = 0;       // bit per MouseButton pressed in the window
         bool capturedMouse = false;          // SetCapture was ours
         bool trackingLeave = false, mouseInside = false;
-        Vec2 lastMousePos{-1, -1};
+        Vec2 lastMousePos{kNoMousePos, kNoMousePos};
         std::bitset<(std::size_t)Key::Count> keysDown;
         wchar_t highSurrogate = 0;
         bool composing = false;
