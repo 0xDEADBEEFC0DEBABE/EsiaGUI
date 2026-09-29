@@ -7,7 +7,9 @@
 #   esia_text      text interface, the analytic glyph rasterizer, the glyph atlas and the system font lookup
 #   esia_text_ft   FreeType + HarfBuzz text system (ESIA_TEXT_FREETYPE; ESIA_TEXT_DEPS=auto|bundled|system)
 #   esia_rhi_<n>   one target per backend, from src/esia/rhi/<n>/ (ESIA_BACKEND_<N>)
+#   esia_platform_win32   the Win32 platform layer: input, IME, DPI, cursor, clipboard (ESIA_PLATFORM_WIN32)
 cmake_minimum_required(VERSION 3.24)
+include(CMakeDependentOption)
 
 option(ESIA_WERROR "Treat compiler warnings as errors in Esia targets" OFF)
 option(ESIA_TEXT_FREETYPE "Build the FreeType + HarfBuzz text system (dependencies: ESIA_TEXT_DEPS)" ON)
@@ -124,6 +126,13 @@ if(ESIA_TEXT_FREETYPE)
     esia_target_defaults(esia_text_ft)
     add_library(esia::text_ft ALIAS esia_text_ft)
     message(STATUS "Esia text: ${ESIA_TEXT_DEPS_VERSIONS}")
+endif()
+
+# ------------------------------------------------------------------ platform layers
+# They depend on the core only (docs/REWRITE.md, "Platform layer"); each is on by default where its OS is.
+cmake_dependent_option(ESIA_PLATFORM_WIN32 "Build the Win32 platform layer (src/esia/platform/win32)" ON "WIN32" OFF)
+if(ESIA_PLATFORM_WIN32)
+    add_subdirectory(platform/win32)
 endif()
 
 # ------------------------------------------------------------------ RHI + backends
