@@ -144,11 +144,16 @@ jobs:
           $archive.Name | Tee-Object logs/mesa.txt
           7z x -y "-o$dir/x" $archive.FullName | Out-Null
           Get-ChildItem "$dir/x/x64" | Select-Object Name, Length | Format-Table | Out-String | Tee-Object -Append logs/mesa.txt
+          # the job runs elevated, and an elevated process's Vulkan loader ignores VK_DRIVER_FILES / VK_ICD_FILENAMES
+          # / VK_ADD_LAYER_PATH: register lavapipe where the loader looks (the SDK installer registered its layers)
           $icd = Get-ChildItem "$dir/x/x64" -Filter 'lvp_icd*.json' | Select-Object -First 1
-          if ($icd) {
-            "VK_DRIVER_FILES=$($icd.FullName)" >> $env:GITHUB_ENV
-            "VK_ICD_FILENAMES=$($icd.FullName)" >> $env:GITHUB_ENV
-          }
+          if (-not $icd) { throw "mesa-dist-win: no lvp_icd*.json" }
+          $key = 'HKLM:\SOFTWARE\Khronos\Vulkan\Drivers'
+          New-Item -Force -Path $key | Out-Null
+          New-ItemProperty -Force -Path $key -Name $icd.FullName -PropertyType DWord -Value 0 | Out-Null
+          "VK_DRIVER_FILES=$($icd.FullName)" >> $env:GITHUB_ENV
+          Get-ItemProperty -Path $key | Out-String | Tee-Object -Append logs/mesa.txt
+          Get-ItemProperty -Path 'HKLM:\SOFTWARE\Khronos\Vulkan\ExplicitLayers' -ErrorAction SilentlyContinue | Out-String | Tee-Object -Append logs/mesa.txt
           "MESA_X64=$dir/x/x64" >> $env:GITHUB_ENV
 
       # ---- FreeType + HarfBuzz from the runner's vcpkg (binary packages cached, keyed by the vcpkg commit)
@@ -222,6 +227,40 @@ jobs:
           ctest --preset ${{ matrix.test }} --parallel 2 --timeout 1200
           --output-junit ctest-junit.xml --test-output-size-passed 65536 --test-output-size-failed 262144
 
+      # what the summary cannot show: one process per Direct3D 9 scene (a crash names its scene), the adapter as
+      # dxdiag sees it, and the images of failed scenes as base64 in the log (the artifact has the same files)
+      - name: Diagnostics
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          $bin = "${{ matrix.bin }}"
+          $golden = "tests/conformance/golden"
+          dxdiag /whql:off /t "$PWD/logs/dxdiag.txt" | Out-Null
+          Start-Sleep -Seconds 2
+          for ($i = 0; $i -lt 30 -and -not (Test-Path logs/dxdiag.txt); $i++) { Start-Sleep -Seconds 2 }
+          if (Test-Path logs/dxdiag.txt) {
+            Select-String -Path logs/dxdiag.txt -Pattern 'Card name|Chip type|Driver Model|DDI Version|Feature Levels|Direct3D Acceleration|Driver File Version' | ForEach-Object { $_.Line.Trim() }
+          }
+          $scenes = & "$bin/esia_conformance.exe" --list | Select-String '^  (\S+)\s+\d+x\d+' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+          foreach ($debug in '1', '0') {
+            $env:ESIA_D3D_DEBUG = $debug
+            foreach ($sc in $scenes) {
+              $out = & "$bin/esia_conformance.exe" --backend d3d9 --scene $sc --golden $golden --out "build/diag/d3d9-debug$debug" 2>&1
+              '{0,-3} d3d9 ESIA_D3D_DEBUG={1} {2,-16} exit 0x{3:X8} :: {4}' -f '', $debug, $sc, $LASTEXITCODE, (($out | ForEach-Object { "$_" }) -join ' | ')
+            }
+            $out = & "$bin/esia_conformance.exe" --backend d3d12 --scene glow_layer --golden $golden --out "build/diag/d3d12-debug$debug" 2>&1
+            "d3d12 ESIA_D3D_DEBUG=$debug glow_layer exit $LASTEXITCODE :: $(($out | Select-String 'glow_layer') -join ' | ')"
+          }
+          Get-ChildItem -Recurse build/${{ matrix.preset }}/conformance*, build/diag -Filter *.diff.png -ErrorAction SilentlyContinue | ForEach-Object {
+            foreach ($f in $_.FullName, ($_.FullName -replace '\.diff\.png$', '.png')) {
+              if (Test-Path $f) {
+                "BEGIN-BASE64 $f"
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($f)) -split '(.{1,4000})' | Where-Object { $_ }
+                "END-BASE64 $f"
+              }
+            }
+          }
+
       - name: Report
         if: ${{ !cancelled() }}
         run: >
@@ -243,3 +282,4 @@ jobs:
             build/${{ matrix.preset }}/text/
             build/${{ matrix.preset }}/ctest-junit.xml
             build/${{ matrix.preset }}/Testing/Temporary/
+            build/diag/
