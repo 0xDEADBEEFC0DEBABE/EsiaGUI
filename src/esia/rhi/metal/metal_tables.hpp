@@ -44,10 +44,6 @@ namespace esia::rhi::metal
             BlendFactorOne = 1,
             BlendFactorSourceAlpha = 4,
             BlendFactorOneMinusSourceAlpha = 5,
-            BlendFactorSource1Color = 15,
-            BlendFactorOneMinusSource1Color = 16,
-            BlendFactorSource1Alpha = 17,
-            BlendFactorOneMinusSource1Alpha = 18,
         };
         enum BlendOperation : std::uint32_t { BlendOperationAdd = 0 };   // MTLBlendOperation
         enum LoadAction : std::uint32_t { LoadActionDontCare = 0, LoadActionLoad = 1, LoadActionClear = 2 };

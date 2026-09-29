@@ -87,14 +87,6 @@ namespace esia::rhi::metal
             b.alphaSrc = mtl::BlendFactorOne;
             b.alphaDst = mtl::BlendFactorOneMinusSourceAlpha;
             break;
-        case BlendMode::DualSourceLcd:
-            // rgb: src0 * src1 + dst * (1 - src1). The alpha factor multiplies src0.a, which TextLcdPS writes as 1,
-            // so Source1Alpha gives a = src1.a + dst * (1 - src1.a) as the RHI defines it.
-            b.enabled = true;
-            b.rgbSrc = mtl::BlendFactorSource1Color;
-            b.rgbDst = mtl::BlendFactorOneMinusSource1Color;
-            b.alphaSrc = mtl::BlendFactorSource1Alpha;
-            b.alphaDst = mtl::BlendFactorOneMinusSource1Alpha;
             break;
         }
         return b;

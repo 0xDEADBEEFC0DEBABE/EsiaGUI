@@ -20,7 +20,7 @@ namespace esia::rhi::metal::test
     {
         std::string type;
         std::string name;
-        std::string attribute;   // "attribute(0)", "user(locn1)", "color(0), index(1)", "position" ...
+        std::string attribute;   // "attribute(0)", "user(locn1)", "color(0)", "position" ...
     };
 
     struct MslInterface

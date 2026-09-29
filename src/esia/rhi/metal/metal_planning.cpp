@@ -22,10 +22,10 @@ namespace esia::rhi::metal
 
     bool ProgramUsesVertices(ShaderProgram p)
     {
-        return p == ShaderProgram::UiGeometry || p == ShaderProgram::TextGray || p == ShaderProgram::TextLcd || p == ShaderProgram::TextLcdGray;
+        return p == ShaderProgram::UiGeometry || p == ShaderProgram::TextGray;
     }
 
-    bool MakePipelineKey(const PipelineDesc& d, const Caps& caps, PipelineKey& key, std::string& why)
+    bool MakePipelineKey(const PipelineDesc& d, PipelineKey& key, std::string& why)
     {
         if (d.program >= ShaderProgram::Count)
         {
@@ -35,17 +35,6 @@ namespace esia::rhi::metal
         if (d.effect != 0)
         {
             why = "user effects need runtime HLSL compilation (Caps::runtimeEffects is false on Metal)";
-            return false;
-        }
-        if (d.blend == BlendMode::DualSourceLcd && !caps.dualSourceBlend)
-        {
-            why = "dual-source blending unsupported";
-            return false;
-        }
-        if ((d.program == ShaderProgram::TextLcd) != (d.blend == BlendMode::DualSourceLcd))
-        {
-            // TextLcdPS writes two outputs (color(0) index(0 / 1)); every other program writes one
-            why = "TextLcd needs, and only it may use, dual-source blending";
             return false;
         }
         if (ProgramUsesVertices(d.program) != (d.layout == VertexLayout::UiVertex))

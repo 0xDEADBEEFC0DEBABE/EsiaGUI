@@ -11,14 +11,12 @@ using namespace esia::rhi::metal;
 
 ESIA_TEST(MetalPlanning, PipelineKeys)
 {
-    Caps caps;
-    caps.dualSourceBlend = true;
     // every combination the renderer can ask for gets its own key and packed value
     std::set<std::uint32_t> packed;
     std::unordered_set<PipelineKey, PipelineKeyHash> keys;
     int n = 0;
     for (int p = 0; p < (int)ShaderProgram::Count; ++p)
-        for (BlendMode b : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied, BlendMode::DualSourceLcd})
+        for (BlendMode b : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied})
             for (Format f : {Format::RGBA8_UNORM, Format::RGBA8_SRGB, Format::BGRA8_UNORM, Format::BGRA8_SRGB, Format::RGB10A2_UNORM, Format::RGBA16_FLOAT})
                 for (int s : {1, 4})
                 {
@@ -31,11 +29,7 @@ ESIA_TEST(MetalPlanning, PipelineKeys)
                     d.samples = s;
                     PipelineKey k;
                     std::string why;
-                    const bool ok = MakePipelineKey(d, caps, k, why);
-                    // dual-source blending belongs to TextLcd and TextLcd needs it
-                    ESIA_CHECK(ok == ((d.program == ShaderProgram::TextLcd) == (b == BlendMode::DualSourceLcd)));
-                    if (!ok)
-                        continue;
+                    ESIA_CHECK(MakePipelineKey(d, k, why));
                     ++n;
                     packed.insert(PackPipelineKey(k));
                     keys.insert(k);
@@ -45,22 +39,17 @@ ESIA_TEST(MetalPlanning, PipelineKeys)
     PipelineDesc d;
     PipelineKey k, k2;
     std::string why;
-    ESIA_CHECK(MakePipelineKey(d, caps, k, why));
+    ESIA_CHECK(MakePipelineKey(d, k, why));
     d.topology = Topology::TriangleStrip;   // the topology is a draw-time argument on Metal: same pipeline state
-    ESIA_CHECK(MakePipelineKey(d, caps, k2, why) && k == k2);
+    ESIA_CHECK(MakePipelineKey(d, k2, why) && k == k2);
     d.effect = 7;                            // no runtime HLSL
-    ESIA_CHECK(!MakePipelineKey(d, caps, k, why) && !why.empty());
+    ESIA_CHECK(!MakePipelineKey(d, k, why) && !why.empty());
     d = PipelineDesc();
     d.layout = VertexLayout::None;           // UiGeometry reads vertices
-    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
+    ESIA_CHECK(!MakePipelineKey(d, k, why));
     d = PipelineDesc();
     d.targetFormat = Format::RGBA32_FLOAT;
-    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
-    d = PipelineDesc();
-    d.program = ShaderProgram::TextLcd;
-    d.blend = BlendMode::DualSourceLcd;
-    caps.dualSourceBlend = false;
-    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
+    ESIA_CHECK(!MakePipelineKey(d, k, why));
 }
 
 ESIA_TEST(MetalPlanning, BlitLayouts)

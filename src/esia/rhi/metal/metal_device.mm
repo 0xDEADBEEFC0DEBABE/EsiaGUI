@@ -38,10 +38,6 @@ ESIA_SAME(MTLBlendFactorZero, BlendFactorZero);
 ESIA_SAME(MTLBlendFactorOne, BlendFactorOne);
 ESIA_SAME(MTLBlendFactorSourceAlpha, BlendFactorSourceAlpha);
 ESIA_SAME(MTLBlendFactorOneMinusSourceAlpha, BlendFactorOneMinusSourceAlpha);
-ESIA_SAME(MTLBlendFactorSource1Color, BlendFactorSource1Color);
-ESIA_SAME(MTLBlendFactorOneMinusSource1Color, BlendFactorOneMinusSource1Color);
-ESIA_SAME(MTLBlendFactorSource1Alpha, BlendFactorSource1Alpha);
-ESIA_SAME(MTLBlendFactorOneMinusSource1Alpha, BlendFactorOneMinusSource1Alpha);
 ESIA_SAME(MTLBlendOperationAdd, BlendOperationAdd);
 ESIA_SAME(MTLLoadActionDontCare, LoadActionDontCare);
 ESIA_SAME(MTLLoadActionLoad, LoadActionLoad);
@@ -84,7 +80,6 @@ namespace esia::rhi::metal
                 point_ = [device_ newSamplerStateWithDescriptor:s];
 
                 caps_.maxTextureSize = ([device_ supportsFamily:MTLGPUFamilyApple3] || [device_ supportsFamily:MTLGPUFamilyMac2]) ? 16384 : 8192;
-                caps_.dualSourceBlend = true;   // every GPU of macOS 11 / iOS 14 (index(1) outputs)
                 if (@available(macOS 11.0, iOS 14.0, *))
                 {
                     // the core writes ~0 for "no sample" and reads ~0 as "not sampled"

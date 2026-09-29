@@ -28,7 +28,7 @@ namespace esia::rhi::metal::test
 {
     struct FakeGpuOptions
     {
-        GpuCaps caps{16384, true, true};
+        GpuCaps caps{16384, true};
         std::vector<int> sampleCounts{1, 2, 4, 8};
         bool autoComplete = true;   // the backend's own command buffers complete when committed
     };

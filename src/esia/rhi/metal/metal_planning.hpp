@@ -34,9 +34,9 @@ namespace esia::rhi::metal
     bool ProgramUsesVertices(ShaderProgram p);
 
     // Checks a PipelineDesc against what the Metal backend builds and fills the key. False (with the reason) when
-    // the RHI says to return an invalid pipeline: user effects (no runtime HLSL on Metal), dual-source blending
-    // without the cap, a layout that does not fit the program, a format that is not a render target here.
-    bool MakePipelineKey(const PipelineDesc& desc, const Caps& caps, PipelineKey& key, std::string& why);
+    // the RHI says to return an invalid pipeline: user effects (no runtime HLSL on Metal), a layout that does not fit
+    // the program, a format that is not a render target here.
+    bool MakePipelineKey(const PipelineDesc& desc, PipelineKey& key, std::string& why);
 
     // ------------------------------------------------------------------ uploads and readback
     // Blits between buffers and textures: offsets and row pitches aligned to 256 bytes. Apple documents multiples

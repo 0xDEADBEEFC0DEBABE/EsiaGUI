@@ -37,8 +37,7 @@
 //   anything on it; the backend binds everything again afterwards. Do not end it.
 // * ReadPixels (tests, screenshots) waits for the frames that rendered the texture: their command buffers must have
 //   been committed (a host's still recording one makes it fail instead of hanging).
-// * Caps: FX instances in a buffer, MSL from the shader library (compiled at runtime, MSL 2.0), dual-source
-//   blending, RGBA16F pyramids, direct target reads, readback; GPU times per category on GPUs that sample
+// * Caps: FX instances in a buffer, MSL from the shader library (compiled at runtime, MSL 2.0), RGBA16F pyramids, direct target reads, readback; GPU times per category on GPUs that sample
 //   timestamps at encoder boundaries (Apple silicon; see metal_profiler.hpp for the approximation), none on the
 //   others. No user HLSL effects (Caps::runtimeEffects = false).
 #pragma once

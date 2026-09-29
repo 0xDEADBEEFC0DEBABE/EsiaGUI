@@ -40,7 +40,6 @@ namespace esia::rhi::metal
         caps_.framebufferOriginBottomLeft = false;   // Metal: top-left framebuffer and texture origins
         caps_.clipSpaceYDown = false;                // clip-space +y up, as Direct3D
         caps_.halfPixelOffset = false;
-        caps_.dualSourceBlend = g.dualSourceBlend;
         caps_.floatRenderTargets = true;             // RGBA16Float is renderable and blendable on every Metal GPU
         caps_.sampleRenderTarget = true;             // encoders are ordered; Metal tracks the hazards of private textures
         caps_.timestampQueries = g.timestamps && options_.timestamps;
@@ -451,7 +450,7 @@ namespace esia::rhi::metal
     {
         PipelineKey key;
         std::string why;
-        if (!MakePipelineKey(desc, caps_, key, why))
+        if (!MakePipelineKey(desc, key, why))
             return {};   // the RHI's "impossible combination": the renderer falls back or skips
         if (desc.samples > 1 && !gpu_->SupportsSampleCount(desc.samples))
             return {};

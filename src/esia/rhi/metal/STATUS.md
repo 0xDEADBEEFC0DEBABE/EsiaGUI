@@ -74,7 +74,7 @@ test plan in [section 6](#6-building-and-testing-on-macos) says what to run and 
 ### Caps
 
 `fxStorage = Buffer`, `shaderFormat = Msl`, `framebufferOriginBottomLeft = false`, `clipSpaceYDown = false`,
-`halfPixelOffset = false`, `dualSourceBlend = true`, `floatRenderTargets = true`, `sampleRenderTarget = true`,
+`halfPixelOffset = false`, `floatRenderTargets = true`, `sampleRenderTarget = true`,
 `readback = true`, `runtimeEffects = false`, `fxFeatureVariants = false`, `maxTextureSize` 16384 (Apple3+ / Mac2, else
 8192), `timestampQueries` = the GPU supports `MTLCounterSamplingPointAtStageBoundary` with the timestamp counter set
 (Apple silicon; Intel / AMD Macs only sample at draw / blit boundaries, not used) and `Desc::timestamps`.
@@ -100,7 +100,6 @@ one frame exercises (from a throwaway counting run, first frame):
 | glass | 11 | 2 | 0 | 1 | 1 | 15 | 1 / 1 | 3 |
 | glow_layer | 19 | 1 | 0 | 0 | 2 | 23 | 0 / 0 | 7 |
 | text | 1 | 1 | 0 | 0 | 2 | 2 | 0 / 0 | 2 |
-| text_lcd | 6 | 1 | 0 | 0 | 2 | 8 | 0 / 0 | 6 |
 | edge_fade | 1 | 1 | 0 | 0 | 2 | 43 | 0 / 0 | 3 |
 | clipping | 1 | 1 | 0 | 0 | 2 | 8 | 0 / 0 | 2 |
 | windows | 11 | 1 | 0 | 0 | 2 | 33 | 2 / 0 | 4 |
@@ -144,7 +143,7 @@ What `esia_rhi_metal_tests` covers (25 tests):
   `gBackdrop0..5` 4..9, `gFxData` 10, `gLinear` / `gPoint` 11 / 12), nothing at buffer 30, vertex shaders sample no
   texture (so binding textures to the fragment stage only is enough), UI vertex shaders take `stage_in` attributes
   0 / 1 / 2 as float2 / float2 / float4 and the others use `vertex_id` (+ `instance_id` for Fx), every fragment input
-  is written by the vertex shader with the same location and type, `TextLcd` alone has `color(0) index(1)`. (Integer
+  is written by the vertex shader with the same location and type, every program has one `color(0)` output. (Integer
   varyings have no `[[flat]]`: SPIRV-Cross leaves it out because integers are always flat in MSL.)
 * **Device on the fake GPU** (`test_metal_device.cpp`): the 14 scenes (above); `NullGoldensWithMetalCaps` - with the
   Metal caps the renderer's command stream is identical to `tests/conformance/golden/null/*.log` for all 14 scenes and
@@ -180,13 +179,21 @@ properties, types and availability are what the mock declares; its enum values a
 `static_assert`s pass trivially there. Apple's SDK headers were deliberately not used on this Linux machine (their
 license ties them to Apple-branded computers).
 
+### Core round 3 (grayscale text only)
+
+Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): no dual-source blending (the
+`Source1*` blend factors, `index(1)` outputs and the `dualSourceBlend` cap are gone), no TextLcd pipelines;
+`MakePipelineKey` no longer takes the caps. Built on Windows after the merge (`esia-core` `ac37883`, clang-cl 22.1.8,
+`ESIA_WERROR=ON`): `esia_rhi_metal_tests` 25 / 25, ctest 9 / 9 (the conformance runs skip Metal). `metal_device.mm`
+lost its four `Source1` checks and the cap line; it was not compiled (needs macOS).
+
 ## 4. Not verified
 
 * **`metal_device.mm` never compiled against the SDK and never ran.** Expect a first round of compile fixes (API
   spellings, availability annotations, deprecations under `-Werror` with a new SDK).
 * **The generated MSL never went through Apple's compiler** (`xcrun metal`) - it is SPIRV-Cross 2021.01.15 output
   for MSL 2.0; only the mock type check above ran.
-* **No pixel was ever produced by this backend.** Colors, blending (in particular dual-source text), sRGB handling,
+* **No pixel was ever produced by this backend.** Colors, blending, sRGB handling,
   scissors, the resolve path, captures and pyramids are only checked structurally.
 * **The fake's rules are Metal's as documented**, not compared with the Metal API validation layer.
 * **Timestamps**: the tick -> ns calibration (`sampleTimestamps:gpuTimestamp:`, CPU side assumed to be nanoseconds),
@@ -275,7 +282,6 @@ exist; `glass.png` is also `msaa_target`'s golden):
 | `glass` | one direct capture (frost read straight from the target) and one copy capture, 5 RGBA16F pyramid levels (DontCare loads, scissored), refraction / dispersion | frosted, refracted backdrop; black or white glass = pyramid not sampled / wrong texture index; blocky or noisy borders = region clamping; banding = pyramid not RGBA16F |
 | `glow_layer` | 19 passes: glow layers cleared by the Clear program in DontCare passes, bloom pyramid, LayerComposite (t0 point, t1..t6 linear) | soft bloom around the content; garbage rectangles = the region clear; a hard-edged glow = the pyramid levels |
 | `text` | R8 glyph page uploaded through the staging blit (256-byte pitches), TextGray | sharp glyphs; sheared or striped glyphs = upload pitch; missing text = the R8 upload or `gTex` |
-| `text_lcd` | dual-source blending (`index(1)` + `Source1*` factors) and TextLcdGray inside layers | color-fringed sub-pixel text on the target; black boxes = blend factors; missing = pipeline creation failed (see stderr) |
 | `edge_fade` | 43 draws with changing draw constants through `setVertexBytes` / `setFragmentBytes` | fades differ per clip rect; one fade everywhere = constants not re-sent |
 | `clipping` | scissors (top-left, no flip), textured geometry, uv sub-rects | clips in the same places as GL; vertically mirrored clips = a coordinate flip that must not be there |
 | `windows` | the UI core end to end, two direct captures | as on GL |
