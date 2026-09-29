@@ -1,5 +1,6 @@
 // Esia - draw list implementation (see esia/core/draw_list.hpp)
 #include "esia/core/draw_list.hpp"
+#include <algorithm>
 
 namespace esia
 {
@@ -13,6 +14,7 @@ namespace esia
         fades_.clear();
         clipStack_.assign(1, clip);
         textureStack_.clear();
+        mergeBarrier_ = 0;
     }
 
     void DrawList::PushClipRect(const Rect& r, bool intersect)
@@ -53,7 +55,7 @@ namespace esia
     DrawCmd& DrawList::Geometry()
     {
         const TextureId tex = CurrentTexture();
-        if (!cmds_.empty())
+        if (cmds_.size() > mergeBarrier_)
         {
             DrawCmd& last = cmds_.back();
             if (last.kind == DrawCmdKind::Geometry && last.texture == tex && last.clip == clipStack_.back() &&
@@ -129,7 +131,7 @@ namespace esia
     void DrawList::AddFx(const fx::Instance& instance, EffectId effect, TextureId texture)
     {
         const Rect& clip = clipStack_.back();
-        if (!cmds_.empty())
+        if (cmds_.size() > mergeBarrier_)
         {
             DrawCmd& last = cmds_.back();
             if (last.kind == DrawCmdKind::Fx && last.clip == clip && last.texture == texture && last.effect == effect &&
@@ -171,6 +173,22 @@ namespace esia
         DrawCmd& c = Push(DrawCmdKind::Callback);
         c.callback = callback;
         c.userData = userData;
+    }
+
+    std::size_t DrawList::Mark()
+    {
+        mergeBarrier_ = cmds_.size();
+        return cmds_.size();
+    }
+
+    void DrawList::MoveCommands(std::size_t from, std::size_t to)
+    {
+        ESIA_ASSERT(to <= from && from <= cmds_.size() && "MoveCommands: bad range");
+        if (to >= from || from > cmds_.size())
+            return;
+        std::rotate(cmds_.begin() + (std::ptrdiff_t)to, cmds_.begin() + (std::ptrdiff_t)from, cmds_.end());
+        // the last command is now an earlier one: new primitives start a command of their own
+        mergeBarrier_ = cmds_.size();
     }
 
     std::size_t DrawData::TotalVertices() const
