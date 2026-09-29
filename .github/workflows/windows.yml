@@ -139,6 +139,7 @@ jobs:
         run: |
           $dir = "${{ runner.temp }}/mesa"
           New-Item -ItemType Directory -Force $dir | Out-Null
+          gh release list --repo pal1000/mesa-dist-win --limit 12 | Tee-Object logs/mesa-releases.txt
           gh release download $env:MESA_DIST_WIN_VERSION --repo pal1000/mesa-dist-win --pattern 'mesa3d-*-release-msvc.7z' --dir $dir
           $archive = Get-ChildItem $dir -Filter 'mesa3d-*-release-msvc.7z' | Select-Object -First 1
           $archive.Name | Tee-Object logs/mesa.txt
@@ -247,21 +248,19 @@ jobs:
           "debuggers: $(Test-Path "$dbg\cdb.exe") $dbg"
           $env:_NT_SYMBOL_PATH = "srv*$env:RUNNER_TEMP\symbols*https://msdl.microsoft.com/download/symbols;$bin"
           & "$dbg\gflags.exe" /p /enable esia_conformance.exe /full
-          & "$dbg\gflags.exe" /p /enable esia_rhi_vulkan_tests.exe /full
-          $runs = @(
-            @('esia_conformance.exe', '--backend d3d9 --scene shapes --golden ' + $golden + ' --out build/diag/d3d9'),
-            @('esia_conformance.exe', '--backend vulkan --scene shapes --golden ' + $golden + ' --out build/diag/vulkan'),
-            @('esia_rhi_vulkan_tests.exe', '')
-          )
-          foreach ($r in $runs) {
-            "::group::cdb $($r[0]) $($r[1])"
-            & "$dbg\cdb.exe" -g -G -lines -c ".lines -e; .exr -1; kpn 40; ~* kn 12; q" "$bin\$($r[0])" $r[1].Split(' ', [StringSplitOptions]::RemoveEmptyEntries) 2>&1 |
-              Select-String -NotMatch '^(ModLoad|Symbol search path|Executable search path|\*\*\*)' | ForEach-Object { $_.Line }
+          & "$dbg\gflags.exe" /p /enable esia_rhi_d3d9_tests.exe /full
+          function Invoke-Cdb([string]$exe, [string[]]$arguments) {
+            "::group::cdb $exe $($arguments -join ' ')"
+            & "$dbg\cdb.exe" -g -G -lines -c ".lines -e; .exr -1; kpn 40; ~* kn 12; q" "$bin\$exe" @arguments 2>&1 |
+              Select-String -NotMatch '^(ModLoad|NatVis|Symbol search path|Executable search path|\*\*\*)|Repository|Nuget' | ForEach-Object { $_.Line }
             "exit $LASTEXITCODE"
             "::endgroup::"
           }
+          Invoke-Cdb esia_conformance.exe @('--backend', 'd3d9', '--scene', 'shapes', '--golden', $golden, '--out', 'build/diag/d3d9')
+          Invoke-Cdb esia_rhi_d3d9_tests.exe @()
+          Invoke-Cdb esia_conformance.exe @('--backend', 'vulkan', '--scene', 'shapes', '--golden', $golden, '--out', 'build/diag/vulkan')
           & "$dbg\gflags.exe" /p /disable esia_conformance.exe
-          & "$dbg\gflags.exe" /p /disable esia_rhi_vulkan_tests.exe
+          & "$dbg\gflags.exe" /p /disable esia_rhi_d3d9_tests.exe
           Get-ChildItem -Recurse build/${{ matrix.preset }}/conformance -Filter *.diff.png -ErrorAction SilentlyContinue | ForEach-Object {
             foreach ($f in $_.FullName, ($_.FullName -replace '\.diff\.png$', '.png')) {
               "BEGIN-BASE64 $f"
