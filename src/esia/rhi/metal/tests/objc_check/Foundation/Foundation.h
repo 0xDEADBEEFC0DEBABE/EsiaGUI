@@ -1,6 +1,7 @@
 // Esia - a MOCK of the few Foundation declarations metal_device.mm uses, for the offline Objective-C++ check on hosts
 // without Apple's SDK (the esia_rhi_metal_objc_mock_check test, ../../CMakeLists.txt). Not Apple's header: written
 // from Apple's documentation; see Metal/Metal.h for what the check does and does not prove.
+// UNVERIFIED: needs macOS - a Linux-only stand-in for Apple's header.
 #pragma once
 #include <cstddef>
 #include <cstdint>

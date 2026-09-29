@@ -8,6 +8,7 @@
 #       (metal_stdlib explains what that does and does not prove). The rewrites below are the ones the mock needs:
 #       SPIRV-Cross's spvUnsafeArray definition out (the mock has its own), vector constructors to make_<type>N
 #       calls, float literals suffixed with f.
+# UNVERIFIED: needs macOS - the mock mode ran on Linux; the xcrun mode never ran.
 file(GLOB _files "${MSL_DIR}/*.metal")
 list(SORT _files)
 if(NOT _files)

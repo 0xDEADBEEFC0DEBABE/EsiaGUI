@@ -1,6 +1,7 @@
 // Metal backend tests: the resource interface of a generated MSL shader (esia_main's parameters and its stage_in /
 // output structs), parsed from the text SPIRV-Cross emits. It lets the tests check the backend's binding table
 // against the real shaders, and lets the fake GPU know what each draw must have bound.
+// UNVERIFIED: needs macOS (runs on Linux and under Wine).
 #pragma once
 #include <string>
 #include <vector>

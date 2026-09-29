@@ -1,4 +1,5 @@
 // Metal backend: the RHI -> Metal tables (formats, usage, blend, vertex layout, binding indices).
+// UNVERIFIED: needs macOS (passes on Linux and under Wine; the raw values are checked by metal_device.mm on macOS).
 #include "esia/core/draw_list.hpp"
 #include "esia_test.hpp"
 #include "metal_tables.hpp"

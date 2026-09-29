@@ -1,5 +1,6 @@
 // Metal backend: the binding table (metal_tables.hpp) against the generated MSL of every program - the indices the
 // backend binds at are the ones the shaders declare, and the shaders declare nothing the backend does not bind.
+// UNVERIFIED: needs macOS (passes on Linux and under Wine).
 #include "esia/render/shader_library.hpp"
 #include "esia_test.hpp"
 #include "metal_planning.hpp"

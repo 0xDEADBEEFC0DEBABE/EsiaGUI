@@ -1,4 +1,5 @@
 // Metal backend: pipeline keys, blit layouts, readback conversion, copy plans.
+// UNVERIFIED: needs macOS (passes on Linux and under Wine).
 #include "esia_test.hpp"
 #include "metal_planning.hpp"
 #include <cstring>

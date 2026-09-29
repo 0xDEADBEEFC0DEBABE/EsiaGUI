@@ -8,6 +8,7 @@
 // Vectors are clang's ext_vector_type (swizzles, component-wise operators and comparisons for free); check_msl.cmake
 // rewrites the constructor calls `float4(...)` into `make_float4(...)` (C++ has no constructor syntax for them) and
 // gives float literals their MSL type (an unsuffixed literal is a float in MSL, a double in C++).
+// UNVERIFIED: needs macOS - a Linux-only stand-in for Apple's header; the real check is the xcrun mode.
 #pragma once
 #include <cstddef>
 #include <type_traits>

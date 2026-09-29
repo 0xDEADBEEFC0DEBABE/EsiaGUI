@@ -1,4 +1,5 @@
 // Metal backend tests: the fake, rule-enforcing Gpu (see fake_metal_gpu.hpp).
+// UNVERIFIED: needs macOS - the fake runs on Linux and under Wine; that it matches real Metal is the open question.
 #include "fake_metal_gpu.hpp"
 #include "esia/render/shader_library.hpp"
 #include "metal_planning.hpp"

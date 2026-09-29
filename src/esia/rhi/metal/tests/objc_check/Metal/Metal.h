@@ -3,6 +3,7 @@
 // believes are Apple's - so the static_asserts of metal_device.mm prove nothing here; they are the real check on
 // macOS. What this mock lets clang verify: syntax, C++ / Objective-C types, ARC bridging, warnings (-Wpedantic ...).
 // What it cannot: that Apple's selectors, property names and types are the ones declared here.
+// UNVERIFIED: needs macOS - a Linux-only stand-in for Apple's header.
 #pragma once
 #import <Foundation/Foundation.h>
 

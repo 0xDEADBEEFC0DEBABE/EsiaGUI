@@ -36,7 +36,9 @@ if(APPLE)
     endif()
     add_library(esia_rhi_metal STATIC metal_device.mm)
     set_source_files_properties(metal_device.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
-    target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core PRIVATE esia_shaders "-framework Metal" "-framework Foundation")
+    # Executables that link the backend keep C++ as their linker language (CXX outranks OBJCXX), so the
+    # Objective-C runtime (objc_msgSend, the ARC entry points) is linked explicitly: Foundation does not re-export it
+    target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core PRIVATE esia_shaders "-framework Metal" "-framework Foundation" objc)
 else()
     add_library(esia_rhi_metal STATIC metal_unavailable.cpp)
     target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core)

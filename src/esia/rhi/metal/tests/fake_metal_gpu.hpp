@@ -13,6 +13,7 @@
 //     texture, row pitches / offsets that are multiples of the pixel size; views need PixelFormatView usage.
 // Textures and buffers keep their bytes, so uploads, copies (with views), resolves and readback are executed on the
 // CPU and can be checked; draws are validated but not rasterized.
+// UNVERIFIED: needs macOS - the rules below are Metal's as documented, never compared with the Metal validation layer.
 #pragma once
 #include "metal_frames.hpp"
 #include "metal_gpu.hpp"

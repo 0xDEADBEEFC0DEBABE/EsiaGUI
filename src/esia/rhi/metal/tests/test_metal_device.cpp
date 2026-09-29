@@ -1,6 +1,7 @@
 // Metal backend: MetalDevice (the whole rhi::Device logic) on the fake, rule-enforcing Gpu - the conformance
 // scenes through the real renderer, frames in flight, uploads / copies / resolves / readback executed on the
 // fake's CPU copies, host textures, host command buffers, timestamps.
+// UNVERIFIED: needs macOS - passes on Linux and under Wine against the fake Gpu, never against Metal.
 #include "esia/render/renderer.hpp"
 #include "esia/rhi/null_device.hpp"
 #include "esia_test.hpp"

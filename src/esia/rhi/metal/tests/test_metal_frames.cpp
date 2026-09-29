@@ -1,4 +1,5 @@
 // Metal backend: frame completion tracking, buffer versions, deferred releases, the staging arena.
+// UNVERIFIED: needs macOS (passes on Linux and under Wine).
 #include "esia_test.hpp"
 #include "metal_frames.hpp"
 #include <thread>

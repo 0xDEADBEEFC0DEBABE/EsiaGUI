@@ -1,4 +1,5 @@
 // Metal backend tests: parser of the generated MSL's resource interface (see msl_interface.hpp).
+// UNVERIFIED: needs macOS (runs on Linux and under Wine).
 #include "msl_interface.hpp"
 #include <cctype>
 #include <cstring>

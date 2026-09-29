@@ -1,4 +1,5 @@
 // Metal backend: timestamp calibration, sample assignment and the per-category split.
+// UNVERIFIED: needs macOS (passes on Linux and under Wine).
 #include "esia_test.hpp"
 #include "metal_profiler.hpp"
 #include "metal_tables.hpp"
