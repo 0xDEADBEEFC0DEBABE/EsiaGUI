@@ -15,7 +15,7 @@ esia_register_backend(gles esia_rhi_opengl)
 # without either): formats, copies,
 # readback, host state, timing, and every conformance scene with zero GL errors in both APIs.
 if(BUILD_TESTING)
-    esia_add_test(esia_rhi_opengl_tests tests/test_gl_device.cpp ${ESIA_ROOT}/tests/conformance/scenes.cpp)
-    target_include_directories(esia_rhi_opengl_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/conformance ${ESIA_ROOT}/tests/support)
-    target_link_libraries(esia_rhi_opengl_tests PRIVATE esia_backends esia_rhi_opengl esia_render)
+    esia_add_test(esia_rhi_opengl_tests tests/test_gl_device.cpp)
+    target_include_directories(esia_rhi_opengl_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(esia_rhi_opengl_tests PRIVATE esia_backends esia_rhi_opengl esia_conformance_scenes)   # tests/CMakeLists.txt
 endif()

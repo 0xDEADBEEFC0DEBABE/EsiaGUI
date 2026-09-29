@@ -69,6 +69,7 @@ namespace esia::rhi::opengl
         void EndProfile() override;
         bool ReadProfile(GpuProfile& out) override;
         bool ReadPixels(Texture tex, const IRect& rect, std::vector<std::uint8_t>& rgba8) override;
+        std::uint32_t ValidationErrors() const override { return errors_; }   // KHR_debug / glGetError errors
 
         Texture Wrap(GLuint fbo, int width, int height, Format format, GLuint colorTexture, int samples);
         GLuint NativeTexture(Texture t) const;

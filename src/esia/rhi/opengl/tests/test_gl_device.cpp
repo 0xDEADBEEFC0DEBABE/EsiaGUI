@@ -64,7 +64,7 @@ namespace
         {
             conformance::SceneFrame f;
             conformance::BuildScene(scene, f);
-            ESIA_CHECK(renderer.Render(f.data, &f.textures, target));
+            ESIA_CHECK(renderer.Render(f.data, &f.textures, target, conformance::RenderParamsOf(scene)));
         }
         return Read(dev, target, rhi::IRect{0, 0, scene.width, scene.height});
     }
@@ -107,7 +107,7 @@ ESIA_TEST(GlDevice, ConformanceScenesWithoutGlErrors)
         for (bool es : kApis)
             for (const conformance::Scene& scene : conformance::Scenes())
             {
-                rhi::HeadlessDevice h = Headless(es, scene.width, scene.height, scene.format, scene.samples, coreOnly);
+                rhi::HeadlessDevice h = Headless(es, scene.width, scene.height, scene.format, scene.samples, coreOnly, scene.sampleable);
                 if (!h.device)
                     continue;
                 if (scene.needsDualSource && !h.device->GetCaps().dualSourceBlend)
