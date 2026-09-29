@@ -6,8 +6,8 @@
 // Wayland needed), else the default display; the context is made current without a surface
 // (EGL_KHR_surfaceless_context) or with a 1 x 1 pbuffer. The config asks for EGL_PBUFFER_BIT: Mesa's surfaceless
 // platform offers no config without it.
+#include "gl_headless.hpp"
 #include "gl_device.hpp"
-#include "esia/rhi/backend_registry.hpp"
 #include <cstdlib>
 #include <cstring>
 
@@ -194,43 +194,50 @@ namespace esia::rhi::opengl
             return owned;
         }
 
-        HeadlessDevice CreateHeadless(bool es, const HeadlessDesc& hd, std::string& error)
+        // ESIA_GL_CORE_ONLY=1 runs the conformance suite on the GL 3.3 / GLES 3.0 minimum (Desc::coreOnly)
+        HeadlessDevice CreateRegistered(bool es, const HeadlessDesc& hd, std::string& error)
         {
-            auto context = CreateContext(es, error);
-            if (!context)
-                return {};
             Desc desc;
             desc.es = es;
-            desc.getProcAddress = LoadEgl().GetProcAddress;
-            // ESIA_GL_CORE_ONLY=1 runs the suite on the GL 3.3 / GLES 3.0 minimum (Desc::coreOnly)
             const char* coreOnly = std::getenv("ESIA_GL_CORE_ONLY");
             desc.coreOnly = coreOnly && std::strcmp(coreOnly, "0") != 0;
-            auto device = std::make_unique<GlDevice>(desc, std::move(context));
-            if (!device->Init(error))
-                return {};
-            TextureDesc td;
-            td.width = hd.width;
-            td.height = hd.height;
-            td.format = hd.format;
-            td.samples = hd.samples;
-            td.usage = TextureUsage_RenderTarget | TextureUsage_CopySrc;
-            if (hd.sampleable && hd.samples == 1 && device->SamplesRaw(hd.format))
-                td.usage |= TextureUsage_Sampled;
-            td.debugName = "headless-target";
-            HeadlessDevice h;
-            h.target = device->CreateTexture(td, nullptr, 0);
-            if (!h.target)
-            {
-                error = std::string(FormatName(hd.format)) + (hd.samples > 1 ? " x" + std::to_string(hd.samples) + " samples" : "") +
-                        " is not a render target format here";
-                return {};
-            }
-            h.device = std::move(device);
-            return h;
+            return CreateHeadlessDevice(desc, hd, error);
         }
 
-        HeadlessDevice CreateHeadlessGl(const HeadlessDesc& d, std::string& error) { return CreateHeadless(false, d, error); }
-        HeadlessDevice CreateHeadlessGles(const HeadlessDesc& d, std::string& error) { return CreateHeadless(true, d, error); }
+        HeadlessDevice CreateHeadlessGl(const HeadlessDesc& d, std::string& error) { return CreateRegistered(false, d, error); }
+        HeadlessDevice CreateHeadlessGles(const HeadlessDesc& d, std::string& error) { return CreateRegistered(true, d, error); }
+    }
+
+    GetProcAddressFn HeadlessGetProcAddress() { return LoadEgl().GetProcAddress; }
+
+    HeadlessDevice CreateHeadlessDevice(Desc desc, const HeadlessDesc& hd, std::string& error)
+    {
+        auto context = CreateContext(desc.es, error);
+        if (!context)
+            return {};
+        desc.getProcAddress = LoadEgl().GetProcAddress;
+        auto device = std::make_unique<GlDevice>(desc, std::move(context));
+        if (!device->Init(error))
+            return {};
+        TextureDesc td;
+        td.width = hd.width;
+        td.height = hd.height;
+        td.format = hd.format;
+        td.samples = hd.samples;
+        td.usage = TextureUsage_RenderTarget | TextureUsage_CopySrc;
+        if (hd.sampleable && hd.samples == 1 && device->SamplesRaw(hd.format))
+            td.usage |= TextureUsage_Sampled;
+        td.debugName = "headless-target";
+        HeadlessDevice h;
+        h.target = device->CreateTexture(td, nullptr, 0);
+        if (!h.target)
+        {
+            error = std::string(FormatName(hd.format)) + (hd.samples > 1 ? " x" + std::to_string(hd.samples) + " samples" : "") +
+                    " is not a render target format here";
+            return {};
+        }
+        h.device = std::move(device);
+        return h;
     }
 }
 

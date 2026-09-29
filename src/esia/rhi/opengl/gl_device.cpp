@@ -1143,8 +1143,11 @@ namespace esia::rhi::opengl
         d->bottomUp = s->bottomUp;   // the copy keeps the source's row order
         // the backdrop copy of an sRGB target (RawFormat): a draw that reads the stored bits, from a texture
         const bool raw = IsSrgb(s->desc.format) && !IsSrgb(d->desc.format);
+        // GLES resolves only into the same rectangle, and between identical formats
+        const bool sameRect = r.x0 == dstX && (s->bottomUp ? s->desc.height - r.y1 : r.y0) == (d->bottomUp ? d->desc.height - (dstY + r.Height()) : dstY);
+        const bool resolveFirst = s->desc.samples > 1 && (!sameRect || Info(s->desc.format).internal != Info(d->desc.format).internal);
         const Tex* from = s;
-        if ((raw && !s->tex) || (s->desc.samples > 1 && Info(s->desc.format).internal != Info(d->desc.format).internal))
+        if ((raw && !s->tex) || resolveFirst)
         {
             // resolve (or copy a window / renderbuffer target) into a texture of the same format first
             from = ResolveTarget(*s);
@@ -1268,7 +1271,8 @@ namespace esia::rhi::opengl
                 return false;
             Blit(*t, *from, r, r.x0, r.y0);
         }
-        // glReadPixels returns the stored values of an sRGB framebuffer
+        // the stored values of an sRGB framebuffer: GLES never converts, desktop GL not with GL_FRAMEBUFFER_SRGB off
+        SetSrgbWrite(false);
         BindFramebuffer(GL_READ_FRAMEBUFFER, from->fbo);
         const int w = r.Width(), h = r.Height();
         const int glY = from->bottomUp ? from->desc.height - r.y1 : r.y0;
