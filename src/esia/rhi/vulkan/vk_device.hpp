@@ -140,8 +140,6 @@ namespace esia::rhi::vulkan
         struct CachedPipeline
         {
             VkPipeline pipeline = VK_NULL_HANDLE;
-            Format format = Format::Unknown;
-            int samples = 1;
             int refs = 0;
         };
 

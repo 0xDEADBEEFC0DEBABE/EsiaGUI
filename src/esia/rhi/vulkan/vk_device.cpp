@@ -1061,8 +1061,6 @@ namespace esia::rhi::vulkan
         if (!c.pipeline)
         {
             c.pipeline = BuildPipeline(key);
-            c.format = d.targetFormat;
-            c.samples = d.samples;
             if (!c.pipeline)
             {
                 pipelineEntries_.erase(key);
@@ -1545,22 +1543,15 @@ namespace esia::rhi::vulkan
         Tex* s = FindTex(scratch_);
         if (s && s->format == format && s->desc.width >= width && s->desc.height >= height)
             return s;
-        if (s)
-            DestroyTexture(scratch_);
         TextureDesc d;
         d.width = std::max(width, s ? s->desc.width : 0);
         d.height = std::max(height, s ? s->desc.height : 0);
+        if (s)
+            DestroyTexture(scratch_);
         d.format = FromVkFormat(format);
         d.usage = TextureUsage_CopySrc | TextureUsage_CopyDst;
         d.debugName = "esia-resolve";
-        // created without a zero-fill: every use writes the region it reads first
-        const bool recording = Recording();
-        const std::size_t pendingBefore = pending_.size();
         scratch_ = CreateTexture(d, nullptr, 0);
-        if (recording)
-            std::erase(uploadedImages_, scratch_.id);
-        else
-            pending_.erase(pending_.begin() + (std::ptrdiff_t)pendingBefore, pending_.end());
         return FindTex(scratch_);
     }
 
