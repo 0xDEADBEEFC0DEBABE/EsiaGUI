@@ -158,8 +158,6 @@ namespace esia::rhi::opengl
         caps_.framebufferOriginBottomLeft = true;
         caps_.clipSpaceYDown = false;
         caps_.halfPixelOffset = false;
-        // GL 3.3 has dual-source blending in core; GLES needs EXT_blend_func_extended (the TextLcd ESSL requires it)
-        caps_.dualSourceBlend = !desc_.es || has("GL_EXT_blend_func_extended");
         caps_.sampleRenderTarget = true;
         caps_.timestampQueries = gl_.QueryCounter && gl_.GetQueryObjectui64v;
         caps_.readback = true;
@@ -509,8 +507,6 @@ namespace esia::rhi::opengl
         case BlendMode::Opaque: gl_.Disable(GL_BLEND); return;
         case BlendMode::Straight: gl_.BlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA); break;
         case BlendMode::Premultiplied: gl_.BlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA); break;
-        // rgb: src0 * src1 + dst * (1 - src1); alpha: src0.a (= 1) * src1.a + dst * (1 - src1.a)
-        case BlendMode::DualSourceLcd: gl_.BlendFuncSeparate(GL_SRC1_COLOR, GL_ONE_MINUS_SRC1_COLOR, GL_SRC1_ALPHA, GL_ONE_MINUS_SRC1_ALPHA); break;
         }
         gl_.Enable(GL_BLEND);
     }
@@ -863,8 +859,6 @@ namespace esia::rhi::opengl
     {
         if (desc.program >= ShaderProgram::Count || desc.effect != 0 || desc.fxFeatures != 0)
             return {};   // no runtime effects, no FX variants (Caps)
-        if (desc.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
-            return {};
         Program* prog = nullptr;
         {
             OutsideFrame guard(*this);

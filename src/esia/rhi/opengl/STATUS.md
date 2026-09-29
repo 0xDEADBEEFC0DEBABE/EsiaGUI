@@ -45,10 +45,10 @@ warning-free with clang 18 (`-DESIA_WERROR=ON`, debug and release) and with the 
 | buffers | `GL_DYNAMIC_DRAW` buffers written through `GL_COPY_WRITE_BUFFER` (no other binding disturbed); `glBufferSubData` is ordered after the draws of earlier frames, so the driver versions it |
 | constants | one 256 KB uniform-buffer ring, `glBindBufferRange` at binding points 0 / 1 / 2 with `GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT`; when full it is orphaned and the current values of all three slots are written again (bindings made before would point into the new storage) |
 | textures and samplers | unit n = RHI slot n (`glUniform1i` per `ShaderBlob::textures` after linking, both stages merged by name); `SetPipeline` binds each used unit's sampler object (linear / point clamp); unit 8 is the backend's own for uploads, so slot bindings survive them |
-| pipelines | one GL program per `ShaderProgram`, compiled at the first `CreatePipeline` and shared; a pipeline is program + blend + layout + topology; `effect` / `fxFeatures` / dual source without support return `{}` |
+| pipelines | one GL program per `ShaderProgram`, compiled at the first `CreatePipeline` and shared; a pipeline is program + blend + layout + topology; `effect` / `fxFeatures` return `{}` |
 | vertex input | a UI VAO (attributes 0 / 1 / 2, 20-byte `esia::Vertex`, color `GL_UNSIGNED_BYTE` normalized), an empty VAO for id-only programs |
 | draws | `glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_INT, first * 4)`, `glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, n)`, `glDrawArrays` |
-| blend | `glBlendFuncSeparate`: straight, premultiplied, opaque (blending off), dual source `GL_SRC1_COLOR` / `GL_SRC1_ALPHA` |
+| blend | `glBlendFuncSeparate`: straight, premultiplied, opaque (blending off) |
 | passes | bind the FBO, full viewport and scissor, `GL_FRAMEBUFFER_SRGB` on for sRGB targets (desktop; GLES always encodes); `Clear` = `glClear` with the scissor off (the clear color is linear and encoded into sRGB targets, as on the other APIs); `DontCare` = `glInvalidateFramebuffer` where it exists; stale unit bindings of the target are dropped (feedback loops) |
 | `CopyTexture` | `glBlitFramebuffer` between formats of the same encoding (`GL_FRAMEBUFFER_SRGB` on for sRGB -> sRGB, so the decode / encode of a blit cancels); **sRGB -> raw copies (the backdrop copy of an sRGB target) are a draw** with the backend's own tiny program, because a blit linearizes an sRGB source on GLES (and, by the spec, on desktop GL before 4.4): the point sampler skips the decode (`EXT_texture_sRGB_decode`) or the shader re-encodes what it decoded (bit-exact for all 256 levels, tested); a multisampled source is resolved by the blit, or first into a same-format temporary when GLES's rules forbid it (different format, or a destination rectangle that is not the source rectangle) |
 | direct render-target read | the headless target and wrapped host framebuffers with a color texture report `Sampled` (sRGB only with `EXT_texture_sRGB_decode`: the sampler objects skip the decode) |
@@ -64,7 +64,6 @@ warning-free with clang 18 (`-DESIA_WERROR=ON`, debug and release) and with the 
 | --- | --- | --- | --- | --- |
 | `fxStorage` / `shaderFormat` | Texture / Glsl330 | Texture / Essl300 | | |
 | `framebufferOriginBottomLeft` | yes | yes | | |
-| `dualSourceBlend` | yes (core 3.3) | `EXT_blend_func_extended` | yes | gles: no |
 | `floatRenderTargets` | yes (probed) | `EXT_color_buffer_half_float` or `_float` (probed) | yes | gles: no |
 | `timestampQueries` | yes (core 3.3) | `EXT_disjoint_timer_query` | yes | gles: no |
 | raw sampling of sRGB targets (reported as `Sampled`) | `EXT_texture_sRGB_decode` | same | yes | no |
@@ -84,7 +83,6 @@ warning-free with clang 18 (`-DESIA_WERROR=ON`, debug and release) and with the 
 | shapes, gradients, shadows, text, edge_fade, clipping | PASS, max delta 0 | PASS, 0 | identical to `opengl` | identical |
 | glass, windows, hidpi, light_streak | PASS, 0 | PASS, 0 | identical | PASS, max delta <= 2 |
 | glow_layer | PASS, 0 | PASS, 0 | identical | PASS, max delta 6 (8 % of pixels over 2, none over the tolerance of 10) |
-| text_lcd | PASS, 0 | PASS, 0 | identical | **SKIP**: no dual-source blending (no `EXT_blend_func_extended` on the GLES 3.0 minimum) |
 | srgb_target | PASS, 0 | PASS, 0 | identical (copy by shader re-encode) | PASS, max delta 2 |
 | msaa_target (vs. glass.png) | PASS, max delta 1 | PASS, 1 | identical | PASS, max delta 2 |
 
@@ -115,8 +113,6 @@ llvmpipe (a 4.5 core context; 3.3 requested). Every image was opened and checked
   untinted bloom of the pink disk and the yellow line, the glowing smooth polyline.
 * **text**: the eight test glyphs in order at 32 / 20 / 12 px on dark and light, the diagonal as "/" and the E facing
   right (uploaded textures are not flipped), black at 60 % on a fractional position.
-* **text_lcd**: sub-pixel coverage with blue fringes on left edges and red on right edges (RGB stripe order), the
-  grayscale fallback with a pink bloom inside the glow layer.
 * **edge_fade**: the left column cut hard at the clip, the right one fading over 28 px at the top and 44 px at the
   bottom, rows, glyphs and hairlines alike.
 * **clipping**: nested clip intersection (disk and white bar cut at x = 150, y = 40..110), the replacing clip with the
@@ -144,7 +140,7 @@ for the cross build.
 | `ctest --preset linux-clang` | 11 / 11 pass (the 8 of `esia-core`, `esia_rhi_opengl_tests`, `esia_conformance_opengl`, `esia_conformance_gles`) |
 | `build/linux-clang/bin/esia_conformance --backend opengl --golden tests/conformance/golden --strict` | 14 / 14 PASS, `max delta 0` except msaa_target (1) |
 | the same with `--backend gles` | 14 / 14 PASS, the same numbers |
-| `ESIA_GL_CORE_ONLY=1` + both backends, `--out`, diffed with the goldens | section 2 (all pass; `gles` text_lcd SKIP) |
+| `ESIA_GL_CORE_ONLY=1` + both backends, `--out`, diffed with the goldens | section 2 (all pass) |
 | `cmake --preset linux-clang-release -DESIA_WERROR=ON -DESIA_BACKEND_OPENGL=ON`, build, `ctest --preset linux-clang-release`, both strict runs | 0 warnings, 11 / 11, 14 / 14 twice |
 | `cmake --preset windows-mingw-cross -DESIA_WERROR=ON -DESIA_BACKEND_OPENGL=ON && cmake --build --preset windows-mingw-cross` | builds every target incl. `esia_rhi_opengl_tests.exe`, 0 warnings (the WGL loader and `LoadLibrary` EGL paths compile); **not run** (no Wine here) |
 | `git diff --stat origin/esia-core..HEAD` | only `src/esia/rhi/opengl/**` and the 13 goldens |
@@ -196,6 +192,14 @@ Three things only the real driver showed, fixed on this branch: NVIDIA's ES prof
 `EXT_disjoint_timer_query` but rejects `GL_GPU_DISJOINT_EXT` (now probed once at creation); its timestamp queries
 of a headless frame never complete after a `glFlush` alone (headless frames now end with `glFinish`; hosts have
 their SwapBuffers); and the conformance scene table read a freed tolerance (fixed on `esia-core`, `3a8fe0a`).
+
+### Core round 3 (grayscale text only)
+
+Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): the backend no longer offers
+dual-source blending (`GL_SRC1_COLOR`, `EXT_blend_func_extended`) or the TextLcd programs, and the `text_lcd` scene
+is gone. On the RTX 4080 SUPER after the merge (`esia-core` `ac37883`): ctest 11 / 11; `--strict`, single frame and
+`--frames 3`: `opengl` 17 / 17, `gles` 17 / 17, and `gles` with `ESIA_GL_CORE_ONLY=1` 17 / 17 - no scene is skipped
+any more (the GLES 3.0 minimum lacked only dual-source blending).
 
 ## 4. Not verified
 

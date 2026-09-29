@@ -110,8 +110,6 @@ ESIA_TEST(GlDevice, ConformanceScenesWithoutGlErrors)
                 rhi::HeadlessDevice h = Headless(es, scene.width, scene.height, scene.format, scene.samples, coreOnly, scene.sampleable);
                 if (!h.device)
                     continue;
-                if (scene.needsDualSource && !h.device->GetCaps().dualSourceBlend)
-                    continue;
                 RenderScene(*h.device, h.target, scene, 2);
                 const std::uint32_t errors = ErrorCount(*h.device);
                 if (errors)
@@ -152,7 +150,6 @@ ESIA_TEST(GlDevice, Caps)
             ESIA_CHECK(c.readback && c.sampleRenderTarget && !c.runtimeEffects && !c.fxFeatureVariants);
             ESIA_CHECK(c.maxFxDataWidth >= 24 && c.maxFxDataWidth <= c.maxTextureSize);
             // GL 3.3 has these in core; GLES 3.0 only through extensions (llvmpipe has them all)
-            ESIA_CHECK(c.dualSourceBlend == (!es || !coreOnly));
             ESIA_CHECK(c.floatRenderTargets == (!es || !coreOnly));
             ESIA_CHECK(c.timestampQueries == (!es || !coreOnly));
             // an sRGB target is sampled raw only with EXT_texture_sRGB_decode
@@ -599,8 +596,6 @@ ESIA_TEST(GlDevice, RendererKeepsTheContractWithGlCaps)
                 o.caps = h.device->GetCaps();
                 o.record = false;
                 rhi::NullDevice null(o);
-                if (scene.needsDualSource && !o.caps.dualSourceBlend)
-                    continue;
                 const rhi::Texture target = null.CreateHostTarget(scene.width, scene.height, scene.format, !rhi::IsSrgb(scene.format) || !coreOnly, scene.samples);
                 render::Renderer renderer(null);
                 conformance::SceneFrame f;

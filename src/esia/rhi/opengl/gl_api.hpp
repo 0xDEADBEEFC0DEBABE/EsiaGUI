@@ -36,8 +36,7 @@ namespace esia::rhi::opengl
     // ------------------------------------------------------------------ constants
     constexpr GLenum GL_NO_ERROR = 0, GL_NONE = 0, GL_ZERO = 0, GL_ONE = 1, GL_FALSE = 0, GL_TRUE = 1;
     constexpr GLenum GL_TRIANGLES = 0x0004, GL_TRIANGLE_STRIP = 0x0005;
-    constexpr GLenum GL_SRC_ALPHA = 0x0302, GL_ONE_MINUS_SRC_ALPHA = 0x0303, GL_SRC1_ALPHA = 0x8589, GL_SRC1_COLOR = 0x88F9,
-                     GL_ONE_MINUS_SRC1_COLOR = 0x88FA, GL_ONE_MINUS_SRC1_ALPHA = 0x88FB, GL_FUNC_ADD = 0x8006;
+    constexpr GLenum GL_SRC_ALPHA = 0x0302, GL_ONE_MINUS_SRC_ALPHA = 0x0303, GL_FUNC_ADD = 0x8006;
     constexpr GLenum GL_BLEND_DST_RGB = 0x80C8, GL_BLEND_SRC_RGB = 0x80C9, GL_BLEND_DST_ALPHA = 0x80CA, GL_BLEND_SRC_ALPHA = 0x80CB,
                      GL_BLEND_EQUATION_RGB = 0x8009, GL_BLEND_EQUATION_ALPHA = 0x883D;
     constexpr GLenum GL_CULL_FACE = 0x0B44, GL_DEPTH_TEST = 0x0B71, GL_STENCIL_TEST = 0x0B90, GL_DITHER = 0x0BD0, GL_BLEND = 0x0BE2,
