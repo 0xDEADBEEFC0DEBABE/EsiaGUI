@@ -206,7 +206,7 @@ namespace esia::text
         {
         public:
             FreeTypeTextSystem(TextureRegistry& textures, const FreeTypeDesc& desc)
-                : desc_(desc), atlas_(textures, GlyphAtlasDesc{desc.atlasPageSize, desc.atlasMaxPages, 1})
+                : atlas_(textures, GlyphAtlasDesc{desc.atlasPageSize, desc.atlasMaxPages, 1})
             {
             }
 
@@ -292,7 +292,6 @@ namespace esia::text
                 if (color.a <= 0.0f || !(scale > 0.0f))
                     return layout->metrics.size;
                 const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
-                const bool lcd = params_.antialiasing == Antialiasing::Subpixel;
                 // animated scales are quantized to 1/4 px of em, so an animation does not flood the atlas
                 const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
                 const std::uint32_t rgba = color.ToRgba8();
@@ -310,7 +309,7 @@ namespace esia::text
                         xi += 1.0f;
                     }
                     const float yi = std::floor(py + 0.5f);
-                    const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase, lcd);
+                    const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase);
                     if (!s || !s->page)
                         continue;
                     const Rect r((xi + (float)s->left) * inv, (yi + (float)s->top) * inv, (xi + (float)(s->left + s->width)) * inv,
@@ -341,8 +340,7 @@ namespace esia::text
                     return;   // no font has it: an icon's .notdef box would help nobody
                 const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
                 // icon sizes animate: quantized to 1/4 px so the animation reuses atlas entries
-                const GlyphSlot* s = Glyph(face, (std::uint16_t)glyph, std::floor(font.size * rs * 4.0f + 0.5f) * 0.25f, 0,
-                                           params_.antialiasing == Antialiasing::Subpixel);
+                const GlyphSlot* s = Glyph(face, (std::uint16_t)glyph, std::floor(font.size * rs * 4.0f + 0.5f) * 0.25f, 0);
                 if (!s || !s->page)
                     return;
                 // optical centering: the ink box's center on `center`, the pen on a whole pixel
@@ -821,11 +819,10 @@ namespace esia::text
 
             // The atlas slot of a glyph at `emPixels` (physical pixels per em) and pen phase `phase` (quarter pixels),
             // rasterized from the unhinted outline on first use.
-            const GlyphSlot* Glyph(std::uint16_t face, std::uint16_t glyph, float emPixels, int phase, bool lcd)
+            const GlyphSlot* Glyph(std::uint16_t face, std::uint16_t glyph, float emPixels, int phase)
             {
                 const std::uint64_t q = (std::uint64_t)std::min(emPixels * 16.0f + 0.5f, 134217727.0f);   // 1/16 px, 27 bits
-                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | ((std::uint64_t)lcd << 30) | (q << 2) |
-                                          (std::uint64_t)(phase & 3);
+                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (q << 2) | (std::uint64_t)(phase & 3);
                 if (const GlyphSlot* s = atlas_.Find(key))
                     return s;
                 Face& f = *faces_[face];
@@ -843,14 +840,12 @@ namespace esia::text
                     FT_Outline_Decompose(&f.ft->glyph->outline, &funcs, &sink);
                 }
                 const float offsetX = 0.25f * (float)phase;
-                const bool ok = lcd ? RasterizeLcd(outline_, offsetX, desc_.lcdBgr, bitmap_) : RasterizeGray(outline_, offsetX, bitmap_);
-                if (!ok)
+                if (!RasterizeGray(outline_, offsetX, bitmap_))
                     bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
                 const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
                 return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
             }
 
-            FreeTypeDesc desc_;
             FT_Library ft_ = nullptr;
             hb_buffer_t* buffer_ = nullptr;
             hb_unicode_funcs_t* unicode_ = nullptr;

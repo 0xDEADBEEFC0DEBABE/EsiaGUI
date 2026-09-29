@@ -48,8 +48,8 @@ namespace esia
         Vec2 min, max;
 
         constexpr Rect() = default;
-        constexpr Rect(Vec2 mn, Vec2 mx) : min(mn), max(mx) {}
-        constexpr Rect(float x0, float y0, float x1, float y1) : min(x0, y0), max(x1, y1) {}
+        constexpr Rect(Vec2 mn, Vec2 mx) : min{mn}, max{mx} {}
+        constexpr Rect(float x0, float y0, float x1, float y1) : min{x0, y0}, max{x1, y1} {}
         static constexpr Rect FromSize(Vec2 pos, Vec2 size) { return {pos, pos + size}; }
         static constexpr Rect FromCenter(Vec2 c, Vec2 size) { return {c - size * 0.5f, c + size * 0.5f}; }
 
@@ -68,11 +68,11 @@ namespace esia
         constexpr Rect Translated(Vec2 d) const { return {min + d, max + d}; }
         constexpr Rect Intersect(const Rect& r) const
         {
-            return {std::max(min.x, r.min.x), std::max(min.y, r.min.y), std::min(max.x, r.max.x), std::min(max.y, r.max.y)};
+            return {(std::max)(min.x, r.min.x), (std::max)(min.y, r.min.y), (std::min)(max.x, r.max.x), (std::min)(max.y, r.max.y)};
         }
         constexpr Rect Union(const Rect& r) const
         {
-            return {std::min(min.x, r.min.x), std::min(min.y, r.min.y), std::max(max.x, r.max.x), std::max(max.y, r.max.y)};
+            return {(std::min)(min.x, r.min.x), (std::min)(min.y, r.min.y), (std::max)(max.x, r.max.x), (std::max)(max.y, r.max.y)};
         }
         constexpr bool operator==(const Rect&) const = default;
     };

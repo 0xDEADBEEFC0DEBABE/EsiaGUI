@@ -4,9 +4,9 @@
 //   * FreeType + HarfBuzz (esia_text_ft, every platform; the only one on Linux / Android / consoles),
 //   * DirectWrite on Windows and Core Text on Apple (later: system fallback fonts and the platform's rendering).
 // A TextSystem shapes UTF-8 text, rasterizes glyphs into atlas pages it owns in the TextureRegistry and emits
-// glyph quads into a DrawList (Geometry commands on those pages). Glyph pages are Alpha8 coverage, or RGBA8 with
-// TextureFlags_LcdCoverage for sub-pixel text; the renderer picks the matching text pipeline from the page's
-// TextureInfo, so text needs no special draw commands.
+// glyph quads into a DrawList (Geometry commands on those pages). Glyph pages are Alpha8 coverage, which the renderer
+// recognizes from the page's TextureInfo and draws with its text pipeline, so text needs no special draw commands.
+// Text is antialiased in grayscale on every platform: there is no sub-pixel (LCD / ClearType) text.
 //
 // Threading: a TextSystem belongs to one UI thread (like the Context that uses it).
 #pragma once
@@ -45,17 +45,10 @@ namespace esia::text
         int lines = 0;
     };
 
-    enum class Antialiasing : std::uint8_t
-    {
-        Grayscale,   // Alpha8 coverage pages
-        Subpixel,    // RGBA8 pages, one coverage per R/G/B stripe (TextureFlags_LcdCoverage), dual-source blended
-    };
-
     // How glyphs are rasterized this frame.
     struct RasterParams
     {
         float pixelsPerUnit = 1.0f;   // render-target pixels per UI unit (metrics x render scale is already in the sizes)
-        Antialiasing antialiasing = Antialiasing::Grayscale;
     };
 
     class TextSystem

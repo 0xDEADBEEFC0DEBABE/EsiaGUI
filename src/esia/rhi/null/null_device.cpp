@@ -29,7 +29,6 @@ namespace esia::rhi
             case BlendMode::Opaque: return "opaque";
             case BlendMode::Straight: return "straight";
             case BlendMode::Premultiplied: return "premul";
-            case BlendMode::DualSourceLcd: return "dual-source";
             }
             return "?";
         }
@@ -227,11 +226,6 @@ namespace esia::rhi
 
     Pipeline NullDevice::CreatePipeline(const PipelineDesc& d)
     {
-        if (d.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
-        {
-            Record("create pipeline refused: dual-source blending unsupported");
-            return {};
-        }
         if (d.effect != 0 && !caps_.runtimeEffects)
         {
             Record(Fmt("create pipeline refused: runtime effect %u unsupported", d.effect));
@@ -252,12 +246,9 @@ namespace esia::rhi
             Error("CreatePipeline: bad program");
             return {};
         }
-        const bool wantsVertices = d.program == ShaderProgram::UiGeometry || d.program == ShaderProgram::TextGray ||
-                                   d.program == ShaderProgram::TextLcd || d.program == ShaderProgram::TextLcdGray;
+        const bool wantsVertices = d.program == ShaderProgram::UiGeometry || d.program == ShaderProgram::TextGray;
         if (wantsVertices != (d.layout == VertexLayout::UiVertex))
             Error(Fmt("CreatePipeline: %s with the wrong vertex layout", ShaderProgramName(d.program)));
-        if ((d.program == ShaderProgram::TextLcd) != (d.blend == BlendMode::DualSourceLcd))
-            Error("CreatePipeline: TextLcd needs (and only it may use) dual-source blending");
         const Pipeline p{next_++};
         pipelines_[p.id] = d;
         if (d.fxFeatures != 0 && (!caps_.fxFeatureVariants || d.program != ShaderProgram::Fx))
@@ -471,8 +462,7 @@ namespace esia::rhi
             Error(Fmt("%s: program %s", call, ShaderProgramName(p.program)));
         // What each program's shaders declare must be bound: Vulkan and D3D12 have no "unbound" descriptors, and
         // Metal / GL would read whatever an earlier draw left.
-        const bool ui = p.program == ShaderProgram::UiGeometry || p.program == ShaderProgram::TextGray || p.program == ShaderProgram::TextLcd ||
-                        p.program == ShaderProgram::TextLcdGray;
+        const bool ui = p.program == ShaderProgram::UiGeometry || p.program == ShaderProgram::TextGray;
         const bool fx = p.program == ShaderProgram::Fx;
         const bool composite = p.program == ShaderProgram::LayerComposite;
         const bool usesPass = p.program == ShaderProgram::Downsample || composite;
