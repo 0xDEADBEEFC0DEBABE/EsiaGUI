@@ -184,12 +184,21 @@ jobs:
           path: ${{ env.VCPKG_BINARY_CACHE }}
           key: vcpkg-x64-windows-freetype-harfbuzz-${{ steps.vcpkg.outputs.commit }}
 
+      # vcpkg's packages through its toolchain file (harfbuzz's CMake config resolves its prefix only there: with a
+      # plain CMAKE_PREFIX_PATH its include directory comes out as "//include/harfbuzz"); the preset's own toolchain
+      # (clang-cl) is chain-loaded
       - name: Configure
-        run: >
-          cmake --preset ${{ matrix.preset }} -DESIA_WERROR=ON
-          -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON
-          -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON -DESIA_BACKEND_METAL=ON
-          "-DCMAKE_PREFIX_PATH=${{ env.VCPKG_X64 }}"
+        run: |
+          $chain = @()
+          if ('${{ matrix.preset }}' -eq 'windows-clang-cl') {
+            $chain = @("-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE/cmake/toolchains/clang-cl-windows.cmake")
+          }
+          cmake --preset ${{ matrix.preset }} -DESIA_WERROR=ON `
+            -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON `
+            -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON -DESIA_BACKEND_METAL=ON `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows @chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build
         run: cmake --build --preset ${{ matrix.build }}
