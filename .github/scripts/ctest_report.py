@@ -9,7 +9,11 @@
   the tests' output, and appends the same as Markdown to $GITHUB_STEP_SUMMARY when it is set;
 * fails (exit 1) when a test matching a --require pattern is missing or was skipped: a conformance test that
   exits 77 (no device for the backend) shows as skipped in CTest, and a job must not pass by skipping the backends
-  it exists to run.
+  it exists to run;
+* fails when a test failed, unless every scene it failed is a --known-failure 'TEST_REGEX:SCENE:REASON' (SCENE '*'
+  for a test that fails without scene lines, e.g. a crash): those are listed with their reason and the scene's
+  numbers, and a known failure that no longer fails is reported so its entry can go. The job's ctest step leaves
+  the verdict to this script (it reads the JUnit file, which has every result).
 """
 import argparse
 import os
@@ -24,6 +28,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('junit')
     ap.add_argument('--require', action='append', default=[], help='regex (full match) of tests that must run')
+    ap.add_argument('--known-failure', action='append', default=[], help="'TEST_REGEX:SCENE:REASON'")
     ap.add_argument('--title', default='ctest')
     args = ap.parse_args()
 
@@ -64,7 +69,47 @@ def main():
                 lines.append('| `%s` | %s | %s | %s |' % (name, result, scene, detail.replace('|', '/')))
         lines += ['', '</details>']
 
+    known = []
+    for k in args.known_failure:
+        test_rx, scene, reason = k.split(':', 2)
+        known.append((re.compile(test_rx), scene, reason, [False]))
+
+    def known_for(test, scene):
+        for rx, sc, reason, used in known:
+            if rx.fullmatch(test) and sc == scene:
+                used[0] = True
+                return reason
+        return None
+
     errors = []
+    excused = []
+    for name, status, _, _, scenes in tests:
+        if status != 'failed':
+            continue
+        failed = [s for s in scenes if s[0] in ('FAIL', 'NO GOLDEN')]
+        if not failed:
+            reason = known_for(name, '*')
+            if reason:
+                excused.append((name, '*', reason, 'failed without a scene result (crash or abort)'))
+            else:
+                errors.append('%s failed' % name)
+            continue
+        for result, _, scene, detail in failed:
+            reason = known_for(name, scene)
+            if reason:
+                excused.append((name, scene, reason, detail))
+            else:
+                errors.append('%s: %s %s (%s)' % (name, result, scene, detail))
+    if excused:
+        lines += ['', '**Known failures** (not counted; each has an entry in the workflow):', '',
+                  '| Test | Scene | Result | Why |', '| --- | --- | --- | --- |']
+        for name, scene, reason, detail in excused:
+            lines.append('| `%s` | %s | %s | %s |' % (name, scene, detail.replace('|', '/'), reason.replace('|', '/')))
+    stale = ['%s:%s' % (rx.pattern, sc) for rx, sc, _, used in known if not used[0]]
+    for entry in stale:
+        lines.append('')
+        lines.append('Known failure `%s` did not fail in this run: remove its entry if it stays so.' % entry)
+
     for pattern in args.require:
         rx = re.compile(pattern)
         matched = [t for t in tests if rx.fullmatch(t[0])]
@@ -74,7 +119,7 @@ def main():
             if status == 'skipped':
                 errors.append('%s was skipped (%s): this job exists to run it' % (name, reason or 'no reason'))
     if errors:
-        lines += ['', '**Required tests did not run:**', ''] + ['* %s' % e for e in errors]
+        lines += ['', '**Failures:**', ''] + ['* %s' % e for e in errors]
 
     text = '\n'.join(lines) + '\n'
     print(text)
@@ -82,6 +127,10 @@ def main():
     if summary:
         with open(summary, 'a', encoding='utf-8') as f:
             f.write(text + '\n')
+    for entry in stale:
+        print('::warning::known failure %s did not fail' % entry)
+    for name, scene, reason, _ in excused:
+        print('::warning::known failure: %s %s (%s)' % (name, scene, reason))
     if errors:
         for e in errors:
             print('::error::%s' % e)
