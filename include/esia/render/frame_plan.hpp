@@ -30,9 +30,9 @@ namespace esia::render
                 return o;
             if (o.Empty())
                 return *this;
-            return {std::min(x0, o.x0), std::min(y0, o.y0), std::max(x1, o.x1), std::max(y1, o.y1)};
+            return {(std::min)(x0, o.x0), (std::min)(y0, o.y0), (std::max)(x1, o.x1), (std::max)(y1, o.y1)};
         }
-        PxRect Intersect(const PxRect& o) const { return {std::max(x0, o.x0), std::max(y0, o.y0), std::min(x1, o.x1), std::min(y1, o.y1)}; }
+        PxRect Intersect(const PxRect& o) const { return {(std::max)(x0, o.x0), (std::max)(y0, o.y0), (std::min)(x1, o.x1), (std::min)(y1, o.y1)}; }
         PxRect Expand(float a) const { return {x0 - a, y0 - a, x1 + a, y1 + a}; }
         bool operator==(const PxRect&) const = default;
     };
