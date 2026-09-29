@@ -15,7 +15,7 @@
 //
 //   // render thread (the UI thread of the Context): owns the device and the frame loop
 //   esia::ContextDesc cd;
-//   platform.InstallClipboard(cd);
+//   platform.Configure(cd);                               // clipboard, double-click time, key repeat
 //   esia::Context ctx(cd);
 //   platform.SetContext(&ctx);                            // input starts flowing into ctx
 //   while (!platform.CloseRequested())
@@ -46,7 +46,7 @@
 //     tracking, cursor, IME contexts, the system caret, SetWindowPos on DPI changes. It never waits for the render
 //     thread, so moving or resizing the window (a modal loop inside DefWindowProc) never stalls rendering.
 //   * UI thread = the thread of the Context (NewFrame .. EndFrame, the renderer): SetContext, Frame, ApplyRequests
-//     and the clipboard callbacks run there. It never sends messages to the window (which could wait on a window
+//     and the clipboard callbacks (Configure) run there. It never sends messages to the window (which could wait on a window
 //     thread busy in a modal loop): requests reach the window thread as one posted message.
 //   * Input crosses over through Context::QueueInput, which is thread-safe; mouse positions are converted to UI
 //     units on the window thread with the scale of the moment. SetContext(nullptr) returns once no message is being
@@ -144,9 +144,11 @@ namespace esia::platform::win32
         // After Context::EndFrame: publishes the capture flags and, when the cursor or the text input changed, posts
         // one message to the window thread that applies them.
         void ApplyRequests(const PlatformRequests& requests);
-        // Points the context's clipboard callbacks at the window's clipboard (UTF-8 <-> UTF-16, "\n" <-> "\r\n").
-        // The Platform must outlive the context.
-        void InstallClipboard(ContextDesc& desc);
+        // Before creating the context: points its clipboard callbacks at the window's clipboard (UTF-8 <-> UTF-16,
+        // "\n" <-> "\r\n"; the Platform must outlive the context) and takes the user's settings for double clicks
+        // and key repeat (Control Panel: Mouse, Keyboard) into desc.input. The distances stay the core's: they are
+        // UI units, the system's are pixels of another era.
+        void Configure(ContextDesc& desc);
         void SetUiScale(float scale);
 
         // ---- any thread

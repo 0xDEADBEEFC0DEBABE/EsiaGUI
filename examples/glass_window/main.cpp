@@ -93,7 +93,7 @@ namespace
         std::fflush(stdout);
 
         esia::ContextDesc cd;
-        platform.InstallClipboard(cd);
+        platform.Configure(cd);
         esia::Context ctx(cd);
         esia::text::TextSystem* text = nullptr;
         esia::text::FontId font = 0;

@@ -23,10 +23,10 @@ namespace
         return ::DefWindowProcW(w, msg, wparam, lparam);
     }
 
-    ContextDesc WithClipboard(pw::Platform& p)
+    ContextDesc Configured(pw::Platform& p)
     {
         ContextDesc d;
-        p.InstallClipboard(d);
+        p.Configure(d);
         return d;
     }
 
@@ -51,7 +51,7 @@ namespace
         double time = 0.0;
         bool inFrame = false;
 
-        explicit Fixture(const pw::Desc& desc = {}) : platform(desc), ctx(WithClipboard(platform))
+        explicit Fixture(const pw::Desc& desc = {}) : platform(desc), ctx(Configured(platform))
         {
             static const bool registered = [] {
                 WNDCLASSEXW wc = {};
@@ -330,6 +330,17 @@ ESIA_TEST(Win32Platform, Clipboard)
     ::CloseClipboard();
     ESIA_CHECK(raw == L"line 1\r\nline 2: 你好");
     ESIA_CHECK(f.ctx.GetClipboardText() == text);
+}
+
+ESIA_TEST(Win32Platform, SystemInputSettings)
+{
+    Fixture f;
+    ContextDesc d;
+    f.platform.Configure(d);
+    ESIA_CHECK_NEAR(d.input.doubleClickTime, (float)::GetDoubleClickTime() / 1000.0f, 1e-6f);
+    ESIA_CHECK(d.input.keyRepeatDelay >= 0.25f && d.input.keyRepeatDelay <= 1.0f);
+    ESIA_CHECK(d.input.keyRepeatRate >= 1.0f / 30.1f && d.input.keyRepeatRate <= 1.0f / 2.4f);
+    ESIA_CHECK(d.getClipboard && d.setClipboard);
 }
 
 ESIA_TEST(Win32Platform, NoContextNoInput)

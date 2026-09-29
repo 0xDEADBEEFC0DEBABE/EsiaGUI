@@ -1,6 +1,7 @@
 // Esia - Win32 platform layer: the app window, the message loop, DPI awareness and the clipboard.
 #include "win32_platform.hpp"
 #include <dwmapi.h>
+#include <algorithm>
 
 namespace esia::platform::win32
 {
@@ -84,11 +85,20 @@ namespace esia::platform::win32
         }
     }
 
-    void Platform::InstallClipboard(ContextDesc& desc)
+    void Platform::Configure(ContextDesc& desc)
     {
         Impl* m = impl_.get();
         desc.getClipboard = [m] { return GetClipboardUtf8(m->hwnd.load()); };
         desc.setClipboard = [m](const std::string& s) { SetClipboardUtf8(m->hwnd.load(), s); };
+
+        desc.input.doubleClickTime = (float)::GetDoubleClickTime() / 1000.0f;
+        // SPI_GETKEYBOARDDELAY: 0 .. 3 = 250 .. 1000 ms; SPI_GETKEYBOARDSPEED: 0 .. 31 = about 2.5 .. 30 repeats a second
+        UINT delay = 1;
+        DWORD speed = 31;
+        if (::SystemParametersInfoW(SPI_GETKEYBOARDDELAY, 0, &delay, 0))
+            desc.input.keyRepeatDelay = 0.25f * (float)(std::min<UINT>(delay, 3) + 1);
+        if (::SystemParametersInfoW(SPI_GETKEYBOARDSPEED, 0, &speed, 0))
+            desc.input.keyRepeatRate = 1.0f / (2.5f + (float)std::min<DWORD>(speed, 31) * (27.5f / 31.0f));
     }
 
     bool EnableDpiAwareness()
