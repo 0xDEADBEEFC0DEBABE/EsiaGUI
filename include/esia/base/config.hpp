@@ -20,6 +20,12 @@
 
 #define ESIA_ASSERT(expr) assert(expr)
 
+#if defined(__clang__) || defined(__GNUC__)
+#  define ESIA_PRINTF(fmtIndex, argIndex) __attribute__((format(printf, fmtIndex, argIndex)))
+#else
+#  define ESIA_PRINTF(fmtIndex, argIndex)
+#endif
+
 namespace esia
 {
     constexpr int kVersionMajor = 0;
