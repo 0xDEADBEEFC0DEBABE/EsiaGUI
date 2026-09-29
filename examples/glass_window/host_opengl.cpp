@@ -3,12 +3,18 @@
 #include "host.hpp"
 #include "esia/rhi/opengl.hpp"
 #include <GL/gl.h>
-#include <GL/wglext.h>
 
 namespace glass
 {
     namespace
     {
+        // WGL_ARB_create_context and WGL_EXT_swap_control, from the registry: the Windows SDK has no GL/wglext.h
+        // (mingw-w64 does), and these few are all the host needs (the backend's gl_headless.cpp does the same).
+        constexpr int WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091, WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092, WGL_CONTEXT_FLAGS_ARB = 0x2094,
+                      WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126, WGL_CONTEXT_DEBUG_BIT_ARB = 0x0001, WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x0001;
+        using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+        using PFNWGLSWAPINTERVALEXTPROC = BOOL(WINAPI*)(int);
+
         template <class Fn>
         Fn Wgl(const char* name)
         {
