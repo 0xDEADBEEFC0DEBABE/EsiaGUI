@@ -200,7 +200,6 @@ namespace esia::rhi::d3d12
             Caps c;
             c.fxStorage = FxStorage::Buffer;
             c.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm5;
-            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -455,7 +454,7 @@ namespace esia::rhi::d3d12
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != (desc.program == ShaderProgram::TextLcd))
+            if (desc.program >= ShaderProgram::Count)
                 return {};
             const d3d::DxgiFormats f = d3d::DxgiFormatsOf(desc.targetFormat);
             if (f.rtv == DXGI_FORMAT_UNKNOWN)
@@ -506,13 +505,6 @@ namespace esia::rhi::d3d12
                 b.BlendEnable = TRUE;
                 b.SrcBlend = b.SrcBlendAlpha = D3D12_BLEND_ONE;
                 b.DestBlend = b.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
-                break;
-            case BlendMode::DualSourceLcd:
-                b.BlendEnable = TRUE;
-                b.SrcBlend = D3D12_BLEND_SRC1_COLOR;
-                b.DestBlend = D3D12_BLEND_INV_SRC1_COLOR;
-                b.SrcBlendAlpha = D3D12_BLEND_SRC1_ALPHA;
-                b.DestBlendAlpha = D3D12_BLEND_INV_SRC1_ALPHA;
                 break;
             }
             d.SampleMask = 0xFFFFFFFFu;

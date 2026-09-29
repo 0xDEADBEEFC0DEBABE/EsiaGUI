@@ -5,7 +5,7 @@ session without a GPU or Windows (2026-09-29). They build warning-free in every 
 `windows-mingw-cross` toolchain, and **everything below that says "ran" ran under Wine 9.0 on Mesa's software
 renderers** (wined3d on llvmpipe for D3D9 / 10 / 11, vkd3d on lavapipe for D3D12) with Microsoft's
 `d3dcompiler_47.dll`. There, all four backends pass every conformance scene against the OpenGL session's image
-goldens (D3D9 SKIPs `text_lcd`: no dual-source blending). **Nothing has run on a real Windows driver or with the
+goldens (D3D9 SKIPped `text_lcd`, a scene removed with sub-pixel text in core round 3). **Nothing has run on a real Windows driver or with the
 Direct3D debug layers**: that is the local session's job (section 7).
 
 * [1. Implemented](#1-implemented)
@@ -35,7 +35,6 @@ Direct3D debug layers**: that is the local session's job (section 7).
 | Direct read (no copy) | host target given with its texture | SRV of the target (raw view of sRGB) | same | same + `RENDER_TARGET -> PIXEL_SHADER_RESOURCE` |
 | sRGB targets | `D3DRS_SRGBWRITEENABLE` | sRGB RTV on typeless storage | same | same |
 | MSAA targets | multisampled render-target surface, `StretchRect` resolve | resolve | resolve | resolve |
-| Dual-source (sub-pixel text) | no (grayscale coverage) | yes | yes | yes |
 | Float render targets | if `A16B16G16R16F` blends and filters | yes | yes | yes |
 | Half-pixel offset | yes (`gEsiaHalfPixel` per pass target) | no | no | no |
 | GPU timestamps | `TIMESTAMP` / `DISJOINT` / `FREQ` queries | timestamp queries | timestamp queries (`DONOTFLUSH`) | query heap resolved per frame slot |
@@ -76,7 +75,6 @@ Run under Wine 9.0 + Xvfb against the OpenGL session's goldens (`origin/esia-ope
 | glass | PASS (1) | PASS (1) | PASS (1) | PASS (3) |
 | glow_layer | PASS (1) | PASS (1) | PASS (1) | PASS (1) |
 | text | PASS (0) | PASS (0) | PASS (0) | PASS (0) |
-| text_lcd | SKIP: no dual-source blending | PASS (1) | PASS (1) | PASS (1) |
 | edge_fade | PASS (0) | PASS (0) | PASS (0) | PASS (0) |
 | clipping | PASS (0) | PASS (0) | PASS (0) | PASS (0) |
 | windows | PASS (1) | PASS (1) | PASS (1) | PASS (3) |
@@ -182,6 +180,15 @@ Verified on the RTX 4080 SUPER: clang-cl 22.1.8 and MSVC 19.44 (`/W4 /WX`) with 
 `--frames 3`: d3d11, d3d12, d3d10 18 / 18, d3d9 17 + `text_lcd` SKIP, no debug-layer warning or error (they now fail
 scenes); D3D12 GPU-based validation clean. Largest differences from the llvmpipe goldens: D3D9 `srgb_msaa` 33 and
 `msaa_target` 25 (under 0.02 % of the pixels), everything else 20 or less.
+
+### Core round 3 (grayscale text only)
+
+Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): the D3D10 / 11 / 12 dual-source
+blend states (`SRC1_COLOR` / `SRC1_ALPHA`), the TextLcd pipelines and the `dualSourceBlend` cap are gone, and D3D9
+no longer refuses TextLcd. D3D9 had no dual-source blending and skipped `text_lcd`: it now runs every scene. On the
+RTX 4080 SUPER after the merge (`esia-core` `ac37883`), clang-cl 22.1.8 (`ESIA_WERROR=ON`), `ESIA_D3D_DEBUG=1`:
+ctest 20 / 20; `esia_conformance --strict`, single frame and `--frames 3`: d3d11, d3d12, d3d10 and d3d9 17 / 17
+each, no debug-layer message.
 
 ## 4. Not verified
 
@@ -322,7 +329,7 @@ bin\esia_conformance.exe --backend d3d9  --golden %TEMP%\gl\tests\conformance\go
 ```
 
 (`ctest` runs `esia_conformance_d3d9 ... _d3d12` too, against `tests/conformance/golden`, without `--strict`.)
-Expected: every scene PASS, `text_lcd` SKIP on d3d9 only. On a failure, look at `out\<backend>\<scene>.png` and
+Expected: every scene PASS. On a failure, look at `out\<backend>\<scene>.png` and
 `.diff.png`.
 
 **What to watch in particular**

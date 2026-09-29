@@ -30,8 +30,8 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
     r.prelude = reinterpret_cast<const char*>(rhi::d3d9::blobs::esia_sm3_prelude_hlsli);
     for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
     {
-        if ((rhi::ShaderProgram)p == rhi::ShaderProgram::TextLcd || (rhi::ShaderProgram)p == rhi::ShaderProgram::Fx)
-            continue;   // no dual-source blending on D3D9; the FX shader only compiles per feature mask
+        if ((rhi::ShaderProgram)p == rhi::ShaderProgram::Fx)
+            continue;   // the FX shader: per feature mask, below
         for (shaders::Stage s : {shaders::Stage::Vertex, shaders::Stage::Pixel})
         {
             r.program = (rhi::ShaderProgram)p;
@@ -82,7 +82,7 @@ ESIA_TEST(D3D9Host, WrapDrawRestore)
     ESIA_CHECK(dev != nullptr);
     if (!dev)
         return;
-    ESIA_CHECK(dev->GetCaps().halfPixelOffset && dev->GetCaps().fxFeatureVariants && !dev->GetCaps().dualSourceBlend);
+    ESIA_CHECK(dev->GetCaps().halfPixelOffset && dev->GetCaps().fxFeatureVariants);
     // perRow = maxFxDataWidth / 24 is a power of two (exact float modulo in FxFetch)
     const int perRow = dev->GetCaps().maxFxDataWidth / 24;
     ESIA_CHECK(perRow > 0 && (perRow & (perRow - 1)) == 0 && perRow * 24 == dev->GetCaps().maxFxDataWidth);

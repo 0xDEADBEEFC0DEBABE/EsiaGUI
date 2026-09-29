@@ -178,7 +178,6 @@ namespace esia::rhi::d3d11
             c.framebufferOriginBottomLeft = false;
             c.clipSpaceYDown = false;
             c.halfPixelOffset = false;
-            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -229,8 +228,6 @@ namespace esia::rhi::d3d11
             bool ok = blend(false, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, blends_[(int)BlendMode::Opaque]);
             ok = ok && blend(true, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Straight]);
             ok = ok && blend(true, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Premultiplied]);
-            ok = ok && blend(true, D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_INV_SRC1_COLOR, D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_INV_SRC1_ALPHA,
-                             blends_[(int)BlendMode::DualSourceLcd]);
 
             D3D11_RASTERIZER_DESC rd = {};
             rd.FillMode = D3D11_FILL_SOLID;
@@ -493,7 +490,7 @@ namespace esia::rhi::d3d11
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != (desc.program == ShaderProgram::TextLcd))
+            if (desc.program >= ShaderProgram::Count)
                 return {};
             d3d::ShaderRequest vr;
             vr.program = desc.program;
@@ -908,7 +905,7 @@ namespace esia::rhi::d3d11
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D11VertexShader>> vertexShaders_;
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D11PixelShader>> pixelShaders_;
         ComPtr<ID3D11InputLayout> uiLayout_;
-        ComPtr<ID3D11BlendState> blends_[4];
+        ComPtr<ID3D11BlendState> blends_[3];   // per BlendMode
         ComPtr<ID3D11RasterizerState> raster_;
         ComPtr<ID3D11DepthStencilState> depth_;
         ComPtr<ID3D11SamplerState> samplers_[2];

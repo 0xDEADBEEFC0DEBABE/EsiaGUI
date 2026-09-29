@@ -309,7 +309,6 @@ namespace esia::rhi::d3d9
             caps_.fxStorage = FxStorage::Texture;
             caps_.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm3;
             caps_.halfPixelOffset = true;
-            caps_.dualSourceBlend = false;
             caps_.floatRenderTargets = Supports(D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING | D3DUSAGE_QUERY_FILTER, D3DFMT_A16B16G16R16F);
             caps_.sampleRenderTarget = true;
             caps_.readback = true;
@@ -537,8 +536,8 @@ namespace esia::rhi::d3d9
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count || desc.blend == BlendMode::DualSourceLcd || desc.program == ShaderProgram::TextLcd)
-                return {};   // no dual-source blending on D3D9
+            if (desc.program >= ShaderProgram::Count)
+                return {};
             d3d::ShaderRequest vr;
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
@@ -722,7 +721,6 @@ namespace esia::rhi::d3d9
             case BlendMode::Opaque: dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE); break;
             case BlendMode::Straight:
             case BlendMode::Premultiplied:
-            case BlendMode::DualSourceLcd:
                 dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
                 dev_->SetRenderState(D3DRS_SRCBLEND, pipe->desc.blend == BlendMode::Straight ? D3DBLEND_SRCALPHA : D3DBLEND_ONE);
                 dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
