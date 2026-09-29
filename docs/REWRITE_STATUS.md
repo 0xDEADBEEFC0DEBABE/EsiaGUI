@@ -1,6 +1,6 @@
 # Esia rewrite - status of `esia-core`
 
-Where the ImGui-free rewrite stands after core round 3 (2026-09-29). The plan is [REWRITE.md](REWRITE.md); how to
+Where the ImGui-free rewrite stands after core round 3 and the UI core's second version (2026-09-29). The plan is [REWRITE.md](REWRITE.md); how to
 write a backend is [backends/README.md](backends/README.md).
 
 **Round 3.** By the owner's decision, sub-pixel (LCD / ClearType) text was removed from Esia: text is antialiased
@@ -20,6 +20,7 @@ core test passes; merged into scratch copies of the backend branches, the OpenGL
 lavapipe) and the Direct3D 9 / 10 / 11 suites (under Wine) pass `--strict` in both modes (section 2). The backend
 branches were not changed: what they had to adopt is in section 5 (the local session has done it, section 3).
 
+* [UI core v2](#ui-core-v2)
 * [0. Round 3: sub-pixel text removed](#0-round-3-sub-pixel-text-removed)
 * [1. Round 2: what changed](#1-round-2-what-changed)
 * [2. Verified in round 2](#2-verified-in-round-2)
@@ -30,6 +31,94 @@ branches were not changed: what they had to adopt is in section 5 (the local ses
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## UI core v2
+
+Branch `feat/ui-core-v2` (from `main` at `81ce5dc`): the UI core reworked for the widget port (phase 3). The design,
+the whole API and how WGT's widgets map onto it are in [UI_CORE.md](UI_CORE.md); only `include/esia/{base,core}`,
+`src/esia/core`, `tests/core`, one conformance golden log and docs changed. The renderer, RHI, backends and shaders
+were not touched.
+
+### What changed
+
+| Commit | What |
+| --- | --- |
+| `17d9e25` | `docs/UI_CORE.md`: the design, written first |
+| `3acdf63` | input: `kNoMousePos` sentinel (negative coordinates are positions), focus loss cancels presses and invalidates the mouse, click counts (`MouseClickCount`), out-of-range buttons / keys ignored, text decoded with `base/utf8.hpp` (`AppendUtf8` / `AppendUtf32` removed, `EncodeUtf8` added) |
+| `14ce8e5` | draw lists: `Mark` / `MoveCommands` (a card's background drawn after its content, moved under it) |
+| `4e77370` | the core: front-to-back hit testing of last frame's item rects; press ownership per mouse button; disabled items that claim the hover; repeat buttons; key ownership, Tab / Escape after the widgets; `InputPending`; containers with the layout cursor or a `LayoutProvider` (`StackLayout`), laid-out item reports, baselines, work rects, pixel snapping; child regions with clip and (smooth) scroll, deferred scroll targets, wheel routing; the content clip; window lifecycle (front on reappearing, dangling focus / drag cleared, garbage collection, kept on screen, resize grab offset, auto-size, DPI per window); popups and tooltips; `State<T>`, scope data, `ItemStatus` |
+| `df5fac2` | the `windows` scene's null log (below); UI_CORE.md aligned with the code |
+| `f7e4f0d` | unused child scroll states freed; README and REWRITE.md sections 3 - 4 point at UI_CORE.md |
+| `fbc86aa` | fixes from an independent review of the implementation (UI_CORE.md, end of section 14): key-claim precedence, DPI hysteresis at monitor boundaries, floating padding, `SetNextScroll` on new areas, `StackLayout` centering, hit records that follow scrolled content, `State<T>` type tags and throwing constructors, keyboard-activated items, smooth scroll ending on a pixel |
+
+Every review item of the task (the 12 bugs) and every new piece has a unit test: `tests/core/test_input.cpp`,
+`test_interaction.cpp`, `test_windows.cpp`, `test_layout.cpp`, `test_draw_list.cpp` (the table in UI_CORE.md section
+14 maps bugs to tests). `esia_core_tests` went from 39 to 93 tests.
+
+**The `windows` conformance scene.** `Begin` now pushes the content clip (bug 8: visibility and hover clip to the
+content rect). Each of the scene's two windows has a last row that lies entirely in the bottom padding (Settings: y
+148 - 170 under a content rect ending at 140; Library: 216 - 238 under 208): it is culled, and the windows' scissors
+are their content rects (`[28,28 152x112]`, `[140,96 152x112]`) instead of the window rects. Only
+`golden/null/windows.log` was regenerated; the other 16 logs are byte-identical. **The image golden
+`golden/windows.png` was not regenerated** (the task allows only the null log): rendered with OpenGL / GLES on Mesa
+llvmpipe here, all 16 other scenes still match their goldens at max delta 0, and `windows` differs exactly in the two
+culled 4-pixel stripes (2.12 % of the pixels, max delta 194, over the 1 % / 48 tolerance). Until `windows.png` is
+regenerated (`esia_conformance --backend opengl --golden tests/conformance/golden --update`, on llvmpipe, reviewed),
+every drawing backend's `windows` scene fails; the candidate image was produced but not committed.
+
+### Verified
+
+Ubuntu 24.04 container without a GPU; clang 18.1.3 + lld, CMake 3.28.3, Ninja, mingw-w64 GCC 13 (posix), Wine 9.0,
+Mesa 25.2.8 (llvmpipe through EGL). Fresh build directories, at `fbc86aa` (the code of the final commit):
+
+| Command | Result |
+| --- | --- |
+| `cmake --preset linux-clang -DESIA_WERROR=ON && cmake --build --preset linux-clang && ctest --preset linux-clang` | 0 warnings; 7 / 7: `esia_core_tests` 93, `esia_text_tests` 9, `esia_render_tests` 42, `esia_testkit_tests` 5, `esia_conformance_null` (17 scenes, `--strict`), `esia_shader_tests` 1, `esia_glsl_link_tests` 1 (no FreeType here: `esia_text_ft_tests` not built) |
+| the same with `linux-clang-release` | 0 warnings; 7 / 7, the same counts |
+| `build/linux-clang{,-release}/bin/esia_conformance --backend null --golden tests/conformance/golden --strict` | 17 / 17 each |
+| `cmake --preset windows-mingw-cross -DESIA_WERROR=ON && cmake --build --preset windows-mingw-cross` | 0 warnings |
+| `wine build/windows-mingw-cross/bin/esia_core_tests.exe`; `wine .../esia_conformance.exe --backend null --golden tests/conformance/golden --strict` | 93 / 93; 17 / 17 |
+| a scratch `-DESIA_BACKEND_OPENGL=ON` build (`build/gl`), `esia_conformance --backend opengl --backend gles --golden tests/conformance/golden --strict` | 16 / 17 each: every scene but `windows` at max delta 0 (`msaa_target` 1); `windows` as described above (GL and GLES render it identically) |
+| the commit that adds only the input changes (`3acdf63`), built alone on `main` in a scratch worktree | `esia_core_tests` 44 / 44 |
+
+`python3 tools/shaders/build_shaders.py --check` could not run (no glslangValidator / spirv-cross here); no shader
+source or generated file was changed.
+
+### Not verified
+
+* No GPU and no Windows machine: the drawing backends were not run except OpenGL / GLES on llvmpipe for the
+  `windows` measurement above; `windows-clang-cl`, `windows-cross` (xwin) and MSVC were not built.
+* The API has not been exercised by real widgets yet: the WGT port (phase 3) is its first user, and UI_CORE.md
+  section 12 shows how the widgets map, not ported code.
+
+### Known limitations
+
+* The hit test uses last frame's window rects and item rects (shifted for scrolling): a window the application moves
+  this frame, or an item laid out somewhere new, is hit where it was until the next frame.
+* A child region may be begun once per frame (a window may be appended to; a child region may not).
+* No modal popups in the core: a dialog is an overlay window that claims its keys (Enter / Escape) and consumes
+  clicks itself. No keyboard / gamepad navigation beyond Tab / Shift+Tab.
+* Key ownership lags by a frame when it changes hands (last frame's owner keeps a key until it stops claiming it).
+* `SetMonitors` has no platform layer to call it yet (phase 4); without monitors every window takes
+  `FrameParams::framebufferScale.x`.
+
+### What the widget port must do next
+
+1. Port WGT's `src/ui` (tag `wgt-1.1-final`) along UI_CORE.md section 12: `InteractImpl` on `ItemAdd` /
+   `ButtonBehavior` (no overlap flags: submit what is on top later, `ItemFlags_Background` for late backgrounds);
+   WGT's `Arrange*` functions (stacks, adaptive stack, grid, flow) as `LayoutProvider`s kept in `State<T>`; the
+   glow-halo item map and the layout inspector on `Window::LaidOutItems()` (`depth`, `floating`); cards and sections
+   as containers with `DrawList::Mark` / `MoveCommands`; windows as `Begin` (padding 0) + a surface drawn with an
+   explicit clip + a `ChildFlags_ScrollY | SmoothScroll` body, with drag-to-scroll, rubber banding and the
+   indicator on `HoveredChild`, `ActiveId` and `SetScrollY`; pickers and menus on `BeginPopup`; the tab and search
+   bars as floating children; the text editor on `ClaimKeyboard`, `MouseClickCount`, `Input().Text()`,
+   `RequestTextInput` and its own `SetMouseCursor`.
+2. Styling: `Theme`, `ItemStyle` and `ui::Next()` in `esia_ui`; scope styles through `SetScopeData` on containers,
+   state colors from `ItemStatusOf`, metrics scaled by `Context::Scale()` (per window).
+3. Decide and regenerate `golden/windows.png` (above), and add conformance scenes drawn by the ported widgets
+   against the WGT reference screenshots (branch `reference/wgt-1.1`).
+4. The platform layers (phase 4) feed `InputEvent::MouseLeave`, focus events and `SetMonitors`, and honor
+   `PlatformRequests::inputPending` / `animating` in their event loops.
 
 ## 0. Round 3: sub-pixel text removed
 
