@@ -17,3 +17,9 @@ esia_add_test(esia_core_tests
     core/test_input.cpp
     core/test_context.cpp)
 target_link_libraries(esia_core_tests PRIVATE esia::core)
+
+esia_add_test(esia_render_tests
+    render/test_frame_plan.cpp
+    render/test_painter.cpp
+    render/test_renderer.cpp)
+target_link_libraries(esia_render_tests PRIVATE esia::render)

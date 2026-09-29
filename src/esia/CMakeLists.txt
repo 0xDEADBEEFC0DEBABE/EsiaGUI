@@ -46,6 +46,15 @@ find_package(Threads REQUIRED)
 target_link_libraries(esia_core PUBLIC Threads::Threads)
 add_library(esia::core ALIAS esia_core)
 
+# ------------------------------------------------------------------ renderer
+add_library(esia_render STATIC
+    render/painter.cpp
+    render/frame_plan.cpp
+    render/renderer.cpp)
+target_link_libraries(esia_render PUBLIC esia_core esia_rhi)
+esia_target_defaults(esia_render)
+add_library(esia::render ALIAS esia_render)
+
 # ------------------------------------------------------------------ RHI + backends
 add_library(esia_rhi STATIC
     rhi/rhi.cpp

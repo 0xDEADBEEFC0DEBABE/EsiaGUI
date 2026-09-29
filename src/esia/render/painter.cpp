@@ -1,0 +1,741 @@
+// Esia - Painter (see esia/render/painter.hpp): encodes SDF shapes as fx::Instances in the draw list's FX stream.
+// Ported from WGT's src/render/painter.cpp; the instance encoding must stay identical (the shaders read it).
+#include "esia/render/painter.hpp"
+#include <cstring>
+
+namespace esia
+{
+    namespace
+    {
+        inline void Set4(float* d, float a, float b, float c, float e) { d[0] = a; d[1] = b; d[2] = c; d[3] = e; }
+        inline void SetColor(float* d, const Color& c) { Set4(d, c.r, c.g, c.b, c.a); }
+        inline void SetRect(float* d, const Rect& r) { Set4(d, r.min.x, r.min.y, r.max.x, r.max.y); }
+
+        inline Vec2 ScalePoint(Vec2 p, Vec2 o, float s) { return Vec2(o.x + (p.x - o.x) * s, o.y + (p.y - o.y) * s); }
+
+        // The path Polyline / Area follow: the points (minus repeats), or a smooth curve through them sampled every
+        // few pixels. Monotone cubic (Fritsch-Carlson) when x keeps increasing, so a chart never overshoots its
+        // data; Catmull-Rom otherwise.
+        void BuildPath(const Vec2* pts, int n, std::uint32_t flags, float pixelScale, std::vector<Vec2>& out)
+        {
+            out.clear();
+            for (int i = 0; i < n; ++i)
+                if (out.empty() || LengthSq(pts[i] - out.back()) > 1e-8f)
+                    out.push_back(pts[i]);
+            if (!(flags & PolylineFlags_Smooth) || out.size() < 3)
+                return;
+            std::vector<Vec2> src;
+            src.swap(out);
+            const int m = (int)src.size();
+            bool monotone = true;
+            for (int i = 1; i < m && monotone; ++i)
+                monotone = src[(std::size_t)i].x > src[(std::size_t)i - 1].x;
+            std::vector<float> tan;
+            if (monotone)
+            {
+                std::vector<float> d((std::size_t)m - 1);
+                for (int i = 0; i < m - 1; ++i)
+                    d[(std::size_t)i] = (src[(std::size_t)i + 1].y - src[(std::size_t)i].y) / (src[(std::size_t)i + 1].x - src[(std::size_t)i].x);
+                tan.resize((std::size_t)m);
+                tan[0] = d[0];
+                tan[(std::size_t)m - 1] = d[(std::size_t)m - 2];
+                for (int i = 1; i < m - 1; ++i)
+                    tan[(std::size_t)i] = d[(std::size_t)i - 1] * d[(std::size_t)i] <= 0.0f ? 0.0f : (d[(std::size_t)i - 1] + d[(std::size_t)i]) * 0.5f;
+                for (int i = 0; i < m - 1; ++i)
+                {
+                    const std::size_t k = (std::size_t)i;
+                    if (d[k] == 0.0f)
+                    {
+                        tan[k] = tan[k + 1] = 0.0f;
+                        continue;
+                    }
+                    const float a = tan[k] / d[k], b = tan[k + 1] / d[k];
+                    const float h = a * a + b * b;
+                    if (h > 9.0f)
+                    {
+                        const float s = 3.0f / std::sqrt(h);
+                        tan[k] = s * a * d[k];
+                        tan[k + 1] = s * b * d[k];
+                    }
+                }
+            }
+            out.push_back(src[0]);
+            for (int i = 0; i < m - 1 && out.size() < 16000; ++i)
+            {
+                const Vec2 p0 = src[(std::size_t)(i > 0 ? i - 1 : 0)], p1 = src[(std::size_t)i], p2 = src[(std::size_t)i + 1];
+                const Vec2 p3 = src[(std::size_t)(i + 2 < m ? i + 2 : m - 1)];
+                const float len = Length(p2 - p1) * pixelScale;
+                const int steps = (int)Clamp(std::ceil(len / 3.0f), 1.0f, 24.0f);
+                for (int k = 1; k <= steps; ++k)
+                {
+                    const float t = (float)k / (float)steps, t2 = t * t, t3 = t2 * t;
+                    if (monotone)
+                    {
+                        const float h = p2.x - p1.x;
+                        const float y = (2 * t3 - 3 * t2 + 1) * p1.y + (t3 - 2 * t2 + t) * h * tan[(std::size_t)i] + (-2 * t3 + 3 * t2) * p2.y +
+                                        (t3 - t2) * h * tan[(std::size_t)i + 1];
+                        out.push_back(Vec2(p1.x + h * t, y));
+                    }
+                    else
+                    {
+                        auto cr = [&](float a, float b, float c, float e) {
+                            return 0.5f * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - e) * t2 + (-a + 3 * b - 3 * c + e) * t3);
+                        };
+                        out.push_back(Vec2(cr(p0.x, p1.x, p2.x, p3.x), cr(p0.y, p1.y, p2.y, p3.y)));
+                    }
+                }
+            }
+        }
+
+        thread_local std::vector<Vec2> tPath;
+    }
+
+    Painter::Painter(DrawList& drawList, const PainterEnv& env) : dl_(&drawList), env_(env), alpha_(env.alpha) {}
+
+    // ------------------------------------------------------------ shapes
+    void Painter::Rect(const esia::Rect& r, const Style& s) { EmitShape(fx::ShapeKind::RoundRect, r, s, nullptr); }
+
+    void Painter::Capsule(const esia::Rect& r, const Style& s)
+    {
+        Style c = s;
+        c.Radius(std::min(r.Width(), r.Height()) * 0.5f);
+        EmitShape(fx::ShapeKind::RoundRect, r, c, nullptr);
+    }
+
+    void Painter::Circle(Vec2 center, float radius, const Style& s)
+    {
+        Style c = s;
+        c.Radius(radius);
+        c.smoothing = 0.0f;
+        EmitShape(fx::ShapeKind::RoundRect, esia::Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), c, nullptr);
+    }
+
+    void Painter::Arc(Vec2 center, float radius, float thickness, float startRad, float sweepRad, const Style& s)
+    {
+        if (std::fabs(sweepRad) < 1e-4f)
+            return;
+        if (sweepRad < 0.0f)
+        {
+            startRad += sweepRad;
+            sweepRad = -sweepRad;
+        }
+        const float ext = radius + thickness * 0.5f;
+        const float extra[4] = {radius, thickness * 0.5f, startRad, std::min(sweepRad, kTau)};
+        EmitShape(fx::ShapeKind::Arc, esia::Rect(center.x - ext, center.y - ext, center.x + ext, center.y + ext), s, extra);
+    }
+
+    void Painter::Ring(Vec2 center, float radius, float thickness, const Style& s) { Arc(center, radius, thickness, 0.0f, kTau, s); }
+
+    void Painter::Line(Vec2 a, Vec2 b, float thickness, const Style& s)
+    {
+        const float h = thickness * 0.5f;
+        const esia::Rect bounds(std::min(a.x, b.x) - h, std::min(a.y, b.y) - h, std::max(a.x, b.x) + h, std::max(a.y, b.y) + h);
+        const float extra[4] = {a.x, a.y, b.x, b.y};
+        Style c = s;
+        c.radii[0] = h;
+        EmitShape(fx::ShapeKind::Segment, bounds, c, extra);
+    }
+
+    void Painter::Merge(const esia::Rect& a, const esia::Rect& b, float radius, float smoothness, const Style& s)
+    {
+        Style c = s;
+        c.Radius(radius);
+        const float extra[4] = {b.min.x, b.min.y, b.max.x, b.max.y};
+        // the merge parameters travel outside Style (they are not a material property)
+        mergeRadius_ = radius;
+        mergeSmooth_ = smoothness;
+        EmitShape(fx::ShapeKind::RoundRect, a, c, extra);
+        mergeSmooth_ = -1.0f;
+    }
+
+    void Painter::Image(TextureId tex, const esia::Rect& r, float radius, Color tint, Vec2 uv0, Vec2 uv1)
+    {
+        Style s;
+        s.Radius(radius).Fill(tint).Image(tex, uv0, uv1);
+        Rect(r, s);
+    }
+
+    void Painter::EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra)
+    {
+        if (bounds.Empty() && kind == fx::ShapeKind::RoundRect)
+            return;
+        const float scale = env_.metricsScale;
+
+        fx::Instance inst;
+        std::memset(&inst, 0, sizeof(inst));
+        std::uint32_t feat = 0;
+
+        SetRect(inst.rect, bounds);
+        if (kind == fx::ShapeKind::Arc)
+        {
+            Set4(inst.radii, extra[0], extra[1], 0, 0);
+            Set4(inst.shape, 0, 0, extra[2], extra[3]);
+        }
+        else if (kind == fx::ShapeKind::Segment)
+        {
+            Set4(inst.radii, s.radii[0], 0, 0, 0);
+            Set4(inst.shape2, extra[0], extra[1], extra[2], extra[3]);
+        }
+        else
+        {
+            Set4(inst.radii, s.radii[0], s.radii[1], s.radii[2], s.radii[3]);
+            inst.shape[1] = s.smoothing >= 0.0f ? s.smoothing : env_.cornerSmoothing;
+            if (extra && mergeSmooth_ >= 0.0f)
+            {
+                feat |= fx::kMerge;
+                Set4(inst.shape2, extra[0], extra[1], extra[2], extra[3]);
+                Set4(inst.shape2Params, mergeRadius_, std::max(mergeSmooth_, 0.01f), 0, 0);
+            }
+        }
+
+        // paint
+        if (s.hasFill && (s.fill.a.a > 0.0f || s.fill.b.a > 0.0f || s.image != 0))
+        {
+            feat |= fx::kFill;
+            SetColor(inst.fill0, s.fill.a);
+            SetColor(inst.fill1, s.fill.b);
+            inst.flags[1] = (std::uint32_t)s.fill.kind;
+            switch (s.fill.kind)
+            {
+            case fx::PaintKind::Linear: Set4(inst.fillParams, s.fill.angle, 0, 0, 0); break;
+            case fx::PaintKind::Radial: Set4(inst.fillParams, s.fill.center.x, s.fill.center.y, s.fill.radius, 0); break;
+            case fx::PaintKind::Conic: Set4(inst.fillParams, s.fill.center.x, s.fill.center.y, s.fill.angle, s.fill.loop ? 1.0f : 0.0f); break;
+            case fx::PaintKind::Spectrum: Set4(inst.fillParams, s.fill.angle, s.fill.center.x, s.fill.center.y, 0); break;
+            case fx::PaintKind::Solid: break;
+            }
+        }
+        if (s.image != 0)
+        {
+            feat |= fx::kImage | fx::kFill;
+            Set4(inst.uvRect, s.uv0.x, s.uv0.y, s.uv1.x, s.uv1.y);
+        }
+
+        // stroke (glass gets an automatic specular hairline rim)
+        float strokeWidth = s.strokeWidth;
+        Color strokeColor = s.strokeColor;
+        float strokeAlign = s.strokeAlign, fadeTo = s.strokeFadeTo, fadeAngle = s.strokeFadeAngle;
+        if (s.hasGlass && strokeWidth <= 0.0f && s.glass.rim.a > 0.0f)
+        {
+            strokeWidth = std::max(1.0f, 1.0f * scale);
+            strokeColor = s.glass.rim;
+            strokeAlign = 0.0f;
+            // a light rim is a highlight (strongest facing the light); a dark one is the edge's shade, strongest
+            // away from it and never gone (the outline that defines light glass on a light background)
+            const bool shade = s.glass.rim.r + s.glass.rim.g + s.glass.rim.b < 1.5f;
+            fadeTo = shade ? 0.55f : 0.25f;
+            fadeAngle = shade ? s.glass.lightAngle : s.glass.lightAngle + kPi;
+        }
+        if (strokeWidth > 0.0f && strokeColor.a > 0.0f)
+        {
+            feat |= fx::kStroke;
+            SetColor(inst.stroke, strokeColor);
+            Set4(inst.strokeParams, strokeWidth, strokeAlign, fadeTo, fadeAngle);
+        }
+
+        // shadow
+        if (s.shadowColor.a > 0.0f && (s.shadowBlur > 0.0f || s.shadowSpread != 0.0f || s.shadowOffset.x != 0.0f || s.shadowOffset.y != 0.0f))
+        {
+            feat |= fx::kShadow;
+            if (s.shadowInset)
+                feat |= fx::kInnerShadow;
+            SetColor(inst.shadow, s.shadowColor);
+            Set4(inst.shadowParams, s.shadowBlur, s.shadowSpread, s.shadowOffset.x, s.shadowOffset.y);
+        }
+
+        // glow
+        if (s.glowColor.a > 0.0f)
+        {
+            SetColor(inst.glow, s.glowColor);
+            if (s.glowRadius > 0.0f && s.glowIntensity > 0.0f)
+                feat |= fx::kGlow;
+            if (s.innerGlowRadius > 0.0f && s.innerGlowIntensity > 0.0f)
+                feat |= fx::kInnerGlow;
+            Set4(inst.glowParams, s.glowRadius, s.glowIntensity, s.innerGlowRadius, s.innerGlowIntensity);
+        }
+
+        // glass
+        if (s.hasGlass)
+        {
+            feat |= fx::kGlass;
+            const GlassMaterial& g = s.glass;
+            Set4(inst.glass, g.blur * scale, g.refraction * scale, g.bezel * scale, g.dispersion);
+            SetColor(inst.glassTint, g.tint);
+            Set4(inst.glassParams, g.saturation, g.brightness, g.specular, g.lightAngle);
+            inst.shape[0] = g.legibility;
+            inst.shape2Params[2] = std::max(g.magnify, 0.0f);
+        }
+        const float noise = s.noise >= 0.0f ? s.noise : (s.hasGlass ? s.glass.noise : 0.0f);
+        if (noise > 0.0f)
+            feat |= fx::kNoise;
+
+        if (s.shimmer > 0.0f)
+            feat |= fx::kShimmer;
+        Set4(inst.misc, Saturate(s.opacity * alpha_), noise, s.shimmer, s.shimmerSpeed);
+
+        if (s.effect != 0)
+        {
+            feat |= fx::kCustom;
+            Set4(inst.custom, s.custom[0], s.custom[1], s.custom[2], s.custom[3]);
+        }
+
+        if (maskDepth_ > 0)
+        {
+            feat |= fx::kMask;
+            SetRect(inst.mask, masks_[maskDepth_ - 1]);
+            Set4(inst.maskParams, maskRadius_[maskDepth_ - 1], env_.cornerSmoothing, 0, 0);
+        }
+
+        if ((feat & (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow | fx::kInnerGlow | fx::kGlass | fx::kCustom)) == 0)
+            return;
+        if (inst.misc[0] <= 0.0f)
+            return;
+
+        inst.flags[0] = feat;
+        inst.flags[2] = (std::uint32_t)kind;
+        // layouts reserve glow room from the resting geometry: press / pop scale animations must not re-flow
+        esia::Rect restShape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
+        if (feat & fx::kMerge)
+            restShape = restShape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
+        const float restGlow = inst.glowParams[0];
+        ApplyScale(inst);
+
+        // glows stay off neighbouring items: layouts reserve room for them, and whatever still reaches a
+        // neighbour fades out before its edge (halo bounds from the layout layer)
+        if ((feat & fx::kGlow) && s.containGlow && env_.glow)
+        {
+            esia::Rect shape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
+            if (feat & fx::kMerge)
+                shape = shape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
+            env_.glow->ReportGlowReach(*dl_, restShape, restGlow * 0.75f);
+            esia::Rect bound;
+            float fade = 0.0f;
+            if (env_.glow->GlowBounds(*dl_, shape, inst.glowParams[0] * 1.8f, bound, fade))
+            {
+                feat |= fx::kHalo;
+                inst.flags[0] = feat;
+                SetRect(inst.halo, bound);
+                inst.maskParams[2] = fade;
+            }
+        }
+
+        // coarse CPU culling against the current clip rect
+        float pad = 2.0f;
+        if (feat & fx::kShadow)
+            pad = std::max(pad, inst.shadowParams[0] * 1.6f + std::max(inst.shadowParams[1], 0.0f) + std::max(std::fabs(inst.shadowParams[2]), std::fabs(inst.shadowParams[3])));
+        if (feat & fx::kGlow)
+            pad = std::max(pad, inst.glowParams[0] * 1.8f);
+        esia::Rect ext(inst.rect[0] - pad, inst.rect[1] - pad, inst.rect[2] + pad, inst.rect[3] + pad);
+        if (feat & fx::kMerge)
+            ext = ext.Union(esia::Rect(inst.shape2[0] - pad, inst.shape2[1] - pad, inst.shape2[2] + pad, inst.shape2[3] + pad));
+        const esia::Rect& clip = dl_->ClipRect();
+        if (ext.max.x < clip.min.x || ext.max.y < clip.min.y || ext.min.x > clip.max.x || ext.min.y > clip.max.y)
+            return;
+
+        Emit(inst, s.effect, s.image);
+    }
+
+    void Painter::ApplyScale(fx::Instance& inst) const
+    {
+        for (int i = scaleDepth_ - 1; i >= 0; --i)
+        {
+            const Vec2 o = scaleOrigin_[i];
+            const float k = scaleValue_[i];
+            if (k == 1.0f)
+                continue;
+            const Vec2 a = ScalePoint(Vec2(inst.rect[0], inst.rect[1]), o, k), b = ScalePoint(Vec2(inst.rect[2], inst.rect[3]), o, k);
+            Set4(inst.rect, a.x, a.y, b.x, b.y);
+            const std::uint32_t kind = inst.flags[2];
+            if (kind == (std::uint32_t)fx::ShapeKind::Segment || (inst.flags[0] & fx::kMerge))
+            {
+                const Vec2 c = ScalePoint(Vec2(inst.shape2[0], inst.shape2[1]), o, k), d = ScalePoint(Vec2(inst.shape2[2], inst.shape2[3]), o, k);
+                Set4(inst.shape2, c.x, c.y, d.x, d.y);
+                inst.shape2Params[0] *= k;
+                inst.shape2Params[1] *= k;
+            }
+            for (float& r : inst.radii)
+                r *= k;
+            inst.strokeParams[0] *= k;
+            inst.shadowParams[0] *= k;
+            inst.shadowParams[1] *= k;
+            inst.shadowParams[2] *= k;
+            inst.shadowParams[3] *= k;
+            inst.glowParams[0] *= k;
+            inst.glowParams[2] *= k;
+            inst.glass[1] *= k;
+            inst.glass[2] *= k;
+        }
+    }
+
+    void Painter::LightStreak(const esia::Rect& r, float intensity, float thickness, float speed, float smile, float open, float time)
+    {
+        if (r.Empty() || intensity <= 0.0f || alpha_ <= 0.0f)
+            return;
+        fx::Instance inst;
+        std::memset(&inst, 0, sizeof(inst));
+        SetRect(inst.rect, r);
+        inst.fill0[3] = intensity;
+        inst.fill1[0] = time;
+        Set4(inst.custom, smile, open, speed, thickness);
+        std::uint32_t feat = fx::kCaustic;
+        Set4(inst.misc, Saturate(alpha_), 0, 0, 0);
+        if (maskDepth_ > 0)
+        {
+            feat |= fx::kMask;
+            SetRect(inst.mask, masks_[maskDepth_ - 1]);
+            Set4(inst.maskParams, maskRadius_[maskDepth_ - 1], env_.cornerSmoothing, 0, 0);
+        }
+        inst.flags[0] = feat;
+        inst.flags[2] = (std::uint32_t)fx::ShapeKind::RoundRect;
+        ApplyScale(inst);
+        Emit(inst);
+    }
+
+    void Painter::Emit(const fx::Instance& inst, EffectId effect, TextureId texture) { dl_->AddFx(inst, effect, texture); }
+
+    // -------------------------------------------------------------- text
+    float Painter::SnapToPixel(float v) const
+    {
+        const float rs = Pixel();
+        return std::floor(v * rs + 0.5f) / rs;
+    }
+
+    Vec2 Painter::MeasureText(text::FontRef font, std::string_view text, float wrapWidth) const
+    {
+        return env_.text ? env_.text->Measure(font, text, wrapWidth, 0).size : Vec2(0, 0);
+    }
+
+    Vec2 Painter::Text(Vec2 pos, text::FontRef font, Color color, std::string_view text, float wrapWidth, std::uint32_t flags)
+    {
+        if (!env_.text)
+            return Vec2(0, 0);
+        color.a *= alpha_;
+        if (color.a <= 0.0f)
+            return env_.text->Measure(font, text, wrapWidth, flags).size;
+        if (scaleDepth_ > 0)
+        {
+            // under PushScale: drawn at the final (scaled) geometry, rasterized at the scaled size; PopScale skips it
+            float k = 1.0f;
+            Vec2 at = pos;
+            for (int i = scaleDepth_ - 1; i >= 0; --i)
+            {
+                at = ScalePoint(at, scaleOrigin_[i], scaleValue_[i]);
+                k *= scaleValue_[i];
+            }
+            const std::size_t start = dl_->Vertices().size();
+            const Vec2 size = env_.text->Draw(*dl_, font, at, color, text, wrapWidth, flags, k);
+            ExcludeFromScale(start);
+            return size;
+        }
+        return env_.text->Draw(*dl_, font, pos, color, text, wrapWidth, flags, 1.0f);
+    }
+
+    Vec2 Painter::TextBox(const esia::Rect& r, Vec2 align, text::FontRef font, Color color, std::string_view text, std::uint32_t flags)
+    {
+        if (!env_.text)
+            return Vec2(0, 0);
+        const bool trim = (flags & text::TextFlags_Ellipsis) != 0;
+        const float wrap = trim ? std::max(r.Width(), 1.0f) : 0.0f;
+        const text::TextMetrics m = env_.text->Measure(font, text, wrap, flags);
+        const Vec2 pos(r.min.x + (r.Width() - m.size.x) * align.x, r.min.y + (r.Height() - m.size.y) * align.y);
+        Text(pos, font, color, text, wrap, flags);
+        return m.size;
+    }
+
+    void Painter::Icon(Vec2 center, text::FontRef font, char32_t icon, Color color)
+    {
+        color.a *= alpha_;
+        if (icon == 0 || color.a <= 0.0f || !env_.text)
+            return;
+        if (scaleDepth_ > 0)
+        {
+            float k = 1.0f;
+            Vec2 at = center;
+            for (int i = scaleDepth_ - 1; i >= 0; --i)
+            {
+                at = ScalePoint(at, scaleOrigin_[i], scaleValue_[i]);
+                k *= scaleValue_[i];
+            }
+            const std::size_t start = dl_->Vertices().size();
+            env_.text->DrawGlyph(*dl_, text::FontRef{font.id, font.size * k}, icon, at, color);
+            ExcludeFromScale(start);
+            return;
+        }
+        env_.text->DrawGlyph(*dl_, font, icon, center, color);
+    }
+
+    void Painter::ExcludeFromScale(std::size_t vtxStart)
+    {
+        if (dl_->Vertices().size() > vtxStart && excludedCount_ < kMaxExcluded)
+        {
+            excludedStart_[excludedCount_] = vtxStart;
+            excludedEnd_[excludedCount_] = dl_->Vertices().size();
+            ++excludedCount_;
+        }
+    }
+
+    // ------------------------------------------------------------ cheap primitives
+    void Painter::FillRect(const esia::Rect& r, Color c, float rounding)
+    {
+        if (rounding > 0.0f)
+        {
+            // rounded: one SDF instance (anti-aliased corners) instead of a tessellated outline
+            Rect(r, Style().Fill(c).Radius(rounding).Smoothing(0.0f));
+            return;
+        }
+        c.a *= alpha_;
+        if (c.a > 0.0f)
+            dl_->AddRectFilled(r, c.ToRgba8());
+    }
+
+    void Painter::HLine(float x0, float x1, float y, Color c, float thickness)
+    {
+        c.a *= alpha_;
+        if (c.a <= 0.0f)
+            return;
+        // hairlines land exactly on physical pixel rows (crisp at any DPI / render scale)
+        const float rs = Pixel();
+        const float y0 = std::floor(y * rs) / rs;
+        const float h = std::max(1.0f, std::floor(thickness * rs + 0.5f)) / rs;
+        dl_->AddRectFilled(esia::Rect(x0, y0, x1, y0 + h), c.ToRgba8());
+    }
+
+    void Painter::Polyline(const Vec2* points, int count, float thickness, const Style& s, std::uint32_t flags)
+    {
+        if (!points || count < 2 || thickness <= 0.0f)
+            return;
+        Color col = s.hasFill ? s.fill.a : (s.strokeColor.a > 0.0f ? s.strokeColor : Color::White());
+        col.a *= Saturate(s.opacity) * alpha_;
+        if (col.a <= 0.0f)
+            return;
+        const float rs = Pixel();
+        std::vector<Vec2>& path = tPath;
+        BuildPath(points, count, flags, rs, path);
+        const int n = (int)path.size();
+        if (n < 2)
+            return;
+
+        // one glow for the whole line: the stroke goes through a glow layer. The layer blurs the line's light over
+        // the glow radius, so a thin line gets proportionally more of it; a glow in the line's own color keeps the
+        // line's colors instead of re-tinting them
+        const bool glow = s.glowRadius > 0.0f && s.glowIntensity > 0.0f && s.glowColor.a > 0.0f;
+        if (glow)
+        {
+            const float scale = env_.metricsScale;
+            const float thin = Clamp(s.glowRadius / std::max(thickness, 1e-3f), 1.0f, 4.0f);
+            const float dc = std::fabs(s.glowColor.r - col.r) + std::fabs(s.glowColor.g - col.g) + std::fabs(s.glowColor.b - col.b);
+            BeginGlowLayer(Color(s.glowColor.r, s.glowColor.g, s.glowColor.b, dc < 0.05f ? 0.0f : 1.0f), s.glowRadius / std::max(scale, 1e-3f),
+                           s.glowIntensity * s.glowColor.a * thin);
+        }
+
+        // cross-sections: outer fringe, solid core, solid core, outer fringe (1 physical pixel of anti-aliasing)
+        const float aa = 1.0f / rs;
+        float hw = thickness * 0.5f;
+        if (thickness < aa)
+        {
+            col.a *= thickness / aa;   // hairline thinner than a pixel: fainter, not thinner
+            hw = aa * 0.5f;
+        }
+        const float inner = std::max(hw - aa * 0.5f, 0.0f), outer = hw + aa * 0.5f;
+        const std::uint32_t cIn = col.ToRgba8(), cOut = Color(col.r, col.g, col.b, 0.0f).ToRgba8();
+        const Vec2 uv(0, 0);
+        const int capSeg = (int)Clamp(std::ceil(hw * rs * 1.2f), 3.0f, 12.0f);
+        const std::uint32_t vtxCount = (std::uint32_t)(n * 4 + 2 * (1 + 2 * (capSeg + 1)));
+        const std::uint32_t idxCount = (std::uint32_t)((n - 1) * 18 + 2 * (capSeg * 9));
+        const std::uint32_t base = dl_->PrimBegin(idxCount, vtxCount);
+        auto segNormal = [&](int i) {
+            const Vec2 d = path[(std::size_t)i + 1] - path[(std::size_t)i];
+            const float l = Length(d);
+            return l > 0.0f ? Vec2(-d.y / l, d.x / l) : Vec2(0, 1);
+        };
+        Vec2 nFirst(0, 1), nLast(0, 1);
+        for (int i = 0; i < n; ++i)
+        {
+            Vec2 m;
+            float k = 1.0f;
+            if (i == 0)
+                m = nFirst = segNormal(0);
+            else if (i == n - 1)
+                m = nLast = segNormal(n - 2);
+            else
+            {
+                const Vec2 a = segNormal(i - 1), b = segNormal(i);
+                m = a + b;
+                const float l = Length(m);
+                m = l > 1e-4f ? m / l : a;
+                k = 1.0f / std::max(Dot(m, b), 0.5f);   // miter, clipped at 2x on sharp turns
+            }
+            const Vec2 p = path[(std::size_t)i];
+            dl_->WriteVertex(p + m * (outer * k), uv, cOut);
+            dl_->WriteVertex(p + m * (inner * k), uv, cIn);
+            dl_->WriteVertex(p - m * (inner * k), uv, cIn);
+            dl_->WriteVertex(p - m * (outer * k), uv, cOut);
+            if (i > 0)
+            {
+                const std::uint32_t a = base + (std::uint32_t)(i - 1) * 4, b = base + (std::uint32_t)i * 4;
+                for (std::uint32_t j = 0; j < 3; ++j)
+                {
+                    dl_->WriteTriangle(a + j, a + j + 1, b + j + 1);
+                    dl_->WriteTriangle(a + j, b + j + 1, b + j);
+                }
+            }
+        }
+        // round caps: a half disc beyond each end, its rim anti-aliased
+        std::uint32_t next = base + (std::uint32_t)n * 4;
+        for (int e = 0; e < 2; ++e)
+        {
+            const Vec2 p = e == 0 ? path[0] : path[(std::size_t)n - 1];
+            const Vec2 nm = e == 0 ? nFirst : nLast;
+            const Vec2 away = e == 0 ? Vec2(nm.y, -nm.x) : Vec2(-nm.y, nm.x);
+            const std::uint32_t c0 = next;
+            dl_->WriteVertex(p, uv, cIn);
+            for (int k = 0; k <= capSeg; ++k)
+            {
+                const float a = kPi * (float)k / (float)capSeg;
+                const Vec2 dir = nm * std::cos(a) + away * std::sin(a);
+                dl_->WriteVertex(p + dir * inner, uv, cIn);
+                dl_->WriteVertex(p + dir * outer, uv, cOut);
+            }
+            for (int k = 0; k < capSeg; ++k)
+            {
+                const std::uint32_t i0 = c0 + 1 + (std::uint32_t)k * 2, i1 = i0 + 2;
+                dl_->WriteTriangle(c0, i0, i1);
+                dl_->WriteTriangle(i0, i0 + 1, i1 + 1);
+                dl_->WriteTriangle(i0, i1 + 1, i1);
+            }
+            next = c0 + 1 + 2 * (std::uint32_t)(capSeg + 1);
+        }
+
+        if (glow)
+            EndGlowLayer();
+    }
+
+    void Painter::Area(const Vec2* points, int count, float baseline, const Paint& paint, std::uint32_t flags)
+    {
+        if (!points || count < 2)
+            return;
+        std::vector<Vec2>& path = tPath;
+        BuildPath(points, count, flags, Pixel(), path);
+        const int n = (int)path.size();
+        if (n < 2)
+            return;
+        // linear paint across the area's bounds (solid: both ends the same color)
+        float x0 = path[0].x, x1 = x0, y0 = std::min(path[0].y, baseline), y1 = std::max(path[0].y, baseline);
+        for (const Vec2& p : path)
+        {
+            x0 = std::min(x0, p.x);
+            x1 = std::max(x1, p.x);
+            y0 = std::min(y0, p.y);
+            y1 = std::max(y1, p.y);
+        }
+        const bool linear = paint.kind == fx::PaintKind::Linear;
+        const Vec2 dir(std::cos(paint.angle), std::sin(paint.angle));
+        float lo = 1e30f, hi = -1e30f;
+        const Vec2 corners[4] = {Vec2(x0, y0), Vec2(x1, y0), Vec2(x0, y1), Vec2(x1, y1)};
+        for (const Vec2& c : corners)
+        {
+            const float d = Dot(c, dir);
+            lo = std::min(lo, d);
+            hi = std::max(hi, d);
+        }
+        auto colorAt = [&](Vec2 p) {
+            Color c = paint.a;
+            if (linear)
+                c = Lerp(paint.a, paint.b, Saturate((Dot(p, dir) - lo) / std::max(hi - lo, 1e-4f)));
+            c.a *= alpha_;
+            return c.ToRgba8();
+        };
+        const std::uint32_t base = dl_->PrimBegin((std::uint32_t)(n - 1) * 6, (std::uint32_t)n * 2);
+        for (int i = 0; i < n; ++i)
+        {
+            const Vec2 top = path[(std::size_t)i], bot(path[(std::size_t)i].x, baseline);
+            dl_->WriteVertex(top, Vec2(0, 0), colorAt(top));
+            dl_->WriteVertex(bot, Vec2(0, 0), colorAt(bot));
+            if (i > 0)
+            {
+                const std::uint32_t a = base + (std::uint32_t)(i - 1) * 2, b = base + (std::uint32_t)i * 2;
+                dl_->WriteTriangle(a, b, b + 1);
+                dl_->WriteTriangle(a, b + 1, a + 1);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- state
+    void Painter::PushMask(const esia::Rect& r, float radius)
+    {
+        ESIA_ASSERT(maskDepth_ < 8);
+        if (maskDepth_ >= 8)
+            return;
+        masks_[maskDepth_] = r;
+        maskRadius_[maskDepth_] = radius;
+        ++maskDepth_;
+    }
+
+    void Painter::PopMask()
+    {
+        ESIA_ASSERT(maskDepth_ > 0);
+        if (maskDepth_ > 0)
+            --maskDepth_;
+    }
+
+    void Painter::PushClip(const esia::Rect& r, bool intersect) { dl_->PushClipRect(r, intersect); }
+    void Painter::PopClip() { dl_->PopClipRect(); }
+
+    void Painter::PushScale(Vec2 origin, float scale)
+    {
+        ESIA_ASSERT(scaleDepth_ < 8);
+        if (scaleDepth_ >= 8)
+            return;
+        scaleOrigin_[scaleDepth_] = origin;
+        scaleValue_[scaleDepth_] = scale;
+        scaleVtxStart_[scaleDepth_] = dl_->Vertices().size();
+        ++scaleDepth_;
+    }
+
+    void Painter::PopScale()
+    {
+        ESIA_ASSERT(scaleDepth_ > 0);
+        if (scaleDepth_ <= 0)
+            return;
+        --scaleDepth_;
+        const float k = scaleValue_[scaleDepth_];
+        const Vec2 o = scaleOrigin_[scaleDepth_];
+        if (k != 1.0f)
+        {
+            std::vector<Vertex>& vtx = dl_->Vertices();
+            int ex = 0;
+            for (std::size_t i = scaleVtxStart_[scaleDepth_]; i < vtx.size(); ++i)
+            {
+                // text / icons were drawn at their final geometry (re-rasterized): skip their vertices
+                while (ex < excludedCount_ && i >= excludedEnd_[ex])
+                    ++ex;
+                if (ex < excludedCount_ && i >= excludedStart_[ex])
+                {
+                    i = excludedEnd_[ex] - 1;
+                    continue;
+                }
+                vtx[i].pos = ScalePoint(vtx[i].pos, o, k);
+            }
+        }
+        if (scaleDepth_ == 0)
+            excludedCount_ = 0;
+    }
+
+    void Painter::BeginGlowLayer(Color tint, float radius, float intensity, float contentOpacity)
+    {
+        fx::LayerParams p{};
+        SetColor(p.color, tint);
+        p.intensity = intensity * alpha_;
+        p.radius = radius * env_.metricsScale;
+        p.opacity = contentOpacity;
+        dl_->BeginLayer(p);
+    }
+
+    void Painter::EndGlowLayer() { dl_->EndLayer(); }
+
+    void Painter::BeginEdgeFade(const esia::Rect& region, float top, float bottom)
+    {
+        dl_->BeginFade(fx::FadeParams{region.min.y, region.max.y, std::max(top, 0.0f), std::max(bottom, 0.0f)});
+    }
+
+    void Painter::EndEdgeFade() { dl_->EndFade(); }
+}
