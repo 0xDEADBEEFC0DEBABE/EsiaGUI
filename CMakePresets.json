@@ -2,21 +2,12 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "vs2022",
-      "displayName": "Visual Studio 2022 (x64)",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/build"
-    },
-    {
       "name": "esia-base",
       "hidden": true,
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "WGT_BUILD_LEGACY": "OFF",
-        "ESIA_BUILD_CORE": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
@@ -25,14 +16,20 @@
       "inherits": "esia-base",
       "binaryDir": "${sourceDir}/build/linux-clang",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-linux.cmake",
-      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
     },
     {
       "name": "linux-clang-release",
       "displayName": "Esia - Linux, clang + lld (Release)",
       "inherits": "linux-clang",
       "binaryDir": "${sourceDir}/build/linux-clang-release",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     },
     {
       "name": "macos-clang",
@@ -40,7 +37,11 @@
       "inherits": "esia-base",
       "binaryDir": "${sourceDir}/build/macos-clang",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-macos.cmake",
-      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     },
     {
       "name": "windows-clang-cl",
@@ -48,7 +49,23 @@
       "inherits": "esia-base",
       "binaryDir": "${sourceDir}/build/windows-clang-cl",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl-windows.cmake",
-      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Esia - Windows, MSVC (Visual Studio 2022)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-msvc",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     },
     {
       "name": "windows-cross",
@@ -56,8 +73,14 @@
       "inherits": "esia-base",
       "binaryDir": "${sourceDir}/build/windows-cross",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl-xwin.cmake",
-      "cacheVariables": { "BUILD_TESTING": "OFF" },
-      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     },
     {
       "name": "windows-mingw-cross",
@@ -65,16 +88,20 @@
       "inherits": "esia-base",
       "binaryDir": "${sourceDir}/build/windows-mingw-cross",
       "toolchainFile": "${sourceDir}/cmake/toolchains/clang-mingw.cmake",
-      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "release", "configurePreset": "vs2022", "configuration": "Release" },
-    { "name": "debug", "configurePreset": "vs2022", "configuration": "Debug" },
     { "name": "linux-clang", "configurePreset": "linux-clang" },
     { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
     { "name": "macos-clang", "configurePreset": "macos-clang" },
     { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl" },
+    { "name": "windows-msvc-debug", "configurePreset": "windows-msvc", "configuration": "Debug" },
+    { "name": "windows-msvc-release", "configurePreset": "windows-msvc", "configuration": "Release" },
     { "name": "windows-cross", "configurePreset": "windows-cross" },
     { "name": "windows-mingw-cross", "configurePreset": "windows-mingw-cross" }
   ],
@@ -82,6 +109,7 @@
     { "name": "linux-clang", "configurePreset": "linux-clang", "output": { "outputOnFailure": true } },
     { "name": "linux-clang-release", "configurePreset": "linux-clang-release", "output": { "outputOnFailure": true } },
     { "name": "macos-clang", "configurePreset": "macos-clang", "output": { "outputOnFailure": true } },
-    { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl", "output": { "outputOnFailure": true } }
+    { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl", "output": { "outputOnFailure": true } },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc", "configuration": "Debug", "output": { "outputOnFailure": true } }
   ]
 }

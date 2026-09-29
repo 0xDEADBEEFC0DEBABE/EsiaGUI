@@ -1,5 +1,11 @@
 # Esia: rewriting WGT without Dear ImGui
 
+> **WGT is gone from this tree.** Esia replaced it: WGT's sources (`src/render`, `src/backends`, `src/ui`,
+> `src/text`, `src/shaders`, `src/core`, `include/wgt`, the demo, the modified Dear ImGui) are in tag
+> `wgt-1.1-final` (branch `archive/wgt`), and screenshots of its demo on branch `reference/wgt-1.1`. Where this
+> document cites a WGT file, read it there. With WGT gone, the `wgt::` compatibility layer of phase 5 is dropped:
+> Esia's widgets get their own API.
+
 WGT ("WGT UI", `wgt.dll`) renders everything you see itself - the SDF Painter, the FX pipeline with liquid glass,
 the DirectWrite text engine, the widgets - but it still stands on a modified Dear ImGui 1.92 for ids, input,
 windows, draw lists, clipping and text editing, and on two hand-written Direct3D backends. **Esia** is the rewrite:
@@ -442,8 +448,7 @@ directly, binary incompatible.
 
 LLVM everywhere for the new code: clang / clang++ with lld on Linux and macOS, clang-cl with lld-link on Windows
 (`CMakePresets.json`: `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross`,
-`windows-mingw-cross`; toolchain files in `cmake/toolchains`). The MSVC build of today's `wgt.dll` is unchanged
-(`vs2022` preset; `WGT_BUILD_LEGACY` defaults on with MSVC, `ESIA_BUILD_CORE` elsewhere).
+`windows-mingw-cross`, and `windows-msvc` for MSVC; toolchain files in `cmake/toolchains`).
 
 Cross-compiling the DirectX backends from Linux:
 
@@ -460,7 +465,7 @@ Cross-compiling the DirectX backends from Linux:
 * **Unit tests** (CTest, no GPU): core (ids, input, windows, items, layout, draw lists, textures), renderer (planner
   decisions, Painter encoding, the command streams of every technique on the null device), test kit (PNG, image
   comparison), shader library (completeness; GLSL / ESSL compiled and linked on the system driver through EGL),
-  text (the rasterizer's exact coverage, the atlas, FreeType layout with the fonts in `third_party/imgui/misc/fonts`,
+  text (the rasterizer's exact coverage, the atlas, FreeType layout with the fonts in `tests/fonts`,
   and golden images of the glyph quads composited on the CPU - no GPU needed).
 * **Conformance suite** (`tests/conformance`, the scenes also a library for backend tests): 17 scenes built
   through the public API, rendered by every backend built into the binary. Drawing backends are read back and
@@ -482,7 +487,7 @@ Cross-compiling the DirectX backends from Linux:
 | 3 - widgets | `src/ui` + auto layout + `Theme` / `ItemStyle` / `anim` + text editing ported to `esia_ui` on the core | the WGT showcase panels run on Esia with the same screenshots (within tolerance) |
 | 4 - platforms and services | Win32 (parity with WGT: IME, DPI, thread split), Cocoa, SDL3 / X11 / Wayland; `Post`, notifications, panels, plugins, pacing | the demo runs on Windows, macOS and Linux |
 | 5 - compatibility | `wgt::` on Esia; `wgt.dll` 2.0 without Dear ImGui; performance parity (GPU profile categories vs. today's D3D11 numbers) | existing hosts recompile; demo scripts produce matching screenshots |
-| 6 - cleanup | `third_party/imgui` removed; legacy sources retired | - |
+| 6 - cleanup | `third_party/imgui` removed; legacy sources retired | done ahead of the other phases: WGT was retired, tag `wgt-1.1-final` |
 
 ## 16. Risks and open questions
 

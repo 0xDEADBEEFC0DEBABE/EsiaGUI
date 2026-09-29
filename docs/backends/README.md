@@ -434,7 +434,7 @@ Presets (`CMakePresets.json`), toolchains in `cmake/toolchains`:
 | `windows-clang-cl` | Windows | clang-cl + lld-link (LLVM installer on PATH, a "x64 Native Tools" prompt for INCLUDE / LIB) | the release toolchain |
 | `windows-cross` | Linux | clang-cl + lld-link + MSVC CRT / Windows SDK from `xwin` | MSVC ABI; tests off |
 | `windows-mingw-cross` | Linux | clang + ld.lld + mingw-w64 | compile / link check when xwin cannot download |
-| `vs2022` | Windows | MSVC | today's `wgt.dll`, unchanged |
+| `windows-msvc` | Windows | MSVC (Visual Studio 2022 generator) | Debug and Release from one build directory |
 
 ```bash
 # Linux (tests)

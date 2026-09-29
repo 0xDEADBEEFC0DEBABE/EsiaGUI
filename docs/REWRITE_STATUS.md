@@ -292,8 +292,7 @@ CTest properties (`esia-vulkan` request 2, optional).
    undefined, and the backdrop copy holds the previous frames' content outside this frame's captures (stale but
    defined).
 5. **Text.** No Unicode bidi algorithm, no color glyphs, no system fonts, no caret / grapheme query yet; glyphs are
-   rasterized before the clip test. The text tests use the fonts in `third_party/imgui/misc/fonts`: move them before
-   `third_party/imgui` is removed (phase 6).
+   rasterized before the clip test. (The text tests' fonts moved to `tests/fonts` when WGT was removed.)
 6. **Zero-filled uploads.** `TextureRegistry::Create(info, nullptr)` queues a zero-filled CPU copy of the whole
    texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
 7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
@@ -336,7 +335,7 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
   for its `type_info::operator==` trap): `sudo apt-get install g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev
   wine64`, then `cmake --preset windows-mingw-cross && cmake --build --preset windows-mingw-cross` and, optionally,
   `wine build/windows-mingw-cross/bin/esia_core_tests.exe` (and the other test executables).
-* **Today's `wgt.dll`**, unchanged: `cmake --preset vs2022 && cmake --build --preset release` with MSVC.
+* **MSVC**: `cmake --preset windows-msvc` (Visual Studio 2022), `cmake --build --preset windows-msvc-release`.
 
 ### macOS
 
@@ -354,7 +353,7 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
 | 5. Conformance suite | `tests/conformance`, `tests/support` | 17 scenes (14 in round 1, 18 in round 2; round 3 removed `text_lcd`) through the public API, image goldens and null command-stream goldens, a self-contained PNG codec and comparison |
 | 6. Backend guide | `docs/backends/README.md` | files and CMake, host integration headers, the RHI call by call, caps per API, binding numbers, recipes for every API, the LLVM toolchains, the conformance suite, a checklist |
 | 7. Text (stretch) | `include/esia/text`, `src/esia/text` | `text::TextSystem`; WGT's analytic rasterizer made platform-free; the glyph atlas on the texture registry; `esia_text_ft`: FreeType + HarfBuzz shaping, fallback, line breaking, trimming, alignment, with two golden images |
-| Toolchains | `CMakePresets.json`, `cmake/toolchains` | `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross` (clang-cl + lld-link + xwin), `windows-mingw-cross` (clang + mingw-w64); the MSVC presets `vs2022` / `release` / `debug` unchanged |
+| Toolchains | `CMakePresets.json`, `cmake/toolchains` | `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross` (clang-cl + lld-link + xwin), `windows-mingw-cross` (clang + mingw-w64); `windows-msvc` since WGT was removed |
 
 Round-1 commits (oldest first): `51d88dc` presets, toolchains, UI core - `4f36cef` RHI, null backend, shader library -
 `55e04ae` delta time from a clock at 0 - `c8a3372` pass and color contract, host callbacks - `c845be3` Painter, planner,
@@ -374,5 +373,5 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
    batches, DXBC generated and checked in.
 4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query; DirectWrite and Core Text behind
    the interface, feeding the shared rasterizer.
-5. **Phases 3 - 6**: widgets on the core, platform layers and services, the `wgt::` compatibility layer and
-   `wgt.dll` 2.0 without Dear ImGui, then removing `third_party/imgui` (REWRITE.md section 15).
+5. **Phases 3 - 4**: widgets on the core (Esia's own API: WGT and its `wgt::` compatibility layer are dropped),
+   platform layers and services. WGT itself was removed from the tree (tag `wgt-1.1-final`).

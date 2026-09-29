@@ -299,17 +299,15 @@ cmake --build --preset windows-clang-cl
 ctest --preset windows-clang-cl --output-on-failure
 ```
 
-**Build with MSVC** (a separate directory: the `vs2022` preset's `build/` is the legacy `wgt.dll`):
+**Build with MSVC**:
 
 ```bat
-cmake -S . -B build/msvc-esia -G "Visual Studio 17 2022" -A x64 -DWGT_BUILD_LEGACY=OFF -DESIA_BUILD_CORE=ON -DESIA_WERROR=ON ^
-      -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON
-cmake --build build/msvc-esia --config Debug
-ctest --test-dir build/msvc-esia -C Debug --output-on-failure
+cmake --preset windows-msvc -DESIA_WERROR=ON -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON
+cmake --build --preset windows-msvc-debug
+ctest --preset windows-msvc
 ```
 
-Also build a few single options (`-DESIA_BACKEND_D3D9=ON` alone, `-DESIA_BACKEND_D3D12=ON` alone) and check that
-the legacy build is unchanged (`cmake --preset vs2022 && cmake --build --preset release`).
+Also build a few single options (`-DESIA_BACKEND_D3D9=ON` alone, `-DESIA_BACKEND_D3D12=ON` alone).
 
 **Tests** (`bin` for Ninja, `bin\Debug` for MSVC), each with `ESIA_D3D_DEBUG=1`, expecting no debug-layer
 message at warning or error level:

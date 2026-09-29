@@ -242,7 +242,7 @@ any more (the GLES 3.0 minimum lacked only dual-source blending).
   linux-clang && ctest --preset linux-clang`. The headless tests need `libEGL.so.1` (glvnd or Mesa) with a GPU or
   Mesa's surfaceless platform; `EGL_KHR_surfaceless_context` or a pbuffer config is required. Set
   `ESIA_GL_CORE_ONLY=1` to run the conformance suite on the GL 3.3 / GLES 3.0 minimum.
-* **Windows**: `cmake --preset windows-clang-cl -DESIA_BACKEND_OPENGL=ON` (or `vs2022` with the option). Hosts
+* **Windows**: `cmake --preset windows-clang-cl -DESIA_BACKEND_OPENGL=ON` (or `windows-msvc` with the option). Hosts
   create the device on their WGL context (`Desc::getProcAddress` may stay null: `wglGetProcAddress` +
   `opengl32.dll`). The headless tests use the GPU driver through WGL (`gles` needs
   `WGL_EXT_create_context_es2_profile`: NVIDIA, AMD); where WGL cannot create a context they fall back to ANGLE's

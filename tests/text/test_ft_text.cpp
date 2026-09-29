@@ -1,4 +1,4 @@
-// The FreeType + HarfBuzz text system with the fonts in third_party/imgui/misc/fonts: font loading, metrics from the
+// The FreeType + HarfBuzz text system with the fonts in tests/fonts: font loading, metrics from the
 // font (kerning, marks, tabs), line breaking, trimming and alignment, pixel-aligned glyph quads on atlas pages, pixel
 // density, fallback fonts, scaled and icon glyphs, caching - and the whole path end to end: the quads Draw emits,
 // composited on the CPU from the pages the registry received, against a golden image.

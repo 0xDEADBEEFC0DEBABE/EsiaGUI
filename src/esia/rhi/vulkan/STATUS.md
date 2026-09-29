@@ -228,7 +228,7 @@ Vulkan 1.1 driver, the validation layer is used when installed.
 * **Windows**: install the LunarG Vulkan SDK (sets `VULKAN_SDK`: headers and validation layers; the driver ships
   `vulkan-1.dll`), then from an "x64 Native Tools" prompt:
   `cmake --preset windows-clang-cl -DESIA_BACKEND_VULKAN=ON && cmake --build --preset windows-clang-cl && ctest --preset windows-clang-cl`
-  (or the `vs2022` preset with `-DESIA_BUILD_CORE=ON -DESIA_BACKEND_VULKAN=ON`).
+  (or the `windows-msvc` preset with `-DESIA_BACKEND_VULKAN=ON`).
 * **macOS**: the Vulkan SDK (MoltenVK) or `brew install vulkan-headers molten-vk vulkan-loader
   vulkan-validationlayers`, then the `macos-clang` preset with `-DESIA_BACKEND_VULKAN=ON` (untested).
 * **Against the goldens**: `esia_conformance --backend vulkan --golden tests/conformance/golden --out out --strict`
