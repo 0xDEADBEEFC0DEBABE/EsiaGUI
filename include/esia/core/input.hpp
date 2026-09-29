@@ -134,6 +134,7 @@ namespace esia
 
         double time_ = 0.0;
         float deltaTime_ = 0.0f;
+        bool started_ = false;
         Vec2 mousePos_{-1, -1}, mousePrev_{-1, -1}, mouseDelta_;
         Vec2 wheel_;
         std::array<ButtonState, (int)MouseButton::Count> mouse_{};

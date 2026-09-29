@@ -112,3 +112,14 @@ ESIA_TEST(Input, FocusLossReleasesEverything)
     ESIA_CHECK(!in.MouseDown(MouseButton::Right) && in.MouseReleased(MouseButton::Right));
     ESIA_CHECK(!in.KeyDown(Key::A) && in.Mods() == 0 && !in.Focused());
 }
+
+ESIA_TEST(Input, DeltaTimeFromAClockStartingAtZero)
+{
+    InputState in;
+    Frame(in, 0.0, {});
+    ESIA_CHECK(in.DeltaTime() == 0.0f);
+    Frame(in, 0.016, {});
+    ESIA_CHECK_NEAR(in.DeltaTime(), 0.016f, 1e-6f);
+    Frame(in, 0.010, {});   // a clock that went backwards
+    ESIA_CHECK(in.DeltaTime() == 0.0f);
+}

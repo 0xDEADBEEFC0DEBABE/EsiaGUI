@@ -1,12 +1,15 @@
 // Esia - input state (see esia/core/input.hpp)
 #include "esia/core/input.hpp"
+#include <algorithm>
 #include <cmath>
 
 namespace esia
 {
     void InputState::NewFrame(double time, std::vector<InputEvent>& events)
     {
-        deltaTime_ = time_ > 0.0 ? (float)(time - time_) : 0.0f;
+        // the first frame has no previous one (its time may well be 0); a clock going backwards gives 0, not < 0
+        deltaTime_ = started_ ? (float)std::max(time - time_, 0.0) : 0.0f;
+        started_ = true;
         time_ = time;
         for (ButtonState& b : mouse_)
             b.clicked = b.released = b.doubleClicked = b.changed = false;
