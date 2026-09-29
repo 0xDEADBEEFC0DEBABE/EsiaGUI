@@ -13,8 +13,12 @@ target_link_libraries(esia_core_tests PRIVATE esia::core)
 
 esia_add_test(esia_text_tests
     text/test_glyph_raster.cpp
-    text/test_glyph_atlas.cpp)
+    text/test_glyph_atlas.cpp
+    text/test_system_fonts.cpp)
 target_link_libraries(esia_text_tests PRIVATE esia::text)
+target_compile_definitions(esia_text_tests PRIVATE
+    ESIA_TEST_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts"
+    ESIA_TEXT_OUT_DIR="${CMAKE_BINARY_DIR}/text")
 
 esia_add_test(esia_render_tests
     render/test_frame_plan.cpp
