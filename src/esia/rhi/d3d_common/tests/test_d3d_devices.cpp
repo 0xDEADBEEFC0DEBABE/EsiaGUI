@@ -170,8 +170,11 @@ ESIA_TEST(D3DDevices, ScissoredDrawAndTimestamps)
         const bool timed = dev.GetCaps().timestampQueries;
         GpuProfile profile;
         bool gotProfile = false;
-        for (int i = 0; i < 12 && !gotProfile; ++i)
+        // timestamps arrive a few frames later: keep rendering (with pauses: the GPU may lag the loop) until they do
+        for (int i = 0; i < 300 && !gotProfile; ++i)
         {
+            if (i >= 4)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             FrameDesc fd;
             ESIA_CHECK(dev.BeginFrame(fd));
             PassDesc p;
