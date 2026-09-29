@@ -1,0 +1,79 @@
+# macOS (arm64): macos-clang with the Metal backend (and OpenGL, which builds everywhere), then ctest: the Metal
+# conformance suite with Metal's API and shader validation when the runner has a Metal device, and the generated MSL
+# compiled by Apple's compiler. See docs/CI.md.
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-clang:
+    name: macos-clang
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM, lld, Ninja, FreeType / HarfBuzz
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: brew install llvm lld ninja freetype harfbuzz
+
+      - name: Toolchain and GPU
+        run: |
+          mkdir -p logs
+          {
+            sw_vers; uname -m
+            xcode-select -p; xcodebuild -version
+            "$(brew --prefix llvm)/bin/clang++" --version
+            xcrun -sdk macosx metal --version || echo "xcrun metal: not available"
+            system_profiler SPDisplaysDataType
+          } 2>&1 | tee logs/toolchain.txt
+
+      - name: Configure
+        run: cmake --preset macos-clang -DESIA_WERROR=ON -DESIA_BACKEND_METAL=ON -DESIA_BACKEND_OPENGL=ON
+
+      - name: Build
+        run: cmake --build --preset macos-clang 2>&1 | tee logs/build.txt; exit "${PIPESTATUS[0]}"
+
+      - name: Metal device
+        run: build/macos-clang/bin/esia_conformance --list 2>&1 | tee logs/drivers.txt
+
+      - name: Test
+        env:
+          MTL_DEBUG_LAYER: '1'          # Metal API validation (asserts on misuse)
+          MTL_SHADER_VALIDATION: '1'    # out-of-bounds / nil resource access in shaders
+        run: >
+          ctest --preset macos-clang --timeout 1200
+          --output-junit ctest-junit.xml --test-output-size-passed 65536 --test-output-size-failed 262144
+
+      - name: Report
+        if: ${{ !cancelled() }}
+        run: >
+          python3 .github/scripts/ctest_report.py build/macos-clang/ctest-junit.xml --title macos-clang
+          --require 'esia_conformance_null' --require 'esia_rhi_metal_tests'
+
+      - name: Upload conformance images and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-clang
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            logs/
+            build/macos-clang/conformance*/
+            build/macos-clang/text/
+            build/macos-clang/src/esia/rhi/metal/msl_check/
+            build/macos-clang/ctest-junit.xml
+            build/macos-clang/Testing/Temporary/
