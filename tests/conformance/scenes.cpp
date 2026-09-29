@@ -448,10 +448,14 @@ namespace esia::conformance
                 &Shapes);
             add("gradients", "linear / radial / conic / conic-loop / spectrum paints, area chart gradient, smooth and mitered polylines (indexed geometry)", &Gradients);
             add("shadows", "drop shadows (blur, offset, spread), inner shadow, outer and inner glow, glow halo containment, shimmer, noise", &Shadows);
-            Scene& glass = add("glass", "liquid glass: backdrop captures (copy and direct read), blur pyramid, refraction, dispersion, magnify, legibility, tint, glass on glass",
-                               &GlassScene);
-            glass.tolerance.channel = 10;
-            glass.tolerance.fraction = 0.01;
+            // a value, not a reference into `s`: the scenes added later reallocate it (srgb_target and msaa_target
+            // read this after them)
+            testkit::Tolerance glassTolerance;
+            glassTolerance.channel = 10;
+            glassTolerance.fraction = 0.01;
+            add("glass", "liquid glass: backdrop captures (copy and direct read), blur pyramid, refraction, dispersion, magnify, legibility, tint, glass on glass",
+                &GlassScene)
+                .tolerance = glassTolerance;
             Scene& glow = add("glow_layer", "glow layers: region clears, bloom pyramid, tinted / untinted composite, text and polylines in layers", &GlowLayers);
             glow.tolerance.channel = 10;
             glow.tolerance.fraction = 0.01;
@@ -474,11 +478,11 @@ namespace esia::conformance
             Scene& srgb = add("srgb_target", "the glass scene into an RGBA8_SRGB target: shaders encode their output, blending in linear light, captures copy raw values",
                               &GlassScene);
             srgb.format = rhi::Format::RGBA8_SRGB;
-            srgb.tolerance = glass.tolerance;
+            srgb.tolerance = glassTolerance;
             Scene& msaa = add("msaa_target", "the glass scene into a 4x multisampled target: captures resolve, pipelines match the sample count", &GlassScene);
             msaa.samples = 4;
             msaa.golden = "glass";
-            msaa.tolerance = glass.tolerance;
+            msaa.tolerance = glassTolerance;
             return s;
         }
     }
