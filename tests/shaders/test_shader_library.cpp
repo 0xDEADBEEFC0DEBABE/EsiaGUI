@@ -31,4 +31,14 @@ ESIA_TEST(ShaderLibrary, EveryFormatHasItsPrograms)
     ESIA_CHECK(shaders::FxStorageOf(shaders::Format::Glsl330) == rhi::FxStorage::Texture);
     ESIA_CHECK(shaders::FxStorageOf(shaders::Format::SpirV) == rhi::FxStorage::Buffer);
     ESIA_CHECK(shaders::FindSource("esia_fx.hlsl") != nullptr && shaders::FindSource("nope.hlsl") == nullptr);
+    // the runtime-compilation table agrees with the generated library (both come from build_shaders.py's PROGRAMS)
+    for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
+    {
+        const shaders::ProgramSource src = shaders::SourceOf((rhi::ShaderProgram)p);
+        const shaders::ShaderBlob* vs = shaders::Find(shaders::Format::SpirV, (rhi::ShaderProgram)p, shaders::Stage::Vertex);
+        const shaders::ShaderBlob* ps = shaders::Find(shaders::Format::SpirV, (rhi::ShaderProgram)p, shaders::Stage::Pixel);
+        ESIA_CHECK(src.file && shaders::FindSource(src.file) && vs && ps);
+        if (src.file && vs && ps)
+            ESIA_CHECK(std::strcmp(vs->entry, src.vertexEntry) == 0 && std::strcmp(ps->entry, src.pixelEntry) == 0);
+    }
 }

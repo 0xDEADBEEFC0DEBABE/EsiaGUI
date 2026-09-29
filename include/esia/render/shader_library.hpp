@@ -62,6 +62,18 @@ namespace esia::shaders
     // nullptr when the format was not generated for this checkout (DXBC / DXIL need fxc / DXC, see the script).
     ESIA_API const ShaderBlob* Find(Format format, rhi::ShaderProgram program, Stage stage);
     ESIA_API bool Available(Format format);
-    // HLSL sources for runtime compilation of user effects (include handler of D3DCompile / DXC).
+    // HLSL sources for runtime compilation (include handler of D3DCompile / DXC): "esia_common.hlsli", "esia_fx.hlsl" ...
     ESIA_API const char* FindSource(const char* name);
+
+    // Where each program comes from in the HLSL: its file and the two entry points. With FindSource, what a backend
+    // needs to compile a program at runtime (Direct3D before the DXBC was built, user effects, FX feature variants).
+    // Defines: ESIA_FX_STORAGE_TEXTURE=1 for texture instance storage, ESIA_FX_FEATURES=<mask> for a variant,
+    // ESIA_CUSTOM_EFFECT=1 plus an "esia_user_effect.hlsli" include for a user effect, ESIA_SHADER_PRELUDE for SM3.
+    struct ProgramSource
+    {
+        const char* file;
+        const char* vertexEntry;
+        const char* pixelEntry;
+    };
+    ESIA_API ProgramSource SourceOf(rhi::ShaderProgram program);
 }

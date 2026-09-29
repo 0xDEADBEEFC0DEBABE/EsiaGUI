@@ -34,6 +34,25 @@ function(esia_target_defaults target)
     endif()
 endfunction()
 
+# ------------------------------------------------------------------ tests
+# The test runner (tests/esia_test.hpp) and esia_add_test(<name> <sources>...): defined here, before the backends,
+# so a backend's directory can add unit tests of its own next to the conformance suite (tests/).
+if(BUILD_TESTING)
+    add_library(esia_test_main STATIC ${ESIA_ROOT}/tests/esia_test.cpp)
+    target_include_directories(esia_test_main PUBLIC ${ESIA_ROOT}/tests)
+    esia_target_defaults(esia_test_main)
+    # the static MinGW libstdc++ (posix threads model) needs winpthreads in every executable
+    find_package(Threads REQUIRED)
+    target_link_libraries(esia_test_main PUBLIC Threads::Threads)
+endif()
+
+function(esia_add_test name)
+    add_executable(${name} ${ARGN})
+    target_link_libraries(${name} PRIVATE esia_test_main)
+    esia_target_defaults(${name})
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
 # ------------------------------------------------------------------ core
 add_library(esia_core STATIC
     core/context.cpp
