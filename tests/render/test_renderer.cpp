@@ -475,3 +475,265 @@ ESIA_TEST(Renderer, FxShaderVariantsPerBatchFeatures)
     r.Render(Data({&dl}), nullptr, s.target);
     ESIA_CHECK(Lines(s.dev, "create pipeline") == 0);   // variants are cached
 }
+
+namespace
+{
+    // three glass cards over content: three planned captures
+    void ThreeGlassCards(DrawList& dl)
+    {
+        Painter p(dl);
+        for (int i = 0; i < 3; ++i)
+        {
+            const float x = 20.0f + 120.0f * (float)i;
+            p.Rect(Rect(x, 20, x + 100, 280), Style().Fill(Color::Hex(0x336699)));
+            p.Rect(Rect(x + 10, 40, x + 90, 120), Style().Radius(16).Glass(Glass(10)));
+        }
+    }
+
+    // the id after "#" in the first log line that contains `needle` (0 if none)
+    std::uint32_t IdIn(const NullDevice& d, const std::string& needle)
+    {
+        for (const std::string& l : d.Log())
+        {
+            const std::size_t at = l.find(needle);
+            if (at == std::string::npos)
+                continue;
+            const std::size_t hash = l.find('#');
+            return hash == std::string::npos ? 0u : (std::uint32_t)std::stoul(l.substr(hash + 1));
+        }
+        return 0;
+    }
+}
+
+ESIA_TEST(Renderer, PyramidLevelsKeepTheirContentWhenGlassReusesACapture)
+{
+    Setup s;
+    DrawList dl = MakeList();
+    ThreeGlassCards(dl);
+    Renderer r(s.dev);
+    RenderParams over;
+    over.maxBackdropCaptures = 1;
+    // past the budget, glass reuses the last capture and reads what the levels hold outside its region: new levels
+    // are cleared, then loaded - never DontCare (undefined on tilers)
+    r.Render(Data({&dl}), nullptr, s.target, over);
+    ESIA_CHECK(NoErrors(s.dev) && r.Stats().overBudget);
+    ESIA_CHECK(Lines(s.dev, "clear pyramid") == 4 && Lines(s.dev, "load pyramid") == 0 && Lines(s.dev, "dont-care pyramid") == 0);
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target, over);
+    ESIA_CHECK(Lines(s.dev, "load pyramid") == 4 && Lines(s.dev, "clear pyramid") == 0);
+    // within the budget every read stays in a refreshed region: DontCare, which leaves the levels undefined ...
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(!r.Stats().overBudget && Lines(s.dev, "dont-care pyramid") == 12 && Lines(s.dev, "load pyramid") == 0);
+    // ... so the next frame that keeps them clears them first
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target, over);
+    ESIA_CHECK(Lines(s.dev, "clear pyramid") == 4 && Lines(s.dev, "load pyramid") == 0);
+    ESIA_CHECK(NoErrors(s.dev));
+
+    // a user effect may sample the backdrop outside its margin: the same
+    Caps caps;
+    caps.runtimeEffects = true;
+    Setup e(caps);
+    DrawList fx = MakeList();
+    GlassScene(fx, 10);
+    Painter(fx).Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
+    Renderer re(e.dev);
+    re.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return float4(WgtBackdrop(fx.screenUV, 4.0), 1.0); }");
+    re.Render(Data({&fx}), nullptr, e.target);
+    ESIA_CHECK(NoErrors(e.dev));
+    ESIA_CHECK(Lines(e.dev, "clear pyramid") >= 4 && Lines(e.dev, "dont-care pyramid") == 0);   // the effect reads every level
+}
+
+ESIA_TEST(Renderer, RefusedOrFailedVariantsFallBackToTheFullShader)
+{
+    Caps caps;
+    caps.fxFeatureVariants = true;
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));
+    p.Image(7, Rect(110, 10, 150, 50), 4);
+    {
+        NullOptions o{caps};
+        o.refuseFxVariants = true;   // e.g. an SM3 variant over the instruction or register limits
+        NullDevice dev(o);
+        const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+        Renderer r(dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(dev));
+        ESIA_CHECK(Lines(dev, "refused: fx variant") == 2 && Lines(dev, "create pipeline #") == 1);   // the full shader, once
+        ESIA_CHECK(Lines(dev, "draw instanced") == 2 && r.Stats().fxFallbacks == 2);   // drawn, not dropped
+        dev.ClearLog();
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(Lines(dev, "create pipeline") == 0 && r.Stats().fxFallbacks == 2);   // a refusal is final
+    }
+    {
+        caps.asyncPipelines = true;
+        NullOptions o{caps};
+        o.failBackground = true;     // compiled in the background, and failed
+        NullDevice dev(o);
+        const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+        Renderer r(dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(dev));   // a failed pipeline is never bound
+        ESIA_CHECK(Lines(dev, "background") == 2 && Lines(dev, "draw instanced") == 2 && r.Stats().fxFallbacks == 2);
+    }
+}
+
+ESIA_TEST(Renderer, VariantsCompilingInTheBackgroundDrawWithAReadyPipeline)
+{
+    Caps caps;
+    caps.fxFeatureVariants = true;
+    caps.asyncPipelines = true;
+    NullOptions o{caps};
+    o.pendingFrames = 2;
+    NullDevice dev(o);
+    const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+    DrawList shadowed = MakeList();
+    Painter(shadowed).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));   // features 0x5
+    Renderer r(dev);
+    // frames 1 and 2: the variant compiles, the full shader draws (asked for synchronously, once)
+    r.Render(Data({&shadowed}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 1 && Lines(dev, "draw instanced") == 1);
+    const std::uint32_t variant = IdIn(dev, "features=0x5 background");
+    ESIA_CHECK(variant != 0 && Lines(dev, "pipeline #" + std::to_string(variant)) == 1);   // created, not bound
+    r.Render(Data({&shadowed}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 1);
+    // frame 3: ready, bound
+    dev.ClearLog();
+    r.Render(Data({&shadowed}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 0 && Lines(dev, "pipeline #" + std::to_string(variant)) == 1);
+    // a shape that only fills (0x1): its variant is pending, the ready 0x5 variant covers it - not the full shader
+    DrawList filled = MakeList();
+    Painter(filled).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
+    dev.ClearLog();
+    r.Render(Data({&filled}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 1);
+    ESIA_CHECK(Lines(dev, "features=0x1 background") == 1 && Lines(dev, "pipeline #" + std::to_string(variant)) == 1);
+}
+
+ESIA_TEST(Renderer, TargetsThatCannotBeCopied)
+{
+    {
+        // sampleable, not copyable (a swap-chain image without TRANSFER_SRC): clear glass wants level 0, gets a
+        // direct read and level 1 in its place
+        Setup s;
+        TextureDesc d;
+        d.width = 400;
+        d.height = 300;
+        d.usage = TextureUsage_RenderTarget | TextureUsage_Sampled;
+        const Texture target = s.dev.CreateTexture(d, nullptr, 0);
+        DrawList dl = MakeList();
+        GlassScene(dl, 0);
+        Renderer r(s.dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(s.dev));
+        ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().directCaptures == 1);
+        ESIA_CHECK(Lines(s.dev, "copy ") == 0 && Lines(s.dev, "backdrop-copy") == 0 && Lines(s.dev, "pyramid") >= 1);
+        const std::uint32_t level1 = IdIn(s.dev, "pyramid-1");
+        ESIA_CHECK(level1 != 0 && Lines(s.dev, "texture t1 #" + std::to_string(level1)) >= 1);
+        const std::vector<float> fc = FrameConstantsAfter(s.dev, "load ui");
+        ESIA_CHECK(fc.size() == 48 && fc[14] == 1.0f);   // backdrop valid
+    }
+    {
+        // neither copyable nor sampleable (a framebufferOnly drawable): no backdrop at all
+        Setup s;
+        TextureDesc d;
+        d.width = 400;
+        d.height = 300;
+        d.usage = TextureUsage_RenderTarget;
+        const Texture target = s.dev.CreateTexture(d, nullptr, 0);
+        DrawList dl = MakeList();
+        GlassScene(dl, 10);
+        Renderer r(s.dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(s.dev));
+        ESIA_CHECK(r.Stats().backdropCaptures == 0 && Lines(s.dev, "copy ") == 0 && Lines(s.dev, "pyramid") == 0);
+        const std::vector<float> fc = FrameConstantsAfter(s.dev, "load ui");
+        ESIA_CHECK(fc.size() == 48 && fc[14] == 0.0f);   // gTime.z: no backdrop
+    }
+}
+
+ESIA_TEST(Renderer, ProfileScopesAreBoundedOrOff)
+{
+    Caps caps;
+    caps.timestampQueries = true;
+    Setup s(caps);
+    DrawList dl = MakeList();
+    Painter p(dl);
+    for (int i = 0; i < 40; ++i)   // geometry and FX alternating: 80 runs
+    {
+        const float x = 5.0f + 9.0f * (float)i;
+        dl.AddRectFilled(Rect(x, 5, x + 4, 9), 0xFFFFFFFFu);
+        p.Rect(Rect(x, 20, x + 4, 24), Style().Fill(Color::White()));
+    }
+    Renderer r(s.dev);
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev) && Lines(s.dev, "profile ") == 32 && Lines(s.dev, "end profile") == 32);
+    RenderParams params;
+    params.profile = false;   // the frame total only (the backend times it by itself)
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target, params);
+    ESIA_CHECK(NoErrors(s.dev) && Lines(s.dev, "profile ") == 0);
+}
+
+ESIA_TEST(Renderer, SmallFixes)
+{
+    {
+        // a host callback whose clip lies outside the target does not run (it would draw unclipped)
+        Setup s;
+        DrawList dl = MakeList();
+        static int calls = 0;
+        calls = 0;
+        dl.PushClipRect(Rect(500, 500, 600, 600));
+        dl.AddCallback([](const DrawList&, const DrawCmd&, void*) { ++calls; }, nullptr);
+        dl.PopClipRect();
+        Renderer r(s.dev);
+        r.Render(Data({&dl}), nullptr, s.target);
+        ESIA_CHECK(NoErrors(s.dev) && calls == 0 && Lines(s.dev, "native render state") == 0);
+    }
+    {
+        // a backend without the downsample program: the pyramid stops, nothing is drawn without a pipeline
+        NullOptions o;
+        o.refusePrograms = 1u << (unsigned)ShaderProgram::Downsample;
+        NullDevice dev(o);
+        const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+        DrawList dl = MakeList();
+        GlassScene(dl, 10);
+        Renderer r(dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(dev) && Lines(dev, "refused: Downsample") == 1 && Lines(dev, "dont-care pyramid") == 1);
+    }
+    {
+        // the instance texture: whole rows, then only the used part of the last one; the row width can be capped
+        Caps caps;
+        caps.fxStorage = FxStorage::Texture;
+        Setup s(caps, Format::RGBA8_UNORM, true, 1, true);
+        DrawList dl = MakeList();
+        Painter p(dl);
+        for (int i = 0; i < 5; ++i)
+            p.Rect(Rect(10.0f + 30.0f * (float)i, 10, 30.0f + 30.0f * (float)i, 30), Style().Fill(Color::White()));
+        Renderer r(s.dev);
+        RenderParams params;
+        params.maxFxInstancesPerRow = 2;
+        r.Render(Data({&dl}), nullptr, s.target, params);
+        ESIA_CHECK(NoErrors(s.dev));
+        ESIA_CHECK(Lines(s.dev, "48x4 RGBA32_FLOAT usage=9 fx-instances") == 1 || Lines(s.dev, "48x3 RGBA32_FLOAT usage=9 fx-instances") == 1);
+        const std::uint32_t tex = IdIn(s.dev, "fx-instances");
+        ESIA_CHECK(Lines(s.dev, "update texture #" + std::to_string(tex) + " [0,0 48x2]") == 1);
+        ESIA_CHECK(Lines(s.dev, "update texture #" + std::to_string(tex) + " [0,2 24x1]") == 1);
+        const std::vector<float> fc = FrameConstantsAfter(s.dev, "load ui");
+        ESIA_CHECK(fc.size() == 48 && fc[46] == 2.0f);
+    }
+    {
+        // the host's frame number reaches the backend
+        Setup s;
+        DrawList dl = MakeList();
+        dl.AddRectFilled(Rect(0, 0, 5, 5), 0xFFFFFFFFu);
+        Renderer r(s.dev);
+        RenderParams params;
+        params.frame.hostFrame = 7;
+        r.Render(Data({&dl}), nullptr, s.target, params);
+        ESIA_CHECK(NoErrors(s.dev) && Lines(s.dev, "begin frame 1 host 7") == 1);
+    }
+}
