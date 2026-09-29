@@ -20,6 +20,14 @@ ESIA_TEST(ShaderLibrary, EveryFormatHasItsPrograms)
                     ESIA_CHECK(std::strlen(reinterpret_cast<const char*>(b->data)) == b->size);   // null-terminated text
             }
     }
+    // ESSL: nothing at reduced precision (mediump is FP16 on mobile GPUs, far too coarse for pixel coordinates)
+    for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
+        for (shaders::Stage s : {shaders::Stage::Vertex, shaders::Stage::Pixel})
+            if (const shaders::ShaderBlob* b = shaders::Find(shaders::Format::Essl300, (rhi::ShaderProgram)p, s))
+            {
+                const char* text = reinterpret_cast<const char*>(b->data);
+                ESIA_CHECK(std::strstr(text, "mediump") == nullptr && std::strstr(text, "lowp") == nullptr);
+            }
     ESIA_CHECK(shaders::FxStorageOf(shaders::Format::Glsl330) == rhi::FxStorage::Texture);
     ESIA_CHECK(shaders::FxStorageOf(shaders::Format::SpirV) == rhi::FxStorage::Buffer);
     ESIA_CHECK(shaders::FindSource("esia_fx.hlsl") != nullptr && shaders::FindSource("nope.hlsl") == nullptr);

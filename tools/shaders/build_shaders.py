@@ -145,6 +145,13 @@ def cross(spirv_cross, spv, fmt, stage, entry, tmp):
         if 'location' in v:
             args += ['--rename-interface-variable', 'out' if stage == 'vs' else 'in', str(v['location']), 'esia_v%d' % v['location']]
     text = run(base + args)
+    if fmt == 'essl300':
+        # SPIRV-Cross defaults fragment floats to mediump, which is FP16 on mobile GPUs: coordinates in the hundreds
+        # of pixels and the SDF / glass math need highp (which ESSL 3.00 guarantees in fragment shaders). This
+        # SPIRV-Cross has no option for it (--fs-default-float-precision came later).
+        text = text.replace('precision mediump float;', 'precision highp float;')
+        if 'mediump' in text or 'lowp' in text:
+            sys.exit('%s %s: reduced precision left in the ESSL' % (entry, stage))
     if fmt == 'essl300' and 'index = 1' in text:
         # dual-source blending on GLES needs EXT_blend_func_extended (the backend only builds TextLcd with it)
         text = text.replace('#version 300 es\n', '#version 300 es\n#extension GL_EXT_blend_func_extended : require\n', 1)
