@@ -47,7 +47,19 @@ namespace esia::rhi
         }
     }
 
-    NullDevice::NullDevice(const NullOptions& options) : caps_(options.caps), record_(options.record) {}
+    NullDevice::NullDevice(const NullOptions& options) : caps_(options.caps), record_(options.record), keepData_(options.keepData) {}
+
+    const std::vector<std::uint8_t>* NullDevice::Data(Buffer b) const
+    {
+        auto it = data_.find(b.id);
+        return it != data_.end() && buffers_.count(b.id) ? &it->second : nullptr;
+    }
+
+    const std::vector<std::uint8_t>* NullDevice::Data(Texture t) const
+    {
+        auto it = data_.find(t.id);
+        return it != data_.end() && textures_.count(t.id) ? &it->second : nullptr;
+    }
 
     void NullDevice::Record(const std::string& line)
     {
@@ -86,7 +98,7 @@ namespace esia::rhi
     }
 
     // ------------------------------------------------------------------ resources
-    Texture NullDevice::CreateTexture(const TextureDesc& desc, const void*, int)
+    Texture NullDevice::CreateTexture(const TextureDesc& desc, const void* data, int rowPitch)
     {
         if (desc.width <= 0 || desc.height <= 0 || desc.width > caps_.maxTextureSize || desc.height > caps_.maxTextureSize)
         {
@@ -99,6 +111,16 @@ namespace esia::rhi
             Error("CreateTexture after the frame's first pass");
         const Texture t{next_++};
         textures_[t.id] = desc;
+        if (keepData_)
+        {
+            const std::size_t row = (std::size_t)desc.width * (std::size_t)BytesPerPixel(desc.format);
+            std::vector<std::uint8_t>& d = data_[t.id];
+            d.assign(row * (std::size_t)desc.height, 0);
+            const std::size_t pitch = rowPitch > 0 ? (std::size_t)rowPitch : row;
+            if (data)
+                for (int y = 0; y < desc.height; ++y)
+                    std::memcpy(d.data() + row * (std::size_t)y, static_cast<const std::uint8_t*>(data) + pitch * (std::size_t)y, row);
+        }
         Record(Fmt("create texture #%u %dx%d %s usage=%x%s%s", t.id, desc.width, desc.height, FormatName(desc.format), desc.usage,
                    desc.samples > 1 ? " msaa" : "", desc.debugName ? (std::string(" ") + desc.debugName).c_str() : ""));
         return t;
@@ -116,7 +138,7 @@ namespace esia::rhi
         return CreateTexture(d, nullptr, 0);
     }
 
-    void NullDevice::UpdateTexture(Texture tex, const IRect& r, const void* data, int)
+    void NullDevice::UpdateTexture(Texture tex, const IRect& r, const void* data, int rowPitch)
     {
         auto it = textures_.find(tex.id);
         if (it == textures_.end())
@@ -130,12 +152,22 @@ namespace esia::rhi
             Error("UpdateTexture: bad rect or data " + Rect(r));
         ++stats_.textureUpdates;
         Record(Fmt("update texture #%u ", tex.id) + Rect(r));
+        if (keepData_ && data && !r.Empty() && r.x0 >= 0 && r.y0 >= 0 && r.x1 <= it->second.width && r.y1 <= it->second.height)
+        {
+            const std::size_t bpp = (std::size_t)BytesPerPixel(it->second.format);
+            const std::size_t row = (std::size_t)r.Width() * bpp, pitch = rowPitch > 0 ? (std::size_t)rowPitch : row;
+            std::vector<std::uint8_t>& d = data_[tex.id];
+            for (int y = 0; y < r.Height(); ++y)
+                std::memcpy(d.data() + ((std::size_t)(r.y0 + y) * (std::size_t)it->second.width + (std::size_t)r.x0) * bpp,
+                            static_cast<const std::uint8_t*>(data) + pitch * (std::size_t)y, row);
+        }
     }
 
     void NullDevice::DestroyTexture(Texture tex)
     {
         if (textures_.erase(tex.id) == 0)
             Error("DestroyTexture: unknown texture");
+        data_.erase(tex.id);
         Record(Fmt("destroy texture #%u", tex.id));
     }
 
@@ -177,12 +209,19 @@ namespace esia::rhi
             Error("UpdateBuffer after the frame's first pass");
         ++stats_.bufferUpdates;
         Record(Fmt("update buffer #%u %zu bytes", buf.id, size));
+        if (keepData_ && data && size <= it->second.size)
+        {
+            std::vector<std::uint8_t>& d = data_[buf.id];
+            d.resize(it->second.size);
+            std::memcpy(d.data(), data, size);
+        }
     }
 
     void NullDevice::DestroyBuffer(Buffer buf)
     {
         if (buffers_.erase(buf.id) == 0)
             Error("DestroyBuffer: unknown buffer");
+        data_.erase(buf.id);
         Record(Fmt("destroy buffer #%u", buf.id));
     }
 
@@ -262,9 +301,13 @@ namespace esia::rhi
         auto it = textures_.find(d.target.id);
         if (it == textures_.end() || !(it->second.usage & TextureUsage_RenderTarget))
             Error("BeginPass: target is not a render target");
-        for (int s = 0; s < kTextureSlots; ++s)
-            if (bound_[s] == d.target)
-                bound_[s] = {};   // a target cannot stay bound as a texture: backends unbind it
+        // every pass starts with nothing bound (Metal encoders and Vulkan render passes carry no state over)
+        pipeline_ = {};
+        for (Texture& t : bound_)
+            t = {};
+        fxBuffer_ = vertexBuffer_ = indexBuffer_ = {};
+        for (bool& c : constantsSet_)
+            c = false;
         inPass_ = true;
         passStarted_ = true;
         passTarget_ = d.target;
@@ -295,6 +338,8 @@ namespace esia::rhi
         const TextureDesc& t = textures_[passTarget_.id];
         if (it->second.targetFormat != t.format)
             Error(Fmt("SetPipeline: pipeline format %s, target %s", FormatName(it->second.targetFormat), FormatName(t.format)));
+        if (it->second.samples != t.samples)
+            Error(Fmt("SetPipeline: pipeline for %d samples, target has %d", it->second.samples, t.samples));
         pipeline_ = p;
         Record(Fmt("pipeline #%u", p.id));
     }
@@ -391,19 +436,34 @@ namespace esia::rhi
             return;
         }
         const PipelineDesc& p = it->second;
-        if (!constantsSet_[(int)ConstantSlot::Frame])
-            Error(Fmt("%s before the frame constants were set", call));
         if ((p.program == ShaderProgram::Fx) != instanced)
             Error(Fmt("%s: program %s", call, ShaderProgramName(p.program)));
-        if (p.program == ShaderProgram::Fx)
+        // What each program's shaders declare must be bound: Vulkan and D3D12 have no "unbound" descriptors, and
+        // Metal / GL would read whatever an earlier draw left.
+        const bool ui = p.program == ShaderProgram::UiGeometry || p.program == ShaderProgram::TextGray || p.program == ShaderProgram::TextLcd ||
+                        p.program == ShaderProgram::TextLcdGray;
+        const bool fx = p.program == ShaderProgram::Fx;
+        const bool composite = p.program == ShaderProgram::LayerComposite;
+        const bool usesPass = p.program == ShaderProgram::Downsample || composite;
+        if (!constantsSet_[(int)ConstantSlot::Frame])
+            Error(Fmt("%s before the frame constants were set", call));
+        if (usesPass && !constantsSet_[(int)ConstantSlot::Pass])
+            Error(Fmt("%s (%s) before the pass constants were set", call, ShaderProgramName(p.program)));
+        if ((ui || fx) && !constantsSet_[(int)ConstantSlot::Draw])
+            Error(Fmt("%s (%s) before the draw constants were set", call, ShaderProgramName(p.program)));
+        const int slots = (fx || composite) ? kSlotBackdrop0 + kBackdropLevels : (p.program == ShaderProgram::Clear ? 0 : 1);
+        for (int sl = 0; sl < slots; ++sl)
+            if (!bound_[sl])
+                Error(Fmt("%s (%s): nothing bound at t%d", call, ShaderProgramName(p.program), sl));
+        if (fx)
         {
             const bool data = caps_.fxStorage == FxStorage::Buffer ? (bool)fxBuffer_ : (bool)bound_[kSlotFxData];
             if (!data)
                 Error(Fmt("%s: no FX instance data bound", call));
         }
-        for (int s = 0; s < kTextureSlots; ++s)
-            if (bound_[s] && !textures_.count(bound_[s].id))
-                Error(Fmt("%s: slot t%d holds a destroyed texture", call, s));
+        for (int sl = 0; sl < kTextureSlots; ++sl)
+            if (bound_[sl] && !textures_.count(bound_[sl].id))
+                Error(Fmt("%s: slot t%d holds a destroyed texture", call, sl));
     }
 
     void NullDevice::Draw(std::uint32_t vertexCount, std::uint32_t firstVertex)
@@ -445,6 +505,10 @@ namespace esia::rhi
         }
         if (!(d->second.usage & TextureUsage_CopyDst) || !(s->second.usage & TextureUsage_CopySrc))
             Error("CopyTexture: missing CopySrc / CopyDst usage");
+        if (d->second.format != s->second.format && d->second.format != RawFormat(s->second.format))
+            Error(Fmt("CopyTexture: %s into %s", FormatName(s->second.format), FormatName(d->second.format)));
+        if (d->second.samples != 1)
+            Error("CopyTexture: multisampled destination");
         if (r.Empty() || r.x0 < 0 || r.y0 < 0 || r.x1 > s->second.width || r.y1 > s->second.height || dstX < 0 || dstY < 0 ||
             dstX + r.Width() > d->second.width || dstY + r.Height() > d->second.height)
             Error("CopyTexture: region out of bounds " + Rect(r));
@@ -481,6 +545,20 @@ namespace esia::rhi
     {
         rgba8.clear();
         return false;
+    }
+
+    void* NullDevice::NativeRenderState()
+    {
+        InPass("NativeRenderState");
+        // host code may have changed anything: the renderer must bind everything again
+        pipeline_ = {};
+        for (Texture& t : bound_)
+            t = {};
+        fxBuffer_ = vertexBuffer_ = indexBuffer_ = {};
+        for (bool& c : constantsSet_)
+            c = false;
+        Record("native render state");
+        return nullptr;
     }
 
     // ------------------------------------------------------------------ registration

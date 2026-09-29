@@ -4,8 +4,9 @@
 //   * every call is appended to Log() as one deterministic text line (handles are numbered in creation order,
 //     constants are printed as values), so a renderer change shows up as a readable diff;
 //   * every call is checked against the RHI contract (esia/rhi/rhi.hpp) and violations go to Errors(): draws
-//     outside passes, updates after the first pass, copies inside a pass, sampling the bound target, scissors
-//     outside the target, pipelines the caps do not allow ...
+//     outside passes or with state from an earlier pass (every pass starts with nothing bound), updates after the
+//     first pass, copies inside a pass or between incompatible formats, sampling the bound target, scissors
+//     outside the target, pipelines the caps or the target do not allow ...
 // Caps are configurable, so the renderer's paths for every API family (texture instance storage, bottom-left
 // origin, no dual-source blending ...) are exercised here.
 #pragma once
@@ -20,7 +21,8 @@ namespace esia::rhi
     struct NullOptions
     {
         Caps caps;
-        bool record = true;   // keep the log (validation runs either way)
+        bool record = true;     // keep the log (validation runs either way)
+        bool keepData = false;  // keep what was uploaded into buffers and textures (Data())
     };
 
     struct NullStats
@@ -65,6 +67,7 @@ namespace esia::rhi
         void EndProfile() override;
         bool ReadProfile(GpuProfile& out) override;
         bool ReadPixels(Texture tex, const IRect& rect, std::vector<std::uint8_t>& rgba8) override;
+        void* NativeRenderState() override;
 
         // A texture standing for a host render target (what a real backend's WrapRenderTarget returns).
         Texture CreateHostTarget(int width, int height, Format format, bool sampleable, int samples = 1);
@@ -73,6 +76,9 @@ namespace esia::rhi
         const std::vector<std::string>& Errors() const { return errors_; }
         const NullStats& Stats() const { return stats_; }
         void ClearLog() { log_.clear(); errors_.clear(); stats_ = NullStats(); }
+        // keepData: the bytes of a buffer, or of a texture (tightly packed rows); null if unknown
+        const std::vector<std::uint8_t>* Data(Buffer b) const;
+        const std::vector<std::uint8_t>* Data(Texture t) const;
         std::size_t LiveTextures() const { return textures_.size(); }
         std::size_t LiveBuffers() const { return buffers_.size(); }
         std::size_t LivePipelines() const { return pipelines_.size(); }
@@ -87,6 +93,8 @@ namespace esia::rhi
 
         Caps caps_;
         bool record_ = true;
+        bool keepData_ = false;
+        std::unordered_map<std::uint32_t, std::vector<std::uint8_t>> data_;
         std::uint32_t next_ = 1;
         std::unordered_map<std::uint32_t, TextureDesc> textures_;
         std::unordered_map<std::uint32_t, BufferDesc> buffers_;

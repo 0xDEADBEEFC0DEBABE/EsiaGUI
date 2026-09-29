@@ -11,7 +11,10 @@
 //     the frame's resources are immutable (backends with frames in flight version them in a ring). Constants are
 //     the exception: SetConstants is inline and versioned by the backend (ring / push / root constants).
 //   * Drawing happens inside passes: BeginPass(target, load op) .. EndPass. CopyTexture only outside passes.
-//     A pass keeps its target bound; the renderer ends and restarts passes around backdrop captures.
+//     A pass keeps its target bound; the renderer ends and restarts passes around backdrop captures. The viewport
+//     is always the whole target. Every pass starts with NOTHING bound (pipeline, textures, buffers, constants,
+//     scissor = whole target): the renderer binds all it uses again after each BeginPass, so Metal encoders and
+//     Vulkan render passes need no state carried across passes.
 //   * Fixed binding model (docs/backends/README.md, "Binding model"), identical in every shader:
 //       constants  Frame (b0), Pass (b1), Draw (b2)
 //       textures   t0 main texture, t1..t6 backdrop pyramid, t7 FX instance data (FxStorage::Texture)
@@ -21,6 +24,11 @@
 //   * Coordinates are render-target pixels with the origin at the top-left, y down, for scissors, copies and
 //     readback, on every API. A backend whose framebuffer origin is bottom-left (OpenGL) converts them and sets
 //     Caps::framebufferOriginBottomLeft so the shaders flip the pixel positions they read.
+//   * Color: the shaders work on the stored (gamma-encoded) values and encode their own output for *_SRGB
+//     targets, as WGT does. So sampling never decodes sRGB: a texture sampled by the renderer is never *_SRGB, and
+//     a render target that is (RGBA8_SRGB / BGRA8_SRGB) is only sampled through a raw view (a host target reports
+//     TextureUsage_Sampled only if the backend can give it one). CopyTexture copies bits, and may copy between a
+//     format and its RawFormat (the backdrop copy of an sRGB target is RawFormat(target)).
 #pragma once
 #include "esia/base/config.hpp"
 #include <cstddef>
@@ -43,6 +51,8 @@ namespace esia::rhi
         R8_UNORM,
     };
     ESIA_API bool IsSrgb(Format f);
+    // The format with the same bits and no sRGB decoding (RGBA8_SRGB -> RGBA8_UNORM ...); others map to themselves.
+    ESIA_API Format RawFormat(Format f);
     ESIA_API int BytesPerPixel(Format f);
     ESIA_API const char* FormatName(Format f);
 
@@ -210,19 +220,25 @@ namespace esia::rhi
     {
         // how FX instances reach the shaders (esia/core/fx.hpp)
         FxStorage fxStorage = FxStorage::Buffer;
-        // the shader library variant this backend loads (esia/render/shader_library.hpp: ShaderFormat)
+        // the shader library variant this backend loads (esia::shaders::Format, esia/render/shader_library.hpp)
         std::uint8_t shaderFormat = 0;
-        // OpenGL: pixel (0, 0) is the bottom-left. The backend converts every IRect; shaders flip SV_Position.
+        // OpenGL: pixel (0, 0) is the bottom-left. The backend converts every IRect; shaders flip SV_Position and the
+        // uv of render-target textures (gConv.x, WgtPixelPos / WgtRtUv in esia_common.hlsli).
         bool framebufferOriginBottomLeft = false;
-        // Vulkan without a negative viewport: clip-space +y points down. The renderer flips its projection.
+        // Vulkan without a negative viewport height: clip-space +y points down. The renderer flips its projection
+        // (and FullscreenVS follows the sign of gXform.y).
         bool clipSpaceYDown = false;
-        // Direct3D 9: pixel centers at integer coordinates. The renderer shifts its projection by half a pixel.
+        // Direct3D 9: pixel centers sit on integer coordinates and VPOS holds integers. The renderer sets gConv.y =
+        // 0.5 (WgtPixelPos then returns pixel centers); the backend's SM3 shader prelude moves clip-space positions
+        // by half a pixel of the current target (docs/backends/README.md, "Direct3D 9").
         bool halfPixelOffset = false;
-        // Sub-pixel text needs dual-source blending; without it the renderer asks for grayscale coverage.
+        // Sub-pixel text needs dual-source blending; without it sub-pixel glyph pages are drawn with the grayscale
+        // coverage kept in their alpha (TextLcdGray).
         bool dualSourceBlend = true;
-        // RGBA16F render targets for the backdrop pyramid and glow layers (else RGBA8: some banding)
+        // RGBA16F render targets (with blending) for the backdrop pyramid and glow layers (else RGBA8: some banding)
         bool floatRenderTargets = true;
-        // the backend can read a render target created with TextureUsage_Sampled directly (frost without a copy)
+        // Render targets the backend reports with TextureUsage_Sampled can be sampled right after their pass
+        // ended (frosted glass then builds its pyramid from the target: no copy).
         bool sampleRenderTarget = true;
         bool timestampQueries = false;
         bool readback = false;          // ReadPixels works (required by the conformance suite)
@@ -271,7 +287,14 @@ namespace esia::rhi
         // Instance ids start at 0 in every draw; the renderer passes the first instance in the Draw constants.
         virtual void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) = 0;
         // Copies `srcRect` of `src` to (dstX, dstY) of `dst`. Outside passes. A multisampled source is resolved.
+        // dst has src's format or its RawFormat (the bits are copied, never converted).
         virtual void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& srcRect) = 0;
+
+        // ---- host callbacks (DrawCmdKind::Callback): the API object host code records its own draws with, inside
+        // the current pass (ID3D11DeviceContext*, ID3D12GraphicsCommandList*, VkCommandBuffer, the current
+        // id<MTLRenderCommandEncoder>, IDirect3DDevice9*; nullptr for OpenGL, whose context is current). Host code may
+        // change any state: the backend forgets what it had bound, and the renderer binds everything again.
+        virtual void* NativeRenderState() = 0;
 
         // ---- profiling (Caps::timestampQueries; no-ops otherwise)
         virtual void BeginProfile(ProfileCategory category) = 0;

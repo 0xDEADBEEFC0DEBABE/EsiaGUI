@@ -6,6 +6,16 @@ namespace esia::rhi
 {
     bool IsSrgb(Format f) { return f == Format::RGBA8_SRGB || f == Format::BGRA8_SRGB; }
 
+    Format RawFormat(Format f)
+    {
+        switch (f)
+        {
+        case Format::RGBA8_SRGB: return Format::RGBA8_UNORM;
+        case Format::BGRA8_SRGB: return Format::BGRA8_UNORM;
+        default: return f;
+        }
+    }
+
     int BytesPerPixel(Format f)
     {
         switch (f)
