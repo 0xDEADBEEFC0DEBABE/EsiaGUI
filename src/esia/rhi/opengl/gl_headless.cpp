@@ -1,4 +1,4 @@
-// Esia OpenGL backend - headless devices for tests (EGL, no window) and the registration of the two backends.
+// Esia OpenGL backend - headless devices for tests (no visible window) and the registration of the two backends.
 //
 // EGL is loaded at runtime (libEGL.so.1 or libEGL.so; libEGL.dll / libEGL.dylib, e.g. ANGLE's, elsewhere), so the backend links
 // no GL or EGL library and a machine without EGL only skips the conformance suite. The display is Mesa's
@@ -6,6 +6,11 @@
 // Wayland needed), else the default display; the context is made current without a surface
 // (EGL_KHR_surfaceless_context) or with a 1 x 1 pbuffer. The config asks for EGL_PBUFFER_BIT: Mesa's surfaceless
 // platform offers no config without it.
+//
+// Windows GPU drivers ship no EGL, so there the context comes from WGL first (opengl32.dll, loaded at runtime too):
+// a hidden window only lends its pixel format, the device renders into its own targets. The GL 3.3 core context is
+// the driver's; the ES 3.0 context needs WGL_EXT_create_context_es2_profile (NVIDIA, AMD). EGL (ANGLE's DLLs next
+// to the executable) remains the fallback for what WGL cannot create.
 #include "gl_headless.hpp"
 #include "gl_device.hpp"
 #include <cstdlib>
@@ -146,7 +151,7 @@ namespace esia::rhi::opengl
         };
 
         // A current context of the API, owned by the returned object; null (and `error`) when EGL cannot make one.
-        std::unique_ptr<EglContext> CreateContext(bool es, std::string& error)
+        std::unique_ptr<EglContext> CreateEglContext(bool es, std::string& error)
         {
             const Egl& egl = LoadEgl();
             if (!egl.display)
@@ -197,6 +202,184 @@ namespace esia::rhi::opengl
             return owned;
         }
 
+#if defined(_WIN32)
+        constexpr int WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091, WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092, WGL_CONTEXT_FLAGS_ARB = 0x2094,
+                      WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126, WGL_CONTEXT_DEBUG_BIT_ARB = 0x0001, WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x0001,
+                      WGL_CONTEXT_ES2_PROFILE_BIT_EXT = 0x0004;
+
+        struct Wgl
+        {
+            HGLRC(WINAPI* CreateContext)(HDC) = nullptr;
+            BOOL(WINAPI* DeleteContext)(HGLRC) = nullptr;
+            BOOL(WINAPI* MakeCurrent)(HDC, HGLRC) = nullptr;
+            HGLRC(WINAPI* GetCurrentContext)() = nullptr;
+            PROC(WINAPI* GetProcAddress)(LPCSTR) = nullptr;
+        };
+
+        // opengl32.dll's wgl functions, once per process (all null when the DLL or one of them is missing)
+        const Wgl& LoadWgl()
+        {
+            static const Wgl wgl = [] {
+                Wgl w;
+                HMODULE lib = LoadLibraryA("opengl32.dll");
+                if (!lib)
+                    return w;
+                auto load = [&](auto& f, const char* name) {
+                    f = reinterpret_cast<std::remove_reference_t<decltype(f)>>(reinterpret_cast<void*>(::GetProcAddress(lib, name)));
+                };
+                load(w.CreateContext, "wglCreateContext");
+                load(w.DeleteContext, "wglDeleteContext");
+                load(w.MakeCurrent, "wglMakeCurrent");
+                load(w.GetCurrentContext, "wglGetCurrentContext");
+                load(w.GetProcAddress, "wglGetProcAddress");
+                if (!w.CreateContext || !w.DeleteContext || !w.MakeCurrent || !w.GetCurrentContext || !w.GetProcAddress)
+                    return Wgl{};
+                return w;
+            }();
+            return wgl;
+        }
+
+        class WglContext final : public OwnedContext
+        {
+        public:
+            WglContext(HWND window, HDC dc) : window_(window), dc_(dc) {}
+            ~WglContext() override
+            {
+                const Wgl& wgl = LoadWgl();
+                if (context_)
+                {
+                    if (wgl.GetCurrentContext() == context_)
+                        wgl.MakeCurrent(nullptr, nullptr);
+                    wgl.DeleteContext(context_);
+                }
+                ReleaseDC(window_, dc_);
+                DestroyWindow(window_);
+            }
+            void MakeCurrent() override { LoadWgl().MakeCurrent(dc_, context_); }
+
+            HDC Dc() const { return dc_; }
+            void SetContext(HGLRC context) { context_ = context; }
+
+        private:
+            HWND window_;
+            HDC dc_;
+            HGLRC context_ = nullptr;
+        };
+
+        // A current context of the API on the GPU driver's WGL; null (and `error`) when the driver cannot make one.
+        std::unique_ptr<WglContext> CreateWglContext(bool es, std::string& error)
+        {
+            const Wgl& wgl = LoadWgl();
+            if (!wgl.CreateContext)
+            {
+                error = "no opengl32.dll";
+                return nullptr;
+            }
+            static const wchar_t* const kClass = [] {
+                WNDCLASSEXW wc{};
+                wc.cbSize = sizeof(wc);
+                wc.style = CS_OWNDC;
+                wc.lpfnWndProc = DefWindowProcW;
+                wc.hInstance = GetModuleHandleW(nullptr);
+                wc.lpszClassName = L"EsiaGlHeadless";
+                RegisterClassExW(&wc);
+                return wc.lpszClassName;
+            }();
+            // never shown: the window only gives the context a pixel format
+            HWND window = CreateWindowExW(0, kClass, L"", WS_OVERLAPPEDWINDOW, 0, 0, 16, 16, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+            HDC dc = window ? GetDC(window) : nullptr;
+            if (!dc)
+            {
+                if (window)
+                    DestroyWindow(window);
+                error = "cannot create a hidden window for WGL";
+                return nullptr;
+            }
+            auto owned = std::make_unique<WglContext>(window, dc);
+            PIXELFORMATDESCRIPTOR pfd{};
+            pfd.nSize = sizeof(pfd);
+            pfd.nVersion = 1;
+            pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+            pfd.iPixelType = PFD_TYPE_RGBA;
+            pfd.cColorBits = 32;
+            const int format = ChoosePixelFormat(dc, &pfd);
+            if (format == 0 || !SetPixelFormat(dc, format, &pfd))
+            {
+                error = "no OpenGL pixel format (no GPU driver with OpenGL)";
+                return nullptr;
+            }
+            // wglCreateContextAttribsARB is only reachable through a current legacy context
+            HGLRC legacy = wgl.CreateContext(dc);
+            if (!legacy || !wgl.MakeCurrent(dc, legacy))
+            {
+                if (legacy)
+                    wgl.DeleteContext(legacy);
+                error = "wglCreateContext failed";
+                return nullptr;
+            }
+            using CreateContextAttribs = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+            using GetExtensionsString = const char*(WINAPI*)(HDC);
+            const auto createAttribs = reinterpret_cast<CreateContextAttribs>(reinterpret_cast<void*>(wgl.GetProcAddress("wglCreateContextAttribsARB")));
+            const auto extensions = reinterpret_cast<GetExtensionsString>(reinterpret_cast<void*>(wgl.GetProcAddress("wglGetExtensionsStringARB")));
+            const char* ext = extensions ? extensions(dc) : nullptr;
+            const bool esProfile = HasExtension(ext, "WGL_EXT_create_context_es2_profile") || HasExtension(ext, "WGL_EXT_create_context_es_profile");
+            HGLRC context = nullptr;
+            if (!createAttribs)
+                error = "the driver has no WGL_ARB_create_context";
+            else if (es && !esProfile)
+                error = "the driver has no WGL_EXT_create_context_es2_profile";
+            else
+            {
+#ifdef NDEBUG
+                constexpr int kFlags = 0;
+#else
+                constexpr int kFlags = WGL_CONTEXT_DEBUG_BIT_ARB;   // full KHR_debug output in debug builds
+#endif
+                const int glAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 3, WGL_CONTEXT_PROFILE_MASK_ARB,
+                                         WGL_CONTEXT_CORE_PROFILE_BIT_ARB, WGL_CONTEXT_FLAGS_ARB, kFlags, 0};
+                const int esAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 0, WGL_CONTEXT_PROFILE_MASK_ARB,
+                                         WGL_CONTEXT_ES2_PROFILE_BIT_EXT, WGL_CONTEXT_FLAGS_ARB, kFlags, 0};
+                context = createAttribs(dc, nullptr, es ? esAttribs : glAttribs);
+                if (!context)
+                    error = es ? "WGL cannot create an OpenGL ES 3.0 context" : "WGL cannot create an OpenGL 3.3 core context";
+            }
+            wgl.MakeCurrent(nullptr, nullptr);
+            wgl.DeleteContext(legacy);
+            if (!context)
+                return nullptr;
+            owned->SetContext(context);
+            if (!wgl.MakeCurrent(dc, context))
+            {
+                error = "wglMakeCurrent failed";
+                return nullptr;
+            }
+            return owned;
+        }
+#endif
+
+        // A current context of the API, owned by the returned object, and the lookup of its GL functions in `proc`;
+        // null (and `error`) when this machine cannot make one.
+        std::unique_ptr<OwnedContext> CreateContext(bool es, GetProcAddressFn& proc, std::string& error)
+        {
+#if defined(_WIN32)
+            std::string wglError;
+            if (auto wgl = CreateWglContext(es, wglError))
+            {
+                proc = &DefaultGetProcAddress;   // wglGetProcAddress, and opengl32.dll for GL 1.1
+                return wgl;
+            }
+#endif
+            if (auto egl = CreateEglContext(es, error))
+            {
+                proc = LoadEgl().GetProcAddress;
+                return egl;
+            }
+#if defined(_WIN32)
+            error = "WGL: " + wglError + "; EGL: " + error;
+#endif
+            return nullptr;
+        }
+
         // ESIA_GL_CORE_ONLY=1 runs the conformance suite on the GL 3.3 / GLES 3.0 minimum (Desc::coreOnly)
         HeadlessDevice CreateRegistered(bool es, const HeadlessDesc& hd, std::string& error)
         {
@@ -211,14 +394,22 @@ namespace esia::rhi::opengl
         HeadlessDevice CreateHeadlessGles(const HeadlessDesc& d, std::string& error) { return CreateRegistered(true, d, error); }
     }
 
-    GetProcAddressFn HeadlessGetProcAddress() { return LoadEgl().GetProcAddress; }
+    GetProcAddressFn HeadlessGetProcAddress()
+    {
+#if defined(_WIN32)
+        if (LoadWgl().GetCurrentContext && LoadWgl().GetCurrentContext())
+            return &DefaultGetProcAddress;
+#endif
+        return LoadEgl().GetProcAddress;
+    }
 
     HeadlessDevice CreateHeadlessDevice(Desc desc, const HeadlessDesc& hd, std::string& error)
     {
-        auto context = CreateContext(desc.es, error);
+        GetProcAddressFn proc = nullptr;
+        auto context = CreateContext(desc.es, proc, error);
         if (!context)
             return {};
-        desc.getProcAddress = LoadEgl().GetProcAddress;
+        desc.getProcAddress = proc;
         auto device = std::make_unique<GlDevice>(desc, std::move(context));
         if (!device->Init(error))
             return {};
