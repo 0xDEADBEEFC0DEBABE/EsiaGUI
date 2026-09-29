@@ -24,6 +24,7 @@ if(BUILD_TESTING)
         tests/test_vk_formats.cpp
         tests/test_vk_device.cpp
         tests/test_vk_scenes.cpp
+        tests/test_vk_host.cpp
         ${ESIA_ROOT}/tests/conformance/scenes.cpp)
     target_include_directories(esia_rhi_vulkan_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/conformance)
     target_link_libraries(esia_rhi_vulkan_tests PRIVATE esia_rhi_vulkan esia_render esia_testkit)
