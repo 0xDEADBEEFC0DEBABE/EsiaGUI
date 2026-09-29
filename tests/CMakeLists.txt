@@ -50,3 +50,16 @@ foreach(_b ${_esia_backends})
     add_test(NAME esia_conformance_${_b}
              COMMAND esia_conformance --backend ${_b} --golden ${ESIA_GOLDEN_DIR} --out ${CMAKE_BINARY_DIR}/conformance ${_strict})
 endforeach()
+
+esia_add_test(esia_shader_tests shaders/test_shader_library.cpp)
+target_link_libraries(esia_shader_tests PRIVATE esia_shaders)
+
+# the generated GLSL / ESSL compiled and linked by the system's driver (Mesa llvmpipe in CI) through EGL
+# (only EGL is linked: the test loads its few GL functions through eglGetProcAddress)
+find_path(ESIA_EGL_INCLUDE_DIR EGL/egl.h)
+find_library(ESIA_EGL_LIBRARY EGL)
+if(ESIA_EGL_INCLUDE_DIR AND ESIA_EGL_LIBRARY)
+    esia_add_test(esia_glsl_link_tests shaders/test_glsl_link.cpp)
+    target_include_directories(esia_glsl_link_tests PRIVATE ${ESIA_EGL_INCLUDE_DIR})
+    target_link_libraries(esia_glsl_link_tests PRIVATE esia_shaders ${ESIA_EGL_LIBRARY})
+endif()
