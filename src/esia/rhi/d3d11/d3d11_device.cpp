@@ -558,6 +558,8 @@ namespace esia::rhi::d3d11
                 s.frame.frameEnd = Stamp();
                 ctx_->End(s.disjoint.Get());
                 s.pending = s.frame.frameEnd > 0;
+                // submitted now, so the queries complete even when nothing presents (headless, several targets)
+                ctx_->Flush();
             }
             ctx_->ClearState();
             if (restore_)
@@ -828,15 +830,15 @@ namespace esia::rhi::d3d11
         void ReadSlot(ProfileSlot& s)
         {
             D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj = {};
+            std::uint64_t ticks[kMaxStamps];
             if (ctx_->GetData(s.disjoint.Get(), &dj, sizeof(dj), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
                 return;   // not yet: try again later
-            s.pending = false;
-            if (dj.Disjoint || dj.Frequency == 0)
-                return;
-            std::uint64_t ticks[kMaxStamps];
             for (int i = 0; i < s.used; ++i)
                 if (ctx_->GetData(s.stamps[i].Get(), &ticks[i], sizeof(std::uint64_t), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK)
                     return;
+            s.pending = false;
+            if (dj.Disjoint || dj.Frequency == 0)
+                return;   // the clock changed during the frame: its numbers mean nothing
             const GpuProfile p = s.frame.Resolve(ticks, s.used, (double)dj.Frequency);
             if (p.valid && p.frame > latest_.frame)
                 latest_ = p;
