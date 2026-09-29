@@ -17,6 +17,7 @@ concurrency:
 
 env:
   VULKAN_SDK_VERSION: 1.3.296.0
+  MESA_DIST_WIN_VERSION: 26.2.3          # github.com/pal1000/mesa-dist-win release
   VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-archives
   # D3D10 / 11 / 12 on WARP (the runners have no GPU), with the debug layer when the Graphics Tools are installed
   ESIA_D3D_DRIVER: warp
@@ -52,6 +53,11 @@ jobs:
         with:
           arch: x64
 
+      # the LLVM installation of the runner, not the older clang-cl that Visual Studio bundles (VC/Tools/Llvm), which
+      # the MSVC environment puts first on PATH
+      - name: Prefer the LLVM installation
+        run: '"C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH'
+
       - name: Toolchain
         run: |
           New-Item -ItemType Directory -Force logs | Out-Null
@@ -80,8 +86,9 @@ jobs:
 
       # ---- Vulkan: headers, loader and the Khronos validation layer from the LunarG SDK (the installer is cached;
       # the installation itself runs every time)
-      - name: Cache the Vulkan SDK installer
-        uses: actions/cache@v4
+      - name: Restore the Vulkan SDK downloads
+        id: vulkan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/vulkan-sdk-installer
           key: vulkan-sdk-installer-${{ env.VULKAN_SDK_VERSION }}
@@ -101,10 +108,28 @@ jobs:
           "VULKAN_SDK=$root" >> $env:GITHUB_ENV
           # the explicit layers of the SDK, whether or not the installer registered them
           "VK_ADD_LAYER_PATH=$root/Bin" >> $env:GITHUB_ENV
-          # the loader: System32 when the installer put it there, else the SDK's copy
-          $loader = Get-ChildItem -Recurse -Path $root -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Select-Object -First 1
-          "loader in System32: $(Test-Path "$env:WINDIR/System32/vulkan-1.dll"); in the SDK: $($loader.FullName)" | Tee-Object logs/vulkan-sdk.txt
-          if (-not (Test-Path "$env:WINDIR/System32/vulkan-1.dll") -and $loader) { $loader.DirectoryName >> $env:GITHUB_PATH }
+          # the loader (vulkan-1.dll): the SDK installer does not install it; the runtime components of the same
+          # version do, next to the executables' PATH
+          if (-not (Test-Path "$env:WINDIR/System32/vulkan-1.dll")) {
+            $zip = "$dir/VulkanRT-$v-Components.zip"
+            if (-not (Test-Path $zip)) {
+              Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$v/windows/VulkanRT-$v-Components.zip" -OutFile $zip
+            }
+            7z x -y "-o${{ runner.temp }}/vulkan-rt" $zip | Out-Null
+            $loader = Get-ChildItem -Recurse "${{ runner.temp }}/vulkan-rt" -Filter vulkan-1.dll | Where-Object { $_.DirectoryName -match 'x64' } | Select-Object -First 1
+            if (-not $loader) { throw "VulkanRT-$v-Components.zip: no x64 vulkan-1.dll" }
+            $loader.DirectoryName >> $env:GITHUB_PATH
+            "loader: $($loader.FullName)" | Tee-Object logs/vulkan-sdk.txt
+          } else {
+            "loader: System32" | Tee-Object logs/vulkan-sdk.txt
+          }
+
+      - name: Save the Vulkan SDK downloads
+        if: steps.vulkan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vulkan-sdk-installer
+          key: vulkan-sdk-installer-${{ env.VULKAN_SDK_VERSION }}
 
       # ---- Mesa for Windows (pal1000/mesa-dist-win): llvmpipe's opengl32.dll next to the executables, lavapipe as
       # the Vulkan driver
@@ -114,10 +139,9 @@ jobs:
         run: |
           $dir = "${{ runner.temp }}/mesa"
           New-Item -ItemType Directory -Force $dir | Out-Null
-          gh release view --repo pal1000/mesa-dist-win --json tagName,name | Tee-Object logs/mesa.txt
-          gh release download --repo pal1000/mesa-dist-win --pattern 'mesa3d-*-release-msvc.7z' --dir $dir
+          gh release download $env:MESA_DIST_WIN_VERSION --repo pal1000/mesa-dist-win --pattern 'mesa3d-*-release-msvc.7z' --dir $dir
           $archive = Get-ChildItem $dir -Filter 'mesa3d-*-release-msvc.7z' | Select-Object -First 1
-          $archive.Name | Tee-Object -Append logs/mesa.txt
+          $archive.Name | Tee-Object logs/mesa.txt
           7z x -y "-o$dir/x" $archive.FullName | Out-Null
           Get-ChildItem "$dir/x/x64" | Select-Object Name, Length | Format-Table | Out-String | Tee-Object -Append logs/mesa.txt
           $icd = Get-ChildItem "$dir/x/x64" -Filter 'lvp_icd*.json' | Select-Object -First 1
@@ -134,8 +158,11 @@ jobs:
           "commit=$(git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD)" >> $env:GITHUB_OUTPUT
           New-Item -ItemType Directory -Force $env:VCPKG_BINARY_CACHE | Out-Null
 
-      - name: Cache vcpkg binary packages
-        uses: actions/cache@v4
+      # restore and save explicitly: actions/cache saves only when the whole job succeeds, and a build that failed
+      # later must not cost the 12 minutes of vcpkg again
+      - name: Restore vcpkg binary packages
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.VCPKG_BINARY_CACHE }}
           key: vcpkg-x64-windows-freetype-harfbuzz-${{ steps.vcpkg.outputs.commit }}
@@ -149,6 +176,13 @@ jobs:
           $inst = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows"
           "VCPKG_X64=$inst" >> $env:GITHUB_ENV
           "$inst/bin" >> $env:GITHUB_PATH
+
+      - name: Save vcpkg binary packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-x64-windows-freetype-harfbuzz-${{ steps.vcpkg.outputs.commit }}
 
       - name: Configure
         run: >
