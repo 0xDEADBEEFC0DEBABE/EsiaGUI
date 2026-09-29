@@ -3,6 +3,7 @@
 // byte string lays out and a decoding loop always advances.
 #pragma once
 #include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace esia
@@ -62,5 +63,32 @@ namespace esia
         if (cp < least || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF))
             return kReplacementCharacter;
         return cp;
+    }
+
+    // Appends the UTF-8 encoding of `c` (a surrogate or a value past U+10FFFF encodes U+FFFD).
+    inline void EncodeUtf8(std::string& out, char32_t c)
+    {
+        if ((c >= 0xD800 && c <= 0xDFFF) || c > 0x10FFFF)
+            c = kReplacementCharacter;
+        if (c < 0x80)
+            out.push_back((char)c);
+        else if (c < 0x800)
+        {
+            out.push_back((char)(0xC0 | (c >> 6)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        }
+        else if (c < 0x10000)
+        {
+            out.push_back((char)(0xE0 | (c >> 12)));
+            out.push_back((char)(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        }
+        else
+        {
+            out.push_back((char)(0xF0 | (c >> 18)));
+            out.push_back((char)(0x80 | ((c >> 12) & 0x3F)));
+            out.push_back((char)(0x80 | ((c >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (c & 0x3F)));
+        }
     }
 }
