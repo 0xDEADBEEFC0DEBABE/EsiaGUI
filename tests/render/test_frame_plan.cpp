@@ -210,7 +210,7 @@ ESIA_TEST(FramePlan, EdgeFadesInPixelsAndNeverMixed)
     }
 }
 
-ESIA_TEST(FramePlan, CoveragePagesPickTextPrograms)
+ESIA_TEST(FramePlan, CoveragePagesPickTheTextProgram)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
@@ -220,17 +220,16 @@ ESIA_TEST(FramePlan, CoveragePagesPickTextPrograms)
     FramePlan plan;
     plan.Build(Data({&dl}), [](TextureId id, TextureInfo& out) {
         if (id == 5)
-            out = {TextureFormat::Alpha8, 256, 256, 0};
+            out = {TextureFormat::Alpha8, 256, 256};
         else if (id == 6)
-            out = {TextureFormat::RGBA8, 256, 256, TextureFlags_LcdCoverage};
+            out = {TextureFormat::RGBA8, 256, 256};
         else
             return false;
         return true;
     });
     ESIA_CHECK(plan.ops.size() == 3);
-    ESIA_CHECK(plan.ops[0].coverage && !plan.ops[0].lcd);
-    ESIA_CHECK(plan.ops[1].coverage && plan.ops[1].lcd);
-    ESIA_CHECK(!plan.ops[2].coverage && !plan.ops[2].lcd);
+    ESIA_CHECK(plan.ops[0].coverage);                            // an Alpha8 glyph page
+    ESIA_CHECK(!plan.ops[1].coverage && !plan.ops[2].coverage);   // an image, an unknown texture
 }
 
 ESIA_TEST(FramePlan, CallbacksAndDisplayMapping)

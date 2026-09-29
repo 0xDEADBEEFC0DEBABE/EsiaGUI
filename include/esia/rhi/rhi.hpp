@@ -127,9 +127,7 @@ namespace esia::rhi
     enum class ShaderProgram : std::uint8_t
     {
         UiGeometry,       // UiVS + UiPS: images, lines, charts
-        TextGray,         // UiVS + TextGrayPS: Alpha8 glyph coverage
-        TextLcd,          // UiVS + TextLcdPS: sub-pixel coverage, dual-source blending
-        TextLcdGray,      // UiVS + TextLcdGrayPS: sub-pixel pages drawn into alpha targets (layers)
+        TextGray,         // UiVS + TextGrayPS: Alpha8 glyph coverage (all text: Esia has no sub-pixel text)
         Fx,               // FxVS + FxPS: SDF shapes, instanced quads (4 vertices, triangle strip)
         Downsample,       // FullscreenVS + DownsamplePS: one pyramid level (3 vertices)
         LayerComposite,   // FullscreenVS + LayerCompositePS: glow layer onto the target
@@ -151,7 +149,6 @@ namespace esia::rhi
         Opaque,          // src
         Straight,        // rgb: src * srcA + dst * (1 - srcA); a: src + dst * (1 - srcA)
         Premultiplied,   // rgb: src + dst * (1 - srcA);        a: src + dst * (1 - srcA)
-        DualSourceLcd,   // rgb: src0 * src1 + dst * (1 - src1); a: src1.a + dst * (1 - src1.a)  (Caps::dualSourceBlend)
     };
 
     struct PipelineDesc
@@ -259,9 +256,6 @@ namespace esia::rhi
         // 0.5 (WgtPixelPos then returns pixel centers); the backend's SM3 shader prelude moves clip-space positions
         // by half a pixel of the current target through ESIA_CLIP_POSITION (docs/backends/README.md, "Direct3D 9").
         bool halfPixelOffset = false;
-        // Sub-pixel text needs dual-source blending; without it sub-pixel glyph pages are drawn with the grayscale
-        // coverage kept in their alpha (TextLcdGray).
-        bool dualSourceBlend = true;
         // RGBA16F render targets (with blending) for the backdrop pyramid and glow layers (else RGBA8: some banding)
         bool floatRenderTargets = true;
         // Render targets the backend reports with TextureUsage_Sampled can be sampled right after their pass

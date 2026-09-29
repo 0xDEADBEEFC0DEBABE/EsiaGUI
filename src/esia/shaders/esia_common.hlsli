@@ -73,7 +73,7 @@ ESIA_CBUFFER(WgtFrame, b0, 0)
     float4 gDisplay;    // xy: UI display pos            zw: framebuffer scale
     float4 gTime;       // x: seconds  y: delta  z: backdrop valid  w: 1 = target is sRGB (write linear)
     float4 gLevel[6];   // backdrop pyramid: xy size (px), zw 1/size. [0] = full-res copy
-    float4 gText;       // x gamma, y grayscale enhanced contrast, z ClearType enhanced contrast, w ClearType level
+    float4 gText;       // x gamma, y enhanced contrast (grayscale text), zw 0
     float4 gConv;       // x: 1 = framebuffer origin bottom-left (flip y)  y: SV_Position offset to pixel centers
                         // z: FX instances per row of the instance texture  w: unused
 };

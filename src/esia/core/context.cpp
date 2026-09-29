@@ -152,7 +152,7 @@ namespace esia
         return nullptr;
     }
 
-    Window* Context::CreateWindow(std::string_view name, Id id)
+    Window* Context::AddWindow(std::string_view name, Id id)
     {
         auto w = std::make_unique<Window>();
         w->id_ = id;
@@ -204,7 +204,7 @@ namespace esia
                 w = x.get();
         const bool created = w == nullptr;
         if (created)
-            w = CreateWindow(name, id);
+            w = AddWindow(name, id);
 
         const bool firstThisFrame = !w->active_;
         if (firstThisFrame)

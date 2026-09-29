@@ -18,20 +18,11 @@ namespace esia
         Alpha8,   // grayscale coverage (glyph atlas)
     };
 
-    enum TextureFlags_ : std::uint32_t
-    {
-        TextureFlags_None = 0,
-        // RGBA8 page of sub-pixel (LCD) coverage: one coverage per R/G/B stripe, grayscale coverage in A.
-        // Drawn with the dual-source text pipeline (or its grayscale fallback).
-        TextureFlags_LcdCoverage = 1u << 0,
-    };
-
     struct TextureInfo
     {
         TextureFormat format = TextureFormat::RGBA8;
         int width = 0, height = 0;
-        std::uint32_t flags = 0;
-        bool Coverage() const { return format == TextureFormat::Alpha8 || (flags & TextureFlags_LcdCoverage); }
+        bool Coverage() const { return format == TextureFormat::Alpha8; }   // glyph coverage: drawn as text
     };
 
     // One pending change, in the order it was requested.

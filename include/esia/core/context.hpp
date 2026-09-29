@@ -257,7 +257,7 @@ namespace esia
         void SetClipboardText(const std::string& s) const { if (desc_.setClipboard) desc_.setClipboard(s); }
 
     private:
-        Window* CreateWindow(std::string_view name, Id id);
+        Window* AddWindow(std::string_view name, Id id);
         void UpdateHoveredWindow();
         void UpdateMoveResize();
         void StartResize();

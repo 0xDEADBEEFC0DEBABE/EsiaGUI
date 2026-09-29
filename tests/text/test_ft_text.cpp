@@ -1,7 +1,7 @@
 // The FreeType + HarfBuzz text system with the fonts in third_party/imgui/misc/fonts: font loading, metrics from the
 // font (kerning, marks, tabs), line breaking, trimming and alignment, pixel-aligned glyph quads on atlas pages, pixel
-// density, sub-pixel pages, fallback fonts, scaled and icon glyphs, caching - and the whole path end to end: the
-// quads Draw emits, composited on the CPU from the pages the registry received, against golden images.
+// density, fallback fonts, scaled and icon glyphs, caching - and the whole path end to end: the quads Draw emits,
+// composited on the CPU from the pages the registry received, against a golden image.
 #include "esia/core/draw_list.hpp"
 #include "esia/core/texture.hpp"
 #include "esia/text/freetype.hpp"
@@ -121,8 +121,8 @@ namespace
         }
     };
 
-    // Glyph coverage over white: grayscale pages blend by coverage, sub-pixel pages per stripe (what the text
-    // pipelines do, without their gamma / contrast composition). Quads are pixel aligned: texels map 1:1.
+    // Glyph coverage over white (what the text pipeline does, without its gamma / contrast composition). Quads are
+    // pixel aligned: texels map 1:1.
     testkit::Image Composite(const DrawList& dl, const PageStore& store, int w, int h)
     {
         testkit::Image img(w, h);
@@ -130,7 +130,6 @@ namespace
         for (const Quad& q : Quads(dl))
         {
             const PageStore::Page& page = store.pages.at(q.texture);
-            const int bpp = BytesPerPixel(page.info.format);
             const int x0 = (int)std::lround(q.r.min.x), y0 = (int)std::lround(q.r.min.y);
             const int x1 = (int)std::lround(q.r.max.x), y1 = (int)std::lround(q.r.max.y);
             const int tx = (int)std::lround(q.uv0.x * (float)page.info.width), ty = (int)std::lround(q.uv0.y * (float)page.info.height);
@@ -139,13 +138,10 @@ namespace
             for (int y = std::max(y0, 0); y < std::min(y1, h); ++y)
                 for (int x = std::max(x0, 0); x < std::min(x1, w); ++x)
                 {
-                    const std::uint8_t* t = page.pixels.data() + ((std::size_t)(ty + y - y0) * page.info.width + (tx + x - x0)) * bpp;
+                    const float cov = (float)page.pixels[(std::size_t)(ty + y - y0) * page.info.width + (tx + x - x0)] / 255.0f * col.a;
                     std::uint8_t* d = img.At(x, y);
                     for (int c = 0; c < 3; ++c)
-                    {
-                        const float cov = (float)t[bpp == 1 ? 0 : c] / 255.0f * col.a;
                         d[c] = (std::uint8_t)std::lround((float)d[c] * (1.0f - cov) + ink[c] * cov);
-                    }
                 }
         }
         return img;
@@ -349,13 +345,13 @@ ESIA_TEST(FreeType, DrawsPixelAlignedQuadsOnAtlasPages)
     ESIA_CHECK(f.ts->Draw(clear, fr, Vec2(0, 0), Color::Clear(), "Esia") == size && clear.Empty());
 }
 
-ESIA_TEST(FreeType, PixelDensityAndSubpixelPages)
+ESIA_TEST(FreeType, PixelDensity)
 {
     Fixture f;
     const text::FontRef fr{f.droid, 16.0f};
-    DrawList a = NewList(), b = NewList(), c = NewList();
+    DrawList a = NewList(), b = NewList();
     f.ts->Draw(a, fr, Vec2(3, 3), Color::Black(), "H");
-    f.ts->NewFrame({2.0f, text::Antialiasing::Grayscale});
+    f.ts->NewFrame({2.0f});
     f.ts->Draw(b, fr, Vec2(3, 3), Color::Black(), "H");
     const Quad qa = Quads(a).at(0), qb = Quads(b).at(0);
     // rasterized at the physical size: twice the texels of ink (the bitmaps' two empty rows do not scale) for about
@@ -363,11 +359,6 @@ ESIA_TEST(FreeType, PixelDensityAndSubpixelPages)
     ESIA_CHECK_NEAR((qb.uv1.y - qb.uv0.y) * 2048.0f - 2.0f, 2.0f * ((qa.uv1.y - qa.uv0.y) * 2048.0f - 2.0f), 2.0f);
     ESIA_CHECK_NEAR(qb.r.Height(), qa.r.Height(), 1.5f);
     ESIA_CHECK(IsWhole(qb.r.min.y * 2.0f) && IsWhole(qb.r.max.x * 2.0f));
-
-    f.ts->NewFrame({1.0f, text::Antialiasing::Subpixel});
-    f.ts->Draw(c, fr, Vec2(3, 3), Color::Black(), "H");
-    TextureInfo info;
-    ESIA_CHECK(f.textures.Info(Quads(c).at(0).texture, info) && info.format == TextureFormat::RGBA8 && (info.flags & TextureFlags_LcdCoverage));
 }
 
 ESIA_TEST(FreeType, FallbackFontsKeepTheLineBox)
@@ -472,14 +463,12 @@ namespace
 {
     // One sample of everything: kerning, accents and marks, Greek, Cyrillic, a fallback glyph, wrapping,
     // trimming, centering, sub-pixel phases and an icon.
-    void DrawSample(text::TextSystem& ts, text::FontId droid, DrawList& dl, bool full)
+    void DrawSample(text::TextSystem& ts, text::FontId droid, DrawList& dl)
     {
         const Color ink(0.08f, 0.08f, 0.10f, 1.0f);
         ts.Draw(dl, {droid, 24.0f}, Vec2(8, 6), ink, "Esia \xC2\xB7 AV To Wa fi \xC3\x80\xC3\x89\xC3\x8E\xC3\xB5\xC3\xBC");
         ts.Draw(dl, {droid, 15.0f}, Vec2(8, 38), Color(0.0f, 0.35f, 0.8f, 1.0f),
                 "The quick brown fox jumps over the lazy dog, again and again and again.", 300.0f);
-        if (!full)
-            return;
         ts.Draw(dl, {droid, 13.0f}, Vec2(8, 82), ink,
                 "\xCE\xA9\xCE\xBC\xCE\xAD\xCE\xB3\xCE\xB1 \xC2\xB7 \xD0\x96\xD0\xB8\xD0\xB7\xD0\xBD\xD1\x8C \xC2\xB7 caf\xC3\xA9 e\xCC\x81 \xC2\xB7 "
                 "1\xE2\x80\x93" "2 \xE2\x82\xAC \xE2\x88\x9E \xE2\x82\xB9");
@@ -491,25 +480,14 @@ namespace
     }
 }
 
-ESIA_TEST(FreeType, RendersTheGoldenImages)
+ESIA_TEST(FreeType, RendersTheGoldenImage)
 {
-    {
-        Fixture f;
-        const text::FontId karla = f.ts->AddFontFile((kFonts + "/Karla-Regular.ttf").c_str());
-        f.ts->AddFallback(karla);
-        DrawList dl = NewList();
-        DrawSample(*f.ts, f.droid, dl, true);
-        PageStore pages;
-        pages.Collect(f.textures);
-        CheckGolden(Composite(dl, pages, 480, 190), "ft_gray");
-    }
-    {
-        Fixture f;
-        f.ts->NewFrame({1.0f, text::Antialiasing::Subpixel});
-        DrawList dl = NewList();
-        DrawSample(*f.ts, f.droid, dl, false);
-        PageStore pages;
-        pages.Collect(f.textures);
-        CheckGolden(Composite(dl, pages, 480, 80), "ft_lcd");
-    }
+    Fixture f;
+    const text::FontId karla = f.ts->AddFontFile((kFonts + "/Karla-Regular.ttf").c_str());
+    f.ts->AddFallback(karla);
+    DrawList dl = NewList();
+    DrawSample(*f.ts, f.droid, dl);
+    PageStore pages;
+    pages.Collect(f.textures);
+    CheckGolden(Composite(dl, pages, 480, 190), "ft_gray");
 }

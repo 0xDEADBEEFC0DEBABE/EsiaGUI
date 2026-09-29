@@ -22,7 +22,7 @@ namespace
     using GLsizei = int;
     using GLchar = char;
     constexpr GLenum kVertexShader = 0x8B31, kFragmentShader = 0x8B30, kCompileStatus = 0x8B81, kLinkStatus = 0x8B82;
-    constexpr GLenum kVersion = 0x1F02, kExtensions = 0x1F03;
+    constexpr GLenum kVersion = 0x1F02;
     constexpr GLuint kInvalidIndex = 0xFFFFFFFFu;
 
     struct Gl
@@ -118,15 +118,11 @@ namespace
         Gl gl{};
         if (!egl.Create(es) || !gl.Load())
             return -1;
-        const std::string extensions = gl.GetString(kExtensions) ? reinterpret_cast<const char*>(gl.GetString(kExtensions)) : "";
         std::printf("  %s on %s\n", shaders::FormatName(format), reinterpret_cast<const char*>(gl.GetString(kVersion)));
         int checked = 0;
         for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
         {
             const auto program = (rhi::ShaderProgram)p;
-            // dual-source blending on GLES needs EXT_blend_func_extended (the backend only builds TextLcd with it)
-            if (es && program == rhi::ShaderProgram::TextLcd && extensions.find("GL_EXT_blend_func_extended") == std::string::npos)
-                continue;
             const shaders::ShaderBlob* vs = shaders::Find(format, program, shaders::Stage::Vertex);
             const shaders::ShaderBlob* ps = shaders::Find(format, program, shaders::Stage::Pixel);
             ESIA_CHECK(vs && ps && vs->text && ps->text);
@@ -169,6 +165,6 @@ ESIA_TEST(ShaderLibrary, GlslAndEsslLinkOnTheDriver)
         if (n < 0)
             std::printf("  %s: no EGL context of that API on this machine - skipped\n", shaders::FormatName(f));
         else
-            ESIA_CHECK(n >= (int)rhi::ShaderProgram::Count - 1);
+            ESIA_CHECK(n == (int)rhi::ShaderProgram::Count);
     }
 }

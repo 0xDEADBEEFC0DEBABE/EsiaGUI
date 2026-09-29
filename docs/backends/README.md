@@ -117,7 +117,7 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `DestroyTexture(tex)` | Any time outside passes; defer the real release until the GPU is done with it. |
 | `GetTextureDesc(tex)` | Size, format, usage, samples. The renderer reads it for the target every frame. |
 | `CreateBuffer(desc)` / `UpdateBuffer(buf, data, size)` / `DestroyBuffer` | `Vertex` (20-byte `esia::Vertex`), `Index` (uint32), `FxInstances` (float4 rows, `FxStorage::Buffer` only). Updates replace the first `size` bytes, before the first pass; version them per frame in flight. |
-| `CreatePipeline(desc)` | Program (vertex + pixel shader of `ShaderProgram`), vertex layout, topology, blend, target format, samples, and for `Fx`: `effect` / `effectSource` (user effects, only with `runtimeEffects`), `fxFeatures` (only with `fxFeatureVariants`) and `background` (only with `asyncPipelines`, below). May be called inside a pass. Return `{}` if the combination is impossible (dual-source without support, an effect that failed): the renderer falls back or skips - a refused FX variant is drawn with the full shader (`fxFeatures = 0`, counted in `RenderStats::fxFallbacks`). A user effect may return `{}` while it compiles in the background; the renderer asks again on a later frame. |
+| `CreatePipeline(desc)` | Program (vertex + pixel shader of `ShaderProgram`), vertex layout, topology, blend, target format, samples, and for `Fx`: `effect` / `effectSource` (user effects, only with `runtimeEffects`), `fxFeatures` (only with `fxFeatureVariants`) and `background` (only with `asyncPipelines`, below). May be called inside a pass. Return `{}` if the combination is impossible (a sample count the format cannot have, an effect that failed): the renderer falls back or skips - a refused FX variant is drawn with the full shader (`fxFeatures = 0`, counted in `RenderStats::fxFallbacks`). A user effect may return `{}` while it compiles in the background; the renderer asks again on a later frame. |
 | `GetPipelineStatus(p)` | Only with `asyncPipelines`: `Pending` while a `background` pipeline compiles, `Failed` when it could not be built, else `Ready` (the default implementation). The renderer never binds a pipeline that is not `Ready`. |
 
 ### Frames, passes, state
@@ -133,7 +133,7 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `SetFxBuffer(buf)` | t7 as a structured / storage buffer (`FxStorage::Buffer`). |
 | `SetVertexBuffer` / `SetIndexBuffer` | The frame's merged buffers; indices are 32-bit and already rebased (no base vertex). |
 | `Draw(3, 0)` | Full-screen triangle, no vertex buffer: `SV_VertexID` 0..2 (Downsample, LayerComposite, Clear). |
-| `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray, TextLcd, TextLcdGray). |
+| `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray). |
 | `DrawInstanced(4, n)` | Triangle strip, no vertex buffer, `SV_InstanceID` 0..n-1; the draw's first instance is in the Draw constants. |
 | `CopyTexture(dst, x, y, src, rect)` | Outside passes; raw bits (`dst` is `src`'s format or `RawFormat(src)`); resolves a multisampled source. `(x, y)` may differ from `rect`'s position (the renderer copies captures in place, the conformance suite checks an offset): where the API resolves only whole subresources or identical rectangles (D3D11 `ResolveSubresource`, GLES blits), resolve into a temporary first. |
 | `NativeRenderState()` | Inside a pass: the object host callbacks record with (table in section 1). Forget every binding afterwards. |
@@ -180,7 +180,6 @@ With `asyncPipelines`, `CreatePipeline` may return a handle at once and build it
 | `framebufferOriginBottomLeft` | shaders flip pixel positions and render-target uv | no | no | no | no | yes | yes | no | no |
 | `clipSpaceYDown` | the renderer flips its projection (`gXform.y > 0`; FullscreenVS follows) | no | no | no | no | no | no | yes (or a negative viewport height and no) | no |
 | `halfPixelOffset` | renderer sets `gConv.y = 0.5`; the SM3 prelude shifts positions by half a pixel | yes | no | no | no | no | no | no | no |
-| `dualSourceBlend` | sub-pixel text with per-channel alpha; else grayscale coverage from the page's alpha | no | yes | yes | yes | yes | `EXT_blend_func_extended` | `dualSrcBlend` feature | yes |
 | `floatRenderTargets` | RGBA16F pyramid and layers (else RGBA8) | if RGBA16F blending | yes | yes | yes | yes | `EXT_color_buffer_half_float` | yes | yes |
 | `sampleRenderTarget` | targets reported `Sampled` may be read right after their pass (the no-copy capture path) | yes | yes | yes | yes | yes | yes | yes | yes |
 | `timestampQueries` | GPU time per category | yes | yes | yes | yes | yes | `EXT_disjoint_timer_query` | yes | not at first |
@@ -207,8 +206,6 @@ const char* hlsl = shaders::FindSource("esia_common.hlsli");              // for
 | --- | --- | --- | --- | --- | --- |
 | `UiGeometry` | `UiVS` / `UiPS` (`esia_ui.hlsl`) | `esia::Vertex` | list | Straight | Frame, Draw, t0 (linear) |
 | `TextGray` | `UiVS` / `TextGrayPS` | `esia::Vertex` | list | Straight | Frame, Draw, t0 (linear, `.r`) |
-| `TextLcd` | `UiVS` / `TextLcdPS` (two outputs) | `esia::Vertex` | list | DualSourceLcd | Frame, Draw, t0 (linear, `.rgb`) |
-| `TextLcdGray` | `UiVS` / `TextLcdGrayPS` | `esia::Vertex` | list | Straight | Frame, Draw, t0 (linear, `.a`) |
 | `Fx` | `FxVS` / `FxPS` (`esia_fx.hlsl`) | none (`SV_VertexID`, `SV_InstanceID`) | strip | Premultiplied | Frame, Draw, t0..t6 (linear), t7 FX data |
 | `Downsample` | `FullscreenVS` / `DownsamplePS` (`esia_post.hlsl`) | none (`SV_VertexID`) | list | Opaque | Frame, Pass, t0 (linear) |
 | `LayerComposite` | `FullscreenVS` / `LayerCompositePS` | none | list | Premultiplied | Frame, Pass, t0 (point), t1..t6 (linear) |
@@ -224,9 +221,12 @@ measurements: `tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1` or `
 `D3DCompile`; the pixels are identical, only the cost differs (do not commit a library built that way).
 
 Blend modes: `Opaque` = replace; `Straight` = rgb `src*srcA + dst*(1-srcA)`, alpha `src + dst*(1-srcA)`;
-`Premultiplied` = rgb and alpha `src + dst*(1-srcA)`; `DualSourceLcd` = rgb `src0*src1 + dst*(1-src1)`, alpha
-`src1.a + dst*(1-src1.a)`. No depth, no stencil, no culling. Samplers: s0 linear / clamp / no mips, s1 point /
-clamp / no mips.
+`Premultiplied` = rgb and alpha `src + dst*(1-srcA)`. No dual-source blending, no depth, no stencil, no culling.
+Samplers: s0 linear / clamp / no mips, s1 point / clamp / no mips.
+
+**Text is grayscale only.** By the owner's decision, Esia has no sub-pixel (LCD / ClearType) text: every glyph page
+is Alpha8 coverage drawn with `TextGray` (core round 3 removed `TextLcd`, `TextLcdGray`, `BlendMode::DualSourceLcd`
+and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature or extension to set up.
 
 ### 4.1 Binding numbers
 
@@ -250,8 +250,6 @@ clamp / no mips.
 * `gFxData` is listed with the point sampler: keep it that way - RGBA32F is not filterable on GLES 3.0, and a linear
   filter makes the texture incomplete, which makes `texelFetch` return zeros. Every texture has one mip level
   (`GL_TEXTURE_MAX_LEVEL 0` or non-mipmap filters).
-* TextLcd on GLES needs `GL_EXT_blend_func_extended` (the ESSL has the `#extension` line): create that pipeline only
-  when the extension exists, and report `dualSourceBlend` accordingly.
 * The ESSL is `highp` throughout (the build script enforces it).
 * `esia_glsl_link_tests` compiles and links every program on the machine's driver; the GL backend's first test.
 
@@ -261,8 +259,8 @@ clamp / no mips.
   `FxPS` ...): pass it as `VkPipelineShaderStageCreateInfo::pName`.
   Separate images and samplers; one descriptor set layout for every program: bindings 0-2 `UNIFORM_BUFFER` (or
   `_DYNAMIC`), 3-9 `SAMPLED_IMAGE`, 10 `STORAGE_BUFFER`, 11-12 `SAMPLER`, all `VERTEX | FRAGMENT`. Only what a
-  program uses must be valid when it draws (what the null device checks). Dual-source outputs are location 0 index 0
-  / 1. Validated with `spirv-val` at build time.
+  program uses must be valid when it draws (what the null device checks). Validated with `spirv-val` at build
+  time.
 * MSL 2.0, entry point `esia_main` in every source (one `MTLLibrary` per blob, `newLibraryWithSource`), indices as in
   the table. The FX data is a `device` buffer; constants may come through `setVertexBytes` / `setFragmentBytes` at
   0 / 1 / 2. MSL cannot be compiled on Linux: validate it on macOS (`xcrun -sdk macosx metal -c file.metal`).
@@ -329,7 +327,7 @@ clamp / no mips.
 * Constants: a UBO ring with `glBindBufferRange` (respect `GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT`); two VAOs (UI
   layout, empty for id-only programs).
 * Draws: `glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_INT, first * 4)`, `glDrawArraysInstanced(GL_TRIANGLE_STRIP,
-  0, 4, n)`, `glDrawArrays(GL_TRIANGLES, 0, 3)`. Blend with `glBlendFuncSeparate` (`GL_SRC1_COLOR` family for LCD).
+  0, 4, n)`, `glDrawArrays(GL_TRIANGLES, 0, 3)`. Blend with `glBlendFuncSeparate`.
 * `ReadPixels`: `glReadPixels` of the rows `h - y1 .. h - y0`, flipped to top-first; multisampled targets blit to a
   temporary texture first.
 * Timestamps: `GL_TIMESTAMP` with `glQueryCounter` (GLES: `EXT_disjoint_timer_query`), read a few frames later.
@@ -420,7 +418,7 @@ queries).
   target). `esia-directx`'s prelude does exactly this.
 * Constants: `SetVertexShaderConstantF` / `SetPixelShaderConstantF` at the registers of the bytecode's constant table.
 * sRGB: `D3DRS_SRGBWRITEENABLE` for sRGB targets, `D3DSAMP_SRGBTEXTURE` always off.
-* No dual-source blending (`dualSourceBlend = false`), `fxFeatureVariants = true`, `runtimeEffects = true`.
+* `fxFeatureVariants = true`, `runtimeEffects = true`.
 * Variants compile with `D3DCompile` in the first frames that use them: up to 2.6 s each on a real driver (masks
   0x822 / 0x823 / 0x826 on an RTX 4080). Report `asyncPipelines` and compile them on a worker thread (section 2,
   "Background pipelines"), with the full shader built first.
@@ -500,7 +498,8 @@ ctest --preset linux-clang -R esia_conformance                                  
   surface the frame reads but did not write - undefined after `DontCare`, stale from an earlier frame - then shows,
   where a fresh device reads zeros (llvmpipe does). The null backend's goldens are single frames: it ignores it.
 * Scenes a backend cannot run are SKIPped with the reason (the headless device refused the format / samples, no
-  dual-source blending for `text_lcd`, no device on this machine). A missing golden is NO GOLDEN, a failure with
+  device on this machine); no scene depends on an optional capability any more (`text_lcd` went with sub-pixel
+  text). A missing golden is NO GOLDEN, a failure with
   `--strict`. Exit code: 1 on a failure, 77 when every scene was skipped, else 0. CMake adds, per backend,
   `esia_conformance_<name>` (`--strict`) and `esia_conformance_<name>_frames` (`--frames 3 --strict`; not for null),
   both with `SKIP_RETURN_CODE 77`: a machine without the backend shows them as skipped, never as passed.

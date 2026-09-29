@@ -236,14 +236,13 @@ ESIA_TEST(Renderer, GlowLayer)
     ESIA_CHECK(Lines(s.dev, "backdrop-copy") == 0);        // no glass: no copy texture
 }
 
-ESIA_TEST(Renderer, SubpixelTextPrograms)
+ESIA_TEST(Renderer, TextDrawsWithTheGrayscaleProgram)
 {
-    auto run = [](bool dualSource, bool inLayer) {
-        Caps caps;
-        caps.dualSourceBlend = dualSource;
-        Setup s(caps);
+    // on the target and inside glow layers (RGBA16F) alike
+    auto run = [](bool inLayer) {
+        Setup s;
         TextureRegistry reg;
-        const TextureId page = reg.Create({TextureFormat::RGBA8, 64, 64, TextureFlags_LcdCoverage});
+        const TextureId page = reg.Create({TextureFormat::Alpha8, 64, 64});
         DrawList dl = MakeList();
         Painter p(dl);
         if (inLayer)
@@ -254,11 +253,10 @@ ESIA_TEST(Renderer, SubpixelTextPrograms)
         Renderer r(s.dev);
         r.Render(Data({&dl}), &reg, s.target);
         ESIA_CHECK(NoErrors(s.dev));
-        return std::make_pair(Lines(s.dev, "TextLcd list dual-source"), Lines(s.dev, "TextLcdGray list straight"));
+        return Lines(s.dev, inLayer ? "TextGray list straight RGBA16_FLOAT" : "TextGray list straight RGBA8_UNORM");
     };
-    ESIA_CHECK(run(true, false) == std::make_pair(1, 0));
-    ESIA_CHECK(run(false, false) == std::make_pair(0, 1));
-    ESIA_CHECK(run(true, true) == std::make_pair(0, 1));   // alpha layers get the grayscale coverage
+    ESIA_CHECK(run(false) == 1);
+    ESIA_CHECK(run(true) == 1);
 }
 
 ESIA_TEST(Renderer, TextureRegistryReachesTheDevice)
@@ -266,8 +264,8 @@ ESIA_TEST(Renderer, TextureRegistryReachesTheDevice)
     Setup s;
     TextureRegistry reg;
     const std::uint8_t pixels[4 * 4] = {};
-    const TextureId glyphs = reg.Create({TextureFormat::Alpha8, 4, 4, 0}, pixels);
-    const TextureId image = reg.Create({TextureFormat::RGBA8, 2, 2, 0}, pixels);
+    const TextureId glyphs = reg.Create({TextureFormat::Alpha8, 4, 4}, pixels);
+    const TextureId image = reg.Create({TextureFormat::RGBA8, 2, 2}, pixels);
     DrawList dl = MakeList();
     dl.AddImage(glyphs, Rect(0, 0, 4, 4), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
     Renderer r(s.dev);
