@@ -459,12 +459,15 @@ Cross-compiling the DirectX backends from Linux:
   comparison), shader library (completeness; GLSL / ESSL compiled and linked on the system driver through EGL),
   text (the rasterizer's exact coverage, the atlas, FreeType layout with the fonts in `third_party/imgui/misc/fonts`,
   and golden images of the glyph quads composited on the CPU - no GPU needed).
-* **Conformance suite** (`tests/conformance`): 14 scenes built through the public API, rendered by every backend
-  built into the binary. Drawing backends are read back and compared with golden PNGs within per-scene tolerances;
-  the null backend's command streams are compared with golden logs, and any RHI contract violation fails. The
-  image goldens are produced by the first drawing backend that runs in CI (OpenGL on Mesa llvmpipe) with
-  `esia_conformance --backend opengl --golden tests/conformance/golden --update`, reviewed, and committed; every
-  other backend compares against them.
+* **Conformance suite** (`tests/conformance`, the scenes also a library for backend tests): 18 scenes built
+  through the public API, rendered by every backend built into the binary. Drawing backends are read back and
+  compared with golden PNGs within per-scene tolerances (a share of differing pixels, a maximum and a mean channel
+  difference); the null backend's command streams are compared with golden logs, and any RHI contract violation
+  fails. API validation messages (`Device::ValidationErrors`) fail a scene too. The image goldens come from OpenGL on
+  Mesa llvmpipe (`esia_conformance --backend opengl --golden tests/conformance/golden --update`, reviewed); every
+  backend compares against them with `--strict`, once on a fresh device and once after two poison frames
+  (`--frames 3`: stale or undefined surfaces show). A backend that cannot run on the machine reports every scene
+  skipped (exit code 77), which CTest shows as skipped, not passed.
 
 ## 15. Phases
 
@@ -496,8 +499,10 @@ Cross-compiling the DirectX backends from Linux:
   compilation); both paths render the same pixels.
 * **Metal from a Linux session.** It cannot be compiled or run there; the Metal backend needs a macOS machine
   (`macos-clang` preset, `xcrun metal` to validate the MSL) before it is trusted.
-* **D3D shaders from a Linux session.** DXBC comes from a Windows run (or `D3DCompile` at runtime); the DirectX
-  backends can be compiled and linked on Linux (both cross presets) but not run.
+* **D3D shaders from a Linux session.** DXBC comes from a Windows run (or `D3DCompile` at runtime). On Linux the
+  DirectX backends are cross-compiled; D3D9 / 10 / 11 also run the conformance suite under Wine (wined3d over
+  llvmpipe) with Microsoft's `d3dcompiler_47.dll`, which tests the code paths but not a real driver; D3D12 does not
+  start there. Real drivers: the local Windows run (NVIDIA, round 2).
 * **Text parity.** DirectWrite's system fallback, color emoji and ClearType tuning are Windows features; the
   FreeType path must match WGT's rasterizer closely enough that screenshots stay within tolerance.
 * **sRGB targets blend in linear light.** Translucent content on an `*_SRGB` target looks different from a UNORM
