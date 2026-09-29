@@ -71,13 +71,29 @@ second URL is a fallback only). SHA256 are those of the downloaded archives.
 On this Linux machine the chain found DejaVu Sans and WenQuanYi Zen Hei, which cover every script of the test (Noto
 is not installed).
 
+### Verified on Windows (the local session: Windows 11, RTX 4080 SUPER, clang-cl 22.1.8, MSVC 19.44)
+
+Steps 1 - 4 of the Windows test plan below, on `0c5fad2`, clean build directories, every backend on, `ESIA_D3D_DEBUG=1`.
+
+| Command | Result |
+| --- | --- |
+| `cmake --preset windows-clang-cl -DESIA_WERROR=ON -DESIA_TEXT_DEPS=bundled -DESIA_BACKEND_<all>=ON`, build, `ctest --preset windows-clang-cl` | configure downloads both archives, no CMake warning; 0 compiler warnings (Esia, FreeType, HarfBuzz; no `D9025`); **34 / 34** (Metal's two conformance runs skipped as before), `esia_text_ft_tests` built and run with clang-cl for the first time |
+| the same with `--preset windows-msvc`, `windows-msvc-debug` and `windows-msvc-release`, `ctest` Debug and Release | 0 compiler warnings (only MSBuild's `MSB8029`, because the build directory was under `%TEMP%`); 34 / 34 in both configurations |
+| `esia_text_tests.exe SystemFonts`, `esia_text_ft_tests.exe SystemFonts` | 4 + 1 pass, no "skipped" line. Chain: `SEGOEUI.TTF`, `MSYH.TTC` face 0, `MSJH.TTC` face 0, `YUGOTHR.TTC` face 0, `MALGUN.TTF`, `SEGUISYM.TTF`; "Microsoft YaHei = 微软雅黑" |
+| a probe on `FindSystemFont` / `FindFontInDirectories` / `AddSystemFont` | YaHei 700 → `MSYHBD.TTC`, YaHei 300 → `MSYHL.TTC` (290); Segoe UI italic → `SEGOEUII.TTF`, bold italic → `SEGOEUIZ.TTF`, 600 → `SEGUISB.TTF`; `system-ui` → Segoe UI; `宋体` and `SimSun` → `SIMSUN.TTC`; Arial 900 → `ARIBLK.TTF`; "Comic Sans" (not a family) → nothing; fonts installed for the current user only (Source Sans 3 400 / 600 in `%LOCALAPPDATA%\Microsoft\Windows\Fonts`) found; a font in a directory named `字体 测试` found by `FindFontInDirectories` and loaded through its UTF-8 path (`你好，世界` at 20 → 100 x 28.96); the whole chain loaded (6 fonts) measures Latin, Simplified and Traditional Chinese, kana, Hangul and ★ together |
+| `ft_cjk.png` written by the Windows runs | matches the golden; line breaks keep closing punctuation off the start of a line |
+
+Found on Windows, not fixed here (see "Known gaps"): the weight DirectWrite reports is not always the weight of the face
+that is loaded. `SimSun` at 700 returns `SIMSUN.TTC` face 0 with weight 700: DirectWrite simulates the bold, the file
+is regular. Variable fonts (`Segoe UI Variable Text` → `SEGUIVAR.TTF`, `Noto Serif CJK SC` → `NotoSerifCJK-VF.ttf.ttc`
+face 2) report the named instance's weight (400 or 700) for the same face index, and FreeType loads the font's default
+instance.
+
 ### Not verified
 
-* **MSVC and clang-cl** (`windows-msvc`, `windows-clang-cl`, `windows-cross`): no Windows SDK here. The DirectWrite code
-  compiled and ran only with mingw-w64 under Wine; `/bigobj`, `/W0` and the `/external:I` system includes of the
-  bundled libraries are untested with `cl` / `clang-cl`.
 * **macOS**: `system_fonts_apple.cpp` has never been compiled (no Apple SDK here); expect small fixes.
-* **The real Windows chain**: Segoe UI, YaHei, JhengHei, Yu Gothic, Malgun Gothic and Segoe UI Symbol were not seen.
+* **`windows-cross`** (clang-cl from Linux with xwin) with the bundled dependencies.
+* **Windows, optional step 5**: vcpkg's FreeType / HarfBuzz with `-DESIA_TEXT_DEPS=system`, and the offline configure.
 
 ### Windows test plan (the local session: Windows 11, clang-cl 22 and MSVC 19.44)
 
@@ -121,6 +137,11 @@ freetype harfbuzz`.
   share one copy); loading a fallback only when a character needs it is future work.
 * **Security**: font files are parsed by FreeType and HarfBuzz as before; the lookup's own table reader is bounded
   (faces, name table size, every read checked against the file size).
+* **Simulated and variable faces on Windows** (found by the local session): `SystemFont::weight` / `style` come from
+  DirectWrite, which counts its bold / oblique simulations (`IDWriteFont::GetSimulations`) and the named instances of
+  variable fonts. The text system then loads the plain face (regular glyphs, or the variable font's default
+  instance). Either report the face's own weight and style (and skip simulated matches), or carry the named instance
+  (FreeType's face index `instance << 16 | face`) and the simulation in `SystemFont`.
 
 ## 0. Round 3: sub-pixel text removed
 
