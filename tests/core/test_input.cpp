@@ -1,3 +1,4 @@
+#include "esia/base/utf8.hpp"
 #include "esia/core/input.hpp"
 #include "esia_test.hpp"
 
@@ -100,7 +101,7 @@ ESIA_TEST(Input, TextImeAndMods)
     ESIA_CHECK(in.Text().empty() && in.Composition().empty());
     std::string back;
     for (char32_t c : std::u32string(U"aé中\U0001F600"))
-        AppendUtf32(back, c);
+        EncodeUtf8(back, c);
     ESIA_CHECK(back == "a\xC3\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80");
 }
 
@@ -122,4 +123,85 @@ ESIA_TEST(Input, DeltaTimeFromAClockStartingAtZero)
     ESIA_CHECK_NEAR(in.DeltaTime(), 0.016f, 1e-6f);
     Frame(in, 0.010, {});   // a clock that went backwards
     ESIA_CHECK(in.DeltaTime() == 0.0f);
+}
+
+// review bug 1: a window switch mid-press must not look like "released over the item"
+ESIA_TEST(Input, FocusLossInvalidatesMouse)
+{
+    InputState in;
+    Frame(in, 1.0, {InputEvent::MouseMove({10, 10}), InputEvent::Button(MouseButton::Left, true)});
+    ESIA_CHECK(in.MouseValid() && in.MouseDown(MouseButton::Left));
+    Frame(in, 1.1, {InputEvent::FocusEvent(false)});
+    ESIA_CHECK(!in.MouseValid());
+    ESIA_CHECK(in.MouseReleased(MouseButton::Left) && in.MouseCanceled(MouseButton::Left));
+    ESIA_CHECK(in.MouseClickCount(MouseButton::Left) == 0);
+    // back: the next move makes the position valid again, and nothing is canceled any more
+    Frame(in, 1.2, {InputEvent::FocusEvent(true), InputEvent::MouseMove({12, 12})});
+    ESIA_CHECK(in.MouseValid() && in.MousePos() == Vec2(12, 12));
+    ESIA_CHECK(!in.MouseCanceled(MouseButton::Left) && !in.MouseReleased(MouseButton::Left));
+}
+
+// review bug 11: negative coordinates are positions (drags past the left / top edge, monitors to the left)
+ESIA_TEST(Input, NegativePositionsAreValid)
+{
+    InputState in;
+    ESIA_CHECK(!in.MouseValid());   // no mouse before the first move
+    Frame(in, 1.0, {InputEvent::MouseMove({-50, -20})});
+    ESIA_CHECK(in.MouseValid() && in.MousePos() == Vec2(-50, -20));
+    Frame(in, 1.1, {InputEvent::MouseMove({-60, -20})});
+    ESIA_CHECK(in.MouseDelta() == Vec2(-10, 0));
+    Frame(in, 1.2, {InputEvent::MouseLeave()});
+    ESIA_CHECK(!in.MouseValid() && in.MouseDelta() == Vec2(0, 0));
+    Frame(in, 1.3, {InputEvent::MouseMove({5, 5})});
+    ESIA_CHECK(in.MouseDelta() == Vec2(0, 0));   // no delta across a leave
+}
+
+// review bug 12: out-of-range buttons and keys (a cast from a platform code) are ignored, not out of bounds
+ESIA_TEST(Input, ButtonIndexBounds)
+{
+    InputState in;
+    Frame(in, 1.0, {InputEvent::Button((MouseButton)9, true), InputEvent::KeyEvent((Key)999, true)});
+    ESIA_CHECK(!in.MouseDown((MouseButton)9) && !in.MouseClicked((MouseButton)200));
+    ESIA_CHECK(in.MouseDownDuration((MouseButton)9) < 0.0f && in.MouseClickCount((MouseButton)9) == 0);
+    ESIA_CHECK(!in.KeyDown((Key)999) && !in.KeyPressed((Key)999) && !in.KeyReleased((Key)999));
+    for (int b = 0; b < (int)MouseButton::Count; ++b)
+        ESIA_CHECK(!in.MouseDown((MouseButton)b));
+}
+
+// review bug 12: text decodes with base/utf8.hpp: malformed and truncated sequences become U+FFFD
+ESIA_TEST(Input, TextUtf8)
+{
+    InputState in;
+    Frame(in, 1.0, {InputEvent::TextEvent("a\xFF"), InputEvent::TextEvent("\xE2\x82"), InputEvent::TextEvent("\xF0\x9F\x98\x80")});
+    ESIA_CHECK(in.Text() == U"a���\U0001F600");
+    std::string s;
+    EncodeUtf8(s, 0xD800);   // a surrogate cannot be encoded
+    EncodeUtf8(s, 0x110000);
+    ESIA_CHECK(s == "\xEF\xBF\xBD\xEF\xBF\xBD");
+}
+
+ESIA_TEST(Input, ClickCounts)
+{
+    InputState in;
+    double t = 1.0;
+    auto click = [&](Vec2 p) {
+        Frame(in, t, {InputEvent::MouseMove(p), InputEvent::Button(MouseButton::Left, true)});
+        const int n = in.MouseClickCount(MouseButton::Left);
+        t += 0.05;
+        Frame(in, t, {InputEvent::Button(MouseButton::Left, false)});
+        t += 0.05;
+        return n;
+    };
+    ESIA_CHECK(click({5, 5}) == 1);
+    ESIA_CHECK(click({6, 5}) == 2);
+    ESIA_CHECK(click({6, 6}) == 3);   // a triple click (a text editor selects the line)
+    ESIA_CHECK(click({6, 6}) == 4);
+    ESIA_CHECK(click({60, 6}) == 1);  // too far: a new sequence
+    t += 1.0;
+    ESIA_CHECK(click({60, 6}) == 1);  // too late
+    Frame(in, t, {InputEvent::Button(MouseButton::Left, true)});
+    t += 0.05;
+    ESIA_CHECK(in.MouseDoubleClicked(MouseButton::Left) && in.MouseClickCount(MouseButton::Left) == 2);
+    Frame(in, t, {});
+    ESIA_CHECK(!in.MouseDoubleClicked(MouseButton::Left) && in.MouseClickCount(MouseButton::Left) == 2);   // kept while held
 }
