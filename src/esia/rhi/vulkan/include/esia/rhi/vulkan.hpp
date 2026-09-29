@@ -93,6 +93,9 @@ namespace esia::rhi::vulkan
         bool validation = true;
         bool dynamicRendering = true;    // false: render passes even where dynamic rendering exists (tests both paths)
         int framesInFlight = 2;
+        // The highest Vulkan version to use (>= 1.1): lower it to run the paths of older devices (dynamic rendering
+        // through VK_KHR_dynamic_rendering below 1.3, and its 1.1 dependencies).
+        std::uint32_t maxApiVersion = VK_API_VERSION_1_3;
     };
     // Empty device (and `error` set) when this machine cannot run the backend: the conformance suite then skips it.
     // The backend's registered creator reads ESIA_VULKAN_VALIDATION=0 and ESIA_VULKAN_RENDER_PASS=1 from the

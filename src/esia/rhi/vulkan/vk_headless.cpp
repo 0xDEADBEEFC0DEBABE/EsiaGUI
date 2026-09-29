@@ -180,7 +180,7 @@ namespace esia::rhi::vulkan
         VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
         app.pApplicationName = "esia-headless";
         app.pEngineName = "esia";
-        app.apiVersion = std::min<std::uint32_t>(instanceVersion, VK_API_VERSION_1_3);
+        app.apiVersion = std::min<std::uint32_t>(instanceVersion, std::clamp<std::uint32_t>(options.maxApiVersion, VK_API_VERSION_1_1, VK_API_VERSION_1_3));
         VkInstanceCreateInfo ici{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         ici.pApplicationInfo = &app;
         ici.flags = portability ? VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR : 0;

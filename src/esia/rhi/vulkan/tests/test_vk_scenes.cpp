@@ -18,14 +18,14 @@ namespace
 {
     struct Rendered
     {
-        bool available = false, ok = false;
+        bool available = false, ok = false, dynamicRendering = false;
         std::vector<std::uint8_t> pixels;
         std::uint32_t validation = 0;
         GpuProfile profile;
         render::RenderStats stats;
     };
 
-    Rendered Render(const conformance::Scene& scene, bool dynamicRendering, int frames)
+    Rendered Render(const conformance::Scene& scene, bool dynamicRendering, int frames, std::uint32_t maxApiVersion = VK_API_VERSION_1_3)
     {
         Rendered r;
         HeadlessDesc hd;
@@ -35,6 +35,7 @@ namespace
         hd.samples = scene.samples;
         vulkan::HeadlessOptions o;
         o.dynamicRendering = dynamicRendering;
+        o.maxApiVersion = maxApiVersion;
         std::string error;
         HeadlessDevice h = vulkan::CreateHeadless(hd, o, error);
         if (!h.device)
@@ -43,6 +44,7 @@ namespace
             return r;
         }
         r.available = true;
+        r.dynamicRendering = vulkan::UsesDynamicRendering(*h.device);
         {
             render::Renderer renderer(*h.device);
             r.ok = true;
@@ -112,5 +114,23 @@ ESIA_TEST(VulkanScenes, FramesInFlight)
         std::printf("  %-10s GPU %.2f ms: capture %.2f, layer %.2f, fx %.2f, fx-glass %.2f, geometry %.2f\n", name, five.profile.totalMs, c[0], c[1], c[2],
                     c[3], c[4]);
         ESIA_CHECK(sum > 0.0f && sum <= five.profile.totalMs * 1.01f);
+    }
+}
+
+// Devices older than 1.3: dynamic rendering through VK_KHR_dynamic_rendering (1.2), plus its dependencies on 1.1.
+ESIA_TEST(VulkanScenes, OlderApiVersions)
+{
+    for (const char* name : {"glass", "text_lcd", "msaa_target"})
+    {
+        const conformance::Scene* scene = conformance::FindScene(name);
+        const Rendered v13 = Render(*scene, true, 1);
+        if (!v13.available)
+            return;
+        for (std::uint32_t version : {VK_API_VERSION_1_1, VK_API_VERSION_1_2})
+        {
+            const Rendered old = Render(*scene, true, 1, version);
+            ESIA_CHECK(old.ok && old.validation == 0 && old.dynamicRendering);
+            ESIA_CHECK(old.pixels == v13.pixels);
+        }
     }
 }
