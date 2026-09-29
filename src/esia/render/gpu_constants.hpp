@@ -18,7 +18,7 @@ namespace esia::render
         float display[4];    // UI display pos, framebuffer scale
         float time[4];       // seconds, delta, backdrop valid, 1 = write linear (sRGB target)
         float level[kBackdropLevels][4];
-        float text[4];       // gamma, grayscale contrast, ClearType contrast, ClearType level
+        float text[4];       // gamma, grayscale contrast, 0, 0
         float conv[4];       // 1 = framebuffer origin bottom-left, SV_Position offset, FX instances per texture row, 0
     };
     static_assert(sizeof(FrameConstants) == 12 * 16, "FrameConstants must mirror WgtFrame");

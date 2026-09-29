@@ -365,8 +365,7 @@ namespace esia::render
             }
             fc.text[0] = p.text.gamma;
             fc.text[1] = p.text.grayscaleContrast;
-            fc.text[2] = p.text.clearTypeContrast;
-            fc.text[3] = p.text.clearTypeLevel;
+            fc.text[2] = fc.text[3] = 0.0f;
             fc.conv[0] = caps.framebufferOriginBottomLeft ? 1.0f : 0.0f;
             fc.conv[1] = caps.halfPixelOffset ? 0.5f : 0.0f;
             fc.conv[2] = caps.fxStorage == rhi::FxStorage::Texture ? (float)fxPerRow : 0.0f;
@@ -462,8 +461,7 @@ namespace esia::render
             }
             rhi::PipelineDesc d;
             d.program = program;
-            const bool ui = program == rhi::ShaderProgram::UiGeometry || program == rhi::ShaderProgram::TextGray ||
-                            program == rhi::ShaderProgram::TextLcd || program == rhi::ShaderProgram::TextLcdGray;
+            const bool ui = program == rhi::ShaderProgram::UiGeometry || program == rhi::ShaderProgram::TextGray;
             d.layout = ui ? rhi::VertexLayout::UiVertex : rhi::VertexLayout::None;
             d.topology = program == rhi::ShaderProgram::Fx ? rhi::Topology::TriangleStrip : rhi::Topology::TriangleList;
             d.blend = blend;
@@ -708,20 +706,9 @@ namespace esia::render
         void DrawGeometry(const RenderOp& op)
         {
             ProfileRun(RunGeometry);
-            rhi::ShaderProgram program = rhi::ShaderProgram::UiGeometry;
-            rhi::BlendMode blend = rhi::BlendMode::Straight;
-            if (op.lcd)
-            {
-                // sub-pixel pages: per-channel alpha on the target; inside glow layers (alpha targets) and without
-                // dual-source blending the grayscale coverage kept in A
-                const bool dual = caps.dualSourceBlend && layerDepth == 0;
-                program = dual ? rhi::ShaderProgram::TextLcd : rhi::ShaderProgram::TextLcdGray;
-                blend = dual ? rhi::BlendMode::DualSourceLcd : rhi::BlendMode::Straight;
-            }
-            else if (op.coverage)
-                program = rhi::ShaderProgram::TextGray;
+            const rhi::ShaderProgram program = op.coverage ? rhi::ShaderProgram::TextGray : rhi::ShaderProgram::UiGeometry;
             EnsureContentPass();
-            if (!BindPipeline(GetPipeline(program, blend)) || !SetScissor(op.clip))
+            if (!BindPipeline(GetPipeline(program, rhi::BlendMode::Straight)) || !SetScissor(op.clip))
                 return;
             EnsureFrame();
             BindTexture(rhi::kSlotTexture, TextureOf(op.texture));
