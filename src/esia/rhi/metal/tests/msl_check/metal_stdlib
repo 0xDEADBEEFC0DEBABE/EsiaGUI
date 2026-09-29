@@ -1,0 +1,163 @@
+// Esia - a MOCK of the Metal standard library, only for type-checking the generated MSL with clang on hosts without
+// Apple's Metal compiler (check_msl.cmake, mode "mock"). It is NOT Metal: the functions do no math, the address
+// spaces are erased, attributes are ignored. What it checks is what C++ can: every identifier is declared, every
+// call has a matching overload, vector constructors get exactly the components they need, the operands of
+// select / mix / clamp / min / max have matching widths, members and swizzles exist, and the text parses. On macOS
+// the same files are compiled by `xcrun metal` instead (mode "xcrun"), which is the real check.
+//
+// Vectors are clang's ext_vector_type (swizzles, component-wise operators and comparisons for free); check_msl.cmake
+// rewrites the constructor calls `float4(...)` into `make_float4(...)` (C++ has no constructor syntax for them) and
+// gives float literals their MSL type (an unsuffixed literal is a float in MSL, a double in C++).
+// UNVERIFIED: needs macOS - a Linux-only stand-in for Apple's header; the real check is the xcrun mode.
+#pragma once
+#include <cstddef>
+#include <type_traits>
+
+#define vertex
+#define fragment
+#define constant
+#define device
+#define thread
+#define threadgroup
+
+namespace metal
+{
+    using std::size_t;
+    using uint = unsigned int;
+
+#define ESIA_MSL_VEC(T, name)                                        \
+    typedef T name##2 __attribute__((ext_vector_type(2)));           \
+    typedef T name##3 __attribute__((ext_vector_type(3)));           \
+    typedef T name##4 __attribute__((ext_vector_type(4)));
+    ESIA_MSL_VEC(float, float)
+    ESIA_MSL_VEC(int, int)
+    ESIA_MSL_VEC(unsigned int, uint)
+    ESIA_MSL_VEC(bool, bool)
+#undef ESIA_MSL_VEC
+
+    // component type and count of scalars and vectors
+    template <class T>
+    struct vec_info
+    {
+        static_assert(std::is_arithmetic_v<T>, "not an MSL scalar or vector type");
+        using elem = T;
+        static constexpr int n = 1;
+    };
+#define ESIA_MSL_INFO(T, name)                                                          \
+    template <> struct vec_info<name##2> { using elem = T; static constexpr int n = 2; }; \
+    template <> struct vec_info<name##3> { using elem = T; static constexpr int n = 3; }; \
+    template <> struct vec_info<name##4> { using elem = T; static constexpr int n = 4; };
+    ESIA_MSL_INFO(float, float)
+    ESIA_MSL_INFO(int, int)
+    ESIA_MSL_INFO(unsigned int, uint)
+    ESIA_MSL_INFO(bool, bool)
+#undef ESIA_MSL_INFO
+
+    template <class V, class... A>
+    V make_vec(A... a)
+    {
+        using E = typename vec_info<V>::elem;
+        constexpr int total = (vec_info<A>::n + ... + 0);
+        static_assert(total == vec_info<V>::n || (sizeof...(A) == 1 && total == 1), "vector constructor: wrong number of components");
+        E c[vec_info<V>::n > total ? vec_info<V>::n : total] = {};
+        int i = 0;
+        auto push = [&](auto x) {
+            using X = decltype(x);
+            if constexpr (vec_info<X>::n == 1)
+                c[i++] = (E)x;
+            else
+                for (int k = 0; k < vec_info<X>::n; ++k)
+                    c[i++] = (E)x[k];
+        };
+        (push(a), ...);
+        V v{};
+        for (int k = 0; k < vec_info<V>::n; ++k)
+            v[k] = total == 1 ? c[0] : c[k];
+        return v;
+    }
+#define ESIA_MSL_MAKE(name)                                                        \
+    template <class... A> name##2 make_##name##2(A... a) { return make_vec<name##2>(a...); } \
+    template <class... A> name##3 make_##name##3(A... a) { return make_vec<name##3>(a...); } \
+    template <class... A> name##4 make_##name##4(A... a) { return make_vec<name##4>(a...); }
+    ESIA_MSL_MAKE(float)
+    ESIA_MSL_MAKE(int)
+    ESIA_MSL_MAKE(uint)
+    ESIA_MSL_MAKE(bool)
+#undef ESIA_MSL_MAKE
+
+    // an operand that must be a scalar or as wide as T
+    template <class T, class U>
+    constexpr void same_width()
+    {
+        static_assert(vec_info<U>::n == 1 || vec_info<U>::n == vec_info<T>::n, "operand widths differ");
+    }
+
+    template <class T> T abs(T x) { return x; }
+    template <class T> T floor(T x) { return x; }
+    template <class T> T fract(T x) { return x; }
+    template <class T> T sin(T x) { return x; }
+    template <class T> T cos(T x) { return x; }
+    template <class T> T exp(T x) { return x; }
+    template <class T> T log2(T x) { return x; }
+    template <class T> T sqrt(T x) { return x; }
+    template <class T> T rsqrt(T x) { return x; }
+    template <class T> T sign(T x) { return x; }
+    template <class T> T rint(T x) { return x; }
+    template <class T> T fwidth(T x) { return x; }
+    template <class T> T dfdx(T x) { return x; }
+    template <class T> T dfdy(T x) { return x; }
+    template <class T> T normalize(T x) { static_assert(vec_info<T>::n > 1, "normalize of a scalar"); return x; }
+    template <class T> typename vec_info<T>::elem length(T x) { static_assert(vec_info<T>::n > 1, "length of a scalar"); return x[0]; }
+    template <class T> typename vec_info<T>::elem dot(T a, T) { static_assert(vec_info<T>::n > 1, "dot of scalars"); return a[0]; }
+    template <class T, class U> T pow(T x, U) { same_width<T, U>(); return x; }
+    template <class T, class U> T min(T x, U) { same_width<T, U>(); return x; }
+    template <class T, class U> T max(T x, U) { same_width<T, U>(); return x; }
+    template <class T, class U> T step(U, T x) { same_width<T, U>(); return x; }
+    template <class T, class U, class V> T clamp(T x, U, V) { same_width<T, U>(); same_width<T, V>(); return x; }
+    template <class T, class U> T mix(T a, T, U) { same_width<T, U>(); return a; }
+    template <class T, class U, class V> T smoothstep(U, V, T x) { same_width<T, U>(); same_width<T, V>(); return x; }
+    template <class T, class C> T select(T a, T, C)
+    {
+        static_assert(vec_info<C>::n == vec_info<T>::n, "select: condition width differs");
+        return a;
+    }
+    template <class T> T atan2(T y, T) { return y; }
+    inline void discard_fragment() {}
+
+    namespace fast
+    {
+        using metal::clamp;
+        using metal::max;
+        using metal::min;
+        using metal::normalize;
+    }
+    namespace precise
+    {
+        using metal::atan2;
+    }
+
+    struct sampler
+    {
+    };
+    struct level
+    {
+        explicit level(float) {}
+    };
+    template <class T>
+    struct texture2d
+    {
+        using vec4 = std::conditional_t<std::is_same_v<T, float>, float4, int4>;
+        vec4 sample(sampler, float2) const { return vec4{}; }
+        vec4 sample(sampler, float2, level) const { return vec4{}; }
+    };
+}
+
+// SPIRV-Cross's array wrapper (check_msl.cmake removes its definition from the shader: its address-space overloads
+// collapse into duplicates once the address spaces are erased)
+template <typename T, std::size_t Num>
+struct spvUnsafeArray
+{
+    T elements[Num ? Num : 1];
+    T& operator[](std::size_t pos) { return elements[pos]; }
+    const T& operator[](std::size_t pos) const { return elements[pos]; }
+};
