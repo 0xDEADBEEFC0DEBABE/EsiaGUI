@@ -72,7 +72,8 @@ if(BUILD_TESTING)
                      COMMAND ${CMAKE_COMMAND} -DMODE=xcrun -DXCRUN=${ESIA_XCRUN} -DMSL_DIR=${ESIA_ROOT}/src/esia/shaders/generated/msl
                              -DOUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/msl_check -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/msl_check/check_msl.cmake)
         endif()
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+        # (not with clang-cl: the checks pass GCC-style options, which clang-cl ignores with a warning)
         # metal_device.mm parsed as Objective-C++ with ARC against mock Foundation / Metal declarations
         # (tests/objc_check): its syntax, types, bridging and warnings - not Apple's API itself
         add_test(NAME esia_rhi_metal_objc_mock_check
