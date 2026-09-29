@@ -91,8 +91,13 @@ add_library(esia::text ALIAS esia_text)
 # FreeType + HarfBuzz: system packages on Linux / macOS (libfreetype-dev libharfbuzz-dev, brew freetype harfbuzz),
 # vcpkg or the like on Windows. Cross builds usually have neither: the text system is then left out, not an error.
 if(ESIA_TEXT_FREETYPE)
-    find_package(Freetype QUIET)
+    # HarfBuzz first: vcpkg's harfbuzz config loads freetype's config (targets freetype and Freetype::Freetype),
+    # which refuses to load after FindFreetype has defined Freetype::Freetype ("Some (but not all) targets in this
+    # export set were already defined")
     find_package(harfbuzz CONFIG QUIET)
+    if(NOT TARGET Freetype::Freetype)
+        find_package(Freetype QUIET)
+    endif()
     if(NOT TARGET harfbuzz::harfbuzz)
         find_path(ESIA_HARFBUZZ_INCLUDE_DIR hb.h PATH_SUFFIXES harfbuzz)
         find_library(ESIA_HARFBUZZ_LIBRARY harfbuzz)
