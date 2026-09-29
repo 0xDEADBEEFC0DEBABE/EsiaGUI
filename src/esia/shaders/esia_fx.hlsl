@@ -8,22 +8,28 @@
 // shimmer, noise and a rounded mask. Layout must match esia::fx::Instance in include/esia/core/fx.hpp.
 #include "esia_common.hlsli"
 
-// Feature bits (esia::fx::Feature)
-#define F_FILL         (1u << 0)
-#define F_STROKE       (1u << 1)
-#define F_SHADOW       (1u << 2)
-#define F_GLOW         (1u << 3)
-#define F_INNER_GLOW   (1u << 4)
-#define F_GLASS        (1u << 5)
-#define F_IMAGE        (1u << 6)
-#define F_SHIMMER      (1u << 7)
-#define F_INNER_SHADOW (1u << 8)
-#define F_MERGE        (1u << 9)
-#define F_MASK         (1u << 10)
-#define F_NOISE        (1u << 11)
-#define F_CUSTOM       (1u << 12)
-#define F_HALO         (1u << 13)
-#define F_CAUSTIC      (1u << 14)
+// Feature bits (esia::fx::Feature), as plain literals: shader models without integer shifts fold them too.
+// ESIA_FX_FEATURES compiles a variant for a subset of them (rhi::Caps::fxFeatureVariants): a feature outside the
+// mask is a constant false and its code is gone - how Direct3D 9 fits the shader into SM3's instruction slots.
+#ifndef ESIA_FX_FEATURES
+#define ESIA_FX_FEATURES 0xFFFFFFFFu
+#endif
+#define FX_HAS(feat, flag) ESIA_HAS(feat, (flag) & ESIA_FX_FEATURES)
+#define F_FILL         1u
+#define F_STROKE       2u
+#define F_SHADOW       4u
+#define F_GLOW         8u
+#define F_INNER_GLOW   16u
+#define F_GLASS        32u
+#define F_IMAGE        64u
+#define F_SHIMMER      128u
+#define F_INNER_SHADOW 256u
+#define F_MERGE        512u
+#define F_MASK         1024u
+#define F_NOISE        2048u
+#define F_CUSTOM       4096u
+#define F_HALO         8192u
+#define F_CAUSTIC      16384u
 
 // Shape kinds (esia::fx::ShapeKind)
 #define SHAPE_RRECT    0u
@@ -75,12 +81,12 @@ struct FxInst
 // interpolators exceed their varyings too): both stages fetch the fields they need from the instance data by
 // instance index. Row 23 (flags) holds the integer flags as float values (exact below 2^24).
 #ifdef ESIA_FX_STORAGE_TEXTURE
-ESIA_BINDING(10) Texture2D<float4> gFxData : register(t7);
+ESIA_TEXTURE(gFxData, t7, 10);
 float4 FxFetch(uint instance, uint field)
 {
     // gConv.z instances per row, 24 texels each
     const uint perRow = max((uint)gConv.z, 1u);
-    return gFxData.Load(int3((int)((instance % perRow) * 24u + field), (int)(instance / perRow), 0));
+    return ESIA_LOAD(gFxData, int2((int)((instance % perRow) * 24u + field), (int)(instance / perRow)));
 }
 #else
 ESIA_BINDING(10) StructuredBuffer<float4> gFxData : register(t7);
@@ -99,15 +105,15 @@ FxInst FxLoad(uint instance)
 
 struct FxVSIn
 {
-    uint vid : SV_VertexID;
-    uint iid : SV_InstanceID;
+    ESIA_VERTEX_ID(vid);
+    ESIA_INSTANCE_ID(iid);
 };
 
 struct FxPSIn
 {
     float4 pos : SV_Position;
     float2 local : TEXCOORD0;
-    nointerpolation uint instance : TEXCOORD1;
+    ESIA_FLAT uint instance : TEXCOORD1;
 };
 
 FxPSIn FxVS(FxVSIn v)
@@ -124,34 +130,34 @@ FxPSIn FxVS(FxVSIn v)
     const uint feat = (uint)FxFetch(instance, 23u).x;
 
     float2 mn = rect.xy, mx = rect.zw;
-    if (feat & F_MERGE)
+    if FX_HAS(feat, F_MERGE)
     {
         mn = min(mn, shape2.xy);
         mx = max(mx, shape2.zw);
     }
     float pad = 2.0;
-    if (feat & F_STROKE)
+    if FX_HAS(feat, F_STROKE)
         pad = max(pad, strokeParams.x * strokeParams.y + 2.0);
-    if ((feat & F_SHADOW) && !(feat & F_INNER_SHADOW))
+    if (FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW))
         pad = max(pad, shadowParams.x * 1.6 + max(shadowParams.y, 0.0) + max(abs(shadowParams.z), abs(shadowParams.w)) + 2.0);
-    if (feat & F_GLOW)
+    if FX_HAS(feat, F_GLOW)
         pad = max(pad, glowParams.x * 1.8 + 2.0);
     mn -= pad;
     mx += pad;
-    if (feat & F_MASK)
+    if FX_HAS(feat, F_MASK)
     {
         const float4 mask = FxFetch(instance, 19u);
         mn = max(mn, mask.xy - 1.0);
         mx = min(mx, mask.zw + 1.0);
     }
     // the halo bounds everything outside the shape except a drop shadow: skip the dead area
-    if ((feat & F_HALO) && !((feat & F_SHADOW) && !(feat & F_INNER_SHADOW)))
+    if (FX_HAS(feat, F_HALO) && !(FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW)))
     {
         const float4 halo = FxFetch(instance, 22u);
         mn = max(mn, halo.xy - 1.0);
         mx = min(mx, halo.zw + 1.0);
     }
-    float2 c = float2((v.vid & 1u) ? mx.x : mn.x, (v.vid & 2u) ? mx.y : mn.y);
+    float2 c = float2(ESIA_HAS(v.vid, 1u) ? mx.x : mn.x, ESIA_HAS(v.vid, 2u) ? mx.y : mn.y);
     o.pos = float4(c * gXform.xy + gXform.zw, 0.0, 1.0);
     o.local = c;
     return o;
@@ -238,7 +244,7 @@ float ShapeSD(float2 p, FxInst I)
     else
     {
         d = SdRoundRect(p - center, halfSize, I.radii, I.shape.y);
-        [branch] if (I.flags.x & F_MERGE)
+        [branch] if (FX_HAS(I.flags.x, F_MERGE))
         {
             float2 c2 = (I.shape2.xy + I.shape2.zw) * 0.5;
             float2 h2 = max((I.shape2.zw - I.shape2.xy) * 0.5, 1e-3);
@@ -474,7 +480,7 @@ struct WgtFx
 
 #ifdef ESIA_CUSTOM_EFFECT
 float3 WgtBackdrop(float2 screenUV, float blurPx) { return gTime.z > 0.5 ? WgtSampleBackdrop(screenUV, blurPx) : float3(0.5, 0.5, 0.5); }
-float4 WgtTexture(float2 uv) { return gTex.Sample(gLinear, uv); }
+float4 WgtTexture(float2 uv) { return ESIA_SAMPLE(gTex, gLinear, uv); }
 #include "esia_user_effect.hlsli"   // must define: float4 WgtEffect(WgtFx fx)  -> premultiplied color
 #endif
 
@@ -482,7 +488,7 @@ float4 WgtTexture(float2 uv) { return gTex.Sample(gLinear, uv); }
 
 float4 FxPS(FxPSIn i) : SV_Target
 {
-    FxInst I = FxLoad(i.instance);
+    FxInst I = FxLoad(ESIA_FLAT_UINT(i.instance));
     uint feat = I.flags.x;
     const float2 spos = WgtPixelPos(i.pos);
     float2 p = i.local;
@@ -492,7 +498,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     float cov = saturate(0.5 - d / px);
 
     float maskCov = 1.0;
-    [branch] if (feat & F_MASK)
+    [branch] if FX_HAS(feat, F_MASK)
     {
         float2 mc = (I.mask.xy + I.mask.zw) * 0.5;
         float2 mh = max((I.mask.zw - I.mask.xy) * 0.5, 1e-3);
@@ -504,10 +510,10 @@ float4 FxPS(FxPSIn i) : SV_Target
 
     float4 acc = float4(0, 0, 0, 0);
     // inside an opaque glass body the drop shadow and outer glow are fully covered: skip them
-    const bool underOpaqueGlass = (feat & F_GLASS) && cov >= 0.999;
+    const bool underOpaqueGlass = FX_HAS(feat, F_GLASS) && cov >= 0.999;
 
     // 1. drop shadow
-    [branch] if ((feat & F_SHADOW) && !(feat & F_INNER_SHADOW) && !underOpaqueGlass)
+    [branch] if (FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW) && !underOpaqueGlass)
     {
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
         float ds = ShapeSD(p - I.shadowParams.zw, I) - I.shadowParams.y;
@@ -516,11 +522,11 @@ float4 FxPS(FxPSIn i) : SV_Target
     }
 
     // 2. outer glow
-    [branch] if ((feat & F_GLOW) && !underOpaqueGlass)
+    [branch] if (FX_HAS(feat, F_GLOW) && !underOpaqueGlass)
     {
         float r = max(I.glowParams.x, 1e-3);
         float edgeFade = 1.0;
-        [branch] if (feat & F_HALO)
+        [branch] if FX_HAS(feat, F_HALO)
         {
             // Neighbours in reach (halo bounds): the glow keeps its gaussian profile but its radius shrinks
             // towards each constrained side, so it has died out before the neighbour instead of being cut off.
@@ -553,7 +559,7 @@ float4 FxPS(FxPSIn i) : SV_Target
 
     // 3. liquid glass body
     float rim = 0.0;
-    [branch] if ((feat & F_GLASS) && cov > 0.0)
+    [branch] if (FX_HAS(feat, F_GLASS) && cov > 0.0)
     {
         GlassSample gs = EvalGlass(spos, p, d, I);
         rim = gs.rim;
@@ -562,14 +568,14 @@ float4 FxPS(FxPSIn i) : SV_Target
 
     // 4. fill (solid / gradient / image)
     float4 fillColor = float4(0, 0, 0, 0);
-    [branch] if (feat & F_FILL)
+    [branch] if FX_HAS(feat, F_FILL)
     {
         fillColor = EvalPaint(p, I);
-        [branch] if (feat & F_IMAGE)
+        [branch] if FX_HAS(feat, F_IMAGE)
         {
             float2 uvl = (p - I.rect.xy) / max(I.rect.zw - I.rect.xy, 1e-3);
             float2 tuv = lerp(I.uvRect.xy, I.uvRect.zw, uvl);
-            fillColor *= gTex.Sample(gLinear, tuv);
+            fillColor *= ESIA_SAMPLE(gTex, gLinear, tuv);
         }
         acc = Over(Premul(fillColor, cov), acc);
     }
@@ -579,7 +585,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     // green and lavender lines, a faint one under it, a white one along the bottom edge with a white bloom above
     // it, and a pale sheet of light between them. The lines part and gather as the light breathes; brightness
     // saturates softly towards white (never clips).
-    [branch] if (feat & F_CAUSTIC)
+    [branch] if FX_HAS(feat, F_CAUSTIC)
     {
         const float2 sz = max(I.rect.zw - I.rect.xy, 1e-3);
         const float2 q = (p - I.rect.xy) / sz;
@@ -647,7 +653,7 @@ float4 FxPS(FxPSIn i) : SV_Target
 #endif
 
     // 5. inner shadow
-    [branch] if ((feat & F_SHADOW) && (feat & F_INNER_SHADOW))
+    [branch] if (FX_HAS(feat, F_SHADOW) && FX_HAS(feat, F_INNER_SHADOW))
     {
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
         float ds = ShapeSD(p - I.shadowParams.zw, I) + I.shadowParams.y;
@@ -656,7 +662,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     }
 
     // 6. inner glow
-    [branch] if (feat & F_INNER_GLOW)
+    [branch] if FX_HAS(feat, F_INNER_GLOW)
     {
         float r = max(I.glowParams.z, 1e-3);
         float x = max(-d, 0.0) / r;
@@ -668,7 +674,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     acc.rgb += rim * cov * acc.a;
 
     // 8. stroke
-    [branch] if (feat & F_STROKE)
+    [branch] if FX_HAS(feat, F_STROKE)
     {
         float w = I.strokeParams.x;
         float align = I.strokeParams.y;
@@ -689,7 +695,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     }
 
     // 9. shimmer sweep
-    [branch] if (feat & F_SHIMMER)
+    [branch] if FX_HAS(feat, F_SHIMMER)
     {
         float2 size = max(I.rect.zw - I.rect.xy, 1e-3);
         float2 uvl = (p - I.rect.xy) / size;
@@ -701,7 +707,7 @@ float4 FxPS(FxPSIn i) : SV_Target
     }
 
     // 10. film grain
-    [branch] if (feat & F_NOISE)
+    [branch] if FX_HAS(feat, F_NOISE)
     {
         float n = WgtHash(floor(spos)) - 0.5;
         acc.rgb += n * I.misc.y * acc.a;

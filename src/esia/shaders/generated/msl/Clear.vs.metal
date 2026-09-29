@@ -20,12 +20,12 @@ struct esia_main_out
     float4 gl_Position [[position]];
 };
 
-vertex esia_main_out esia_main(constant WgtFrame& _40 [[buffer(0)]], uint gl_VertexIndex [[vertex_id]])
+vertex esia_main_out esia_main(constant WgtFrame& _45 [[buffer(0)]], uint gl_VertexIndex [[vertex_id]])
 {
     esia_main_out out = {};
-    float2 _116 = float2(float((gl_VertexIndex << uint(1)) & 2u), float(gl_VertexIndex & 2u));
-    out.gl_Position = float4((_116 * float2(2.0, (_40.gXform.y < 0.0) ? (-2.0) : 2.0)) + float2(-1.0, (_40.gXform.y < 0.0) ? 1.0 : (-1.0)), 0.0, 1.0);
-    out._entryPointOutput_uv = _116;
+    float2 _119 = float2(((gl_VertexIndex & 1u) != 0u) ? 2.0 : 0.0, ((gl_VertexIndex & 2u) != 0u) ? 2.0 : 0.0);
+    out.gl_Position = float4((_119 * float2(2.0, (_45.gXform.y < 0.0) ? (-2.0) : 2.0)) + float2(-1.0, (_45.gXform.y < 0.0) ? 1.0 : (-1.0)), 0.0, 1.0);
+    out._entryPointOutput_uv = _119;
     return out;
 }
 

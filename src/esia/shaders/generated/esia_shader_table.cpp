@@ -104,11 +104,11 @@ namespace esia::shaders
         {3, 1, "TextLcdGrayPS", blobs::spirv_TextLcdGray_ps_spv, 6260, false, nullptr, 0},
         {4, 0, "FxVS", blobs::spirv_Fx_vs_spv, 5276, false, nullptr, 0},
         {4, 1, "FxPS", blobs::spirv_Fx_ps_spv, 185064, false, nullptr, 0},
-        {5, 0, "FullscreenVS", blobs::spirv_Downsample_vs_spv, 1604, false, nullptr, 0},
+        {5, 0, "FullscreenVS", blobs::spirv_Downsample_vs_spv, 1640, false, nullptr, 0},
         {5, 1, "DownsamplePS", blobs::spirv_Downsample_ps_spv, 8568, false, nullptr, 0},
-        {6, 0, "FullscreenVS", blobs::spirv_LayerComposite_vs_spv, 1604, false, nullptr, 0},
+        {6, 0, "FullscreenVS", blobs::spirv_LayerComposite_vs_spv, 1640, false, nullptr, 0},
         {6, 1, "LayerCompositePS", blobs::spirv_LayerComposite_ps_spv, 42548, false, nullptr, 0},
-        {7, 0, "FullscreenVS", blobs::spirv_Clear_vs_spv, 1604, false, nullptr, 0},
+        {7, 0, "FullscreenVS", blobs::spirv_Clear_vs_spv, 1640, false, nullptr, 0},
         {7, 1, "ClearPS", blobs::spirv_Clear_ps_spv, 344, false, nullptr, 0},
         {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
     };
@@ -124,12 +124,12 @@ namespace esia::shaders
         {3, 0, "UiVS", blobs::glsl330_TextLcdGray_vs_glsl, 455, true, nullptr, 0},
         {3, 1, "TextLcdGrayPS", blobs::glsl330_TextLcdGray_ps_glsl, 3960, true, kBind_glsl330_TextLcdGray_ps_glsl, 1},
         {4, 0, "FxVS", blobs::glsl330_Fx_vs_glsl, 3627, true, kBind_glsl330_Fx_vs_glsl, 1},
-        {4, 1, "FxPS", blobs::glsl330_Fx_ps_glsl, 257711, true, kBind_glsl330_Fx_ps_glsl, 8},
-        {5, 0, "FullscreenVS", blobs::glsl330_Downsample_vs_glsl, 472, true, nullptr, 0},
+        {4, 1, "FxPS", blobs::glsl330_Fx_ps_glsl, 257762, true, kBind_glsl330_Fx_ps_glsl, 8},
+        {5, 0, "FullscreenVS", blobs::glsl330_Downsample_vs_glsl, 489, true, nullptr, 0},
         {5, 1, "DownsamplePS", blobs::glsl330_Downsample_ps_glsl, 4868, true, kBind_glsl330_Downsample_ps_glsl, 1},
-        {6, 0, "FullscreenVS", blobs::glsl330_LayerComposite_vs_glsl, 472, true, nullptr, 0},
+        {6, 0, "FullscreenVS", blobs::glsl330_LayerComposite_vs_glsl, 489, true, nullptr, 0},
         {6, 1, "LayerCompositePS", blobs::glsl330_LayerComposite_ps_glsl, 50560, true, kBind_glsl330_LayerComposite_ps_glsl, 7},
-        {7, 0, "FullscreenVS", blobs::glsl330_Clear_vs_glsl, 472, true, nullptr, 0},
+        {7, 0, "FullscreenVS", blobs::glsl330_Clear_vs_glsl, 489, true, nullptr, 0},
         {7, 1, "ClearPS", blobs::glsl330_Clear_ps_glsl, 116, true, nullptr, 0},
         {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
     };
@@ -145,12 +145,12 @@ namespace esia::shaders
         {3, 0, "UiVS", blobs::essl300_TextLcdGray_vs_essl, 458, true, nullptr, 0},
         {3, 1, "TextLcdGrayPS", blobs::essl300_TextLcdGray_ps_essl, 4201, true, kBind_essl300_TextLcdGray_ps_essl, 1},
         {4, 0, "FxVS", blobs::essl300_Fx_vs_essl, 3636, true, kBind_essl300_Fx_vs_essl, 1},
-        {4, 1, "FxPS", blobs::essl300_Fx_ps_essl, 265105, true, kBind_essl300_Fx_ps_essl, 8},
-        {5, 0, "FullscreenVS", blobs::essl300_Downsample_vs_essl, 475, true, nullptr, 0},
+        {4, 1, "FxPS", blobs::essl300_Fx_ps_essl, 265156, true, kBind_essl300_Fx_ps_essl, 8},
+        {5, 0, "FullscreenVS", blobs::essl300_Downsample_vs_essl, 492, true, nullptr, 0},
         {5, 1, "DownsamplePS", blobs::essl300_Downsample_ps_essl, 5253, true, kBind_essl300_Downsample_ps_essl, 1},
-        {6, 0, "FullscreenVS", blobs::essl300_LayerComposite_vs_essl, 475, true, nullptr, 0},
+        {6, 0, "FullscreenVS", blobs::essl300_LayerComposite_vs_essl, 492, true, nullptr, 0},
         {6, 1, "LayerCompositePS", blobs::essl300_LayerComposite_ps_essl, 52569, true, kBind_essl300_LayerComposite_ps_essl, 7},
-        {7, 0, "FullscreenVS", blobs::essl300_Clear_vs_essl, 475, true, nullptr, 0},
+        {7, 0, "FullscreenVS", blobs::essl300_Clear_vs_essl, 492, true, nullptr, 0},
         {7, 1, "ClearPS", blobs::essl300_Clear_ps_essl, 171, true, nullptr, 0},
         {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
     };
@@ -167,11 +167,11 @@ namespace esia::shaders
         {3, 1, "TextLcdGrayPS", blobs::msl_TextLcdGray_ps_metal, 5251, true, nullptr, 0},
         {4, 0, "FxVS", blobs::msl_Fx_vs_metal, 3165, true, nullptr, 0},
         {4, 1, "FxPS", blobs::msl_Fx_ps_metal, 258675, true, nullptr, 0},
-        {5, 0, "FullscreenVS", blobs::msl_Downsample_vs_metal, 779, true, nullptr, 0},
+        {5, 0, "FullscreenVS", blobs::msl_Downsample_vs_metal, 796, true, nullptr, 0},
         {5, 1, "DownsamplePS", blobs::msl_Downsample_ps_metal, 5139, true, nullptr, 0},
-        {6, 0, "FullscreenVS", blobs::msl_LayerComposite_vs_metal, 779, true, nullptr, 0},
+        {6, 0, "FullscreenVS", blobs::msl_LayerComposite_vs_metal, 796, true, nullptr, 0},
         {6, 1, "LayerCompositePS", blobs::msl_LayerComposite_ps_metal, 50018, true, nullptr, 0},
-        {7, 0, "FullscreenVS", blobs::msl_Clear_vs_metal, 779, true, nullptr, 0},
+        {7, 0, "FullscreenVS", blobs::msl_Clear_vs_metal, 796, true, nullptr, 0},
         {7, 1, "ClearPS", blobs::msl_Clear_ps_metal, 267, true, nullptr, 0},
         {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
     };
@@ -188,6 +188,11 @@ namespace esia::shaders
 
     // dxil: FX instances in buffer storage
     extern const ShaderBlob kLibrary_dxil[] = {
+        {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
+    };
+
+    // dxbc_sm3: FX instances in texture storage
+    extern const ShaderBlob kLibrary_dxbc_sm3[] = {
         {-1, 0, nullptr, nullptr, 0, false, nullptr, 0},
     };
 

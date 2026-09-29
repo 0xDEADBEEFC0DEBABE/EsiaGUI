@@ -11,6 +11,7 @@ namespace esia::shaders
     extern const ShaderBlob kLibrary_dxbc_sm5[];
     extern const ShaderBlob kLibrary_dxbc_sm4[];
     extern const ShaderBlob kLibrary_dxil[];
+    extern const ShaderBlob kLibrary_dxbc_sm3[];
     namespace blobs
     {
         extern const unsigned char source_esia_common_hlsli[];
@@ -40,6 +41,7 @@ namespace esia::shaders
             case Format::DxbcSm5: return kLibrary_dxbc_sm5;
             case Format::DxbcSm4: return kLibrary_dxbc_sm4;
             case Format::Dxil: return kLibrary_dxil;
+            case Format::DxbcSm3: return kLibrary_dxbc_sm3;
             case Format::Count: break;
             }
             return nullptr;
@@ -48,13 +50,14 @@ namespace esia::shaders
 
     const char* FormatName(Format f)
     {
-        static const char* names[] = {"spirv", "glsl330", "essl300", "msl", "dxbc_sm5", "dxbc_sm4", "dxil"};
+        static const char* names[] = {"spirv", "glsl330", "essl300", "msl", "dxbc_sm5", "dxbc_sm4", "dxil", "dxbc_sm3"};
         return f < Format::Count ? names[(int)f] : "?";
     }
 
     rhi::FxStorage FxStorageOf(Format f)
     {
-        return (f == Format::Glsl330 || f == Format::Essl300 || f == Format::DxbcSm4) ? rhi::FxStorage::Texture : rhi::FxStorage::Buffer;
+        return (f == Format::Glsl330 || f == Format::Essl300 || f == Format::DxbcSm4 || f == Format::DxbcSm3) ? rhi::FxStorage::Texture
+                                                                                                            : rhi::FxStorage::Buffer;
     }
 
     const ShaderBlob* Find(Format format, rhi::ShaderProgram program, Stage stage)

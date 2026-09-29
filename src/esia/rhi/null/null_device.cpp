@@ -250,8 +250,11 @@ namespace esia::rhi
             Error("CreatePipeline: TextLcd needs (and only it may use) dual-source blending");
         const Pipeline p{next_++};
         pipelines_[p.id] = d;
-        Record(Fmt("create pipeline #%u %s %s %s %s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
-                   BlendName(d.blend), FormatName(d.targetFormat), d.effect ? Fmt(" effect=%u", d.effect).c_str() : ""));
+        if (d.fxFeatures != 0 && (!caps_.fxFeatureVariants || d.program != ShaderProgram::Fx))
+            Error("CreatePipeline: fxFeatures without Caps::fxFeatureVariants or on a non-Fx program");
+        Record(Fmt("create pipeline #%u %s %s %s %s%s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
+                   BlendName(d.blend), FormatName(d.targetFormat), d.effect ? Fmt(" effect=%u", d.effect).c_str() : "",
+                   d.fxFeatures ? Fmt(" features=0x%x", d.fxFeatures).c_str() : ""));
         return p;
     }
 

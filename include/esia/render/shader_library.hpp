@@ -6,6 +6,8 @@
 //   const shaders::ShaderBlob* vs = shaders::Find(shaders::Format::Glsl330, rhi::ShaderProgram::Fx, shaders::Stage::Vertex);
 //
 // Text formats (GLSL, ESSL, MSL) are null-terminated source; binary formats (SPIR-V, DXBC, DXIL) are bytecode.
+// The Direct3D formats need Microsoft's compilers (fxc / DXC, see tools/shaders/build_shaders.py): until a Windows
+// run added them, Available() is false for them and the D3D backends compile FindSource()'s HLSL with D3DCompile.
 // GLSL / ESSL have combined samplers: `textures` maps each sampler uniform to its RHI texture slot and sampler
 // (0 linear clamp, 1 point clamp); uniform blocks are named WgtFrame / WgtPass / WgtDraw (bind them to 0 / 1 / 2).
 // MSL uses the Vulkan binding numbers as Metal indices (esia_common.hlsli); its entry point is `esia_main`.
@@ -23,6 +25,7 @@ namespace esia::shaders
         DxbcSm5,   // Direct3D 11 / 12 (fxc vs_5_0 / ps_5_0), structured buffer
         DxbcSm4,   // Direct3D 10 (fxc vs_4_0 / ps_4_0), RGBA32F texture
         Dxil,      // Direct3D 12 shader model 6 (DXC), structured buffer
+        DxbcSm3,   // Direct3D 9 (fxc vs_3_0 / ps_3_0 with the D3D9 backend's SM3 prelude), RGBA32F texture; no TextLcd
         Count
     };
     ESIA_API const char* FormatName(Format f);

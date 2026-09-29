@@ -455,3 +455,23 @@ ESIA_TEST(Renderer, ReleasesEverythingAndSkipsEmptyFrames)
     ESIA_CHECK(NoErrors(s.dev));
     ESIA_CHECK(s.dev.LiveTextures() == 1 && s.dev.LiveBuffers() == 0 && s.dev.LivePipelines() == 0);
 }
+
+ESIA_TEST(Renderer, FxShaderVariantsPerBatchFeatures)
+{
+    Caps caps;
+    caps.fxFeatureVariants = true;
+    Setup s(caps);
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
+    p.Rect(Rect(60, 10, 100, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));
+    p.Image(7, Rect(110, 10, 150, 50), 4);   // another texture: a batch of its own
+    Renderer r(s.dev);
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev));
+    ESIA_CHECK(r.Plan().ops[0].features == (fx::kFill | fx::kShadow) && r.Plan().ops[1].features == (fx::kFill | fx::kImage));
+    ESIA_CHECK(Lines(s.dev, "Fx strip premul RGBA8_UNORM features=0x5") == 1 && Lines(s.dev, "Fx strip premul RGBA8_UNORM features=0x41") == 1);
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(Lines(s.dev, "create pipeline") == 0);   // variants are cached
+}

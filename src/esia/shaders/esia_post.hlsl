@@ -8,10 +8,10 @@ struct FsOut
     float2 uv  : TEXCOORD0;   // top-left based uv of the target
 };
 
-FsOut FullscreenVS(uint vid : SV_VertexID)
+FsOut FullscreenVS(ESIA_VERTEX_ID(vid))
 {
     FsOut o;
-    float2 uv = float2((vid << 1) & 2, vid & 2);
+    float2 uv = float2(ESIA_HAS(vid, 1u) ? 2.0 : 0.0, ESIA_HAS(vid, 2u) ? 2.0 : 0.0);   // (0,0) (2,0) (0,2)
     o.uv = uv;
     // gXform.y's sign carries the API's clip-space y direction (Caps::clipSpaceYDown)
     o.pos = float4(uv * float2(2.0, gXform.y < 0.0 ? -2.0 : 2.0) + float2(-1.0, gXform.y < 0.0 ? 1.0 : -1.0), 0.0, 1.0);
@@ -24,7 +24,7 @@ FsOut FullscreenVS(uint vid : SV_VertexID)
 // captures can never leak into the pyramid (lets captures stay tightly region-limited).
 float4 Tap(float2 uv)
 {
-    return gTex.SampleLevel(gLinear, WgtRtUv(clamp(uv, gPass1.xy, gPass1.zw)), 0);
+    return ESIA_SAMPLE_LEVEL(gTex, gLinear, WgtRtUv(clamp(uv, gPass1.xy, gPass1.zw)));
 }
 
 float4 DownsamplePS(FsOut i) : SV_Target
@@ -57,7 +57,7 @@ float4 DownsamplePS(FsOut i) : SV_Target
 float4 LayerCompositePS(FsOut i) : SV_Target
 {
     float2 uv = WgtPixelPos(i.pos) * gTarget.zw;
-    float4 sharp = gTex.SampleLevel(gPoint, WgtRtUv(uv), 0);
+    float4 sharp = ESIA_SAMPLE_LEVEL(gTex, gPoint, WgtRtUv(uv));
     float radius = max(gPass1.y * gDisplay.z, 2.0);   // UI units -> render-target pixels
     float lv = clamp(log2(radius) - 1.0, 1.0, 5.0);
     int l0 = (int)floor(lv);

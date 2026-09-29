@@ -19,6 +19,16 @@
 #ifndef ESIA_COMMON_HLSLI
 #define ESIA_COMMON_HLSLI
 
+// Portability hooks. The defaults below are shader model 4+ HLSL (every format of the shader library). A backend
+// whose shader model lacks something - Direct3D 9 / SM3: no integer bit operations, no SV_VertexID / SV_InstanceID,
+// no texture objects, no flat interpolation, constants in c registers - compiles these same sources with
+// ESIA_SHADER_PRELUDE naming a file of its own (e.g. /DESIA_SHADER_PRELUDE="\"esia_sm3_prelude.hlsli\"") that
+// defines the macros its way; everything it leaves undefined keeps the default. docs/backends/README.md lists them.
+#ifdef ESIA_SHADER_PRELUDE
+#include ESIA_SHADER_PRELUDE
+#endif
+
+#ifndef ESIA_BINDING
 #ifdef ESIA_SPIRV
 #define ESIA_BINDING(n) [[vk::binding(n, 0)]]
 #define ESIA_LOCATION(n) [[vk::location(n)]]
@@ -26,8 +36,33 @@
 #define ESIA_BINDING(n)
 #define ESIA_LOCATION(n)
 #endif
+#endif
+#ifndef ESIA_CBUFFER
+#define ESIA_CBUFFER(name, reg, binding) ESIA_BINDING(binding) cbuffer name : register(reg)
+#endif
+#ifndef ESIA_TEXTURE
+#define ESIA_TEXTURE(name, reg, binding) ESIA_BINDING(binding) Texture2D name : register(reg)
+#define ESIA_TEXTURE_ARG Texture2D
+#define ESIA_SAMPLE(tex, smp, uv) tex.Sample(smp, uv)
+#define ESIA_SAMPLE_LEVEL(tex, smp, uv) tex.SampleLevel(smp, uv, 0)
+#define ESIA_LOAD(tex, texel) tex.Load(int3(texel, 0))
+#endif
+#ifndef ESIA_SAMPLER
+#define ESIA_SAMPLER(name, reg, binding) ESIA_BINDING(binding) SamplerState name : register(reg)
+#endif
+#ifndef ESIA_HAS
+#define ESIA_HAS(bits, flag) (((bits) & (flag)) != 0u)   // flag set in an integer bit field
+#endif
+#ifndef ESIA_VERTEX_ID
+#define ESIA_VERTEX_ID(name) uint name : SV_VertexID
+#define ESIA_INSTANCE_ID(name) uint name : SV_InstanceID
+#endif
+#ifndef ESIA_FLAT
+#define ESIA_FLAT nointerpolation                         // integer varyings (the FX instance index)
+#define ESIA_FLAT_UINT(v) (v)                             // ... read in the pixel shader
+#endif
 
-ESIA_BINDING(0) cbuffer WgtFrame : register(b0)
+ESIA_CBUFFER(WgtFrame, b0, 0)
 {
     float4 gXform;      // clip.xy = pos.xy * gXform.xy + gXform.zw
     float4 gTarget;     // xy: render target size (px)   zw: 1 / size
@@ -39,27 +74,27 @@ ESIA_BINDING(0) cbuffer WgtFrame : register(b0)
                         // z: FX instances per row of the instance texture  w: unused
 };
 
-ESIA_BINDING(1) cbuffer WgtPass : register(b1)
+ESIA_CBUFFER(WgtPass, b1, 1)
 {
     float4 gPass0;
     float4 gPass1;
 };
 
-ESIA_BINDING(2) cbuffer WgtDraw : register(b2)
+ESIA_CBUFFER(WgtDraw, b2, 2)
 {
     float4 gFade;       // edge fade: x top edge, y bottom edge (render-target px), z / w fade widths (0 = none)
     float4 gDrawInfo;   // x: first FX instance of the draw
 };
 
-ESIA_BINDING(3)  Texture2D gTex       : register(t0);
-ESIA_BINDING(4)  Texture2D gBackdrop0 : register(t1);
-ESIA_BINDING(5)  Texture2D gBackdrop1 : register(t2);
-ESIA_BINDING(6)  Texture2D gBackdrop2 : register(t3);
-ESIA_BINDING(7)  Texture2D gBackdrop3 : register(t4);
-ESIA_BINDING(8)  Texture2D gBackdrop4 : register(t5);
-ESIA_BINDING(9)  Texture2D gBackdrop5 : register(t6);
-ESIA_BINDING(11) SamplerState gLinear : register(s0);
-ESIA_BINDING(12) SamplerState gPoint  : register(s1);
+ESIA_TEXTURE(gTex, t0, 3);
+ESIA_TEXTURE(gBackdrop0, t1, 4);
+ESIA_TEXTURE(gBackdrop1, t2, 5);
+ESIA_TEXTURE(gBackdrop2, t3, 6);
+ESIA_TEXTURE(gBackdrop3, t4, 7);
+ESIA_TEXTURE(gBackdrop4, t5, 8);
+ESIA_TEXTURE(gBackdrop5, t6, 9);
+ESIA_SAMPLER(gLinear, s0, 11);
+ESIA_SAMPLER(gPoint, s1, 12);
 
 static const float WGT_PI  = 3.14159265359;
 static const float WGT_TAU = 6.28318530718;
@@ -129,7 +164,7 @@ float WgtErf(float x)
 
 // Cubic B-spline reconstruction with 4 bilinear taps: smooth magnification of low-res blur levels.
 // `uv` is top-left based; the flip for bottom-left APIs happens on the final taps.
-float4 WgtSampleBSpline(Texture2D tex, float2 uv, float4 level)
+float4 WgtSampleBSpline(ESIA_TEXTURE_ARG tex, float2 uv, float4 level)
 {
     float2 texel = uv * level.xy - 0.5;
     float2 tc = floor(texel);
@@ -142,14 +177,14 @@ float4 WgtSampleBSpline(Texture2D tex, float2 uv, float4 level)
     float2 s0 = w0 + w1, s1 = w2 + w3;
     float2 t0 = (tc - 0.5 + w1 / s0) * level.zw;
     float2 t1 = (tc + 1.5 + w3 / s1) * level.zw;
-    return (tex.SampleLevel(gLinear, WgtRtUv(float2(t0.x, t0.y)), 0) * s0.x + tex.SampleLevel(gLinear, WgtRtUv(float2(t1.x, t0.y)), 0) * s1.x) * s0.y
-         + (tex.SampleLevel(gLinear, WgtRtUv(float2(t0.x, t1.y)), 0) * s0.x + tex.SampleLevel(gLinear, WgtRtUv(float2(t1.x, t1.y)), 0) * s1.x) * s1.y;
+    return (ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t0.x, t0.y))) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t1.x, t0.y))) * s1.x) * s0.y
+         + (ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t0.x, t1.y))) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t1.x, t1.y))) * s1.x) * s1.y;
 }
 
 float4 WgtSampleLevel(int level, float2 uv)
 {
     float4 r;
-    [branch] if (level <= 0)      r = gBackdrop0.SampleLevel(gLinear, WgtRtUv(uv), 0);
+    [branch] if (level <= 0)      r = ESIA_SAMPLE_LEVEL(gBackdrop0, gLinear, WgtRtUv(uv));
     else if (level == 1)          r = WgtSampleBSpline(gBackdrop1, uv, gLevel[1]);
     else if (level == 2)          r = WgtSampleBSpline(gBackdrop2, uv, gLevel[2]);
     else if (level == 3)          r = WgtSampleBSpline(gBackdrop3, uv, gLevel[3]);
@@ -164,12 +199,12 @@ float4 WgtSampleLevelBilinear(int level, float2 uv)
 {
     const float2 t = WgtRtUv(uv);
     float4 r;
-    [branch] if (level <= 0)      r = gBackdrop0.SampleLevel(gLinear, t, 0);
-    else if (level == 1)          r = gBackdrop1.SampleLevel(gLinear, t, 0);
-    else if (level == 2)          r = gBackdrop2.SampleLevel(gLinear, t, 0);
-    else if (level == 3)          r = gBackdrop3.SampleLevel(gLinear, t, 0);
-    else if (level == 4)          r = gBackdrop4.SampleLevel(gLinear, t, 0);
-    else                          r = gBackdrop5.SampleLevel(gLinear, t, 0);
+    [branch] if (level <= 0)      r = ESIA_SAMPLE_LEVEL(gBackdrop0, gLinear, t);
+    else if (level == 1)          r = ESIA_SAMPLE_LEVEL(gBackdrop1, gLinear, t);
+    else if (level == 2)          r = ESIA_SAMPLE_LEVEL(gBackdrop2, gLinear, t);
+    else if (level == 3)          r = ESIA_SAMPLE_LEVEL(gBackdrop3, gLinear, t);
+    else if (level == 4)          r = ESIA_SAMPLE_LEVEL(gBackdrop4, gLinear, t);
+    else                          r = ESIA_SAMPLE_LEVEL(gBackdrop5, gLinear, t);
     return r;
 }
 

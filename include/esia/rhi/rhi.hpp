@@ -161,6 +161,9 @@ namespace esia::rhi
         // Caps::runtimeEffects return an invalid pipeline and the renderer draws with the built-in shader.
         EffectId effect = 0;
         const char* effectSource = nullptr;
+        // Fx only, with Caps::fxFeatureVariants: the fx::Feature bits the batch's instances use - compile the FX
+        // shader with ESIA_FX_FEATURES = this mask (the rest of the shader is gone). 0 = every feature.
+        std::uint32_t fxFeatures = 0;
         bool operator==(const PipelineDesc&) const = default;
     };
 
@@ -243,6 +246,9 @@ namespace esia::rhi
         bool timestampQueries = false;
         bool readback = false;          // ReadPixels works (required by the conformance suite)
         bool runtimeEffects = false;    // PipelineDesc::effectSource is compiled at runtime
+        // The backend builds Fx pipelines specialized to PipelineDesc::fxFeatures (runtime compilation of the FX
+        // shader with ESIA_FX_FEATURES): for shader models that cannot hold the whole shader (SM3), or for speed.
+        bool fxFeatureVariants = false;
         int maxTextureSize = 4096;
         int maxFxDataWidth = 4096;      // FxStorage::Texture: width of the instance texture in texels
     };

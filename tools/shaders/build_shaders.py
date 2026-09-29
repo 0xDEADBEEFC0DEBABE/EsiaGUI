@@ -7,6 +7,7 @@
       |                                  |-- SPIRV-Cross ------------------> essl300  (OpenGL ES 3.0 / WebGL 2)
       |                                  '-- SPIRV-Cross ------------------> msl      (Metal 2.0)
       |-- fxc (Windows, or under Wine) --------------------------------------> dxbc_sm5 (D3D11 / D3D12), dxbc_sm4 (D3D10)
+      |-- fxc + the D3D9 backend's SM3 prelude ------------------------------> dxbc_sm3 (D3D9; no TextLcd)
       '-- DXC (optional) ----------------------------------------------------> dxil     (D3D12 SM 6)
 
 The output is checked in, so backends build without any shader tool: src/esia/shaders/generated/<format>/
@@ -19,6 +20,11 @@ Run this script after changing a shader; the generated files must be committed w
     python3 tools/shaders/build_shaders.py --fxc "wine fxc.exe" # + DXBC on Linux / macOS through Wine
     python3 tools/shaders/build_shaders.py --dxc dxc            # + DXIL
     python3 tools/shaders/build_shaders.py --check              # regenerate into a temp dir and diff (CI)
+
+fxc and DXC are Microsoft's: fxc.exe / d3dcompiler_47.dll come with the Windows SDK (Windows only; under Wine with
+Microsoft's DLL), DXC also ships for Linux. Wine's own d3dcompiler_47 (vkd3d-shader, Ubuntu 24.04) compiles the UI
+and post shaders but not esia_fx.hlsl, so it is not an option. dxbc_sm3 is built when an SM3 prelude exists
+(--sm3-prelude, default src/esia/rhi/d3d9/esia_sm3_prelude.hlsli, see esia_common.hlsli).
 
 Formats a run cannot produce keep their previously generated file (the script never deletes a format because a
 tool is missing). Requirements: glslangValidator, spirv-val, spirv-cross (Ubuntu: glslang-tools spirv-tools
@@ -61,6 +67,7 @@ FORMATS = [
     ('dxbc_sm5', 'buffer'),
     ('dxbc_sm4', 'texture'),
     ('dxil', 'buffer'),
+    ('dxbc_sm3', 'texture'),
 ]
 TEXTURE_SLOTS = {'gTex': 0, 'gBackdrop0': 1, 'gBackdrop1': 2, 'gBackdrop2': 3, 'gBackdrop3': 4, 'gBackdrop4': 5,
                  'gBackdrop5': 6, 'gFxData': 7}
@@ -162,16 +169,17 @@ def validate_glsl(glslang, text, stage, fmt, tmp):
 
 
 # --------------------------------------------------------------------------------------------- D3D
-def compile_fxc(fxc, file, entry, stage, profile, storage, tmp):
+def compile_fxc(fxc, file, entry, stage, profile, storage, tmp, prelude=None):
     out = os.path.join(tmp, '%s_%s.dxbc' % (entry, profile))
     defines = ['/DESIA_FX_STORAGE_TEXTURE=1'] if storage == 'texture' else []
     src = os.path.join(SRC, file)
-    if fxc[0].endswith('wine') or os.path.basename(fxc[0]) == 'wine':
-        src = run(['winepath', '-w', src]).strip()
-        out_arg = run(['winepath', '-w', out]).strip()
-    else:
-        out_arg = out
-    run(fxc + ['/nologo', '/O3', '/Ges', '/T', '%s_%s' % (stage, profile), '/E', entry] + defines + ['/Fo', out_arg, src])
+    wine = fxc[0].endswith('wine') or os.path.basename(fxc[0]) == 'wine'
+    path = (lambda p: run(['winepath', '-w', p]).strip()) if wine else (lambda p: p)
+    if prelude:
+        # esia_common.hlsli does #include ESIA_SHADER_PRELUDE: the file name in quotes, found through /I
+        defines += ['/DESIA_SHADER_PRELUDE="%s"' % os.path.basename(prelude), '/I', path(os.path.dirname(os.path.abspath(prelude)))]
+    flags = ['/Gec'] if profile == '3_0' else ['/Ges']
+    run(fxc + ['/nologo', '/O3'] + flags + ['/T', '%s_%s' % (stage, profile), '/E', entry] + defines + ['/Fo', path(out), path(src)])
     return open(out, 'rb').read()
 
 
@@ -257,6 +265,8 @@ def main():
     ap.add_argument('--spirv-cross', help='spirv-cross command')
     ap.add_argument('--fxc', help='fxc command (e.g. "fxc.exe" or "wine /path/fxc.exe"): adds dxbc_sm5 / dxbc_sm4')
     ap.add_argument('--dxc', help='dxc command: adds dxil')
+    ap.add_argument('--sm3-prelude', default=os.path.join(ROOT, 'src', 'esia', 'rhi', 'd3d9', 'esia_sm3_prelude.hlsli'),
+                    help='SM3 prelude of the Direct3D 9 backend: with --fxc, adds dxbc_sm3 when the file exists')
     ap.add_argument('--out', default=OUT)
     ap.add_argument('--check', action='store_true', help='generate into a temp dir and compare with the checked-in files')
     args = ap.parse_args()
@@ -295,6 +305,9 @@ def main():
                 if fxc:
                     produced['dxbc_sm5'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '5_0', 'buffer', tmp), False, []))
                     produced['dxbc_sm4'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '4_0', 'texture', tmp), False, []))
+                    if os.path.exists(args.sm3_prelude) and prog not in ('TextLcd',):   # D3D9 has no dual-source blending
+                        produced['dxbc_sm3'].append((pi, st, entry, compile_fxc(fxc, file, entry, stage, '3_0', 'texture', tmp, args.sm3_prelude),
+                                                     False, []))
                 if dxc:
                     produced['dxil'].append((pi, st, entry, compile_dxc(dxc, file, entry, stage, tmp), False, []))
         for fmt, storage in FORMATS:

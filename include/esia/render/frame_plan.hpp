@@ -60,6 +60,7 @@ namespace esia::render
         bool lcd = false;            // ... sub-pixel coverage: dual-source text pipeline
         // FxBatch
         std::uint32_t instStart = 0, instCount = 0;   // into FramePlan::instances
+        std::uint32_t features = 0;  // union of the instances' fx::Feature bits (shader variants, Caps::fxFeatureVariants)
         EffectId effect = 0;
         bool glass = false;
         PxRect glassRegion;          // area whose backdrop must be valid before drawing (generous: capture extent)

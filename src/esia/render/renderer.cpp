@@ -33,6 +33,27 @@ namespace esia::render
             rhi::Texture tex;
             TextureInfo info;
         };
+
+        struct PipelineKey
+        {
+            rhi::ShaderProgram program;
+            rhi::BlendMode blend;
+            rhi::Format format;
+            int samples;
+            EffectId effect;
+            std::uint32_t features;   // FX shader variant (Caps::fxFeatureVariants), 0 = every feature
+            bool operator==(const PipelineKey&) const = default;
+        };
+
+        struct PipelineKeyHash
+        {
+            std::size_t operator()(const PipelineKey& k) const
+            {
+                const std::uint64_t a = (std::uint64_t)k.program | ((std::uint64_t)k.blend << 8) | ((std::uint64_t)k.format << 16) |
+                                        ((std::uint64_t)(k.samples & 0xFF) << 24) | ((std::uint64_t)k.effect << 32);
+                return std::hash<std::uint64_t>()(a ^ ((std::uint64_t)k.features * 0x9E3779B97F4A7C15ull));
+            }
+        };
     }
 
     struct Renderer::Impl
@@ -46,7 +67,7 @@ namespace esia::render
 
         std::unordered_map<TextureId, DeviceTexture> textures;
         std::vector<TextureChange> changes;
-        std::unordered_map<std::uint64_t, rhi::Pipeline> pipelines;
+        std::unordered_map<PipelineKey, rhi::Pipeline, PipelineKeyHash> pipelines;
         struct Effect
         {
             std::string name, source;
@@ -397,10 +418,9 @@ namespace esia::render
             }
         }
 
-        rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0)
+        rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0, std::uint32_t features = 0)
         {
-            const std::uint64_t key = (std::uint64_t)program | ((std::uint64_t)blend << 8) | ((std::uint64_t)passFormat << 16) |
-                                      ((std::uint64_t)(passSamples & 0xFF) << 24) | ((std::uint64_t)effect << 32);
+            const PipelineKey key{program, blend, passFormat, passSamples, effect, features};
             auto it = pipelines.find(key);
             if (it != pipelines.end() && (it->second || effect == 0))
                 return it->second;   // built-in programs are asked once; a refusal is final
@@ -421,6 +441,7 @@ namespace esia::render
             d.blend = blend;
             d.targetFormat = passFormat;
             d.samples = passSamples;
+            d.fxFeatures = features;
             if (effect != 0)
             {
                 auto e = effects.find(effect);
@@ -650,9 +671,12 @@ namespace esia::render
             }
             ProfileRun(op.glass ? RunFxGlass : RunFx);
             EnsureContentPass();
-            rhi::Pipeline p = op.effect != 0 && caps.runtimeEffects ? GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, op.effect) : rhi::Pipeline{};
+            // a shader specialized to the features this batch uses, where the backend builds variants
+            const std::uint32_t features = caps.fxFeatureVariants ? op.features : 0u;
+            rhi::Pipeline p = op.effect != 0 && caps.runtimeEffects ? GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, op.effect, features)
+                                                                    : rhi::Pipeline{};
             if (!p)
-                p = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+                p = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, 0, features);
             if (!BindPipeline(p) || !SetScissor(op.clip))
                 return;
             EnsureFrame();
@@ -786,7 +810,7 @@ namespace esia::render
         // a changed source invalidates the pipelines built from the old one
         for (auto it = impl_->pipelines.begin(); it != impl_->pipelines.end();)
         {
-            if ((it->first >> 32) == id)
+            if (it->first.effect == id)
             {
                 if (it->second)
                     impl_->dev.DestroyPipeline(it->second);

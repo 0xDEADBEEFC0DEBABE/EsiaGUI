@@ -222,6 +222,7 @@ namespace esia::render
                         {
                             RenderOp& o = ops[(std::size_t)openBatch];
                             ++o.instCount;
+                            o.features |= in.flags[0];
                             o.bounds = o.bounds.Union(b);
                             o.core = o.core.Union(core);
                             o.glassShape = o.glassShape.Union(gShape);
@@ -247,6 +248,7 @@ namespace esia::render
                             o.effect = cmd.effect;
                             o.instStart = (std::uint32_t)instances.size();
                             o.instCount = 1;
+                            o.features = in.flags[0];
                             o.glass = glass;
                             o.glassRegion = gRegion;
                             o.glassCore = gCore;

@@ -27,7 +27,7 @@ UiPSIn UiVS(UiVSIn v)
 
 float4 UiPS(UiPSIn i) : SV_Target
 {
-    float4 c = i.col * gTex.Sample(gLinear, i.uv);
+    float4 c = i.col * ESIA_SAMPLE(gTex, gLinear, i.uv);
     c.a *= WgtEdgeFade(WgtPixelPos(i.pos).y);
     return WgtOutputStraight(c);
 }
@@ -77,7 +77,7 @@ float WgtGrayText(float cov, float3 ink)
 // Grayscale coverage (Alpha8 glyph atlas).
 float4 TextGrayPS(UiPSIn i) : SV_Target
 {
-    const float cov = gTex.Sample(gLinear, i.uv).r;
+    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).r;
     return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
 }
 
@@ -85,7 +85,7 @@ float4 TextGrayPS(UiPSIn i) : SV_Target
 // the grayscale coverage kept in A is used instead.
 float4 TextLcdGrayPS(UiPSIn i) : SV_Target
 {
-    const float cov = gTex.Sample(gLinear, i.uv).a;
+    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).a;
     return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
 }
 
@@ -101,7 +101,7 @@ struct TextLcdOut
 
 TextLcdOut TextLcdPS(UiPSIn i)
 {
-    float3 cov = gTex.Sample(gLinear, i.uv).rgb;
+    float3 cov = ESIA_SAMPLE(gTex, gLinear, i.uv).rgb;
     cov = lerp(dot(cov, 1.0 / 3.0).xxx, cov, gText.w);   // ClearType level (0 = grayscale)
     const float k = WgtLightOnDarkContrast(gText.z, i.col.rgb);
     float3 a;
