@@ -124,11 +124,13 @@ ESIA_TEST(MetalMsl, VertexInputsAndOutputs)
         }
         // every varying the fragment shader reads is written by the vertex shader at the same location and type
         const MslInterface ps = Parse(p, shaders::Stage::Pixel);
+        // the location part only: the FX fragment inputs carry the interpolation too (`user(locn3), flat`)
+        auto location = [](const std::string& attribute) { return attribute.substr(0, attribute.find(',')); };
         for (const MslVarying& in : ps.inputs)
         {
             bool found = false;
             for (const MslVarying& out : vs.outputs)
-                found |= out.attribute == in.attribute && out.type == in.type;
+                found |= location(out.attribute) == location(in.attribute) && out.type == in.type;
             ESIA_CHECK(found);
             // integer varyings (the FX instance index): SPIRV-Cross leaves out [[flat]] because integers are
             // always flat in MSL

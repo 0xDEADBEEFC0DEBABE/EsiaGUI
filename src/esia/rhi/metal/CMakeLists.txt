@@ -57,10 +57,9 @@ if(BUILD_TESTING)
         tests/test_metal_msl.cpp
         tests/test_metal_device.cpp
         tests/msl_interface.cpp
-        tests/fake_metal_gpu.cpp
-        ${ESIA_ROOT}/tests/conformance/scenes.cpp)
-    target_include_directories(esia_rhi_metal_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests ${ESIA_ROOT}/tests/conformance)
-    target_link_libraries(esia_rhi_metal_tests PRIVATE esia_rhi_metal_core esia_shaders esia::render esia_testkit)
+        tests/fake_metal_gpu.cpp)
+    target_include_directories(esia_rhi_metal_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    target_link_libraries(esia_rhi_metal_tests PRIVATE esia_rhi_metal_core esia_shaders esia_conformance_scenes)
     target_compile_definitions(esia_rhi_metal_tests PRIVATE ESIA_METAL_NULL_GOLDEN_DIR="${ESIA_ROOT}/tests/conformance/golden/null")
 
     # The generated MSL (src/esia/shaders/generated/msl): on macOS compiled by Apple's compiler; elsewhere
