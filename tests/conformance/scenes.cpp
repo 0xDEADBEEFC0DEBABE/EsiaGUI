@@ -226,11 +226,9 @@ namespace esia::conformance
             p.Rect(Rect(212, 192, 304, 230), Style().Fill(Color::Hex(0x3A3A3C)).Radius(10).Noise(0.08f));
         }
 
-        void GlassScene(SceneFrame& f)
+        // The glass scene's shapes, on its wallpaper.
+        void GlassCards(Painter& p)
         {
-            DrawList& dl = f.NewList();
-            Painter p(dl);
-            Wallpaper(p, dl, Rect(0, 0, 320, 240));
             // frosted card with legibility, and a nearly clear capsule on it (reads the full-resolution level)
             GlassMaterial card = Glass(12, 10, 24);
             card.legibility = 0.4f;
@@ -249,6 +247,32 @@ namespace esia::conformance
             dark.rim = Color(0, 0, 0, 0.3f);
             p.Capsule(Rect(186, 170, 308, 214), Style().Glass(dark));
             p.Capsule(Rect(16, 176, 170, 212), Style().Glass(Glass(4, 8, 18)).Fill(kBlue.WithAlpha(0.35f)));
+        }
+
+        void GlassScene(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl);
+            Wallpaper(p, dl, Rect(0, 0, 320, 240));
+            GlassCards(p);
+        }
+
+        void CountCallback(const DrawList&, const DrawCmd& cmd, void*) { ++*static_cast<int*>(cmd.userData); }
+
+        // The glass scene with a host callback between the backdrop's content and the first glass: the pass the host
+        // code ran in ends for the capture and resumes with everything bound again. Host code is API specific, so the
+        // callbacks draw nothing and the image is the glass scene's. A second callback has an empty clip: it must
+        // not run (it would draw unclipped).
+        void CallbackCapture(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl);
+            Wallpaper(p, dl, Rect(0, 0, 320, 240));
+            dl.AddCallback(&CountCallback, &f.callbacks);
+            dl.PushClipRect(Rect(100, 100, 100, 140));
+            dl.AddCallback(&CountCallback, &f.callbacks);
+            dl.PopClipRect();
+            GlassCards(p);
         }
 
         void GlowLayers(SceneFrame& f)
@@ -433,6 +457,35 @@ namespace esia::conformance
             p.Rect(Rect(60, 120, 260, 196), Style().Radius(38).Glass(dome));
         }
 
+        // BuildPoisonFrame: loud colors everywhere, glass over the whole target (every pyramid level; the clear one
+        // copies level 0), a glow layer over it all, 160 FX instances (more than any scene: the later rows of the
+        // instance data stay dirty) and a few hundred vertices.
+        void Poison(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl);
+            const Rect all(Vec2(0, 0), f.data.displaySize);
+            const Color magenta = Color::Hex(0xFF00FF), green = Color::Hex(0x00FF00);
+            p.Rect(all, Style().Fill(Paint::Linear(magenta, green, 90)));
+            for (int i = 0; i < 160; ++i)
+            {
+                const float x = std::fmod((float)i * 37.0f, all.Width()), y = std::fmod((float)i * 23.0f, all.Height());
+                p.Rect(Rect(x - 6, y - 6, x + 6, y + 6), Style().Fill(i % 2 ? Color::Hex(0xFFFF00) : Color::Hex(0x00FFFF)).Radius(4).Shadow(magenta, 6, Vec2(2, 2)));
+            }
+            for (int i = 0; i < 48; ++i)
+            {
+                const float x = std::fmod((float)i * 13.0f, all.Width());
+                dl.AddRectFilled(Rect(x, all.min.y, x + 2, all.max.y), green.ToRgba8());
+            }
+            p.Rect(all, Style().Glass(Glass(24, 24, 60)));
+            GlassMaterial clear = Glass(0, 24, 60);
+            clear.tint = Color(1, 1, 1, 0.0f);
+            p.Rect(all, Style().Glass(clear));
+            p.BeginGlowLayer(magenta, 16.0f, 1.0f);
+            p.Rect(all, Style().Fill(green.WithAlpha(0.8f)));
+            p.EndGlowLayer();
+        }
+
         std::vector<Scene> MakeScenes()
         {
             std::vector<Scene> s;
@@ -479,11 +532,47 @@ namespace esia::conformance
                               &GlassScene);
             srgb.format = rhi::Format::RGBA8_SRGB;
             srgb.tolerance = glassTolerance;
-            Scene& msaa = add("msaa_target", "the glass scene into a 4x multisampled target: captures resolve, pipelines match the sample count", &GlassScene);
+            srgb.checkCopy = true;
+            Scene& msaa = add("msaa_target", "the glass scene into a 4x multisampled target: captures resolve, pipelines match the sample count; a resolve to an offset",
+                              &GlassScene);
             msaa.samples = 4;
             msaa.golden = "glass";
             msaa.tolerance = glassTolerance;
+            msaa.checkCopy = true;
+            // the scenes below share the goldens of those above
+            Scene& copy = add("glass_copy", "the glass scene into a target that cannot be sampled: every capture copies, none reads the target; a copy to an offset",
+                              &GlassScene);
+            copy.sampleable = false;
+            copy.golden = "glass";
+            copy.tolerance = glassTolerance;
+            copy.checkCopy = true;
+            Scene& srgbMsaa = add("srgb_msaa", "the glass scene into a 4x multisampled RGBA8_SRGB target: captures resolve sRGB samples into the raw format",
+                                  &GlassScene);
+            srgbMsaa.format = rhi::Format::RGBA8_SRGB;
+            srgbMsaa.samples = 4;
+            srgbMsaa.golden = "srgb_target";
+            srgbMsaa.tolerance = glassTolerance;
+            srgbMsaa.checkCopy = true;
+            Scene& callback = add("callback_capture", "a host callback before a backdrop capture (the pass ends and resumes, state bound again); one with an empty clip does not run",
+                                  &CallbackCapture);
+            callback.golden = "glass";
+            callback.tolerance = glassTolerance;
+            callback.callbacks = 1;
+            Scene& rows = add("fx_rows", "the shapes scene with 2 FX instances per row of the instance texture (FxStorage::Texture: row math across rows and batches)",
+                              &Shapes);
+            rows.golden = "shapes";
+            rows.fxInstancesPerRow = 2;
             return s;
+        }
+
+        void Build(const Scene& scene, SceneFrame& frame, void (*build)(SceneFrame&))
+        {
+            frame.data = DrawData();
+            frame.data.displaySize = Vec2((float)scene.width / scene.scale, (float)scene.height / scene.scale);
+            frame.data.framebufferScale = Vec2(scene.scale, scene.scale);
+            build(frame);
+            frame.data.time = kTime;
+            frame.data.deltaTime = 1.0f / 60.0f;
         }
     }
 
@@ -510,13 +599,25 @@ namespace esia::conformance
         return nullptr;
     }
 
-    void BuildScene(const Scene& scene, SceneFrame& frame)
+    void BuildScene(const Scene& scene, SceneFrame& frame) { Build(scene, frame, scene.build); }
+
+    void BuildPoisonFrame(const Scene& scene, SceneFrame& frame) { Build(scene, frame, &Poison); }
+
+    rhi::HeadlessDesc HeadlessDescOf(const Scene& scene)
     {
-        frame.data = DrawData();
-        frame.data.displaySize = Vec2((float)scene.width / scene.scale, (float)scene.height / scene.scale);
-        frame.data.framebufferScale = Vec2(scene.scale, scene.scale);
-        scene.build(frame);
-        frame.data.time = kTime;
-        frame.data.deltaTime = 1.0f / 60.0f;
+        rhi::HeadlessDesc hd;
+        hd.width = scene.width;
+        hd.height = scene.height;
+        hd.format = scene.format;
+        hd.sampleable = scene.sampleable;
+        hd.samples = scene.samples;
+        return hd;
+    }
+
+    render::RenderParams RenderParamsOf(const Scene& scene)
+    {
+        render::RenderParams params;
+        params.maxFxInstancesPerRow = scene.fxInstancesPerRow;
+        return params;
     }
 }

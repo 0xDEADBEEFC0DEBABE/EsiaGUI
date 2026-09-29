@@ -614,7 +614,7 @@ namespace esia::testkit
         const double n = (double)image.width * (double)image.height;
         r.fraction = (double)r.differing / n;
         r.meanDelta = sum / (n * 4.0);
-        r.pass = r.fraction <= t.fraction && r.maxDelta <= t.maxDelta;
+        r.pass = r.fraction <= t.fraction && r.maxDelta <= t.maxDelta && r.meanDelta <= t.meanDelta;
         return r;
     }
 }

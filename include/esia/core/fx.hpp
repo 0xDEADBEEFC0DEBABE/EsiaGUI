@@ -10,8 +10,8 @@
 // and many Vulkan / D3D9 drivers guarantee). The renderer uploads them as flat float4 arrays - a structured /
 // storage buffer or an RGBA32F texture, whichever the backend supports (rhi::Caps::fxStorage) - and the shaders
 // fetch them by instance index. Every row is float4 on the GPU: the integer row `flags` is uploaded as float
-// values (exact below 2^24), so formats without integer texels work too. Layout must match FxLoad in
-// src/esia/shaders/esia_fx.hlsl.
+// values (exact below 2^24), so formats without integer texels work too. Layout must match the FX_ROW_* indices
+// in src/esia/shaders/esia_fx.hlsl.
 #pragma once
 #include "esia/base/config.hpp"
 

@@ -1,123 +1,204 @@
 # Esia rewrite - status of `esia-core`
 
-Where the ImGui-free rewrite stands at the end of the core session (2026-09-29). The plan is
-[REWRITE.md](REWRITE.md); how to write a backend is [backends/README.md](backends/README.md).
+Where the ImGui-free rewrite stands after core round 2 (2026-09-29). The plan is [REWRITE.md](REWRITE.md); how to
+write a backend is [backends/README.md](backends/README.md).
 
-**In one paragraph.** Phase 0 is done: the UI core without Dear ImGui, the RHI with its capability model and a
-validating null device, the shader pipeline (one HLSL source, generated SPIR-V / GLSL 330 / ESSL 300 / MSL), the
-renderer with WGT's techniques on the RHI, the conformance suite, the text interface with a FreeType + HarfBuzz
-implementation, LLVM toolchains for Linux, macOS and Windows (native and cross), and the two documents. Everything
-builds warning-free with clang 18 and every test passes on Linux, and the Windows cross build passes its tests under
-Wine. No drawing backend exists on this branch: the four backend sessions start from here. **Base them on commit
-`331bddc` or later** - before it, the null backend's golden logs were not in git (section 4, item 7).
+**In one paragraph.** Round 1 built phase 0: the UI core without Dear ImGui, the RHI with a validating null device,
+the shader pipeline, the renderer with WGT's techniques, the conformance suite, the text interface with FreeType +
+HarfBuzz, the LLVM toolchains and the two documents (section 8). Four backend sessions then wrote OpenGL / GLES,
+Vulkan, Metal and Direct3D 9 / 10 / 11 / 12 on their own branches, and a local Windows session ran them on an NVIDIA
+RTX 4080 SUPER (section 3). Round 2 fixed on `esia-core` what those sessions and an independent review found: the
+clang-cl build, the image goldens in core, a conformance suite that cannot mistake a skip for a pass and fails on
+API validation messages, new scenes and a cross-frame mode, pyramid levels that stay defined when glass reuses a
+capture, fallbacks for refused and still-compiling FX variants, targets that cannot be copied, the SM3 shader
+defects, and the FX shader's per-pixel fetch of all 24 instance rows (section 1). Everything builds warning-free
+with clang 18 and every core test passes; merged into scratch copies of the backend branches, the OpenGL, GLES and
+Vulkan suites (llvmpipe / lavapipe) and the Direct3D 9 / 10 / 11 suites (under Wine) pass `--strict` in both modes
+(section 2). The backend branches were not changed: what they must adopt is in section 5.
 
-* [1. Done](#1-done)
-* [2. Verified](#2-verified)
-* [3. Not verified](#3-not-verified)
-* [4. Known issues](#4-known-issues)
-* [5. Building and testing](#5-building-and-testing)
-* [6. Are the RHI and the guide enough for the backend sessions?](#6-are-the-rhi-and-the-guide-enough-for-the-backend-sessions)
-* [7. Next](#7-next)
+* [1. Round 2: what changed](#1-round-2-what-changed)
+* [2. Verified in round 2](#2-verified-in-round-2)
+* [3. Results on Windows (the local session)](#3-results-on-windows-the-local-session)
+* [4. Not verified](#4-not-verified)
+* [5. Backend follow-ups](#5-backend-follow-ups)
+* [6. Known issues](#6-known-issues)
+* [7. Building and testing](#7-building-and-testing)
+* [8. Round 1: the core](#8-round-1-the-core)
+* [9. Next](#9-next)
 
-## 1. Done
+## 1. Round 2: what changed
 
-| Scope item | Where | What |
+Commits on `esia-core` after round 1's `79c12ef`, oldest first: `3810b97` and `3a8fe0a` (from the local Windows
+session: the legacy `wgt.dll` glob no longer picks up `src/esia`; `MakeScenes` no longer reads a `Scene&` after the
+vector reallocated), then this round's `37303e3` goldens - `cb67f8c` build - `8eadc2b` SM3 shader fixes - `f7156e4`
+FX hot rows - `f1d846e` RHI - `c141f2a` renderer - `6f5de3c` tolerance - `d4cc523` conformance - `4edfc32` docs -
+and the `[cloud-done]` commit with this file.
+
+| Item (round-2 task) | What changed | Commit |
 | --- | --- | --- |
-| 1. Architecture | `docs/REWRITE.md` | layers and boundaries, the frame end to end, the UI core, renderer, RHI contract, every FX feature per API with each family's limits, the shader strategy decision (why fxc / DXC / vkd3d / Wine were or were not usable), text, platform, threading, migration of the `wgt::` API, toolchain, testing, phases, risks |
-| 2. UI core without ImGui | `include/esia/{base,core}`, `src/esia/core` | ids (FNV-1a id stack, `##` / `###` labels), thread-safe input queue and input state (clicks, double clicks, drag, key repeat, text, IME composition), context (windows with layers and z-order, focus, move / resize, items with hover / active arbitration, layout cursor, groups, clipping, scrolling, keyboard focus), draw lists with the FX stream, the texture registry, UTF-8 decoding |
-| 3. RHI | `include/esia/rhi`, `src/esia/rhi` | `rhi::Device` (resources, frames, passes that start with nothing bound, fixed binding model, copies, readback, profiling, host callbacks), `Caps` instead of API versions, `RawFormat`, the backend registry (`esia_register_backend`, headless creation for tests), the null device that records the command stream and enforces the call-order and binding rules |
-| 4. Renderer | `include/esia/render`, `src/esia/render`, `src/esia/shaders` | `Painter` (WGT's, byte-identical `fx::Instance`), `FramePlan` (batching, dirty rectangles, look-ahead capture merging, levels per capture), `Renderer` (region-limited captures, the direct render-target read when no glass needs level 0, the pyramid, B-spline frost sampling in the shader, glow layers with region clears, lazy passes, FX feature variants, GPU profile categories); the shader library: one HLSL source, SPIR-V / GLSL 330 / ESSL 300 / MSL generated by `tools/shaders/build_shaders.py` and checked in, the HLSL sources embedded for runtime compilation, portability hooks for Direct3D 9 (`ESIA_SHADER_PRELUDE`, `ESIA_CLIP_POSITION` ...) |
-| 5. Conformance suite | `tests/conformance`, `tests/support` | 14 scenes built through the public API, one CTest per backend built in, readback compared with golden PNGs within per-scene tolerances (self-contained PNG codec and comparison), the null backend's command streams compared with golden logs (`--strict`), `--update` / `--out` / diff images |
-| 6. Backend guide | `docs/backends/README.md` | files and CMake, host integration headers, the RHI call by call, caps per API, binding numbers per shader format, recipes for GL / GLES, Vulkan, Metal, D3D 9 / 10 / 11 / 12 (including the SM3 prelude), the LLVM toolchains, the conformance suite and its golden policy, a checklist |
-| 7. Text (stretch) | `include/esia/text`, `src/esia/text` | `text::TextSystem`; WGT's analytic rasterizer made platform-free (exact area coverage, sub-pixel phases, LCD filter); the glyph atlas on the texture registry; `esia_text_ft`: FreeType + HarfBuzz shaping, fallback, line breaking, trimming, alignment, WGT's line box, tested with `third_party/imgui/misc/fonts/DroidSans.ttf` (+ Karla as a fallback) including two golden images |
-| Toolchains | `CMakePresets.json`, `cmake/toolchains` | `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross` (clang-cl + lld-link + xwin), `windows-mingw-cross` (clang + mingw-w64); the MSVC presets `vs2022` / `release` / `debug` unchanged |
+| 1. clang-cl and `ESIA_WERROR` | `esia_target_defaults` adds `-Wno-missing-field-initializers` for clang-cl (its `/W4` is `-Wall -Wextra`: `VkFooInfo i{sType}`, `D3D12_HEAP_PROPERTIES hp = {type}`) | `cb67f8c` |
+| 1. `--check` on Windows checkouts | `.gitattributes`: everything under `src/esia/shaders/generated/` is `text eol=lf` (the SPIR-V / DXBC / DXIL blobs `binary`) | `cb67f8c` |
+| 1. `build_shaders.py --fxc` | `EXT` has `dxbc_sm3`; every format is generated into a staging directory and installed only when all succeeded, the table last; the SM3 prelude reaches fxc as the fixed-name include; `--define NAME=VALUE` for A / B builds | `cb67f8c`, `8eadc2b`, `f7156e4` |
+| 2.1 Image goldens | the 13 llvmpipe PNGs from `esia-opengl` (`77e936b`) cherry-picked; the docs no longer say none exist | `37303e3`, `4edfc32` |
+| 2.2 Skips | `esia_conformance` exits 77 when every scene was skipped, 1 on a failure, else 0; the summary counts skips; every `esia_conformance_<backend>` CTest runs `--strict` with `SKIP_RETURN_CODE 77` | `d4cc523` |
+| 2.3 Tolerance | default `maxDelta` 48 (was 128) and a `meanDelta` gate of 0.5 (why: `tests/support/image.hpp`) | `6f5de3c` |
+| 2.4 Validation | `virtual std::uint32_t Device::ValidationErrors() const { return 0; }` (the null device returns its violations); a scene fails when it is non-zero after the readback | `f1d846e`, `d4cc523` |
+| 2.5 New scenes | `glass_copy` (target not sampleable: every capture copies; shares `glass.png`), `srgb_msaa` (4x RGBA8_SRGB; shares `srgb_target.png`), `callback_capture` (a host callback before a capture, one with an empty clip that must not run; `glass.png`), `fx_rows` (below); `srgb_target`, `msaa_target`, `glass_copy`, `srgb_msaa` also `CopyTexture` half the target to an offset and compare the copy. No new image golden was needed (the four new scenes match the goldens they share on every backend run here); null goldens for the four, reviewed as text | `d4cc523` |
+| 2.6 Scenes library | `esia_conformance_scenes` (public include `tests/conformance`, `esia::render esia_testkit`); `HeadlessDescOf` / `RenderParamsOf` give backend tests the harness's target and parameters | `d4cc523` |
+| 2.7 Cross-frame | `--frames N`: N - 1 poison frames (glass and a glow layer over the whole target, 160 FX instances) on the same device, a cleared target, then the scene; CMake adds `esia_conformance_<backend>_frames` (`--frames 3 --strict`) for drawing backends | `d4cc523` |
+| 2.8 FX texture rows | `RenderParams::maxFxInstancesPerRow` (a power of two); `fx_rows` = `shapes` at 2 instances per row (`shapes.png`) | `c141f2a`, `d4cc523` |
+| 3.1 Pyramid levels | per frame: levels load (and are cleared once while undefined) when the planned captures exceed the budget or a user effect can sample the backdrop, else `DontCare` as before; the backdrop copy is created zero-filled | `c141f2a` |
+| 3.2 Refused variants | a refused or failed FX variant draws with the full shader (`RenderStats::fxFallbacks`). The optional asynchronous protocol: `PipelineDesc::background`, `Caps::asyncPipelines`, `Device::GetPipelineStatus` (`Ready` / `Pending` / `Failed`); a batch whose variant is pending draws with the smallest ready superset variant, else the full shader (`RenderStats::fxPendingVariants`). Guide section 2, "Background pipelines" | `f1d846e`, `c141f2a` |
+| 3.3 Uncopyable targets | without `CopySrc`, a sampleable target is read directly and pyramid level 1 stands in for level 0; neither: no backdrop (`time.z = 0`); null-device tests for both | `c141f2a` |
+| 3.4 Host frames | `FrameDesc::hostFrame` (documented in `rhi.hpp` and the guide; the null log records it) | `f1d846e` |
+| 3.5 Profiling | `RenderParams::profile` (off: frame total only) and `maxProfileScopes` (32 per frame) | `c141f2a` |
+| 3.6 Small ones | a callback with an empty clip is skipped; a refused Downsample pipeline ends the pyramid; the FX texture uploads the used rows and the used part of the last one | `c141f2a` |
+| 4.1 / 4.2 SM3 | the dither test uses `FX_HAS`; shape / paint kinds are plain literals (no X3203 signed / unsigned warning under the prelude's `uint` = `float`) | `8eadc2b` |
+| 4.3 Prelude | `#ifdef ESIA_SHADER_PRELUDE` / `#include "esia_shader_prelude.hlsli"` (a fixed name); prepending keeps working | `8eadc2b` |
+| 4.4 FX fetch | `FxVS` fetches the hot rows (rect, radii, fill0, shape, misc, flags) and passes them as flat varyings (8 in all); `FxPS` fetches every other row inside the branch that reads it; `ESIA_FX_FETCH_ALL` restores the old path; REWRITE.md section 16 corrected | `f7156e4` |
+| 5. Docs | the backend guide (every item of the task's section 5, plus the new RHI calls, the async protocol and the conformance changes) and REWRITE.md | `4edfc32` |
 
-Commits on `esia-core` (oldest first): `51d88dc` presets, toolchains, UI core - `4f36cef` RHI, null backend, shader
-library - `55e04ae` delta time from a clock at 0 - `c8a3372` pass and color contract, host callbacks, stricter null
-device - `c845be3` Painter, planner, renderer - `8ebb8df` sharp corners with continuous smoothing (SDF fix) -
-`2283d72` conformance suite - `94d89bf` D3D9 portability hooks, FX feature variants - `1f1443a` mingw-w64 cross
-build - `653dd4f` shader library and GLSL / ESSL link tests - `9d7fd4b` ESSL at highp - `4c9af5c` runtime shader
-sources, backend unit tests - `4c35054` clip-position hook, RHI threading and state rules - `871a86c` REWRITE.md and
-the backend guide - `d3768bb` rasterizer, atlas, UTF-8 - `09f4b27` FreeType + HarfBuzz text system - `331bddc` the
-null goldens tracked - and the `[cloud-done]` commit with this file.
+## 2. Verified in round 2
 
-## 2. Verified
+Machine: the same Ubuntu 24.04 container **without a GPU**. Tools: clang 18.1.3 + lld, CMake 3.28.3, Ninja,
+glslangValidator 15.1.0, SPIRV-Cross, spirv-val (SPIRV-Tools 2025.1), Mesa 25.2.8 (llvmpipe through EGL, lavapipe
+for Vulkan), Khronos validation layer 1.3.275, Wine 9.0 with Xvfb, mingw-w64 (GCC 13 posix) for the cross build,
+and Microsoft's `d3dcompiler_47.dll` 6.3.9600 (taken from the `PyQt5-Qt5` 5.15.2 win_amd64 wheel on PyPI) with a
+140-line `D3DCompile` command-line wrapper written for this check (scratch, not committed): Wine's own d3dcompiler
+cannot compile the FX shader.
 
-Machine: an Ubuntu 24.04.4 container **without a GPU**. Tools: clang / clang++ 18.1.3, ld.lld 18.1.3, CMake 3.28.3,
-Ninja 1.11.1, glslangValidator 15.1.0, SPIRV-Cross 2021.01.15, spirv-val (SPIRV-Tools), Mesa 25.2.8 (llvmpipe)
-through EGL, FreeType 2.13.2, HarfBuzz 8.3.0, mingw-w64 headers and libraries (GCC 13 posix) used by clang, Wine 9.0,
-Python 3.11.
-
-Run on a fresh `git clone --branch esia-core` at `331bddc` (so only what is committed):
+**The core** (fresh build directories, at `4edfc32`, the code of the final commit):
 
 | Command | Result |
 | --- | --- |
-| `cmake --preset linux-clang -DESIA_WERROR=ON && cmake --build --preset linux-clang` | builds, 0 warnings |
-| `ctest --preset linux-clang` | 8 / 8 pass: `esia_core_tests` (38 tests), `esia_text_tests` (10), `esia_render_tests` (36), `esia_testkit_tests` (5), `esia_text_ft_tests` (12), `esia_conformance_null` (14 scenes, `--strict`), `esia_shader_tests` (1), `esia_glsl_link_tests` (1) |
-| `cmake --preset linux-clang-release -DESIA_WERROR=ON`, build, `ctest --preset linux-clang-release` | 0 warnings, 8 / 8 pass (the text goldens hold at `-O3` too) |
+| `cmake --preset linux-clang -DESIA_WERROR=ON`, build, `ctest --preset linux-clang` | 0 warnings; 8 / 8: `esia_core_tests` 38, `esia_text_tests` 10, `esia_render_tests` 42, `esia_testkit_tests` 5, `esia_text_ft_tests` 12, `esia_conformance_null` (18 scenes, `--strict`), `esia_shader_tests` 1, `esia_glsl_link_tests` 1 |
+| the same with `linux-clang-release` | 0 warnings, 8 / 8 |
+| `cmake --preset windows-mingw-cross -DESIA_WERROR=ON`, build | 0 warnings (`esia_text_ft` left out: no FreeType for mingw here) |
+| `wine build/windows-mingw-cross/bin/<test>.exe` | core 38, text 10, render 42, testkit 5, shader 1: all pass; `esia_conformance.exe --backend null --strict`: 18 / 18 |
 | `python3 tools/shaders/build_shaders.py --check` | `generated shaders are up to date` |
-| `esia_glsl_link_tests` | every GLSL 330 program compiled and linked on "4.5 (Core Profile) Mesa 25.2.8", every ESSL 300 program on "OpenGL ES 3.2 Mesa 25.2.8" |
-| `cmake --preset windows-mingw-cross -DESIA_WERROR=ON && cmake --build --preset windows-mingw-cross` | builds every Esia library and test executable, 0 warnings (`esia_text_ft` skipped with a status message: no FreeType / HarfBuzz for mingw here) |
-| `wine build/windows-mingw-cross/bin/<test>.exe` | `esia_core_tests` 38, `esia_text_tests` 10, `esia_render_tests` 36, `esia_testkit_tests` 5, `esia_shader_tests` 1: all pass; `esia_conformance.exe --backend null --golden tests/conformance/golden --strict`: 14 scenes pass (the command streams are identical on both platforms) |
+| `esia_conformance --backend null --golden tests/conformance/golden --strict` | 18 / 18 (Debug and Release) |
+| `build_shaders.py --fxc "wine fxcw.exe"` in an `esia-directx` checkout (it has the D3D9 prelude), output to a scratch directory | runs through (6 min 40 s): `dxbc_sm3` 14 shaders (7 programs: no TextLcd without dual-source blending), `dxbc_sm4` / `dxbc_sm5` 16 each; GLSL, ESSL, MSL and SPIR-V identical to the checked-in library. Nothing of it was committed |
 
-Checked by hand during the session, not repeatable from the repository:
+**The backends**: each branch's latest commit with `esia-core` merged in a scratch worktree (never pushed):
 
-* A throwaway OpenGL 3.3 implementation of `rhi::Device` (in the session's scratch space, deliberately not committed:
-  it is the OpenGL session's work) rendered all 14 conformance scenes on llvmpipe; the images were inspected by eye.
-  It found two defects that are fixed on this branch (a speck at zero-radius corners in the SDF, `8ebb8df`; ESSL
-  defaulting to `mediump`, `9d7fd4b`), showed the D3D9 portability refactoring to be pixel-identical and the 4x MSAA
-  target within 1 / 255 of the plain one.
-* Wine's own `d3dcompiler_47` (vkd3d-shader) compiles `esia_ui.hlsl` and `esia_post.hlsl` but not `esia_fx.hlsl`.
-* The two text goldens (`tests/text/golden`) were produced here and reviewed zoomed in (kerning, marks, fallback,
-  trimming, centering, quarter-pixel phases, LCD fringes on the correct sides).
-* `ESIA_CLIP_POSITION` overridden the way a D3D9 prelude would: the three vertex shaders compile with glslang.
+| Branch (commit) | Command | Result |
+| --- | --- | --- |
+| `esia-opengl` (`cc75e82`) | `linux-clang -DESIA_WERROR=ON -DESIA_BACKEND_OPENGL=ON`, build, `ctest` | 0 warnings, 13 / 13: `esia_rhi_opengl_tests` (its `ConformanceScenesWithoutGlErrors` renders the 18 scenes), `esia_conformance_opengl` / `_gles` and their `_frames` runs: 18 / 18 each, max delta <= 1, mean 0.000 |
+| | `ESIA_GL_CORE_ONLY=1 esia_conformance --backend opengl --backend gles --strict` (and `--frames 3`) | 35 PASS + `text_lcd` SKIP on GLES 3.0 without `EXT_blend_func_extended`, both modes |
+| `esia-vulkan` (`724df7a`) | `linux-clang -DESIA_WERROR=ON -DESIA_BACKEND_VULKAN=ON`, build, `ctest` | 0 warnings, 12 / 12: `esia_rhi_vulkan_tests`, `esia_conformance_vulkan`, `_frames` and the branch's own render-pass run: 18 / 18 each on lavapipe, max delta <= 4, mean <= 0.001, 0 validation messages (the loader inserts `VK_LAYER_KHRONOS_validation`) |
+| | `ESIA_VULKAN_RENDER_PASS=1 esia_conformance --backend vulkan --strict --frames 3` | 18 / 18 |
+| `esia-metal` (`eea8c0c`) | `linux-clang -DESIA_WERROR=ON -DESIA_BACKEND_METAL=ON`, build, `ctest` | 0 warnings; `esia_conformance_metal` and `_frames` **skipped** (exit 77: no Metal on Linux - before this round they "passed"); `esia_rhi_metal_tests` 23 / 25: the two failures are the follow-ups of section 5, item 5 (with those two changes, tried in the scratch copy: 25 / 25) |
+| `esia-directx` (`2f150f9`) | `windows-mingw-cross -DESIA_WERROR=ON`, D3D9 / 10 / 11 / 12 on, build | 0 warnings |
+| | under Wine + Xvfb (`WINEDLLOVERRIDES=d3dcompiler_47=n`): `esia_conformance.exe --backend <b> --strict`, and with `--frames 3` | d3d11, d3d10: 18 / 18 in both modes, max delta <= 2; d3d9: 17 PASS + `text_lcd` SKIP in both modes, max delta <= 2; d3d12: every scene SKIP ("creating the D3D12 device objects failed"), exit code 77 |
 
-## 3. Not verified
+Wine's D3D runs through wined3d on llvmpipe (OpenGL): they exercise the backends' code paths and Microsoft's
+shader compiler, not a real D3D driver. The d3d9 runs print two warnings of the backend's own log, which matter for
+`ValidationErrors` (section 5, item 2).
 
-* **No Direct3D, DirectWrite, Win32, Metal, Vulkan or OpenGL backend code exists on `esia-core`**; nothing here
-  claims that any of them works. The only GPU path that ever ran is the throwaway GL device above, on llvmpipe.
-* **The MSVC build of `wgt.dll`** (`vs2022` preset) was not built - there is no Windows machine. By inspection: with
-  MSVC on Windows the root `CMakeLists.txt` defaults to `WGT_BUILD_LEGACY=ON` and `ESIA_BUILD_CORE=OFF` and then
-  configures the same targets from the same sources as before (the legacy part is only wrapped in
-  `if(WGT_BUILD_LEGACY)`; those two options are new, the existing ones are unchanged); the `vs2022`, `release` and
-  `debug` presets are unchanged; no legacy source, shader or CMake module was modified.
-* **Presets not run**: `windows-cross` (clang-cl + lld-link + xwin: xwin's download host,
-  download.visualstudio.microsoft.com, is blocked in the cloud sessions), `windows-clang-cl` and `macos-clang` (no
-  such machines).
-* **Shader formats**: the generated MSL was never compiled (needs `xcrun metal` on macOS); the SPIR-V passed `spirv-val`
-  but never ran on a Vulkan driver (lavapipe was not installed / run); no DXBC or DXIL exists (fxc and DXC are not
-  available here, Wine's compiler rejects the FX shader) - the D3D backends compile the embedded HLSL with
-  `D3DCompile` until someone runs the build script with fxc on Windows. The SM3 path (the prelude hooks, FX feature
-  variants) was checked with glslang only, never with fxc for `vs_3_0` / `ps_3_0`.
-* **Conformance image goldens**: none yet. They are produced by the OpenGL session (backends/README.md, section 7);
-  until then drawing backends report NO GOLDEN (a failure only with `--strict`).
-* **Performance**: no GPU was available, so no timings (in particular the per-pixel FX instance fetch against WGT's
-  interpolants, section 4).
+**The shader restructure (4.4)**, checked before the renderer changes were layered on top: every scene rendered
+by `opengl`, `gles`, `gles` with `ESIA_GL_CORE_ONLY=1` (FX data in a texture) and `vulkan` (validation on) is
+pixel-identical to the renders before the change (max delta 0), and so is the `ESIA_FX_FETCH_ALL` build on GL; the
+generated ESSL has no `texelFetch` before the first branch any more. Compiled with `d3dcompiler_47` (instruction
+slots of `ps_3_0` FX variants, before -> after): `0x1` 451 -> 446, `0x822` 3509 -> 3519, `0xFF` 3990 -> 4101,
+`0x1FF` and `0x3FFF` failed (out of temporary registers) -> 4298 and 5044, all features 5395; the SM3 pixel shader
+reads 8 input registers. `ps_4_0` / `ps_5_0` FX: 3851 -> 3897 / 3831 -> 3832 instruction slots (the cold fetches
+now sit in branches: more code, fewer fetches executed).
 
-## 4. Known issues
+**The cross-frame mode catches what it should**: with the glow layer's region clear removed on purpose (in a
+scratch copy), `text_lcd` still passes a single frame on llvmpipe (a fresh texture reads as zeros) and fails with
+`--frames 3` (max delta 221).
 
-1. **Legacy SDF speck.** `src/shaders/wgt_fx.hlsl` (`SdRoundRect`) has the zero-radius-corner defect fixed in Esia's
-   copy (`8ebb8df`); the legacy shader is left untouched, as the rules for this branch require.
+## 3. Results on Windows (the local session)
+
+Windows 11, NVIDIA GeForce RTX 4080 SUPER (driver 610.88), clang-cl 22.1.8 + lld-link and MSVC 19.44, before this
+round's core changes; reported in the backend branches' STATUS files and commits (`cc75e82`, `2f150f9`, `eea8c0c`),
+not re-run here:
+
+| Backend | Result |
+| --- | --- |
+| OpenGL, GLES (headless through WGL: Windows drivers ship no EGL) | `esia_rhi_opengl_tests` 11 / 11, 0 GL errors (KHR_debug); `esia_conformance --strict` 14 / 14 on both against the llvmpipe goldens, max delta 1 - 6 (shadows 20 on 0.003 % of the pixels), mean <= 0.09 |
+| Direct3D 11, 12, 10 | 14 / 14 each, `ESIA_D3D_DEBUG=1`: no debug-layer warning or error; D3D12 GPU-based validation clean; clang-cl (`ESIA_WERROR=ON`) and MSVC (`/W4 /WX`) build all four with 0 warnings; ctest 16 / 16 |
+| Direct3D 9 | 13 PASS + `text_lcd` SKIP (no dual-source blending); `msaa_target` max delta 25 on 0.018 % of the pixels; FX variants compile synchronously for up to 2.6 s each in the first frames (masks 0x822 / 0x823 / 0x826) |
+| Metal (portable parts) | clang-cl 22.1.8, `ESIA_WERROR=ON`: 0 warnings, 8 / 8 tests (the fake-GPU tests drive all 14 scenes; the conformance run SKIPs Metal) |
+| Vulkan | did not build with clang-cl and `ESIA_WERROR=ON` before `cb67f8c` (missing-field-initializer warnings); no Windows result recorded |
+
+## 4. Not verified
+
+* **No GPU here.** Nothing in this round ran on a hardware GPU. OpenGL / GLES and Vulkan ran on Mesa's CPU drivers,
+  Direct3D 9 / 10 / 11 only under Wine (wined3d on llvmpipe), Direct3D 12 not at all (it does not start under
+  Wine), Metal not at all (it cannot be compiled on Linux; its portable parts and mocks ran). No claim is made here
+  that the D3D, Metal or Win32 code works on real drivers; section 3 is the local session's report.
+* **Performance.** The FX fetch restructure (4.4) was not timed: pixels are identical, the per-pixel fetches of a
+  solid shape went from 24 to 0, but the GPU time was not measured. `ESIA_FX_FETCH_ALL` is there for the A / B run
+  on the RTX 4080 with the GPU profile categories.
+* **Windows builds of this round.** The clang-cl flag (`cb67f8c`) was added without a Windows machine; the
+  `windows-clang-cl`, `windows-cross` and MSVC builds of the round-2 core were not run here.
+* **The new RHI features have no backend yet**: `asyncPipelines`, `hostFrame` and `ValidationErrors` are exercised
+  only through the null device and its tests; the backends keep the defaults until section 5 is done.
+* **The new scenes on Metal and D3D12** were not run (no machine), nor on any real GPU.
+
+## 5. Backend follow-ups
+
+The backend branches were not changed in this round. What they must (or may) adopt after merging `esia-core`:
+
+1. **Direct3D 9: drop the `kPatches` entry** for `[branch] if (feat & (F_GLOW | F_SHADOW))` (`d3d9_device.cpp`):
+   the shader line is fixed (`8eadc2b`), so the patch finds nothing. `d3d::Patched` (`d3d_shader.cpp`) skips a patch
+   whose text is missing without a word: make it log an error (or fail the compile), so a patch never goes stale
+   silently.
+2. **All backends: implement `ValidationErrors()`.** OpenGL: its KHR_debug `ErrorCount`. Direct3D: the debug layer's
+   messages and the D3D log's error / warning counts. Vulkan: the validation messages its messenger already counts
+   (`ValidationLog::messages`). Watch Direct3D 9: under Wine the first device of a process logs "512 pixel shader
+   instruction slots: liquid-glass pipelines may fail to build" (a capability notice), and the devices of the scenes
+   with a backdrop copy log "a texture with uploaded contents became a copy destination: its contents were dropped"
+   (7 times in a single-frame run, 17 with `--frames 3`) - the renderer now creates the backdrop copy with zero data
+   (`c141f2a`), which the backend replaces with a cleared render target (the same zeros). Create `CopyDst` textures
+   as render targets from the start, and keep capability notices out of the count, or those scenes fail.
+3. **Direct3D 12 and Vulkan in host mode: adopt `FrameDesc::hostFrame`** for the per-frame slots they recycle
+   `framesInFlight` frames later (same non-zero number = same slot; 0 = every `BeginFrame` its own frame).
+4. **Metal, Vulkan (and OpenGL) unit tests: link `esia_conformance_scenes`** instead of compiling
+   `tests/conformance/scenes.cpp` (`src/esia/rhi/<name>/CMakeLists.txt`), and create targets and parameters with
+   `conformance::HeadlessDescOf(scene)` / `RenderParamsOf(scene)`.
+5. **Metal: two tests fail after the merge** (run on Linux). `MetalMsl.VertexInputsAndOutputs`: the FX fragment
+   inputs are now `[[user(locnN), flat]]`, the vertex outputs `[[user(locnN)]]` - compare the `user(locnN)` part.
+   `MetalDevice.NullGoldensWithMetalCaps`: `glass_copy` needs a target that is not sampleable - create it with
+   `scene.sampleable` and render with `RenderParamsOf(scene)`. Both one-line changes, checked in a scratch copy
+   (25 / 25).
+6. **Direct3D 9: the asynchronous variants** (guide section 2, "Background pipelines"): report `asyncPipelines`,
+   compile variants on a worker (`d3d_common` already has `CompileShaderAsync` for user effects), build the full
+   shader first. Keep `maxFxDataWidth` at 24 x a power of two.
+7. **Vulkan: its extra CTest** `esia_conformance_vulkan_renderpass` should get `--strict`, `SKIP_RETURN_CODE 77`
+   and a `--frames 3` twin, like the core's.
+8. *Optional.* Direct3D 9 may serve its prelude as `esia_shader_prelude.hlsli` with `ESIA_SHADER_PRELUDE` defined
+   instead of prepending it; DXBC could be generated on Linux (`build_shaders.py --fxc "wine <wrapper>.exe"` with
+   Microsoft's `d3dcompiler_47.dll`, section 2), but `build_shaders.py` in core needs the SM3 prelude, which lives on
+   `esia-directx`.
+
+Still open from the backends' core requests: splitting heavy glass batches on SM3 when even their variant does not
+fit (`esia-directx` request 5), a `BGR10A2_UNORM` format for iOS (`esia-metal` request 5, optional), and per-backend
+CTest properties (`esia-vulkan` request 2, optional).
+
+## 6. Known issues
+
+1. **Legacy SDF speck.** `src/shaders/wgt_fx.hlsl` (`SdRoundRect`) keeps the zero-radius-corner defect fixed in
+   Esia's copy (`8ebb8df`); the legacy shader is left untouched.
 2. **sRGB targets blend in linear light** (as WGT's D3D11 backend does): translucent UI looks different on an
-   `*_SRGB` target than on a UNORM one; `srgb_target` has its own golden.
-3. **FX instance data per pixel.** Esia fetches the instance fields in the pixel shader (GL 3.3 / GLES 3 / D3D10
-   guarantee 16 varyings; WGT passed 24 flat interpolants). Unmeasured; REWRITE.md section 16 has the fallback.
-4. **Text.** No Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left, but a line's runs are
-   laid out left to right), no color glyphs (COLR / CBDT / sbix glyphs draw nothing), no system fonts, no caret /
-   grapheme query yet (text editing needs one, phase 3). Glyphs are rasterized before the clip test, so a long,
-   mostly clipped text rasterizes glyphs it does not draw. The text tests use the fonts in
-   `third_party/imgui/misc/fonts`: move them before `third_party/imgui` is removed (phase 6).
-5. **Zero-filled uploads.** `TextureRegistry::Create(info, nullptr)` queues a zero-filled CPU copy of the whole
-   texture (4 MB for a 2048 x 2048 Alpha8 glyph page, 16 MB for RGBA8) until the renderer consumes it. The registry
-   could queue no pixels and let the renderer clear instead - a small core change for later.
-6. **No device-loss protocol.** The registry hands its pixels to the renderer and keeps no copy, so after a lost
-   device (D3D TDR, Android losing the GL context) images must be supplied again by their owners (a text system can
-   restart its atlas). Not needed for conformance; needed before shipping.
-7. **The null goldens were missing from git until `331bddc`.** The root `.gitignore` ignores `*.log`, so
-   `tests/conformance/golden/null/*.log` existed only in the working tree that recorded them and a fresh checkout
-   failed `esia_conformance_null`. `.gitignore` now re-includes them and `.gitattributes` keeps them LF.
+   `*_SRGB` target than on a UNORM one; `srgb_target` has its own golden. Multisampled sRGB captures resolve in
+   linear light on GL and D3D; `srgb_msaa` stays within max delta 4 of `srgb_target` on every backend run here.
+3. **SM3 size.** The full FX pixel shader is ~5.4k `ps_3_0` instruction slots, a plain fill ~450; SM3 guarantees
+   512. On a device limited to that, most variants cannot be created, and neither can the full shader - the fallback
+   of refused and pending variants - so those batches are dropped (counted in `RenderStats::fxFallbacks`).
+4. **Glass over the capture budget** reuses the last capture: the pyramid levels are now loaded rather than
+   undefined, and the backdrop copy holds the previous frames' content outside this frame's captures (stale but
+   defined).
+5. **Text.** No Unicode bidi algorithm, no color glyphs, no system fonts, no caret / grapheme query yet; glyphs are
+   rasterized before the clip test. The text tests use the fonts in `third_party/imgui/misc/fonts`: move them before
+   `third_party/imgui` is removed (phase 6).
+6. **Zero-filled uploads.** `TextureRegistry::Create(info, nullptr)` queues a zero-filled CPU copy of the whole
+   texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
+7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
+   their owners.
 
-## 5. Building and testing
+## 7. Building and testing
 
 ### Linux (what the cloud sessions use)
 
@@ -130,10 +211,14 @@ cmake --preset linux-clang && cmake --build --preset linux-clang && ctest --pres
 # release: linux-clang-release; warnings as errors: -DESIA_WERROR=ON; a backend: -DESIA_BACKEND_OPENGL=ON
 python3 tools/shaders/build_shaders.py          # after a shader change: regenerate the library (commit the output)
 python3 tools/shaders/build_shaders.py --check  # CI: the checked-in library matches the sources
+build/linux-clang/bin/esia_conformance --backend null --golden tests/conformance/golden --strict
 ```
 
 Without `libegl-dev` the GLSL link test is left out; without FreeType / HarfBuzz the text system and its tests are.
-`vkd3d-compiler`, `libosmesa6-dev` are not needed by anything on this branch.
+Vulkan on the CPU: `apt-get install mesa-vulkan-drivers libvulkan-dev vulkan-validationlayers` (lavapipe). The D3D
+backends under Wine: `apt-get install wine64 xvfb`, build `windows-mingw-cross`, put Microsoft's
+`d3dcompiler_47.dll` next to the executables, then `WINEDLLOVERRIDES=d3dcompiler_47=n xvfb-run -a wine
+build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden tests/conformance/golden --strict`.
 
 ### Windows with LLVM
 
@@ -141,14 +226,14 @@ Without `libegl-dev` the GLSL link test is left out; without FreeType / HarfBuzz
   the STL, CRT and headers; from an "x64 Native Tools Command Prompt":
   `cmake --preset windows-clang-cl && cmake --build --preset windows-clang-cl && ctest --preset windows-clang-cl`.
   For the text system, point `CMAKE_PREFIX_PATH` at a FreeType + HarfBuzz installation (e.g. vcpkg's installed tree);
-  without it `esia_text_ft` is skipped.
+  without it `esia_text_ft` is skipped. The local session used clang-cl 22.1.8 and MSVC 19.44.
 * **From Linux, MSVC ABI** (`windows-cross`): `cargo install xwin --locked`, then
   `xwin --accept-license --arch x86_64 splat --output ~/.xwin` (needs download.visualstudio.microsoft.com),
   `cmake --preset windows-cross -DXWIN_DIR=$HOME/.xwin && cmake --build --preset windows-cross` (tests off: they
   cannot run on Linux).
-* **From Linux, offline** (`windows-mingw-cross`, GNU ABI - a compile / link check of the same code):
-  `sudo apt-get install g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev wine64`, then
-  `cmake --preset windows-mingw-cross && cmake --build --preset windows-mingw-cross` and, optionally,
+* **From Linux, offline** (`windows-mingw-cross`, GNU ABI - a compile / link check of the same code, see the guide
+  for its `type_info::operator==` trap): `sudo apt-get install g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev
+  wine64`, then `cmake --preset windows-mingw-cross && cmake --build --preset windows-mingw-cross` and, optionally,
   `wine build/windows-mingw-cross/bin/esia_core_tests.exe` (and the other test executables).
 * **Today's `wgt.dll`**, unchanged: `cmake --preset vs2022 && cmake --build --preset release` with MSVC.
 
@@ -157,35 +242,35 @@ Without `libegl-dev` the GLSL link test is left out; without FreeType / HarfBuzz
 `brew install llvm lld cmake ninja glslang spirv-cross spirv-tools freetype harfbuzz`, then
 `cmake --preset macos-clang && cmake --build --preset macos-clang && ctest --preset macos-clang` (not tried here).
 
-## 6. Are the RHI and the guide enough for the backend sessions?
+## 8. Round 1: the core
 
-Yes, for all four - with the risks named per session. Each can add its directory and CMake option without touching
-anything else (the options, `esia_register_backend`, `esia_add_test`, the registry and the conformance CTest are in
-place), and the null device shows what the renderer sends for every scene and enforces the call-order and binding
-rules; what it cannot see - color encoding, coordinate conversion - the image goldens catch, and GPU resource
-lifetimes are the backend's own (its API's validation layers).
-
-| Session | Enough? | Watch for |
+| Scope item | Where | What |
 | --- | --- | --- |
-| `esia-opengl` | yes: the contract was implemented once against llvmpipe (throwaway), so the guide's GL recipe is tested | writes the image goldens for everyone: review every image before committing them |
-| `esia-vulkan` | yes | the SPIR-V never ran on a driver: run lavapipe (`mesa-vulkan-drivers`) first; layouts per the "never sampled while rendered" rule |
-| `esia-metal` | yes on paper | nothing Metal was ever compiled: the MSL and the backend need a Mac (`macos-clang`, `xcrun metal`) |
-| `esia-directx` | yes | no DXBC: compile the embedded HLSL at runtime (`D3DCompile`) or run fxc on Windows; D3D9 is the riskiest part: the SM3 prelude is theirs to write (the hooks are in the core), the FX shader may need `fxFeatureVariants` to fit; the code can be compiled on Linux (both Windows presets) but only run on Windows |
+| 1. Architecture | `docs/REWRITE.md` | layers and boundaries, the frame end to end, the UI core, renderer, RHI contract, every FX feature per API with each family's limits, the shader strategy decision, text, platform, threading, migration of the `wgt::` API, toolchain, testing, phases, risks |
+| 2. UI core without ImGui | `include/esia/{base,core}`, `src/esia/core` | ids (FNV-1a id stack, `##` / `###` labels), thread-safe input queue and input state, context (windows with layers and z-order, focus, move / resize, items with hover / active arbitration, layout cursor, groups, clipping, scrolling, keyboard focus), draw lists with the FX stream, the texture registry, UTF-8 decoding |
+| 3. RHI | `include/esia/rhi`, `src/esia/rhi` | `rhi::Device` (resources, frames, passes that start with nothing bound, fixed binding model, copies, readback, profiling, host callbacks, validation counts, background pipelines), `Caps` instead of API versions, `RawFormat`, the backend registry, the null device that records the command stream and enforces the call-order and binding rules |
+| 4. Renderer | `include/esia/render`, `src/esia/render`, `src/esia/shaders` | `Painter` (WGT's, byte-identical `fx::Instance`), `FramePlan` (batching, dirty rectangles, look-ahead capture merging, levels per capture), `Renderer` (region-limited captures, the direct render-target read, the pyramid, B-spline frost sampling, glow layers with region clears, lazy passes, FX feature variants, GPU profile categories); one HLSL source, SPIR-V / GLSL 330 / ESSL 300 / MSL generated by `tools/shaders/build_shaders.py` and checked in, the HLSL embedded for runtime compilation, the Direct3D 9 hooks |
+| 5. Conformance suite | `tests/conformance`, `tests/support` | 18 scenes (14 in round 1) through the public API, image goldens and null command-stream goldens, a self-contained PNG codec and comparison |
+| 6. Backend guide | `docs/backends/README.md` | files and CMake, host integration headers, the RHI call by call, caps per API, binding numbers, recipes for every API, the LLVM toolchains, the conformance suite, a checklist |
+| 7. Text (stretch) | `include/esia/text`, `src/esia/text` | `text::TextSystem`; WGT's analytic rasterizer made platform-free; the glyph atlas on the texture registry; `esia_text_ft`: FreeType + HarfBuzz shaping, fallback, line breaking, trimming, alignment, with two golden images |
+| Toolchains | `CMakePresets.json`, `cmake/toolchains` | `linux-clang`, `linux-clang-release`, `macos-clang`, `windows-clang-cl`, `windows-cross` (clang-cl + lld-link + xwin), `windows-mingw-cross` (clang + mingw-w64); the MSVC presets `vs2022` / `release` / `debug` unchanged |
 
-What the core does not give them yet, none of it blocking: image goldens (from the OpenGL session; the others use
-`--out` and their eyes until OpenGL is merged), a device-loss protocol (section 4, item 6), and a conformance scene
-with the FreeType text system (the scenes use a test atlas, so image goldens do not depend on font libraries).
-If a backend finds that it needs a core change, it must not make it on its own branch: it is a change on
-`esia-core`, merged into the backend branches from there.
+Round-1 commits (oldest first): `51d88dc` presets, toolchains, UI core - `4f36cef` RHI, null backend, shader library -
+`55e04ae` delta time from a clock at 0 - `c8a3372` pass and color contract, host callbacks - `c845be3` Painter, planner,
+renderer - `8ebb8df` SDF fix - `2283d72` conformance suite - `94d89bf` D3D9 hooks, FX feature variants - `1f1443a`
+mingw-w64 cross build - `653dd4f` shader library and GLSL / ESSL link tests - `9d7fd4b` ESSL at highp - `4c9af5c`
+runtime shader sources - `4c35054` clip-position hook, threading rules - `871a86c` REWRITE.md and the guide - `d3768bb`
+rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens tracked - `79c12ef` `[cloud-done]`.
 
-## 7. Next
+## 9. Next
 
-1. **Phase 1, backends** (in parallel): OpenGL / GLES (first: it produces the image goldens), Vulkan, DirectX (9 / 10 /
-   11 / 12), Metal. Merge order: OpenGL, then the others as they pass the suite against its goldens.
-2. **Core follow-ups**: device loss (item 6), empty-pixel creates (item 5), measure the FX fetch on D3D11 against WGT
-   with the GPU profile categories, DXBC generated on Windows and checked in.
-3. **Phase 2, text**: the bidi algorithm (fribidi / ICU), color glyphs, a caret / grapheme query; DirectWrite and Core
-   Text behind the interface, feeding the shared rasterizer.
-4. **Phase 3, widgets**: port `src/ui`, auto layout, `Theme` / `ItemStyle` / `anim` and text editing onto the core.
-5. **Phases 4 - 6**: platform layers and services, the `wgt::` compatibility layer and `wgt.dll` 2.0 without Dear
-   ImGui, then removing `third_party/imgui` (REWRITE.md section 15).
+1. **Backends**: merge `esia-core` into each backend branch and do section 5; then merge the backends (OpenGL
+   first), each passing `--strict` and `--frames 3` with `ValidationErrors` implemented.
+2. **Measure** the FX fetch on the RTX 4080 (`ESIA_FX_FETCH_ALL` A / B with the GPU profile categories) and against
+   WGT's D3D11 numbers; run the new scenes on the real drivers and Metal on a Mac.
+3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
+   batches, DXBC generated and checked in.
+4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query; DirectWrite and Core Text behind
+   the interface, feeding the shared rasterizer.
+5. **Phases 3 - 6**: widgets on the core, platform layers and services, the `wgt::` compatibility layer and
+   `wgt.dll` 2.0 without Dear ImGui, then removing `third_party/imgui` (REWRITE.md section 15).

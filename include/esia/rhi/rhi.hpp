@@ -169,7 +169,18 @@ namespace esia::rhi
         // Fx only, with Caps::fxFeatureVariants: the fx::Feature bits the batch's instances use - compile the FX
         // shader with ESIA_FX_FEATURES = this mask (the rest of the shader is gone). 0 = every feature.
         std::uint32_t fxFeatures = 0;
+        // The renderer can draw with another pipeline until this one is built (it sets this for FX variants): with
+        // Caps::asyncPipelines the backend may compile it off the render thread and return a handle that stays
+        // Pending (Device::GetPipelineStatus) meanwhile. Without the cap it is ignored.
+        bool background = false;
         bool operator==(const PipelineDesc&) const = default;
+    };
+
+    enum class PipelineStatus : std::uint8_t
+    {
+        Ready,     // may be bound
+        Pending,   // a background pipeline still compiling: never bound
+        Failed,    // a background pipeline that could not be built: never bound, never ready
     };
 
     // ------------------------------------------------------------------ binding model
@@ -196,6 +207,12 @@ namespace esia::rhi
         // API specific recording context the host renders with (ID3D12GraphicsCommandList*, VkCommandBuffer,
         // id<MTLCommandBuffer>, IDirect3DDevice9* ...); null for backends that own their context (GL, D3D11).
         void* nativeContext = nullptr;
+        // The host's frame number, for backends that record into the host's command list / buffer and cannot fence
+        // the host's work (D3D12, Vulkan with nativeContext): they recycle a per-frame slot (upload ring,
+        // descriptors, queries) `framesInFlight` host frames later, not device frames. Device frames with the same
+        // non-zero number share one slot - a host that renders several targets per frame (one Renderer::Render
+        // each) passes the same number to each of them; 0 = every BeginFrame is a frame of its own.
+        std::uint64_t hostFrame = 0;
     };
 
     // GPU time per category (non-blocking timestamps, read a few frames later).
@@ -209,6 +226,8 @@ namespace esia::rhi
         Count
     };
 
+    // categoryMs can be approximate where the API only timestamps whole passes (Metal on Apple GPUs samples at
+    // encoder boundaries: categories sharing a render pass are split by their draw counts); totalMs is exact.
     struct GpuProfile
     {
         bool valid = false;
@@ -254,6 +273,11 @@ namespace esia::rhi
         // The backend builds Fx pipelines specialized to PipelineDesc::fxFeatures (runtime compilation of the FX
         // shader with ESIA_FX_FEATURES): for shader models that cannot hold the whole shader (SM3), or for speed.
         bool fxFeatureVariants = false;
+        // The backend may build PipelineDesc::background pipelines off the render thread (GetPipelineStatus). The
+        // renderer then draws an FX batch whose variant is still compiling with a ready variant that covers its
+        // features, else with the full shader, and switches when the variant is ready: no frame waits for a
+        // variant (Direct3D 9 compiles one for up to seconds). Optional.
+        bool asyncPipelines = false;
         int maxTextureSize = 4096;
         int maxFxDataWidth = 4096;      // FxStorage::Texture: width of the instance texture in texels
     };
@@ -278,6 +302,9 @@ namespace esia::rhi
         virtual void DestroyBuffer(Buffer buf) = 0;
         virtual Pipeline CreatePipeline(const PipelineDesc& desc) = 0;
         virtual void DestroyPipeline(Pipeline p) = 0;
+        // Pending while a PipelineDesc::background pipeline compiles (Caps::asyncPipelines), Failed when it could not
+        // be built. Backends that build every pipeline in CreatePipeline keep this default.
+        virtual PipelineStatus GetPipelineStatus(Pipeline) const { return PipelineStatus::Ready; }
 
         // ---- frame
         virtual bool BeginFrame(const FrameDesc& desc) = 0;
@@ -315,5 +342,11 @@ namespace esia::rhi
         // ---- readback (Caps::readback): RGBA8 rows, top row first, whatever the texture format.
         // Waits for the GPU: tests and screenshots only.
         virtual bool ReadPixels(Texture tex, const IRect& rect, std::vector<std::uint8_t>& rgba8) = 0;
+
+        // ---- validation: how many messages at warning or error level the API's validation reported since the
+        // device was created (the D3D debug layers, the Vulkan validation layer, GL KHR_debug; the null device
+        // counts its contract violations); 0 when there is no validation or it is off. The conformance suite
+        // fails a scene whose device reports any after its readback.
+        virtual std::uint32_t ValidationErrors() const { return 0; }
     };
 }
