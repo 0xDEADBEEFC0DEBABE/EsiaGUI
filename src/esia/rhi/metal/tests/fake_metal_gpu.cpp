@@ -29,7 +29,8 @@ namespace esia::rhi::metal::test
         }
     }
 
-    FakeMetalGpu::FakeMetalGpu(Options o) : options_(std::move(o)), shared_(std::make_shared<Shared>()) {}
+    // not make_shared: see MetalDevice's constructor
+    FakeMetalGpu::FakeMetalGpu(Options o) : options_(std::move(o)), shared_(new Shared) {}
 
     FakeMetalGpu::~FakeMetalGpu()
     {

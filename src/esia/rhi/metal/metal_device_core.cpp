@@ -27,7 +27,9 @@ namespace esia::rhi::metal
     MetalDevice::MetalDevice(std::unique_ptr<Gpu> gpu, const DeviceOptions& options)
         : gpu_(std::move(gpu)),
           options_(options),
-          tracker_(std::make_shared<FrameTracker>()),
+          // not make_shared: its control block compares type_info, which clang with mingw-w64's libstdc++ 13 defines
+          // twice (a duplicate symbol at link time in the Windows cross builds that compile this file)
+          tracker_(new FrameTracker),
           staging_(StagingArena::Callbacks{[this](std::size_t bytes) { return gpu_->CreateBuffer(bytes, "esia-staging"); },
                                            [this](std::uint32_t b) { return gpu_->BufferContents(b); },
                                            [this](std::uint32_t b) { gpu_->ReleaseBuffer(b); }})

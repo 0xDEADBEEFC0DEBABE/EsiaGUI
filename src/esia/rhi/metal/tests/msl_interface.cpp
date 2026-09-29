@@ -1,6 +1,7 @@
 // Metal backend tests: parser of the generated MSL's resource interface (see msl_interface.hpp).
 #include "msl_interface.hpp"
-#include <regex>
+#include <cctype>
+#include <cstring>
 
 namespace esia::rhi::metal::test
 {
@@ -49,6 +50,28 @@ namespace esia::rhi::metal::test
             }
             return true;
         }
+
+        // "buffer(N)" / "texture(N)" / "sampler(N)"
+        bool ParseBinding(const std::string& attr, MslResource& r)
+        {
+            const std::size_t open = attr.find('(');
+            if (open == std::string::npos || attr.back() != ')' || open + 2 > attr.size() - 1)
+                return false;
+            const std::string kind = attr.substr(0, open), digits = attr.substr(open + 1, attr.size() - open - 2);
+            for (char c : digits)
+                if (!std::isdigit((unsigned char)c))
+                    return false;
+            if (kind == "buffer")
+                r.kind = MslResource::Buffer;
+            else if (kind == "texture")
+                r.kind = MslResource::Texture;
+            else if (kind == "sampler")
+                r.kind = MslResource::Sampler;
+            else
+                return false;
+            r.index = std::stoi(digits);
+            return true;
+        }
     }
 
     const MslResource* MslInterface::Find(MslResource::Kind kind, int index) const
@@ -70,16 +93,23 @@ namespace esia::rhi::metal::test
     MslInterface ParseMsl(const std::string& src)
     {
         MslInterface m;
-        std::smatch match;
-        static const std::regex entry(R"((vertex|fragment)\s+\w+\s+esia_main\s*\()");
-        if (!std::regex_search(src, match, entry))
+        // `vertex|fragment <type> esia_main(`
+        const std::size_t at = src.find(" esia_main(");
+        if (at == std::string::npos)
         {
             m.error = "no esia_main entry point";
             return m;
         }
-        m.vertex = match[1] == "vertex";
+        const std::size_t line = src.rfind('\n', at) + 1;
+        const std::string qualifier = src.substr(line, src.find(' ', line) - line);
+        if (qualifier != "vertex" && qualifier != "fragment")
+        {
+            m.error = "esia_main is not a vertex or fragment function";
+            return m;
+        }
+        m.vertex = qualifier == "vertex";
         // the parameter list: up to the parenthesis that closes esia_main(
-        std::size_t pos = (std::size_t)match.position(0) + (std::size_t)match.length(0);
+        std::size_t pos = at + std::strlen(" esia_main(");
         int depth = 1;
         std::size_t end = pos;
         for (; end < src.size() && depth > 0; ++end)
@@ -110,7 +140,6 @@ namespace esia::rhi::metal::test
         if (!Trim(params).empty())
             list.push_back(params.substr(start));
 
-        static const std::regex bound(R"(^(buffer|texture|sampler)\((\d+)\)$)");
         for (const std::string& p : list)
         {
             std::string type, name, attr;
@@ -119,12 +148,9 @@ namespace esia::rhi::metal::test
                 m.error = "cannot parse parameter '" + Trim(p) + "'";
                 return m;
             }
-            std::smatch b;
-            if (std::regex_match(attr, b, bound))
+            MslResource r;
+            if (ParseBinding(attr, r))
             {
-                MslResource r;
-                r.kind = b[1] == "buffer" ? MslResource::Buffer : b[1] == "texture" ? MslResource::Texture : MslResource::Sampler;
-                r.index = std::stoi(b[2]);
                 r.type = type;
                 r.name = name;
                 m.resources.push_back(r);
