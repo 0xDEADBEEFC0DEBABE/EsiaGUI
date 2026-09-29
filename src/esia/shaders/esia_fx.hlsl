@@ -158,7 +158,7 @@ FxPSIn FxVS(FxVSIn v)
         mx = min(mx, halo.zw + 1.0);
     }
     float2 c = float2(ESIA_HAS(v.vid, 1u) ? mx.x : mn.x, ESIA_HAS(v.vid, 2u) ? mx.y : mn.y);
-    o.pos = float4(c * gXform.xy + gXform.zw, 0.0, 1.0);
+    o.pos = ESIA_CLIP_POSITION(float4(c * gXform.xy + gXform.zw, 0.0, 1.0));
     o.local = c;
     return o;
 }

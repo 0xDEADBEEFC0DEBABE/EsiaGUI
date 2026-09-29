@@ -14,7 +14,7 @@ FsOut FullscreenVS(ESIA_VERTEX_ID(vid))
     float2 uv = float2(ESIA_HAS(vid, 1u) ? 2.0 : 0.0, ESIA_HAS(vid, 2u) ? 2.0 : 0.0);   // (0,0) (2,0) (0,2)
     o.uv = uv;
     // gXform.y's sign carries the API's clip-space y direction (Caps::clipSpaceYDown)
-    o.pos = float4(uv * float2(2.0, gXform.y < 0.0 ? -2.0 : 2.0) + float2(-1.0, gXform.y < 0.0 ? 1.0 : -1.0), 0.0, 1.0);
+    o.pos = ESIA_CLIP_POSITION(float4(uv * float2(2.0, gXform.y < 0.0 ? -2.0 : 2.0) + float2(-1.0, gXform.y < 0.0 ? 1.0 : -1.0), 0.0, 1.0));
     return o;
 }
 

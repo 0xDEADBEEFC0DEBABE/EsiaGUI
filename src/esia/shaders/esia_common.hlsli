@@ -61,6 +61,9 @@
 #define ESIA_FLAT nointerpolation                         // integer varyings (the FX instance index)
 #define ESIA_FLAT_UINT(v) (v)                             // ... read in the pixel shader
 #endif
+#ifndef ESIA_CLIP_POSITION
+#define ESIA_CLIP_POSITION(p) (p)                         // every SV_Position a vertex shader writes (SM3: half pixel)
+#endif
 
 ESIA_CBUFFER(WgtFrame, b0, 0)
 {

@@ -5,11 +5,16 @@
 // OpenGL 3.3 / GLES 3, Vulkan and Metal can all implement it (docs/backends/README.md maps every call).
 //
 // Model
-//   * Resources are opaque handles (Texture, Buffer, Pipeline); 0 = none. Creation / destruction happens on the
-//     render thread; a backend with frames in flight defers the release until the GPU is done.
-//   * A frame is BeginFrame .. EndFrame. Every Update* of a frame happens BEFORE its first BeginPass; after that
-//     the frame's resources are immutable (backends with frames in flight version them in a ring). Constants are
-//     the exception: SetConstants is inline and versioned by the backend (ring / push / root constants).
+//   * Resources are opaque handles (Texture, Buffer, Pipeline); 0 = none. Every call comes from one thread (the
+//     renderer's). A backend with frames in flight defers the release of a destroyed resource until the GPU is done.
+//   * A frame is BeginFrame .. EndFrame (one Renderer::Render). Textures and buffers are created, updated and
+//     destroyed outside frames or before the frame's first BeginPass - never after it; the frame's resources are
+//     then immutable (backends with frames in flight version them in a ring). Pipelines may be created at any
+//     time, inside passes too. Constants are inline: SetConstants is versioned by the backend (ring / push / root
+//     constants) and every draw sees the values set last.
+//   * A texture is never sampled in the pass that renders into it (the null device checks it); after its pass a
+//     render target may be sampled or copied. So a Vulkan backend can leave every sampleable target in
+//     SHADER_READ_ONLY at the end of its pass and transition only at BeginPass / CopyTexture.
 //   * Drawing happens inside passes: BeginPass(target, load op) .. EndPass. CopyTexture only outside passes.
 //     A pass keeps its target bound; the renderer ends and restarts passes around backdrop captures. The viewport
 //     is always the whole target. Every pass starts with NOTHING bound (pipeline, textures, buffers, constants,
@@ -233,7 +238,7 @@ namespace esia::rhi
         bool clipSpaceYDown = false;
         // Direct3D 9: pixel centers sit on integer coordinates and VPOS holds integers. The renderer sets gConv.y =
         // 0.5 (WgtPixelPos then returns pixel centers); the backend's SM3 shader prelude moves clip-space positions
-        // by half a pixel of the current target (docs/backends/README.md, "Direct3D 9").
+        // by half a pixel of the current target through ESIA_CLIP_POSITION (docs/backends/README.md, "Direct3D 9").
         bool halfPixelOffset = false;
         // Sub-pixel text needs dual-source blending; without it sub-pixel glyph pages are drawn with the grayscale
         // coverage kept in their alpha (TextLcdGray).

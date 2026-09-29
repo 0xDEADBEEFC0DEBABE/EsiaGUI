@@ -19,7 +19,7 @@ struct UiPSIn
 UiPSIn UiVS(UiVSIn v)
 {
     UiPSIn o;
-    o.pos = float4(v.pos * gXform.xy + gXform.zw, 0.0, 1.0);
+    o.pos = ESIA_CLIP_POSITION(float4(v.pos * gXform.xy + gXform.zw, 0.0, 1.0));
     o.col = v.col;
     o.uv = v.uv;
     return o;
