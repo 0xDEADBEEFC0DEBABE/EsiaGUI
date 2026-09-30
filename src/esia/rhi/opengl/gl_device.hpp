@@ -8,7 +8,7 @@
 //     textures remember whether their rows are in GL's order (rendered or copied) or top row first (uploaded);
 //   * texture unit n = RHI slot n, with the program's sampler object on it (each program's GLSL names the sampler
 //     of every slot); unit kScratchUnit is the backend's own for uploads, so the slot bindings survive them;
-//   * constants go through one uniform-buffer ring bound with glBindBufferRange at binding points 0 / 1 / 2;
+//   * constants: one uniform buffer per slot at binding points 0 / 1 / 2, its store replaced by each update;
 //   * GL keeps an object alive while queued commands use it, so destruction is immediate.
 #pragma once
 #include "esia/rhi/opengl.hpp"
@@ -206,7 +206,6 @@ namespace esia::rhi::opengl
         bool debugOutput_ = false;         // our KHR_debug callback is installed
         bool disjointQuery_ = false;       // GL_GPU_DISJOINT_EXT can be read (GLES timer queries)
         int maxSamples_ = 1;
-        GLint uboAlign_ = 256;
         std::uint32_t errors_ = 0;
 
         std::uint32_t next_ = 1;
@@ -221,10 +220,7 @@ namespace esia::rhi::opengl
 
         GLuint samplers_[2] = {};   // linear clamp, point clamp
         GLuint uiVao_ = 0, emptyVao_ = 0;
-        GLuint ubo_ = 0;
-        GLintptr uboSize_ = 0, uboOffset_ = 0;
-        std::uint8_t lastConstants_[3][256] = {};
-        std::uint32_t lastConstantSize_[3] = {};
+        GLuint ubo_[3] = {};   // constants: frame, pass, draw
 
         // frame / pass
         bool inFrame_ = false, inPass_ = false, hostTouched_ = false;

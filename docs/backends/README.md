@@ -337,8 +337,9 @@ and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature 
   all 256 levels); see `esia-opengl`'s STATUS. GLES resolves a multisampled source only into the identical rectangle
   and format: resolve into a temporary of the source's format and size first when the destination position or
   format differs.
-* Constants: a UBO ring with `glBindBufferRange` (respect `GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT`); two VAOs (UI
-  layout, empty for id-only programs).
+* Constants: a UBO per slot, orphaned by each update (`glBufferData`). Not `glBufferSubData` into a shared ring:
+  NVIDIA's driver waits for the draws reading a buffer before `glBufferSubData` writes any of it, a GPU drain per
+  draw. Two VAOs (UI layout, empty for id-only programs).
 * Draws: `glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_INT, first * 4)`, `glDrawArraysInstanced(GL_TRIANGLE_STRIP,
   0, 4, n)`, `glDrawArrays(GL_TRIANGLES, 0, 3)`. Blend with `glBlendFuncSeparate`.
 * `ReadPixels`: `glReadPixels` of the rows `h - y1 .. h - y0`, flipped to top-first; multisampled targets blit to a
