@@ -1,21 +1,12 @@
 // glass_window - what the example draws: a wallpaper and liquid-glass cards through esia::Painter, and two core
 // windows (dragged by their empty area, resized from their edges) holding a button and a text field.
 #pragma once
-#include "esia/core/context.hpp"
+#include "app.hpp"
 #include "esia/text/text.hpp"
 #include <string>
 
 namespace glass
 {
-    struct SceneInfo
-    {
-        const char* api = "";
-        std::string adapter;
-        int width = 0, height = 0;   // pixels
-        float scale = 1.0f;          // pixels per UI unit
-        float fps = 0.0f;
-    };
-
     class Scene
     {
     public:

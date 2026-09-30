@@ -7,6 +7,7 @@
 #   esia_text      text interface, the analytic glyph rasterizer, the glyph atlas and the system font lookup
 #   esia_text_ft   FreeType + HarfBuzz text system (ESIA_TEXT_FREETYPE; ESIA_TEXT_DEPS=auto|bundled|system)
 #   esia_rhi_<n>   one target per backend, from src/esia/rhi/<n>/ (ESIA_BACKEND_<N>)
+#   esia_ui        the widget layer: theme, springs, styles, auto layout, controls, containers
 #   esia_platform_win32   the Win32 platform layer: input, IME, DPI, cursor, clipboard (ESIA_PLATFORM_WIN32)
 cmake_minimum_required(VERSION 3.24)
 include(CMakeDependentOption)
@@ -127,6 +128,19 @@ if(ESIA_TEXT_FREETYPE)
     add_library(esia::text_ft ALIAS esia_text_ft)
     message(STATUS "Esia text: ${ESIA_TEXT_DEPS_VERSIONS}")
 endif()
+
+# ------------------------------------------------------------------ widgets
+# The widget layer (include/esia/ui): theme, springs, styles, auto layout, controls and containers drawn with Painter.
+add_library(esia_ui STATIC
+    ui/theme.cpp
+    ui/anim.cpp
+    ui/ui.cpp
+    ui/controls.cpp
+    ui/layout.cpp
+    ui/containers.cpp)
+target_link_libraries(esia_ui PUBLIC esia_render esia_text)
+esia_target_defaults(esia_ui)
+add_library(esia::ui ALIAS esia_ui)
 
 # ------------------------------------------------------------------ platform layers
 # They depend on the core only (docs/REWRITE.md, "Platform layer"); each is on by default where its OS is.

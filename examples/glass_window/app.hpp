@@ -1,0 +1,54 @@
+// glass_window - the frame the examples run in: options, the window thread, the render thread with its device,
+// Context, text system and frame loop, screenshots. An example gives what it draws per frame (App).
+//
+//   <example>.exe [--api d3d9|d3d10|d3d11|d3d12|opengl|vulkan] [--size 1280x800] [--vsync on|off] [--debug]
+//                 [--fixed-dt 0.016667] [--frames N] [--screenshot out.png] [--font file.ttf]... <the example's own>
+//
+//   --size          client area in UI units (pixels at 100 % scale; the window grows with the monitor's scale)
+//   --frames N      quit after N frames; with --screenshot, the last one is read back from the swap chain image
+//   --fixed-dt s    the UI clock advances s seconds per frame (deterministic screenshots)
+//   --debug         the API's debug / validation layer; its message count is printed at exit (exit code 3 if any)
+//   --font          font files, the first the main one, the others fallbacks (default: Segoe UI + Microsoft YaHei);
+//                   for examples that load their own fonts, passed on to them
+//
+// Threads, as a game has them: the main thread creates the window and pumps its messages (window thread); a render
+// thread owns the device, the Context and the frame loop. Input crosses over through Context::QueueInput, so moving
+// or resizing the window never stalls rendering (esia/platform/win32.hpp, "Threading rules").
+#pragma once
+#include "esia/core/context.hpp"
+#include "esia/text/text.hpp"
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace glass
+{
+    struct SceneInfo
+    {
+        const char* api = "";
+        std::string adapter;
+        int width = 0, height = 0;   // pixels
+        float scale = 1.0f;          // pixels per UI unit
+        float fps = 0.0f;
+    };
+
+    struct App
+    {
+        const char* name = "glass_window";
+        // true: the frame loads the fonts (--font, else Segoe UI + Microsoft YaHei) and calls TextSystem::NewFrame;
+        // false: the example does both (esia::ui::Ui does)
+        bool loadFonts = true;
+        // Options the frame does not know ("--demo name"): true when consumed (then `value`, if not null, was too).
+        std::function<bool(const std::string& option, const char* value, bool& usedValue)> option;
+        // On the render thread, once the Context and the text system exist (text is null when built without it or
+        // when no font loaded). `font` is the main font the frame loaded (0 with loadFonts = false); `fonts` are the
+        // --font files.
+        std::function<void(esia::Context& ctx, esia::text::TextSystem* text, esia::text::FontId font, const std::vector<std::string>& fonts)> init;
+        // Every frame, between Context::NewFrame and EndFrame.
+        std::function<void(esia::Context& ctx, const SceneInfo& info)> frame;
+        // Before the Context goes away.
+        std::function<void()> shutdown;
+    };
+
+    int RunApp(int argc, char** argv, App& app);
+}

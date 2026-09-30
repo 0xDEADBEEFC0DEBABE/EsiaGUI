@@ -29,6 +29,9 @@ esia_add_test(esia_render_tests
     render/test_renderer.cpp)
 target_link_libraries(esia_render_tests PRIVATE esia::render)
 
+esia_add_test(esia_ui_tests ui/test_ui.cpp)
+target_link_libraries(esia_ui_tests PRIVATE esia::ui)
+
 # test kit: PNG files and tolerant image comparison (the conformance suite's goldens)
 add_library(esia_testkit STATIC support/image.cpp)
 target_include_directories(esia_testkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/support)

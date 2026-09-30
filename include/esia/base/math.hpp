@@ -98,6 +98,9 @@ namespace esia
 
         constexpr Color WithAlpha(float na) const { return {r, g, b, na}; }
         constexpr Color Fade(float k) const { return {r, g, b, a * k}; }
+        // toward white / black by `k` (0..1), alpha kept
+        constexpr Color Lighter(float k) const { return {r + (1 - r) * k, g + (1 - g) * k, b + (1 - b) * k, a}; }
+        constexpr Color Darker(float k) const { return {r * (1 - k), g * (1 - k), b * (1 - k), a}; }
         constexpr float Luminance() const { return 0.2126f * r + 0.7152f * g + 0.0722f * b; }
         constexpr bool IsVisible() const { return a > 0.0005f; }
         // Packed for vertices: R in the lowest byte (memory order R, G, B, A = the RGBA8_UNORM vertex format).

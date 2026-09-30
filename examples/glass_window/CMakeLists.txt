@@ -7,7 +7,8 @@ if(NOT TARGET esia_platform_win32)
 endif()
 
 # one host file per API whose backend is built: GLASS_<API> tells host.cpp which ones exist
-set(_sources main.cpp host.cpp scene.cpp ${ESIA_ROOT}/tests/support/image.cpp)   # the test kit's PNG writer
+# glass_app: the frame the examples run in (app.hpp: options, window and render threads, the hosts, screenshots)
+set(_sources app.cpp host.cpp ${ESIA_ROOT}/tests/support/image.cpp)   # the test kit's PNG writer
 set(_libs)
 set(_defs)
 if(TARGET esia_rhi_d3d10 OR TARGET esia_rhi_d3d11 OR TARGET esia_rhi_d3d12)
@@ -47,9 +48,14 @@ if(TARGET esia_text_ft)
     list(APPEND _defs GLASS_TEXT)
 endif()
 
-add_executable(glass_window ${_sources})
-target_include_directories(glass_window PRIVATE ${ESIA_ROOT}/tests/support)
-target_link_libraries(glass_window PRIVATE esia::render esia_platform_win32 ${_libs})
-target_compile_definitions(glass_window PRIVATE ${_defs} UNICODE _UNICODE _WIN32_WINNT=0x0A00)
-esia_target_defaults(glass_window)
+add_library(glass_app STATIC ${_sources})
+target_include_directories(glass_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/support)
+target_link_libraries(glass_app PUBLIC esia::render esia_platform_win32 ${_libs})
+target_compile_definitions(glass_app PRIVATE ${_defs})
+target_compile_definitions(glass_app PUBLIC UNICODE _UNICODE _WIN32_WINNT=0x0A00)
+esia_target_defaults(glass_app)
 message(STATUS "glass_window: ${_defs}")
+
+add_executable(glass_window main.cpp scene.cpp)
+target_link_libraries(glass_window PRIVATE glass_app)
+esia_target_defaults(glass_window)

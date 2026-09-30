@@ -27,6 +27,11 @@ lookup and a fallback chain per platform cover Chinese, Japanese and Korean; CJK
 **UI core v2** (branch `feat/ui-core-v2`): the UI core reworked for the widget port; the design is
 [UI_CORE.md](UI_CORE.md).
 
+**Widget layer, first part** (branch `feat/ui-foundation`, 2026-09-30): `esia_ui` with WGT's theme, springs,
+styles, text, controls, cards, windows and auto layout, and the `showcase` example. How to use it and what of WGT
+is left: [UI_WIDGETS.md](UI_WIDGETS.md).
+
+* [Widget layer, first part](#widget-layer-first-part-featui-foundation)
 * [UI core v2](#ui-core-v2)
 * [Text on every platform](#text-on-every-platform-feattext-everywhere)
 * [0. Round 3: sub-pixel text removed](#0-round-3-sub-pixel-text-removed)
@@ -39,6 +44,34 @@ lookup and a fallback chain per platform cover Chinese, Japanese and Korean; CJK
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Widget layer, first part (`feat/ui-foundation`)
+
+Branch from `main` at `e43ea9f`, written by the local session. What is ported, how it maps onto the core and what
+is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 9.
+
+| Part | Files |
+| --- | --- |
+| the widget layer | `include/esia/ui` (`theme.hpp`, `anim.hpp`, `icons.hpp`, `ui.hpp`), `src/esia/ui` (`theme`, `anim`, `ui` with the style resolution, `controls`, `layout`, `containers`) |
+| `Color::Lighter` / `Darker` | `include/esia/base/math.hpp` |
+| the example frame | `examples/glass_window`: options, the window and render threads and screenshots moved from `main.cpp` into the `glass_app` library (`app.hpp`, `app.cpp`), so other examples share them |
+| the showcase | `examples/showcase` |
+| tests | `tests/ui/test_ui.cpp` (`esia_ui_tests`) |
+
+### Verified on Windows (the local session)
+
+* Clean builds of every backend with `ESIA_WERROR`, clang-cl 22.1.8 and MSVC 19.44: 36 of 36 tests pass with each,
+  `esia_ui_tests` included (Metal's two conformance tests skip on Windows, as before).
+* `showcase` with `--debug` on D3D11 (light) and D3D12 (dark): no debug-layer message, and every widget of
+  [UI_WIDGETS.md](UI_WIDGETS.md) section 8 renders.
+* `glass_window` after its frame moved into `glass_app`: D3D11, Vulkan and OpenGL with `--debug`, no message.
+
+### Not verified
+
+* Linux and macOS: `esia_ui` has no platform code and builds with the core there, but `showcase` needs the Win32
+  platform layer (`glass_app`), so nothing of it renders in CI.
+* Use by hand: the tests drive input by script, and the screenshots are of fixed frames. Dragging windows and
+  sliders, and the springs at a real frame rate, were only looked at, not checked.
 
 ## UI core v2
 
