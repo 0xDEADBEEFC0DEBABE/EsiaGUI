@@ -22,12 +22,12 @@ texture t5 #3
 texture t6 #3
 fx buffer #6
 constants draw: 0 0 0 0 | 0 0 0 0
-draw instanced 4 x 1
+draw instanced 4 x 3
 scissor [10,10 140x100]
-constants draw: 0 0 0 0 | 1 0 0 0
+constants draw: 0 0 0 0 | 3 0 0 0
 draw instanced 4 x 1
 scissor [60,40 90x70]
-constants draw: 0 0 0 0 | 2 0 0 0
+constants draw: 0 0 0 0 | 4 0 0 0
 draw instanced 4 x 1
 create pipeline #8 UiGeometry list straight RGBA8_UNORM
 pipeline #8
@@ -37,11 +37,9 @@ index buffer #5
 draw indexed 6 from 0
 pipeline #7
 scissor [170,10 140x100]
-constants draw: 0 0 0 0 | 3 0 0 0
+constants draw: 0 0 0 0 | 5 0 0 0
 draw instanced 4 x 1
 scissor [0,0 320x240]
-constants draw: 0 0 0 0 | 4 0 0 0
-draw instanced 4 x 2
 texture t0 #2
 constants draw: 0 0 0 0 | 6 0 0 0
 draw instanced 4 x 2

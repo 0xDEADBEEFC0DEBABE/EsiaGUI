@@ -1,4 +1,5 @@
-// Esia - frame planner (see esia/render/frame_plan.hpp). The batching and capture decisions are WGT's, unchanged.
+// Esia - frame planner (see esia/render/frame_plan.hpp). The capture decisions are WGT's; batching also joins draws
+// across others that touch different pixels, which WGT did not.
 #include "esia/render/frame_plan.hpp"
 #include "gpu_constants.hpp"
 #include <cfloat>
@@ -103,6 +104,10 @@ namespace esia::render
             o.blurPx = ops[(std::size_t)begin].layer.radius * scale;
             ops.push_back(o);
         }
+
+        constexpr int kJoinLookBack = 64;                         // ops searched for a batch to join
+        constexpr std::uint32_t kVertexBoundsMaxIndices = 1u << 14;   // larger geometry commands are bounded by their clip
+        constexpr std::uint32_t kNoPiece = 0xFFFFFFFFu;
     }
 
     void FramePlan::Build(const DrawData& dd, const TextureInfoFn& textureInfo)
@@ -111,6 +116,9 @@ namespace esia::render
         instances.clear();
         vertices.clear();
         indices.clear();
+        pieces_.clear();
+        opFirst_.clear();
+        opLast_.clear();
         anyGlass = false;
         anyLayer = false;
         fxCount = 0;
@@ -121,39 +129,62 @@ namespace esia::render
 
         const Mapper map{dd.displayPos, dd.framebufferScale};
 
-        // Pass 1: do we need precise bounds at all? (only glass capture planning and glow layers use them)
-        bool needBounds = false;
-        for (const DrawList* dl : dd.lists)
-        {
-            for (const DrawCmd& cmd : dl->Commands())
-            {
-                if (cmd.kind == DrawCmdKind::LayerBegin)
-                    needBounds = true;
-                else if (cmd.kind == DrawCmdKind::Fx)
-                    for (std::uint32_t i = cmd.first; i < cmd.first + cmd.count && !needBounds; ++i)
-                        needBounds = (dl->FxInstances()[i].flags[0] & (fx::kGlass | fx::kCustom)) != 0;
-                if (needBounds)
-                    break;
-            }
-            if (needBounds)
-                break;
-        }
-
         std::vector<int> layerStack;
         auto addToLayers = [&](const PxRect& b) {
             for (int li : layerStack)
                 ops[(std::size_t)li].bounds = ops[(std::size_t)li].bounds.Union(b);
         };
 
+        // What each op draws is a chain of pieces (runs of instances or indices), laid out op by op at the end: a
+        // draw that joins an earlier batch lands behind that batch's own instances or indices.
+        auto link = [&](int op, const Piece& piece) {
+            opFirst_.resize(ops.size(), kNoPiece);
+            opLast_.resize(ops.size(), kNoPiece);
+            const std::uint32_t last = opLast_[(std::size_t)op];
+            if (last != kNoPiece)
+            {
+                Piece& l = pieces_[last];   // continues the op's last piece: consecutive instances or indices of a list
+                if ((piece.inst && l.inst && l.inst + l.count == piece.inst) ||
+                    (piece.idx && l.idx && l.idx + l.count == piece.idx && l.base == piece.base))
+                {
+                    l.count += piece.count;
+                    return;
+                }
+            }
+            const std::uint32_t id = (std::uint32_t)pieces_.size();
+            pieces_.push_back(piece);
+            if (last == kNoPiece)
+                opFirst_[(std::size_t)op] = id;
+            else
+                pieces_[last].next = id;
+            opLast_[(std::size_t)op] = id;
+        };
+
+        // The batch a new draw joins: the latest op it is compatible with, as long as every op after that one touches
+        // other pixels - drawing the new one before them then changes nothing. Buttons and their labels alternate
+        // between FX instances and text; this draws the shapes of a window in few batches and its text in few draws.
+        // Glass (and user effects) keeps its place: it joins only the last op, nothing moves across it, and only the
+        // last op joins it, so the backdrop captures stay where they were and plain shapes do not take on the glass
+        // shader. Ops before a layer (it redirects drawing) or a callback (it draws what it likes) are never joined.
+        int barrier = 0;
+        auto findJoin = [&](const PxRect& reach, bool glass, const auto& compatible) {
+            const int n = (int)ops.size();
+            for (int k = n - 1; k >= barrier && k >= n - kJoinLookBack; --k)
+            {
+                const RenderOp& o = ops[(std::size_t)k];
+                if (compatible(o) && (k == n - 1 || !o.glass))
+                    return k;
+                if (glass || o.glass || o.bounds.Overlaps(reach))
+                    return -1;
+            }
+            return -1;
+        };
+
         for (const DrawList* dl : dd.lists)
         {
             const std::uint32_t vtxBase = (std::uint32_t)vertices.size();
-            const std::uint32_t idxBase = (std::uint32_t)indices.size();
             vertices.insert(vertices.end(), dl->Vertices().begin(), dl->Vertices().end());
-            for (std::uint32_t i : dl->Indices())
-                indices.push_back(i + vtxBase);
 
-            int openBatch = -1;
             float fade[4] = {0, 0, 0, 0};   // edge fade of this draw list (FadeBegin / FadeEnd)
             for (const DrawCmd& cmd : dl->Commands())
             {
@@ -209,18 +240,15 @@ namespace esia::render
                             anyGlass = true;
                         }
 
-                        bool append = openBatch >= 0 && openBatch == (int)ops.size() - 1;
-                        if (append)
+                        int k = findJoin(b, glass, [&](const RenderOp& o) {
+                            return o.type == RenderOp::FxBatch && o.clip == clip && o.texture == cmd.texture && o.effect == cmd.effect &&
+                                   std::equal(fade, fade + 4, o.fade) &&
+                                   // a glass shape must see what the batch already drew under it -> new batch (new capture)
+                                   !(glass && o.bounds.Overlaps(gRegion.Intersect(clip)));
+                        });
+                        if (k >= 0)
                         {
-                            const RenderOp& o = ops[(std::size_t)openBatch];
-                            append = o.clip == clip && o.texture == cmd.texture && o.effect == cmd.effect;
-                            // a glass shape must see what the batch already drew under it -> new batch (new capture)
-                            if (append && glass && o.bounds.Overlaps(gRegion.Intersect(clip)))
-                                append = false;
-                        }
-                        if (append)
-                        {
-                            RenderOp& o = ops[(std::size_t)openBatch];
+                            RenderOp& o = ops[(std::size_t)k];
                             ++o.instCount;
                             o.features |= in.flags[0];
                             o.bounds = o.bounds.Union(b);
@@ -246,7 +274,6 @@ namespace esia::render
                             std::copy(fade, fade + 4, o.fade);
                             o.texture = cmd.texture;
                             o.effect = cmd.effect;
-                            o.instStart = (std::uint32_t)instances.size();
                             o.instCount = 1;
                             o.features = in.flags[0];
                             o.glass = glass;
@@ -255,9 +282,9 @@ namespace esia::render
                             o.blurPx = glass ? blurPx : 0.0f;
                             o.readsLevel0 = glass && reads0;
                             ops.push_back(o);
-                            openBatch = (int)ops.size() - 1;
+                            k = (int)ops.size() - 1;
                         }
-                        instances.push_back(in);
+                        link(k, Piece{&in, nullptr, 1, 0, kNoPiece});
                         ++fxCount;
                         addToLayers(b);
                     }
@@ -270,12 +297,10 @@ namespace esia::render
                     fade[1] = (f.y1 - map.off.y) * map.scale.y;
                     fade[2] = f.top * map.scale.y;
                     fade[3] = f.bottom * map.scale.y;
-                    openBatch = -1;   // batches never mix fades
                     break;
                 }
                 case DrawCmdKind::FadeEnd:
                     fade[0] = fade[1] = fade[2] = fade[3] = 0.0f;
-                    openBatch = -1;
                     break;
                 case DrawCmdKind::LayerBegin:
                 {
@@ -285,7 +310,7 @@ namespace esia::render
                     ops.push_back(o);
                     layerStack.push_back((int)ops.size() - 1);
                     anyLayer = true;
-                    openBatch = -1;
+                    barrier = (int)ops.size();
                     break;
                 }
                 case DrawCmdKind::LayerEnd:
@@ -295,8 +320,8 @@ namespace esia::render
                         layerStack.pop_back();
                         CloseLayer(ops, begin, map.scale.x);
                         addToLayers(ops.back().bounds);
+                        barrier = (int)ops.size();
                     }
-                    openBatch = -1;
                     break;
                 case DrawCmdKind::Callback:
                 {
@@ -306,7 +331,7 @@ namespace esia::render
                     o.list = dl;
                     o.cmd = &cmd;
                     ops.push_back(o);
-                    openBatch = -1;
+                    barrier = (int)ops.size();
                     break;
                 }
                 case DrawCmdKind::Geometry:
@@ -322,11 +347,25 @@ namespace esia::render
                     if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
                         o.coverage = ti.Coverage();
                     o.idxCount = cmd.count;
-                    o.idxOffset = idxBase + cmd.first;
-                    o.bounds = needBounds ? VertexBounds(*dl, cmd, map).Intersect(clip) : clip;
-                    ops.push_back(o);
+                    o.bounds = cmd.count <= kVertexBoundsMaxIndices ? VertexBounds(*dl, cmd, map).Intersect(clip) : clip;
+                    if (o.bounds.Empty())
+                        break;   // nothing inside the clip
+                    int k = findJoin(o.bounds, false, [&](const RenderOp& x) {
+                        return x.type == RenderOp::Draw && x.clip == clip && x.texture == cmd.texture && x.coverage == o.coverage &&
+                               std::equal(fade, fade + 4, x.fade);
+                    });
+                    if (k >= 0)
+                    {
+                        ops[(std::size_t)k].idxCount += cmd.count;
+                        ops[(std::size_t)k].bounds = ops[(std::size_t)k].bounds.Union(o.bounds);
+                    }
+                    else
+                    {
+                        ops.push_back(o);
+                        k = (int)ops.size() - 1;
+                    }
+                    link(k, Piece{nullptr, dl->Indices().data() + cmd.first, cmd.count, vtxBase, kNoPiece});
                     addToLayers(o.bounds);
-                    openBatch = -1;
                     break;
                 }
                 }
@@ -339,6 +378,26 @@ namespace esia::render
             const int begin = layerStack.back();
             layerStack.pop_back();
             CloseLayer(ops, begin, map.scale.x);
+        }
+
+        // the instances and indices, batch by batch
+        opFirst_.resize(ops.size(), kNoPiece);
+        for (std::size_t k = 0; k < ops.size(); ++k)
+        {
+            RenderOp& o = ops[k];
+            if (o.type == RenderOp::FxBatch)
+                o.instStart = (std::uint32_t)instances.size();
+            else if (o.type == RenderOp::Draw)
+                o.idxOffset = (std::uint32_t)indices.size();
+            for (std::uint32_t p = opFirst_[k]; p != kNoPiece; p = pieces_[p].next)
+            {
+                const Piece& pc = pieces_[p];
+                if (pc.inst)
+                    instances.insert(instances.end(), pc.inst, pc.inst + pc.count);
+                else
+                    for (std::uint32_t i = 0; i < pc.count; ++i)
+                        indices.push_back(pc.idx[i] + pc.base);
+            }
         }
         if (anyGlass)
             PlanCaptures();

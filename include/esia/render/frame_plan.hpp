@@ -2,8 +2,10 @@
 //
 // Walks DrawData once and produces a flat list of render operations plus the frame's merged buffers:
 //   * geometry draws (indices rebased into one index buffer, vertex bounds for dirty tracking),
-//   * FX batches: consecutive instances sharing clip / texture / effect become ONE instanced draw, split whenever a
-//     glass shape would need to "see" something drawn earlier in the same batch,
+//   * FX batches: instances sharing clip / texture / effect become ONE instanced draw, split whenever a glass shape
+//     would need to "see" something drawn earlier in the same batch. A draw also joins an earlier batch (FX or
+//     geometry) when everything drawn since touches other pixels: the shapes and the text of a window alternate, and
+//     they become one batch of shapes and one draw of text,
 //   * glow-layer begin / end, edge fades (per-draw constants), host callbacks,
 //   * the backdrop captures: before which glass batch the backdrop is captured and over which region, how many
 //     pyramid levels it needs and whether the full-resolution level is read (PlanCaptures).
@@ -100,5 +102,15 @@ namespace esia::render
     private:
         // Decides before which glass batches the backdrop is captured and over which region (see .cpp).
         void PlanCaptures();
+
+        // Build's scratch: what each op draws, as a chain of runs of instances or indices (see .cpp).
+        struct Piece
+        {
+            const fx::Instance* inst = nullptr;   // FX batch: `count` instances from here
+            const std::uint32_t* idx = nullptr;   // draw: `count` indices from here, rebased by `base`
+            std::uint32_t count = 0, base = 0, next = 0;
+        };
+        std::vector<Piece> pieces_;
+        std::vector<std::uint32_t> opFirst_, opLast_;
     };
 }

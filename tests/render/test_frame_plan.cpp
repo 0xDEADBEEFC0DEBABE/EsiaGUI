@@ -50,9 +50,9 @@ ESIA_TEST(FramePlan, GeometryOfSeveralListsIsMergedAndRebased)
     b.AddRectFilled(Rect(20, 20, 30, 30), 0xFF0000FFu);
     FramePlan p;
     p.Build(Data({&a, &b}), {});
-    ESIA_CHECK(p.ops.size() == 2);
+    ESIA_CHECK(p.ops.size() == 1);   // same clip and texture, nothing between: one draw
     ESIA_CHECK(p.vertices.size() == 8 && p.indices.size() == 12);
-    ESIA_CHECK(p.ops[1].type == RenderOp::Draw && p.ops[1].idxOffset == 6 && p.ops[1].idxCount == 6);
+    ESIA_CHECK(p.ops[0].type == RenderOp::Draw && p.ops[0].idxOffset == 0 && p.ops[0].idxCount == 12);
     ESIA_CHECK(p.indices[6] == 4);   // b's first vertex follows a's four
     ESIA_CHECK(p.vertices[4].color == 0xFF0000FFu);
 }
@@ -76,6 +76,76 @@ ESIA_TEST(FramePlan, FxInstancesBatchUntilTheStateChanges)
     ESIA_CHECK(plan.ops[1].texture == 7 && plan.ops[1].instStart == 2);
     ESIA_CHECK(plan.ops[2].clip == (PxRect{0, 0, 200, 200}));
     ESIA_CHECK(!plan.anyGlass && plan.plannedCaptures == 0);
+}
+
+ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)
+{
+    // two buttons, each a shape with a label on it (a white rectangle stands in for the text)
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
+    dl.AddRectFilled(Rect(30, 25, 90, 35), 0xFFFFFFFFu);
+    p.Rect(Rect(150, 10, 250, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
+    dl.AddRectFilled(Rect(170, 25, 230, 35), 0xFFFFFFFFu);
+    FramePlan plan;
+    plan.Build(Data({&dl}), {});
+    ESIA_CHECK(plan.ops.size() == 2);   // both shapes, then both labels
+    ESIA_CHECK(plan.ops[0].type == RenderOp::FxBatch && plan.ops[0].instStart == 0 && plan.ops[0].instCount == 2);
+    ESIA_CHECK(plan.ops[1].type == RenderOp::Draw && plan.ops[1].idxOffset == 0 && plan.ops[1].idxCount == 12);
+    ESIA_CHECK(plan.instances[0].rect[0] == 10.0f && plan.instances[1].rect[0] == 150.0f);   // each in drawing order
+    ESIA_CHECK(plan.vertices[plan.indices[0]].pos.x == 30.0f && plan.vertices[plan.indices[6]].pos.x == 170.0f);
+
+    // a shape over the first label stays after it
+    DrawList d2;
+    d2.Reset(Rect(0, 0, 400, 300));
+    Painter q(d2);
+    q.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
+    d2.AddRectFilled(Rect(30, 25, 90, 35), 0xFFFFFFFFu);
+    q.Rect(Rect(80, 20, 120, 40), Style().Fill(Color::Hex(0xC03060)));
+    FramePlan plan2;
+    plan2.Build(Data({&d2}), {});
+    ESIA_CHECK(plan2.ops.size() == 3);
+    ESIA_CHECK(plan2.ops[1].type == RenderOp::Draw && plan2.ops[2].type == RenderOp::FxBatch);
+
+    // nothing joins a batch across a callback
+    DrawList d3;
+    d3.Reset(Rect(0, 0, 400, 300));
+    Painter r(d3);
+    r.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)));
+    d3.AddCallback([](const DrawList&, const DrawCmd&, void*) {}, nullptr);
+    r.Rect(Rect(150, 10, 250, 50), Style().Fill(Color::Hex(0x3060C0)));
+    FramePlan plan3;
+    plan3.Build(Data({&d3}), {});
+    ESIA_CHECK(plan3.ops.size() == 3 && plan3.ops[2].type == RenderOp::FxBatch && plan3.ops[2].instStart == 1);
+}
+
+ESIA_TEST(FramePlan, GlassKeepsItsPlace)
+{
+    // a shape, a label, a glass panel, another label - all apart. The second label joins the first unless the glass
+    // lies between them: nothing moves across glass (its backdrop capture stays where it was)
+    for (const bool glass : {true, false})
+    {
+        DrawList dl;
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl);
+        p.Rect(Rect(0, 0, 60, 60), Style().Fill(Color::Hex(0x336699)));
+        dl.AddRectFilled(Rect(100, 10, 140, 20), 0xFFFFFFFFu);
+        const Style panel = glass ? Style().Radius(12).Glass(Frosted()) : Style().Radius(12).Fill(Color::Hex(0x808080));
+        p.Rect(Rect(200, 100, 290, 160), panel);
+        dl.AddRectFilled(Rect(100, 250, 140, 260), 0xFFFFFFFFu);
+        FramePlan plan;
+        plan.Build(Data({&dl}), {});
+        if (glass)
+        {
+            ESIA_CHECK(plan.ops.size() == 4 && plan.ops[2].glass && plan.ops[3].type == RenderOp::Draw);
+            ESIA_CHECK(plan.ops[0].instCount == 1);   // the glass did not join the first shape either
+        }
+        else
+        {
+            ESIA_CHECK(plan.ops.size() == 2 && plan.ops[0].instCount == 2 && plan.ops[1].idxCount == 12);
+        }
+    }
 }
 
 ESIA_TEST(FramePlan, GlassOnGlassRecapturesButNeighboursShare)

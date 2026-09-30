@@ -345,7 +345,7 @@ ESIA_TEST(Renderer, IndicesAreRebased)
         std::memcpy(idx, ib->data(), sizeof(idx));
         ESIA_CHECK(idx[0] == 0 && idx[6] == 4 && idx[8] == 6);
     }
-    ESIA_CHECK(Lines(s.dev, "draw indexed 6 from 6") == 1);
+    ESIA_CHECK(Lines(s.dev, "draw indexed 12 from 0") == 1);   // same clip and texture: one draw for both lists
 }
 
 ESIA_TEST(Renderer, CallbacksGetTheNativeStateAndStateIsRebound)
@@ -686,11 +686,10 @@ ESIA_TEST(Renderer, ProfileScopesAreBoundedOrOff)
     Setup s(caps);
     DrawList dl = MakeList();
     Painter p(dl);
-    for (int i = 0; i < 40; ++i)   // geometry and FX alternating: 80 runs
+    for (int i = 0; i < 40; ++i)   // geometry and FX alternating on the same pixels (no batch joins another): 80 runs
     {
-        const float x = 5.0f + 9.0f * (float)i;
-        dl.AddRectFilled(Rect(x, 5, x + 4, 9), 0xFFFFFFFFu);
-        p.Rect(Rect(x, 20, x + 4, 24), Style().Fill(Color::White()));
+        dl.AddRectFilled(Rect(5, 5, 9, 9), 0xFFFFFFFFu);
+        p.Rect(Rect(5, 5, 9, 9), Style().Fill(Color::White()));
     }
     Renderer r(s.dev);
     r.Render(Data({&dl}), nullptr, s.target);
