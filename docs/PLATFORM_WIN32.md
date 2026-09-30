@@ -387,13 +387,10 @@ and the example use the first two; the example renders every frame, so it needs 
 
 ## 8. Known issues
 
-1. **mingw-w64 link, pre-existing on `main`**: `src/esia/rhi/d3d_common/d3d_util.hpp` uses `std::make_shared`, which
-   with clang + mingw-w64's libstdc++ 13 defines `std::type_info::operator==` next to libstdc++'s own
-   (`docs/backends/README.md` section 6). Every executable linking a D3D backend fails to link in
-   `windows-mingw-cross` (`esia_conformance`, the D3D and OpenGL backend tests) - reproduced on `origin/main`.
-   `glass_window` links with `-Wl,--allow-multiple-definition` (MinGW only, when a D3D backend is built), which
-   leaves one linker warning. The fix belongs to the backend (`std::shared_ptr<T>(new T)`) or to the toolchain
-   (`-D__GXX_TYPEINFO_EQUALITY_INLINE=0` in `clang-mingw.cmake`); once it is in, drop the option.
+1. **mingw-w64 link (fixed)**: `d3d_util.hpp`'s `Logger` used `std::make_shared`, which with clang + mingw-w64's
+   libstdc++ 13 defines `std::type_info::operator==` next to libstdc++'s own (`docs/backends/README.md` section 6), so
+   every executable linking a D3D backend failed to link in `windows-mingw-cross`. The CI branch fixed the backend
+   (`c90865d`, `std::shared_ptr<T>(new T)`), and `glass_window` no longer links with `--allow-multiple-definition`.
 2. **D3D12 under Wine**: Esia's root signature is refused (vkd3d). On Windows the host runs (section 5.1).
 3. The IME behavior is designed from the documentation, Chromium's and WGT's code, and checked only with synthetic
    messages: section 6.7 decides.

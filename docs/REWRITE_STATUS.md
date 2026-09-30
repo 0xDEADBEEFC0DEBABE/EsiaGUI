@@ -554,8 +554,12 @@ build/windows-mingw-cross/bin/esia_conformance.exe --backend d3d11 --golden test
 * **On Windows**: the LLVM installer (`clang-cl`, `lld-link` on `PATH`) plus the MSVC build tools and Windows SDK for
   the STL, CRT and headers; from an "x64 Native Tools Command Prompt":
   `cmake --preset windows-clang-cl && cmake --build --preset windows-clang-cl && ctest --preset windows-clang-cl`.
-  FreeType and HarfBuzz are built from source unless `CMAKE_PREFIX_PATH` points at an installation of both (e.g.
-  vcpkg's installed tree, with `-DESIA_TEXT_DEPS=system`). The local session used clang-cl 22.1.8 and MSVC 19.44.
+  FreeType and HarfBuzz are built from source unless an installation of both is found. For vcpkg's
+  (`vcpkg install freetype harfbuzz --triplet x64-windows`) use its toolchain file,
+  `-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake` (plus
+  `-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=cmake/toolchains/clang-cl-windows.cmake` for clang-cl) and
+  `-DESIA_TEXT_DEPS=system`: vcpkg's harfbuzz config breaks under a plain `CMAKE_PREFIX_PATH` (docs/CI.md). The local
+  session used clang-cl 22.1.8 and MSVC 19.44.
 * **From Linux, MSVC ABI** (`windows-cross`): `cargo install xwin --locked`, then
   `xwin --accept-license --arch x86_64 splat --output ~/.xwin` (needs download.visualstudio.microsoft.com),
   `cmake --preset windows-cross -DXWIN_DIR=$HOME/.xwin && cmake --build --preset windows-cross` (tests off: they

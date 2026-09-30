@@ -21,7 +21,7 @@ The renderer and its backends work; widgets, windowing and a demo are the next p
 | Direct3D 11, 12, 10, 9 | `ESIA_BACKEND_D3D11` / `D3D12` / `D3D10` / `D3D9` | Windows 11, NVIDIA RTX 4080 SUPER, debug layers (D3D12 GPU-based validation); Wine |
 | OpenGL, OpenGL ES | `ESIA_BACKEND_OPENGL` | NVIDIA (WGL), Mesa llvmpipe (EGL) |
 | Vulkan | `ESIA_BACKEND_VULKAN` | NVIDIA and Mesa lavapipe, Khronos validation layer |
-| Metal | `ESIA_BACKEND_METAL` | its portable part on a fake GPU only; the Metal code needs a Mac |
+| Metal | `ESIA_BACKEND_METAL` | macOS 15 on GitHub's arm64 runner (Apple Paravirtual device, Metal API and shader validation) |
 
 Every backend passes the conformance suite (17 scenes against golden images, single frame and across frames, with
 the API's validation counted); details and numbers in `docs/REWRITE_STATUS.md` and each backend's `STATUS.md`.
@@ -51,6 +51,7 @@ cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xw
 
 ## Documents
 
+* `docs/CI.md`: the GitHub Actions jobs (Linux, Windows, macOS), what they prove, how to reproduce them.
 * `docs/REWRITE.md`: the architecture (layers, renderer, RHI, shaders, text, threading, phases).
 * `docs/UI_CORE.md`: the UI core (input, hit testing, layout, windows, scrolling, popups) and how widgets use it.
 * `docs/REWRITE_STATUS.md`: what is done and verified, known issues, next steps.
@@ -65,7 +66,7 @@ cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xw
    the system font lookup are done).
 4. Widgets: WGT's iOS-style controls, themes, per-component styles, animations and auto layout on the new core,
    compared with the WGT reference screenshots; then the demo.
-5. Packaging (`find_package(esia)`), API reference, Metal verified on a Mac, CI.
+5. Packaging (`find_package(esia)`), API reference, Metal on Apple silicon hardware and iOS.
 
 ## Third-party
 

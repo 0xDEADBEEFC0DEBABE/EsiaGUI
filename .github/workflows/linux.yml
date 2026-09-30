@@ -1,0 +1,152 @@
+# Linux: clang + lld, every backend that builds on Linux, the conformance suite on Mesa's CPU drivers (llvmpipe
+# through EGL for OpenGL / GLES, lavapipe with the Khronos validation layer for Vulkan), the shader library check,
+# and the Windows cross build (compile / link check of every D3D backend). See docs/CI.md.
+name: Linux
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_COLOR_DIAGNOSTICS: 'ON'
+  # the runners have no GPU: pin Mesa's CPU drivers so a future image with another ICD cannot change what runs
+  VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.json
+  VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+  LIBGL_ALWAYS_SOFTWARE: '1'
+  GALLIUM_DRIVER: llvmpipe
+
+jobs:
+  linux-clang:
+    name: ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [linux-clang, linux-clang-release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain, Mesa, Vulkan, shader tools, FreeType / HarfBuzz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm cmake ninja-build python3 \
+            glslang-tools spirv-cross spirv-tools \
+            libegl-dev libgles-dev libgl-dev libegl-mesa0 libgl1-mesa-dri mesa-utils \
+            libvulkan-dev libvulkan1 mesa-vulkan-drivers vulkan-validationlayers vulkan-tools \
+            libfreetype-dev libharfbuzz-dev
+
+      - name: Drivers (what the conformance suite runs on)
+        run: |
+          mkdir -p logs
+          {
+            clang++ --version; ld.lld --version; cmake --version | head -1
+            echo; echo "== vulkaninfo --summary"; vulkaninfo --summary
+            echo; echo "== eglinfo -B -p surfaceless"; eglinfo -B -p surfaceless
+          } 2>&1 | tee logs/drivers.txt
+          # lavapipe and the validation layer must be there: without them the Vulkan tests skip, and the job would
+          # prove nothing (ctest_report.py fails a skipped required test too)
+          grep -q "VK_LAYER_KHRONOS_validation" logs/drivers.txt
+          grep -q "llvmpipe" logs/drivers.txt
+
+      - name: Configure
+        run: >
+          cmake --preset ${{ matrix.preset }} -DESIA_WERROR=ON
+          -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON -DESIA_BACKEND_METAL=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: >
+          ctest --preset ${{ matrix.preset }} --parallel 4 --timeout 900
+          --output-junit ctest-junit.xml --test-output-size-passed 65536 --test-output-size-failed 262144
+
+      - name: Report
+        if: ${{ !cancelled() }}
+        # Metal skips on Linux (its portable part is esia_rhi_metal_tests); everything else must run
+        run: >
+          python3 .github/scripts/ctest_report.py build/${{ matrix.preset }}/ctest-junit.xml --title ${{ matrix.preset }}
+          --require 'esia_conformance_(null|opengl|gles|vulkan)(_frames)?'
+          --require 'esia_conformance_vulkan_renderpass(_frames)?'
+          --require 'esia_rhi_(opengl|vulkan|metal)_tests' --require 'esia_glsl_link_tests' --require 'esia_text_ft_tests'
+
+      - name: Upload conformance images and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.preset }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            logs/
+            build/${{ matrix.preset }}/conformance*/
+            build/${{ matrix.preset }}/vulkan/
+            build/${{ matrix.preset }}/text/
+            build/${{ matrix.preset }}/ctest-junit.xml
+            build/${{ matrix.preset }}/Testing/Temporary/
+
+  shaders:
+    name: shader library (build_shaders.py --check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install glslang, SPIRV-Tools, SPIRV-Cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends glslang-tools spirv-cross spirv-tools python3
+      - name: Tool versions
+        run: |
+          glslangValidator --version | head -3
+          spirv-val --version | head -1
+          spirv-cross --help 2>&1 | head -1 || true
+          dpkg-query -W glslang-tools spirv-cross spirv-tools
+      # the checked-in library (src/esia/shaders/generated) must be what the sources produce with these tools
+      - name: Check the generated shaders
+        run: python3 tools/shaders/build_shaders.py --check
+
+  windows-mingw-cross:
+    name: windows-mingw-cross (compile / link check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang, lld, mingw-w64 (posix threads), Vulkan headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang lld llvm cmake ninja-build g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev libvulkan-dev
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          # the Vulkan headers alone: -I/usr/include would put glibc's headers in front of mingw-w64's
+          mkdir -p "$RUNNER_TEMP/vulkan-headers"
+          ln -s /usr/include/vulkan /usr/include/vk_video "$RUNNER_TEMP/vulkan-headers/"
+
+      - name: Configure
+        run: >
+          cmake --preset windows-mingw-cross -DESIA_WERROR=ON
+          -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON
+          -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON -DESIA_BACKEND_METAL=ON
+          "-DESIA_VULKAN_INCLUDE_DIR=$RUNNER_TEMP/vulkan-headers"
+
+      - name: Build
+        run: cmake --build --preset windows-mingw-cross 2>&1 | tee build-log.txt; exit "${PIPESTATUS[0]}"
+
+      - name: Upload the build log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-mingw-cross
+          retention-days: 14
+          path: build-log.txt

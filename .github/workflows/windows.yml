@@ -1,0 +1,316 @@
+# Windows: clang-cl and MSVC with every backend and warnings as errors, then ctest: Direct3D 10 / 11 / 12 on WARP with
+# their debug layers, Direct3D 9 on the runner's display adapter, OpenGL / GLES and Vulkan on Mesa's Windows build
+# (llvmpipe opengl32.dll, lavapipe) with the Khronos validation layer of the Vulkan SDK. See docs/CI.md.
+name: Windows
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Tests this runner cannot run, and why (docs/CI.md, section 4): excluded from ctest, listed in the summary
+  NOT_RUN_D3D9: >-
+    esia_conformance_d3d9(_frames)?:the runner's Direct3D 9 device is WARP's D3D9 emulation (Warp9UM in d3d10warp.dll,
+    Hyper-V video adapter), whose ps_3_0 translator crashes on the FX pixel shader (access violation in
+    d3d10warp!ShaderConv::CContext::EmitDstInstruction from Translate_TEXLDL, under DrawIndexedPrimitive)
+  NOT_RUN_VULKAN: >-
+    esia_rhi_vulkan_tests|esia_conformance_vulkan.*:mesa-dist-win's lavapipe corrupts its own heap on Windows (page heap:
+    corrupted start stamp in RtlFreeHeap from vulkan_lvp.dll's vkFreeMemory and its queue thread, with or without the
+    validation layer); the same tests are clean under AddressSanitizer with lavapipe on Linux
+  # Scenes that fail only on WARP: recorded with their numbers, not hidden by a wider tolerance
+  KNOWN_WARP: >-
+    esia_conformance_d3d12(_frames)?:glow_layer:WARP's D3D12 only - a 1-pixel column (x 133, y 42-111) of glow from
+    elsewhere in the layer, max delta 235 on 0.081 % of the pixels; D3D10 / D3D11 on the same WARP are within 1, and
+    D3D12 on NVIDIA passes
+  VULKAN_SDK_VERSION: 1.3.296.0
+  MESA_DIST_WIN_VERSION: 26.2.3          # github.com/pal1000/mesa-dist-win release
+  VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-archives
+  # D3D10 / 11 / 12 on WARP (the runners have no GPU), with the debug layer when the Graphics Tools are installed
+  ESIA_D3D_DRIVER: warp
+  ESIA_D3D_DEBUG: '1'
+  # Mesa: llvmpipe for OpenGL (not the d3d12 Gallium driver, which would run GL on WARP)
+  GALLIUM_DRIVER: llvmpipe
+
+jobs:
+  windows:
+    name: ${{ matrix.preset }}
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: windows-clang-cl
+            build: windows-clang-cl
+            test: windows-clang-cl
+            bin: build/windows-clang-cl/bin
+          - preset: windows-msvc
+            build: windows-msvc-debug
+            test: windows-msvc
+            bin: build/windows-msvc/bin/Debug
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSVC environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # the LLVM installation of the runner, not the older clang-cl that Visual Studio bundles (VC/Tools/Llvm), which
+      # the MSVC environment puts first on PATH
+      - name: Prefer the LLVM installation
+        run: '"C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH'
+
+      - name: Toolchain
+        run: |
+          New-Item -ItemType Directory -Force logs | Out-Null
+          & {
+            Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Format-List
+            Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion, AdapterCompatibility | Format-List
+            where.exe clang-cl lld-link cl ninja cmake
+            clang-cl --version
+            cmake --version
+          } *>&1 | Tee-Object logs/toolchain.txt
+
+      # ---- Direct3D debug layers: the "Graphics Tools" optional feature (d3d11sdklayers.dll, d3d12SDKLayers.dll).
+      # Without it ESIA_D3D_DEBUG=1 falls back to no debug layer (logged by the backends).
+      - name: Direct3D debug layers (Graphics Tools)
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          $cap = Get-WindowsCapability -Online -Name 'Tools.Graphics.DirectX~~~~0.0.1.0'
+          "before: $($cap.State)" | Tee-Object -Append logs/graphics-tools.txt
+          if ($cap.State -ne 'Installed') {
+            Add-WindowsCapability -Online -Name 'Tools.Graphics.DirectX~~~~0.0.1.0' *>&1 | Tee-Object -Append logs/graphics-tools.txt
+          }
+          $cap = Get-WindowsCapability -Online -Name 'Tools.Graphics.DirectX~~~~0.0.1.0'
+          "after: $($cap.State)" | Tee-Object -Append logs/graphics-tools.txt
+          Get-ChildItem "$env:WINDIR\System32" -Filter '*sdklayers*.dll' | Select-Object Name, Length | Tee-Object -Append logs/graphics-tools.txt
+
+      # ---- Vulkan: headers, loader and the Khronos validation layer from the LunarG SDK (the installer is cached;
+      # the installation itself runs every time)
+      - name: Restore the Vulkan SDK downloads
+        id: vulkan-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/vulkan-sdk-installer
+          key: vulkan-sdk-installer-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Vulkan SDK
+        run: |
+          $v = $env:VULKAN_SDK_VERSION
+          $dir = "${{ runner.temp }}/vulkan-sdk-installer"
+          $exe = "$dir/VulkanSDK-$v-Installer.exe"
+          if (-not (Test-Path $exe)) {
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$v/windows/VulkanSDK-$v-Installer.exe" -OutFile $exe
+          }
+          $root = "C:/VulkanSDK/$v"
+          & $exe --root $root --accept-licenses --default-answer --confirm-command install | Out-Host
+          if (-not (Test-Path "$root/Include/vulkan/vulkan.h")) { throw "Vulkan SDK: $root/Include/vulkan/vulkan.h missing" }
+          "VULKAN_SDK=$root" >> $env:GITHUB_ENV
+          # the explicit layers of the SDK, whether or not the installer registered them
+          "VK_ADD_LAYER_PATH=$root/Bin" >> $env:GITHUB_ENV
+          # the loader (vulkan-1.dll): the SDK installer does not install it; the runtime components of the same
+          # version do, next to the executables' PATH
+          if (-not (Test-Path "$env:WINDIR/System32/vulkan-1.dll")) {
+            $zip = "$dir/VulkanRT-$v-Components.zip"
+            if (-not (Test-Path $zip)) {
+              Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$v/windows/VulkanRT-$v-Components.zip" -OutFile $zip
+            }
+            7z x -y "-o${{ runner.temp }}/vulkan-rt" $zip | Out-Null
+            $loader = Get-ChildItem -Recurse "${{ runner.temp }}/vulkan-rt" -Filter vulkan-1.dll | Where-Object { $_.DirectoryName -match 'x64' } | Select-Object -First 1
+            if (-not $loader) { throw "VulkanRT-$v-Components.zip: no x64 vulkan-1.dll" }
+            $loader.DirectoryName >> $env:GITHUB_PATH
+            "loader: $($loader.FullName)" | Tee-Object logs/vulkan-sdk.txt
+          } else {
+            "loader: System32" | Tee-Object logs/vulkan-sdk.txt
+          }
+
+      - name: Save the Vulkan SDK downloads
+        if: steps.vulkan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vulkan-sdk-installer
+          key: vulkan-sdk-installer-${{ env.VULKAN_SDK_VERSION }}
+
+      # ---- Mesa for Windows (pal1000/mesa-dist-win): llvmpipe's opengl32.dll next to the executables, lavapipe as
+      # the Vulkan driver
+      - name: Mesa for Windows (llvmpipe, lavapipe)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = "${{ runner.temp }}/mesa"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          gh release download $env:MESA_DIST_WIN_VERSION --repo pal1000/mesa-dist-win --pattern 'mesa3d-*-release-msvc.7z' --dir $dir
+          $archive = Get-ChildItem $dir -Filter 'mesa3d-*-release-msvc.7z' | Select-Object -First 1
+          $archive.Name | Tee-Object logs/mesa.txt
+          7z x -y "-o$dir/x" $archive.FullName | Out-Null
+          Get-ChildItem "$dir/x/x64" | Select-Object Name, Length | Format-Table | Out-String | Tee-Object -Append logs/mesa.txt
+          # the job runs elevated, and an elevated process's Vulkan loader ignores VK_DRIVER_FILES / VK_ICD_FILENAMES
+          # / VK_ADD_LAYER_PATH: register lavapipe where the loader looks (the SDK installer registered its layers)
+          $icd = Get-ChildItem "$dir/x/x64" -Filter 'lvp_icd*.json' | Select-Object -First 1
+          if (-not $icd) { throw "mesa-dist-win: no lvp_icd*.json" }
+          $key = 'HKLM:\SOFTWARE\Khronos\Vulkan\Drivers'
+          New-Item -Force -Path $key | Out-Null
+          New-ItemProperty -Force -Path $key -Name $icd.FullName -PropertyType DWord -Value 0 | Out-Null
+          "VK_DRIVER_FILES=$($icd.FullName)" >> $env:GITHUB_ENV
+          Get-ItemProperty -Path $key | Out-String | Tee-Object -Append logs/mesa.txt
+          Get-ItemProperty -Path 'HKLM:\SOFTWARE\Khronos\Vulkan\ExplicitLayers' -ErrorAction SilentlyContinue | Out-String | Tee-Object -Append logs/mesa.txt
+          "MESA_X64=$dir/x/x64" >> $env:GITHUB_ENV
+
+      # ---- FreeType + HarfBuzz from the runner's vcpkg (binary packages cached, keyed by the vcpkg commit)
+      - name: vcpkg commit
+        id: vcpkg
+        run: |
+          "commit=$(git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Force $env:VCPKG_BINARY_CACHE | Out-Null
+
+      # restore and save explicitly: actions/cache saves only when the whole job succeeds, and a build that failed
+      # later must not cost the 12 minutes of vcpkg again
+      - name: Restore vcpkg binary packages
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-x64-windows-freetype-harfbuzz-${{ steps.vcpkg.outputs.commit }}
+
+      - name: FreeType + HarfBuzz (vcpkg)
+        env:
+          VCPKG_BINARY_SOURCES: clear;files,${{ env.VCPKG_BINARY_CACHE }},readwrite
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install freetype harfbuzz --triplet x64-windows
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed" }
+          $inst = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows"
+          "VCPKG_X64=$inst" >> $env:GITHUB_ENV
+          "$inst/bin" >> $env:GITHUB_PATH
+
+      - name: Save vcpkg binary packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_BINARY_CACHE }}
+          key: vcpkg-x64-windows-freetype-harfbuzz-${{ steps.vcpkg.outputs.commit }}
+
+      # vcpkg's packages through its toolchain file (harfbuzz's CMake config resolves its prefix only there: with a
+      # plain CMAKE_PREFIX_PATH its include directory comes out as "//include/harfbuzz"); the preset's own toolchain
+      # (clang-cl) is chain-loaded
+      - name: Configure
+        run: |
+          $chain = @()
+          if ('${{ matrix.preset }}' -eq 'windows-clang-cl') {
+            $chain = @("-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE/cmake/toolchains/clang-cl-windows.cmake")
+          }
+          cmake --preset ${{ matrix.preset }} -DESIA_WERROR=ON `
+            -DESIA_BACKEND_D3D9=ON -DESIA_BACKEND_D3D10=ON -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_D3D12=ON `
+            -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON -DESIA_BACKEND_METAL=ON `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows @chain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.build }}
+
+      - name: Mesa's opengl32.dll next to the executables
+        run: |
+          foreach ($f in 'opengl32.dll', 'libgallium_wgl.dll', 'libglapi.dll') {
+            if (Test-Path "$env:MESA_X64/$f") { Copy-Item "$env:MESA_X64/$f" "${{ matrix.bin }}/" }
+          }
+          Get-ChildItem "${{ matrix.bin }}" -Filter *.dll | Select-Object Name | Format-Table | Out-String | Tee-Object logs/bin-dlls.txt
+
+      - name: Drivers (what the conformance suite runs on)
+        run: |
+          & "${{ matrix.bin }}/esia_conformance.exe" --list *>&1 | Tee-Object logs/drivers.txt
+          if (Get-Command vulkaninfoSDK.exe -ErrorAction SilentlyContinue) { vulkaninfoSDK.exe --summary *>&1 | Tee-Object -Append logs/drivers.txt }
+          elseif (Test-Path "$env:VULKAN_SDK/Bin/vulkaninfoSDK.exe") { & "$env:VULKAN_SDK/Bin/vulkaninfoSDK.exe" --summary *>&1 | Tee-Object -Append logs/drivers.txt }
+          exit 0
+
+      # the verdict is the Report step's: it reads every result from the JUnit file, knows the WARP-only failures
+      # and fails the job for anything else
+      - name: Test
+        run: |
+          $exclude = (($env:NOT_RUN_D3D9, $env:NOT_RUN_VULKAN) | ForEach-Object { '^(' + $_.Split(':')[0] + ')$' }) -join '|'
+          ctest --preset ${{ matrix.test }} --parallel 2 --timeout 1200 -E $exclude `
+            --output-junit ctest-junit.xml --test-output-size-passed 65536 --test-output-size-failed 262144
+          "ctest exit code: $LASTEXITCODE"
+          exit 0
+
+      # what the summary cannot show: one process per Direct3D 9 scene (a crash names its scene), the adapter as
+      # dxdiag sees it, and the images of failed scenes as base64 in the log (the artifact has the same files)
+      # what the summary cannot show, and the evidence for NOT_RUN_*: the adapter as dxdiag sees it, the stacks of
+      # the excluded Direct3D 9 and Vulkan runs under full page heap (the first bad heap access faults where it
+      # happens), Vulkan once more without the validation layer, and the images of failed scenes as base64 in the
+      # log (the artifact has the same files)
+      - name: Diagnostics
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          $bin = (Resolve-Path "${{ matrix.bin }}").Path
+          $golden = "tests/conformance/golden"
+          dxdiag /whql:off /t "$PWD/logs/dxdiag.txt" | Out-Null
+          for ($i = 0; $i -lt 30 -and -not (Test-Path logs/dxdiag.txt); $i++) { Start-Sleep -Seconds 2 }
+          if (Test-Path logs/dxdiag.txt) {
+            Select-String -Path logs/dxdiag.txt -Pattern 'Card name|Driver Model|DDI Version|Feature Levels|Direct3D Acceleration|Driver File Version' | ForEach-Object { $_.Line.Trim() }
+          }
+          $dbg = "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64"
+          "debuggers: $(Test-Path "$dbg\cdb.exe") $dbg"
+          $env:_NT_SYMBOL_PATH = "srv*$env:RUNNER_TEMP\symbols*https://msdl.microsoft.com/download/symbols;$bin"
+          & "$dbg\gflags.exe" /p /enable esia_conformance.exe /full
+          function Invoke-Cdb([string]$exe, [string[]]$arguments) {
+            "::group::cdb $exe $($arguments -join ' ')"
+            & "$dbg\cdb.exe" -g -G -lines -c ".lines -e; .exr -1; kpn 40; ~* kn 12; q" "$bin\$exe" @arguments 2>&1 |
+              Select-String -NotMatch '^(ModLoad|NatVis|Symbol search path|Executable search path|\*\*\*)|Repository|Nuget' | ForEach-Object { $_.Line }
+            "exit $LASTEXITCODE"
+            "::endgroup::"
+          }
+          Invoke-Cdb esia_conformance.exe @('--backend', 'd3d9', '--scene', 'shapes', '--golden', $golden, '--out', 'build/diag/d3d9')
+          Invoke-Cdb esia_conformance.exe @('--backend', 'vulkan', '--scene', 'shapes', '--golden', $golden, '--out', 'build/diag/vulkan')
+          $env:ESIA_VULKAN_VALIDATION = '0'
+          Invoke-Cdb esia_conformance.exe @('--backend', 'vulkan', '--scene', 'shapes', '--golden', $golden, '--out', 'build/diag/vulkan-novalidation')
+          Remove-Item Env:ESIA_VULKAN_VALIDATION
+          & "$dbg\gflags.exe" /p /disable esia_conformance.exe
+          Get-ChildItem -Recurse build/${{ matrix.preset }}/conformance -Filter *.diff.png -ErrorAction SilentlyContinue | ForEach-Object {
+            foreach ($f in $_.FullName, ($_.FullName -replace '\.diff\.png$', '.png')) {
+              "BEGIN-BASE64 $f"
+              [Convert]::ToBase64String([IO.File]::ReadAllBytes($f)) -split '(.{1,4000})' | Where-Object { $_ }
+              "END-BASE64 $f"
+            }
+          }
+
+      - name: Report
+        if: ${{ !cancelled() }}
+        run: >
+          python .github/scripts/ctest_report.py build/${{ matrix.preset }}/ctest-junit.xml --title ${{ matrix.preset }}
+          --require 'esia_conformance_(null|d3d10|d3d11|d3d12|opengl|gles)(_frames)?'
+          --require 'esia_rhi_d3d(9|10|11|12|_shader|_device)_tests' --require 'esia_rhi_opengl_tests'
+          --require 'esia_text_ft_tests'
+          --known-failure "$env:KNOWN_WARP"
+          --not-run "$env:NOT_RUN_D3D9" --not-run "$env:NOT_RUN_VULKAN"
+
+      - name: Upload conformance images and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.preset }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            logs/
+            build/${{ matrix.preset }}/conformance*/
+            build/${{ matrix.preset }}/vulkan/
+            build/${{ matrix.preset }}/text/
+            build/${{ matrix.preset }}/ctest-junit.xml
+            build/${{ matrix.preset }}/Testing/Temporary/
+            build/diag/

@@ -52,9 +52,4 @@ target_include_directories(glass_window PRIVATE ${ESIA_ROOT}/tests/support)
 target_link_libraries(glass_window PRIVATE esia::render esia_platform_win32 ${_libs})
 target_compile_definitions(glass_window PRIVATE ${_defs} UNICODE _UNICODE _WIN32_WINNT=0x0A00)
 esia_target_defaults(glass_window)
-if(MINGW AND TARGET esia_rhi_d3d_common)
-    # d3d_util.hpp's std::make_shared defines std::type_info::operator== next to libstdc++ 13's own (mingw-w64 only,
-    # docs/backends/README.md section 6): the two are the same inline function, so the linker may keep either
-    target_link_options(glass_window PRIVATE -Wl,--allow-multiple-definition)
-endif()
 message(STATUS "glass_window: ${_defs}")

@@ -187,15 +187,41 @@ Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 
 `ESIA_WERROR=ON`): `esia_rhi_metal_tests` 25 / 25, ctest 9 / 9 (the conformance runs skip Metal). `metal_device.mm`
 lost its four `Source1` checks and the cap line; it was not compiled (needs macOS).
 
+### First run on macOS (CI, 2026-09-29)
+
+GitHub Actions' `macos-15` arm64 runner (`docs/CI.md`): macOS 15.7.9, Xcode 16.4 (`metal` 32023.620), Homebrew
+clang 23.1.0 + lld, `ESIA_WERROR=ON`, once with the default deployment target and once with
+`CMAKE_OSX_DEPLOYMENT_TARGET=11.0`. `metal_device.mm` compiled and linked **without a change** (no availability or
+deprecation warning either), `xcrun metal` compiled every generated MSL file (`esia_rhi_metal_msl_compile`), and the
+conformance suite ran on the runner's Metal device, **Apple Paravirtual device** (GPU family Mac2, not Apple7; no
+counter sampling at stage boundaries, so `timestampQueries` is false and the profiler's Metal path did not run), with
+`MTL_DEBUG_LAYER=1` and `MTL_SHADER_VALIDATION=1`: **17 / 17 scenes PASS**, single frame and `--frames 3` (identical
+numbers), against the llvmpipe goldens:
+
+| Scene | max delta | pixels over | mean delta |
+| --- | --- | --- | --- |
+| shapes, fx_rows | 1 | 0.000 % | 0.023 |
+| gradients | 2 | 0.000 % | 0.010 |
+| shadows | 20 | 0.003 % | 0.051 |
+| glass, msaa_target, glass_copy, callback_capture | 6 | 0.000 % | 0.046 |
+| glow_layer | 1 | 0.000 % | 0.019 |
+| text | 2 | 0.000 % | 0.004 |
+| edge_fade, clipping | 2 | 0.000 % | 0.020 |
+| windows | 4 | 0.000 % | 0.045 |
+| hidpi | 3 | 0.000 % | 0.035 |
+| light_streak | 4 | 0.000 % | 0.030 |
+| srgb_target, srgb_msaa | 6 | 0.000 % | 0.091 |
+
+The copy checks (`srgb_target`, `msaa_target`, `glass_copy`, `srgb_msaa`: offset copy / resolve) match. The paravirtual
+device is Metal on a virtual machine's GPU, not an Apple silicon GPU on bare metal: tile memory, the timestamp
+counters and the Apple GPU families are still unverified (section 4), as is iOS.
+
 ## 4. Not verified
 
-* **`metal_device.mm` never compiled against the SDK and never ran.** Expect a first round of compile fixes (API
-  spellings, availability annotations, deprecations under `-Werror` with a new SDK).
-* **The generated MSL never went through Apple's compiler** (`xcrun metal`) - it is SPIRV-Cross 2021.01.15 output
-  for MSL 2.0; only the mock type check above ran.
-* **No pixel was ever produced by this backend.** Colors, blending, sRGB handling,
-  scissors, the resolve path, captures and pyramids are only checked structurally.
-* **The fake's rules are Metal's as documented**, not compared with the Metal API validation layer.
+* *Superseded by the CI run above:* `metal_device.mm` compiles against the macOS SDK (Xcode 16.4, macOS 11.0 and
+  default deployment targets), the generated MSL goes through `xcrun metal`, and the backend renders every scene
+  within tolerance under the Metal API and shader validation layers - on a paravirtual device. Still not run: an
+  Apple silicon GPU on bare metal, the iOS SDK.
 * **Timestamps**: the tick -> ns calibration (`sampleTimestamps:gpuTimestamp:`, CPU side assumed to be nanoseconds),
   the error sentinel handling, and whether Apple GPUs fill all four stage-boundary samples of every encoder.
 * **iOS**: nothing iOS-specific was tried (the code has no macOS-only path except the `@available` checks; storage is
@@ -204,8 +230,8 @@ lost its four `Source1` checks and the cap line; it was not compiled (needs macO
   discrete GPU are read over PCIe - fine for UI sizes, unmeasured.
 * **Performance**: nothing measured. MSL is compiled at the first `CreatePipeline` of each program (a first-frame
   hitch; every headless conformance device compiles again).
-* `macos-clang` + `enable_language(OBJCXX)` with Homebrew LLVM: written to work (the OBJCXX compiler is set to the C++
-  compiler of the toolchain), not configured anywhere.
+* `macos-clang` + `enable_language(OBJCXX)` with Homebrew LLVM: configured and built in CI (Homebrew clang 23.1.0);
+  Apple's clang was not tried.
 
 ## 5. Known issues and limitations
 
