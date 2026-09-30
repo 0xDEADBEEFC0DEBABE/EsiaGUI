@@ -123,6 +123,10 @@ ESIA_TEST(SystemFonts, PlatformLookup)
     // Windows and Wine both ship Tahoma: DirectWrite's lookup itself is checked even where the chain is missing
     const std::optional<text::SystemFont> tahoma = text::FindSystemFont("tahoma");
     ESIA_CHECK(tahoma && tahoma->family == "Tahoma" && tahoma->faceIndex == 0);
+    // Tahoma has no italic: DirectWrite answers with an oblique it simulates, but the file's face is upright, and
+    // that is what a text system gets
+    const std::optional<text::SystemFont> oblique = text::FindSystemFont("Tahoma", 400, text::FontStyle::Italic);
+    ESIA_CHECK(oblique && oblique->style == text::FontStyle::Upright && oblique->weight == 400);
 #endif
     // a family by its localized name: the same face as by its English one
     const std::pair<const char*, const char*> localized[] = {{"Microsoft YaHei", "微软雅黑"}, {"WenQuanYi Zen Hei", "文泉驛正黑"}};

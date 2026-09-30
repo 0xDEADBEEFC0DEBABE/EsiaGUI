@@ -33,7 +33,9 @@ namespace esia::text
         std::string path;        // UTF-8
         int faceIndex = 0;       // face in a collection (.ttc / .otc); 0 for a single font
         std::string family;      // the family name the face reports (English when it has one)
-        int weight = 400;        // the face's weight, 100 (thin) - 900 (black)
+        // The face as stored in the file, which is what a text system loads: never a simulated bold / oblique, and a
+        // variable font's default instance. It can differ from the request when the family has no closer face.
+        int weight = 400;        // 100 (thin) - 900 (black)
         FontStyle style = FontStyle::Upright;
     };
 

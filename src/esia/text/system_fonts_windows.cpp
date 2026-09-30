@@ -131,8 +131,17 @@ namespace esia::text::detail
             Com<IDWriteLocalizedStrings> names;
             if (SUCCEEDED(fontFamily->GetFamilyNames(names.Put())))
                 out.family = EnglishName(names.Get());
+            // DirectWrite's weight and style count what the file does not hold: a simulated bold or oblique (SimSun
+            // at 700) and the named instance of a variable font (Segoe UI Variable at 700), while a text system
+            // loads the stored face (FreeType: a variable font's default instance). Report the face as stored.
             out.weight = (int)font->GetWeight();
             out.style = font->GetStyle() == DWRITE_FONT_STYLE_NORMAL ? FontStyle::Upright : FontStyle::Italic;
+            for (const FontFaceInfo& stored : ReadFontFaces(PathFromUtf8(out.path)))
+                if (stored.faceIndex == out.faceIndex)
+                {
+                    out.weight = stored.weight;
+                    out.style = stored.italic ? FontStyle::Italic : FontStyle::Upright;
+                }
             return out;
         }
     }
