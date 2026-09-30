@@ -192,6 +192,17 @@ namespace esia
 
     Rect Context::WorkRect() const { return CurFrame().region; }
 
+    Rect Context::ViewRect() const
+    {
+        const Window* w = CurrentWindow();
+        if (!w)
+            return Rect();
+        for (auto it = w->frames_.rbegin(); it != w->frames_.rend(); ++it)
+            if (it->childIndex >= 0)
+                return Rect(it->origin + it->padding, it->origin + it->fixedSize - it->padding);
+        return w->ContentRect();
+    }
+
     float Context::LineBaseline() const { return CurFrame().lineBaseline; }
 
     float Context::AlignToLineBaseline(float baseline)

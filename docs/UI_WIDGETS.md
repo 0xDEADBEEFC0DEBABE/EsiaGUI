@@ -11,10 +11,12 @@ the core, and what of WGT is ported so far.
 * [3. Styling one widget or a block](#3-styling-one-widget-or-a-block)
 * [4. Text and controls](#4-text-and-controls)
 * [5. Windows, cards, scroll areas](#5-windows-cards-scroll-areas)
-* [6. Auto layout](#6-auto-layout)
-* [7. Custom widgets and animation](#7-custom-widgets-and-animation)
-* [8. The showcase](#8-the-showcase)
-* [9. Status: what of WGT is ported](#9-status-what-of-wgt-is-ported)
+* [6. Lists: sections and rows](#6-lists-sections-and-rows)
+* [7. Navigation and the tab bar](#7-navigation-and-the-tab-bar)
+* [8. Auto layout](#8-auto-layout)
+* [9. Custom widgets and animation](#9-custom-widgets-and-animation)
+* [10. The showcase](#10-the-showcase)
+* [11. Status: what of WGT is ported](#11-status-what-of-wgt-is-ported)
 
 ## 1. Setting up
 
@@ -124,6 +126,7 @@ edge. `TextWrapped` always wraps at the container's width. Inside an auto-layout
 | `Stepper(id, &n, min, max, step)` | - / + with auto-repeat |
 | `ProgressBar`, `ProgressRing`, `ActivityIndicator` | determinate (springs toward the value) and indeterminate progress |
 | `Badge(text, tint)`, `ColorSwatches(id, &i, colors, n)`, `Image(texture, size, radius)` | small parts |
+| `Segmented(id, &i, {"A", "B", "C"}, width)` | the iOS 26 segmented control: tap a segment, or grab the selection and drag it; it travels as a clear lens that magnifies what it passes, then lands on the nearest segment as a solid pill. `*i` changes on release |
 
 * **Ids.** Labels may carry an id suffix: `"OK##dialog"` shows "OK", and `"##x"` shows nothing.
 * **Return values.** The functions that change a value return true in the frame they change it.
@@ -147,7 +150,71 @@ edge. `TextWrapped` always wraps at the container's width. Inside an auto-layout
   * With `size.x == 0` it fills the available width.
 * **`BeginScrollArea(id, size)`** is a child region with the core's smooth scrolling and an edge fade.
 
-## 6. Auto layout
+## 6. Lists: sections and rows
+
+Inset grouped lists, as in iOS Settings:
+
+```cpp
+ui::BeginSection("Display", "HDR needs a display that supports it.");   // header and footer are optional
+ui::RowToggle("HDR", &hdr, {ui::icons::Brightness, Color::Hex(0xFF9F0A)});   // an icon tile and its color
+ui::RowSegmented("Frame Limit", &limit, {"Off", "60", "120"});
+ui::RowValue("Resolution", "2560 x 1440");
+if (ui::RowNavigation("Advanced", "On")) ...;
+ui::EndSection();
+```
+
+* **A section** is one item of its parent: the header, the card with its rows, and the footer. Inside an auto-layout
+  container it is one child, and it takes the width it is offered.
+  * The rows sit in the core's `StackLayout` without gaps, so they need no measuring frame.
+  * The card is drawn at `EndSection` and moved under the rows, as a card's background is.
+  * A row's hover highlight is masked by the card's rounded corners (last frame's height).
+* **Rows**: `RowNavigation` (a chevron and a detail text; returns true when pressed), `RowToggle`, `RowSlider`
+  (a value column formatted with printf), `RowStepper`, `RowSegmented`, `RowValue`, and `RowButton` (accent, or red
+  when destructive).
+* **Label and accessory.** A row's label gets the room its accessory leaves.
+  * A switch, value, stepper or segmented control keeps its natural width while it fits, down to a minimum.
+  * Sliders start on a column shared by the section (38 % of the row), so a section's sliders line up.
+  * When even a short label does not fit beside the accessory's minimum, the row stacks them: label on top,
+    control below.
+  * Labels and values are cut with an ellipsis; nothing overlaps at any width.
+* **Rows of your own.** `BeginRow(id, height, &content)` / `EndRow` give a row of that height. Its content rect is
+  inset like the labels. Widgets submitted in between go inside it, and widgets that fill the available width stay
+  in the row.
+
+## 7. Navigation and the tab bar
+
+```cpp
+ui::BeginNavigation("settings", "root");   // takes the room left in its area
+if (ui::BeginPage("root", "Settings")) {
+    if (ui::RowNavigation("Accent Color")) ui::NavigationPush("accent");
+    ui::EndPage();
+}
+if (ui::BeginPage("accent", "Accent Color")) { ...; ui::EndPage(); }
+ui::EndNavigation();
+
+ui::TabBar("tabs", &tab, {{ui::icons::Apps, "Controls"}, {ui::icons::Palette, "Style"}});   // last in its area
+```
+
+* **Navigation** is a stack of pages, as in iOS.
+  * Every page is submitted every frame. `BeginPage` returns true for the page shown and, during a transition, for
+    the page leaving.
+  * A pushed page slides in from the right over the current one. A popped page slides out and uncovers the one
+    below, which drifts in from the left and brightens.
+  * The top page counts as opaque: the page below is clipped to the strip left of its edge, which casts a soft
+    shadow. The pages are glass, and without the clip their text would show through each other.
+  * Each page has a title bar and a back button. The button is titled after the page below and pops when pressed.
+  * Each page scrolls on its own (a child region with smooth scrolling and edge fades).
+  * `NavigationPush` and `NavigationPop` work anywhere between `BeginNavigation` and `EndNavigation`.
+* **The tab bar** floats over the bottom of the area it is submitted in, a window's content or a page
+  (`Context::ViewRect`). The content scrolls under the glass, and the bar reserves room below the content so its
+  end can scroll out from under it.
+  * Tap a tab or drag the selection, as on a segmented control.
+  * A child region draws in submission order, inside the edge fades of the scroll areas around it. So a floating
+    bar's draw commands are moved to the end of its window's draw list at `Ui::EndFrame`: it draws over all the
+    window's content and is not faded. (WGT's bars were ImGui child windows, drawn after their parent.) Card and
+    section backgrounds, which are moved under their content, go through the same bookkeeping.
+
+## 8. Auto layout
 
 Stacks, grids and flows are `LayoutProvider`s of the core ([UI_CORE.md](UI_CORE.md) section 6). Every widget or
 nested container submitted directly inside one is one child.
@@ -174,7 +241,7 @@ nested container submitted directly inside one is one child.
 * **Size classes.** `GetSizeClass(width)` returns `Compact` (< 420), `Regular` (< 760) or `Expanded`, for pages that
   change their structure with the width.
 
-## 7. Custom widgets and animation
+## 9. Custom widgets and animation
 
 ```cpp
 const ui::Interaction it = ui::Interact("knob", {S(44), S(44)});   // layout room + press / hover logic
@@ -199,25 +266,29 @@ if (it.pressed) ...;
 * **Springs** (`anim.hpp`) are analytic: the same curve at any frame rate, coming to rest exactly on the target. The
   presets are `Spring::Snappy`, `Smooth`, `Bouncy` and `Gentle`, as in SwiftUI.
 
-## 8. The showcase
+## 10. The showcase
 
 `examples/showcase` shows the widgets in a window over a drifting wallpaper. It uses the same frame as
 `glass_window`: the `glass_app` library, with the Win32 platform layer, every backend, and a render thread.
 
-* **Components**: every button kind, switches, checkboxes, sliders, the stepper, progress bars and rings, badges,
-  and dark mode with the accent swatches.
+* **Components**: three tabs under a tab bar: every button kind, switches, checkboxes, sliders, a segmented
+  control and the stepper; progress bars and rings and badges; dark mode, the accent swatches and the glass look.
 * **Control Center**: a grid of glass cards with round toggles, Now Playing, and a brightness slider spanning two
   columns.
 * **Telemetry**: two gauges in a flow, and a card with wrapped mixed Latin / Chinese text.
+* **Settings**: WGT's Settings screen without its search bar: a navigation stack whose root page has a custom
+  profile row and sections of every row kind (the Liquid Glass section edits the live theme); Accent Color opens a
+  second page.
 
 ```
-showcase.exe --api d3d12 --dark --look frosted --size 960x760 --frames 90 --fixed-dt 0.016667 --screenshot shot.png
+showcase.exe --api d3d12 --dark --look frosted --size 1360x780 --frames 90 --fixed-dt 0.016667 --screenshot shot.png
 ```
 
-The options of `glass_window` (`app.hpp`) apply: `--api`, `--size`, `--frames`, `--fixed-dt`, `--screenshot` and
+`--tab 0|1|2` picks the Components tab and `--page accent` opens the Accent Color page. The options of
+`glass_window` (`app.hpp`) apply: `--api`, `--size`, `--frames`, `--fixed-dt`, `--screenshot` and
 `--debug`.
 
-## 9. Status: what of WGT is ported
+## 11. Status: what of WGT is ported
 
 Ported, in the order the parts depend on each other:
 
@@ -225,8 +296,10 @@ Ported, in the order the parts depend on each other:
 * style resolution (WGT's `look.cpp`: `Next`, scopes, glass looks, surfaces, state fills);
 * the interaction core;
 * text;
-* every control in section 4;
+* every control in section 4, with the liquid selection of segmented controls (WGT's `selection.cpp`);
 * cards, scroll areas and windows;
+* sections and rows (WGT's `lists.cpp`), except `RowPicker`, which waits for the picker;
+* navigation and the tab bar (WGT's `navigation.cpp`), except the search bar, which waits for the text field;
 * stacks, adaptive stacks, grids and flows.
 
 Two WGT bugs were fixed on the way:
@@ -234,17 +307,15 @@ Two WGT bugs were fixed on the way:
 * WGT keyed the progress widgets' animations by their screen position, so they restarted when the page scrolled.
   They now take a per-frame serial under the widget's id.
 * A stack inside a flow took the full width. It is now as wide as its content unless it has something to fill with
-  (section 6).
+  (section 8).
 
 Not ported yet, in the planned order:
 
-1. sections and rows (WGT's `lists.cpp`), Segmented and LiquidSelect;
-2. Navigation, TabBar, SearchBar;
-3. TextField (WGT's `text_edit`), pickers and popups, tooltips;
-4. the scroll indicator and drag-to-scroll, the glow halo;
-5. the island, the dock, notifications;
-6. LineChart;
-7. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
+1. TextField (WGT's `text_edit`) and the search bar; pickers and popups (and `RowPicker`), tooltips;
+2. the scroll indicator and drag-to-scroll, the glow halo;
+3. the island, the dock, notifications;
+4. LineChart;
+5. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
 
 Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 
@@ -255,6 +326,12 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 * style merging (`Next` taken by one widget, nested scopes);
 * stack, flex, flow and grid placement;
 * a button click and a switch flip through queued input;
+* rows without gaps in their section, sections one after another;
+* a row button, a row's switch (and not the rest of its row);
+* the segmented control: a tap lands on release, a drag lands on the nearest segment, and it comes to rest;
+* navigation: a push shows both pages while it moves and then only the new one; the back button pops;
+* the tab bar: its place at the bottom of its area, the room it reserves, a tap; its draw commands last in the
+  window's list, also inside a card;
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.

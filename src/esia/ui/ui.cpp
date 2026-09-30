@@ -94,10 +94,16 @@ namespace esia::ui
         m.theme.Step(m.dt);
         m.animating = m.theme.Animating();
         // containers left open last frame (a missing End) must not leak into this one
-        ESIA_ASSERT(m.styles.empty() && m.layouts.empty() && m.containers.empty() && "a ui container was not ended");
+        ESIA_ASSERT(m.styles.empty() && m.layouts.empty() && m.containers.empty() && m.sections.empty() && m.rowStyles.empty() && m.navs.empty() &&
+                    m.pages.empty() && "a ui container was not ended");
         m.styles.clear();
         m.layouts.clear();
         m.containers.clear();
+        m.sections.clear();
+        m.rowStyles.clear();
+        m.navs.clear();
+        m.pages.clear();
+        m.floats.clear();
         m.next = ItemStyle();
         m.decorationSerial = 0;
         if (m.text)
@@ -109,6 +115,22 @@ namespace esia::ui
     void Ui::EndFrame()
     {
         Impl& m = *impl_;
+        // floating bars to the end of their window's draw list, in the order they were submitted
+        for (std::size_t i = 0; i < m.floats.size(); ++i)
+        {
+            const Impl::FloatBlock b = m.floats[i];
+            const std::size_t n = b.to - b.from;
+            if (n == 0)
+                continue;
+            b.list->MoveCommands(b.to, b.from);   // what follows the block goes before it
+            for (std::size_t k = i + 1; k < m.floats.size(); ++k)
+                if (m.floats[k].list == b.list && m.floats[k].from >= b.to)
+                {
+                    m.floats[k].from -= n;
+                    m.floats[k].to -= n;
+                }
+        }
+        m.floats.clear();
         m.inFrame = false;
         if (g_current == this)
             g_current = nullptr;
@@ -304,6 +326,18 @@ namespace esia::ui
             it.hover = Anim(id, 0xA1, it.hovered ? 1.0f : 0.0f, SpringFast());
             it.press = Anim(id, 0xA2, it.held ? 1.0f : 0.0f, SpringFast());
             return it;
+        }
+
+        void MoveCommands(DrawList& dl, std::size_t from, std::size_t to)
+        {
+            const std::size_t n = dl.Commands().size() - from;
+            dl.MoveCommands(from, to);
+            for (Ui::Impl::FloatBlock& b : M().floats)
+                if (b.list == &dl && b.from >= to && b.to <= from)
+                {
+                    b.from += n;
+                    b.to += n;
+                }
         }
 
         ScopedUnclip::ScopedUnclip(const Rect& r, float extent) { Ctx().PushClipRect(r.Expanded(extent), false); }

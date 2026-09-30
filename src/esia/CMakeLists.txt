@@ -130,14 +130,17 @@ if(ESIA_TEXT_FREETYPE)
 endif()
 
 # ------------------------------------------------------------------ widgets
-# The widget layer (include/esia/ui): theme, springs, styles, auto layout, controls and containers drawn with Painter.
+# The widget layer (include/esia/ui): theme, springs, styles, auto layout, controls, containers and lists drawn with Painter.
 add_library(esia_ui STATIC
     ui/theme.cpp
     ui/anim.cpp
     ui/ui.cpp
     ui/controls.cpp
     ui/layout.cpp
-    ui/containers.cpp)
+    ui/containers.cpp
+    ui/selection.cpp
+    ui/lists.cpp
+    ui/navigation.cpp)
 target_link_libraries(esia_ui PUBLIC esia_render esia_text)
 esia_target_defaults(esia_ui)
 add_library(esia::ui ALIAS esia_ui)

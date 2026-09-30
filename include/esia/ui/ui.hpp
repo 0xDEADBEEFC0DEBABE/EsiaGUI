@@ -32,7 +32,9 @@
 #include "esia/ui/icons.hpp"
 #include "esia/ui/theme.hpp"
 #include <cmath>
+#include <initializer_list>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -243,6 +245,82 @@ namespace esia::ui
     ESIA_API void Badge(std::string_view text, Color tint = Color::Clear());
     ESIA_API bool ColorSwatches(std::string_view id, int* selected, const Color* colors, int count, float diameter = 0.0f);
     ESIA_API void Image(TextureId texture, Vec2 size, float radius = -1.0f, Vec2 uv0 = Vec2(0, 0), Vec2 uv1 = Vec2(1, 1));
+
+    // iOS segmented control: tap a segment or drag the selection, which travels as a clear lens and lands as a pill.
+    // width: > 0 fixed, else the available width.
+    //
+    //   ui::Segmented("scale", &scale, {"Small", "Default", "Large"});
+    ESIA_API bool Segmented(std::string_view id, int* selected, std::span<const std::string_view> items, float width = -1.0f);
+    inline bool Segmented(std::string_view id, int* selected, std::initializer_list<std::string_view> items, float width = -1.0f)
+    {
+        return Segmented(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
+    }
+
+    // ================================================= inset grouped lists
+    // iOS Settings: sections of rows on a card, with an optional header and footer. A row's label takes what its
+    // accessory (switch, value, slider ...) leaves; when even a short label does not fit beside it, the row stacks
+    // them. Rows go between BeginSection and EndSection; a section is one item of its parent.
+    //
+    //   ui::BeginSection("Display", "HDR needs a display that supports it.");
+    //   ui::RowToggle("HDR", &hdr, {ui::icons::Brightness, Color::Hex(0xFF9F0A)});
+    //   ui::RowValue("Resolution", "2560 x 1440");
+    //   if (ui::RowNavigation("Advanced")) ...;
+    //   ui::EndSection();
+    struct RowIcon
+    {
+        Icon icon = 0;
+        Color color = Color::Clear();  // the tile's color (Clear = accent)
+    };
+    ESIA_API bool BeginSection(std::string_view header = {}, std::string_view footer = {});   // always true
+    ESIA_API void EndSection();
+    ESIA_API bool RowNavigation(std::string_view label, std::string_view detail = {}, RowIcon icon = {});   // pressed
+    ESIA_API bool RowToggle(std::string_view label, bool* value, RowIcon icon = {});
+    // format: printf for the value column (empty or null: none)
+    ESIA_API bool RowSlider(std::string_view label, float* value, float min, float max, RowIcon icon = {}, const char* format = "%.0f");
+    ESIA_API bool RowStepper(std::string_view label, int* value, int min, int max, RowIcon icon = {});
+    ESIA_API bool RowSegmented(std::string_view label, int* selected, std::span<const std::string_view> items, RowIcon icon = {});
+    inline bool RowSegmented(std::string_view label, int* selected, std::initializer_list<std::string_view> items, RowIcon icon = {})
+    {
+        return RowSegmented(label, selected, std::span<const std::string_view>(items.begin(), items.size()), icon);
+    }
+    ESIA_API void RowValue(std::string_view label, std::string_view value, RowIcon icon = {});
+    ESIA_API bool RowButton(std::string_view label, bool destructive = false, RowIcon icon = {});   // pressed
+    // A row of your own: `height` (0 = the theme's row height) and the content rect, inset like the labels; widgets
+    // submitted before EndRow go in it. Call EndRow whatever BeginRow returns (false: the row is not visible).
+    ESIA_API bool BeginRow(std::string_view id, float height = 0.0f, Rect* content = nullptr);
+    ESIA_API void EndRow();
+
+    // ========================================================== navigation
+    // A navigation stack (iOS): a pushed page slides in from the right over the current one, a popped page slides out
+    // and uncovers the one below. Each page has a title bar with a back button and scrolls on its own. Submit every
+    // page every frame: BeginPage returns true for the page shown (and, during a transition, the one leaving).
+    //
+    //   ui::BeginNavigation("settings", "root");   // takes the room left in its area
+    //   if (ui::BeginPage("root", "Settings")) {
+    //       if (ui::RowNavigation("Accent Color")) ui::NavigationPush("accent");
+    //       ui::EndPage();
+    //   }
+    //   if (ui::BeginPage("accent", "Accent Color")) { ...; ui::EndPage(); }
+    //   ui::EndNavigation();
+    ESIA_API bool BeginNavigation(std::string_view id, std::string_view rootPage);   // always true
+    ESIA_API void EndNavigation();
+    ESIA_API bool BeginPage(std::string_view pageId, std::string_view title);
+    ESIA_API void EndPage();                                  // when BeginPage returned true
+    ESIA_API void NavigationPush(std::string_view pageId);   // between BeginNavigation and EndNavigation
+    ESIA_API void NavigationPop();
+
+    // A liquid-glass tab bar floating over the bottom of the area it is submitted in (a window's content, a page): the
+    // content scrolls under it. Tap a tab or drag the selection, as on a segmented control.
+    struct TabItem
+    {
+        Icon icon = 0;
+        std::string_view label;
+    };
+    ESIA_API bool TabBar(std::string_view id, int* selected, std::span<const TabItem> items);
+    inline bool TabBar(std::string_view id, int* selected, std::initializer_list<TabItem> items)
+    {
+        return TabBar(id, selected, std::span<const TabItem>(items.begin(), items.size()));
+    }
 
     // ============================================================= windows
     enum WindowFlags_ : std::uint32_t

@@ -28,7 +28,8 @@ lookup and a fallback chain per platform cover Chinese, Japanese and Korean; CJK
 [UI_CORE.md](UI_CORE.md).
 
 **Widget layer, first part** (branch `feat/ui-foundation`, 2026-09-30): `esia_ui` with WGT's theme, springs,
-styles, text, controls, cards, windows and auto layout, and the `showcase` example. How to use it and what of WGT
+styles, text, controls, cards, windows, auto layout, inset grouped lists, navigation and the tab bar, and the
+`showcase` example. How to use it and what of WGT
 is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 
 * [Widget layer, first part](#widget-layer-first-part-featui-foundation)
@@ -48,12 +49,13 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 ## Widget layer, first part (`feat/ui-foundation`)
 
 Branch from `main` at `e43ea9f`, written by the local session. What is ported, how it maps onto the core and what
-is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 9.
+is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 11.
 
 | Part | Files |
 | --- | --- |
-| the widget layer | `include/esia/ui` (`theme.hpp`, `anim.hpp`, `icons.hpp`, `ui.hpp`), `src/esia/ui` (`theme`, `anim`, `ui` with the style resolution, `controls`, `layout`, `containers`) |
+| the widget layer | `include/esia/ui` (`theme.hpp`, `anim.hpp`, `icons.hpp`, `ui.hpp`), `src/esia/ui` (`theme`, `anim`, `ui` with the style resolution, `controls`, `layout`, `containers`, `selection`, `lists`, `navigation`) |
 | `Color::Lighter` / `Darker` | `include/esia/base/math.hpp` |
+| `Context::ViewRect()` | the core: what the innermost child region shows, where floating bars go ([UI_CORE.md](UI_CORE.md) section 15) |
 | the example frame | `examples/glass_window`: options, the window and render threads and screenshots moved from `main.cpp` into the `glass_app` library (`app.hpp`, `app.cpp`), so other examples share them |
 | the showcase | `examples/showcase` |
 | tests | `tests/ui/test_ui.cpp` (`esia_ui_tests`) |
@@ -63,7 +65,7 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 9.
 * Clean builds of every backend with `ESIA_WERROR`, clang-cl 22.1.8 and MSVC 19.44: 36 of 36 tests pass with each,
   `esia_ui_tests` included (Metal's two conformance tests skip on Windows, as before).
 * `showcase` with `--debug` on D3D11 (light) and D3D12 (dark): no debug-layer message, and every widget of
-  [UI_WIDGETS.md](UI_WIDGETS.md) section 8 renders.
+  [UI_WIDGETS.md](UI_WIDGETS.md) section 10 renders.
 * `glass_window` after its frame moved into `glass_app`: D3D11, Vulkan and OpenGL with `--debug`, no message.
 
 ### Not verified

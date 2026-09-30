@@ -18,9 +18,12 @@ namespace esia::ui
             m.containers.pop_back();
             return e;
         }
+    }
 
-        // Content dissolves toward an edge it can still scroll past (iOS's scroll edge effect), adding no color. The
-        // fades grow with the distance left to scroll: nothing fades at the very top or end.
+    namespace detail
+    {
+        // iOS's scroll edge effect, adding no color. The fades grow with the distance left to scroll: nothing fades at
+        // the very top or end.
         bool BeginScrollEdgeFade()
         {
             Context& c = Ctx();
@@ -104,7 +107,7 @@ namespace esia::ui
             ScopedUnclip unclip(card, ShadowExtent(Sc(18), Vec2(0, Sc(6))));
             p.Rect(card, s);
         }
-        dl.MoveCommands(from, e.mark);
+        MoveCommands(dl, from, e.mark);
         if (e.stylePushed)
             PopStyle();
     }

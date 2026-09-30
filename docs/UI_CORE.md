@@ -517,3 +517,8 @@ After the Win32 platform layer (its core requests, `docs/PLATFORM_WIN32.md` sect
   * IME clauses: `InputEvent::imeTargetBegin / End` (`Composition(text, cursor, targetBegin, targetEnd)`) and
     `InputState::CompositionTargetBegin / End`, the clause the IME is converting (bytes).
 * **Documented**: the horizontal wheel sign. `x > 0` scrolls toward the left, as `y > 0` scrolls toward the top.
+
+For the widget layer (`esia_ui`, [UI_WIDGETS.md](UI_WIDGETS.md)):
+
+* **Added**: `Context::ViewRect()`, what the innermost child region being submitted shows (else the window's
+  content), unmoved by its own scroll. The tab bar floats at its bottom.

@@ -1,11 +1,17 @@
 // Esia UI - what the widget files share: the Ui's state, style resolution, animation and drawing helpers.
 #pragma once
 #include "esia/ui/ui.hpp"
+#include <span>
+#include <string>
 #include <vector>
 
 namespace esia::ui
 {
     class BoxLayout;
+    namespace detail
+    {
+        struct NavState;
+    }
 
     struct Ui::Impl
     {
@@ -58,6 +64,46 @@ namespace esia::ui
         };
         std::vector<ContainerEntry> containers;
         int windowCascade = 0;
+
+        // inset grouped sections being submitted (lists.cpp)
+        struct SectionEntry
+        {
+            Id id = 0;
+            float x0 = 0.0f, x1 = 0.0f;   // the card's left and right
+            int rows = 0;
+            Rect mask;                     // last frame's card at this frame's top: row highlights stay inside
+            std::size_t mark = 0;          // where the card's background goes in the draw list
+            std::string footer;
+            bool stylePushed = false;
+        };
+        std::vector<SectionEntry> sections;
+        std::vector<std::uint8_t> rowStyles;   // BeginRow: whether the row took a Next() style
+
+        // navigation stacks and pages being submitted (navigation.cpp)
+        struct NavEntry
+        {
+            detail::NavState* state = nullptr;
+            Vec2 origin, size;             // the navigation's area
+        };
+        std::vector<NavEntry> navs;
+        struct PageEntry
+        {
+            bool clipped = false;          // the page below during a transition: clipped to the top page's edge
+            bool edgeFade = false;
+            Rect edgeShadow;               // the top page's shadow on it
+            float shadowAlpha = 0.0f;
+        };
+        std::vector<PageEntry> pages;
+
+        // Floating bars (tab bars): their draw commands, moved to the end of their window's draw list at EndFrame. A
+        // child region draws in submission order, inside the scroll edge fades of the areas around it; a bar floats
+        // over all of that (WGT's were child windows, drawn after their parent).
+        struct FloatBlock
+        {
+            DrawList* list = nullptr;
+            std::size_t from = 0, to = 0;
+        };
+        std::vector<FloatBlock> floats;
     };
 
     namespace detail
@@ -142,6 +188,15 @@ namespace esia::ui
         std::string_view VisibleLabel(std::string_view label);
         void TextImpl(text::FontRef f, Color color, std::string_view text, bool wrap);
 
+        // DrawList::MoveCommands for the widget layer (a card's background under its content): the floating blocks it
+        // shifts are kept track of.
+        void MoveCommands(DrawList& dl, std::size_t from, std::size_t to);
+
+        // ---- scrolling
+        // Content dissolves toward an edge it can still scroll past (the innermost scroll area being submitted).
+        bool BeginScrollEdgeFade();
+        void EndScrollEdgeFade(bool started);
+
         // ---- layout
         // In an auto-layout container, true while the item being submitted is one of its direct children.
         bool InLayoutContainer();
@@ -156,5 +211,21 @@ namespace esia::ui
         bool SliderAt(Id id, const Rect& r, float* value, float mn, float mx, const SliderOptions& o);
         bool StepperAt(Id id, const Rect& r, int* value, int mn, int mx, int step);
         void IconTile(Painter& p, const Rect& r, Icon icon, Color color);
+        bool SegmentedAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items);
+
+        // ---- the liquid selection of segmented controls and tab bars (selection.cpp)
+        struct LiquidSelection
+        {
+            float pos = 0.0f;       // animated position, item units
+            float velocity = 0.0f;  // px / s
+            float lens = 0.0f;      // 0 = resting pill .. 1 (+overshoot) = clear lens
+            int hovered = -1;
+            bool held = false;
+            bool changed = false;   // *selected changed (on release)
+        };
+        LiquidSelection LiquidSelect(Id id, const Rect& area, int count, int* selected);
+        Rect LiquidSelectionRect(const LiquidSelection& s, const Rect& area, int count, float inset);
+        // The lens over the items (draw it after them): `rise` = how far it grows past the track, top and bottom.
+        void DrawSelectionLens(Painter& p, const Rect& pill, const LiquidSelection& s, float rise, Color tint = Color::Clear());
     }
 }
