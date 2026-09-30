@@ -10,8 +10,12 @@ namespace esia::text::detail
 {
     namespace
     {
+        // PingFang is the system UI's own CJK font since macOS 12, in a file only the system can read (below); the
+        // families after it are ordinary files in /System/Library/Fonts that cover Chinese where PingFang cannot be
+        // loaded: Hiragino Sans GB (Simplified), Heiti SC / TC (STHeiti).
         constexpr std::string_view kChain[] = {
-            kSystemUiFamily, "Helvetica Neue", "PingFang SC", "PingFang TC", "Hiragino Sans", "Apple SD Gothic Neo", "Apple Symbols",
+            kSystemUiFamily, "Helvetica Neue", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Heiti SC", "Heiti TC",
+            "Hiragino Sans", "Apple SD Gothic Neo", "Apple Symbols",
         };
 
         template <typename T>
@@ -89,8 +93,12 @@ namespace esia::text::detail
             out.family = ToUtf8(family.Get());
             out.weight = traits.weight;
             out.style = traits.italic ? FontStyle::Italic : FontStyle::Upright;
-            // the named instances of a variable font (SF) share face 0, whose name table knows only the default one
+            // A file this process cannot read is not a font it has: Core Text also lists the system UI's private ones
+            // (PingFang in FontServices.framework/Resources/Reserved), which only the system may open.
             const std::vector<FontFaceInfo> faces = ReadFontFaces(PathFromUtf8(out.path));
+            if (faces.empty())
+                return std::nullopt;
+            // the named instances of a variable font (SF) share face 0, whose name table knows only the default one
             const auto face = std::find_if(faces.begin(), faces.end(), [&](const FontFaceInfo& f) { return f.postscriptName == ps; });
             out.faceIndex = face != faces.end() ? face->faceIndex : 0;
             return out;
@@ -134,14 +142,23 @@ namespace esia::text::detail
         if (!matches)
             return std::nullopt;
 
+        // the best face among those that resolve to a readable file
+        std::vector<SystemFont> found;
         std::vector<FaceTraits> traits;
         const CFIndex n = CFArrayGetCount(matches.Get());
         for (CFIndex i = 0; i < n; ++i)
-            traits.push_back(Traits(static_cast<CTFontDescriptorRef>(CFArrayGetValueAtIndex(matches.Get(), i))));
+        {
+            const auto d = static_cast<CTFontDescriptorRef>(CFArrayGetValueAtIndex(matches.Get(), i));
+            if (std::optional<SystemFont> f = Resolve(d))
+            {
+                found.push_back(std::move(*f));
+                traits.push_back(Traits(d));
+            }
+        }
         const int best = SelectFace(traits, weight, style);
         if (best < 0)
             return std::nullopt;
-        return Resolve(static_cast<CTFontDescriptorRef>(CFArrayGetValueAtIndex(matches.Get(), best)));
+        return found[(std::size_t)best];
     }
 
     std::span<const std::string_view> PlatformFallbackFamilies() { return kChain; }
