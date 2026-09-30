@@ -32,6 +32,11 @@ styles, text, controls, cards, windows, auto layout, inset grouped lists, naviga
 the search bar, menus, pickers, tooltips, scrolling and the line chart, and the `showcase` example. How to use it and what of WGT
 is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 
+**Widget layer, second part** (branch `feat/ui-overlays`, 2026-10-01): glow halos, the island with notifications
+and live activities, the dock, and WGT's demo ported panel for panel as the `showcase`, compared with WGT's
+screenshots.
+
+* [Widget layer, second part](#widget-layer-second-part-featui-overlays)
 * [Widget layer, first part](#widget-layer-first-part-featui-foundation)
 * [UI core v2](#ui-core-v2)
 * [Text on every platform](#text-on-every-platform-feattext-everywhere)
@@ -46,10 +51,41 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
 
+## Widget layer, second part (`feat/ui-overlays`)
+
+Branch from `main` at `7a2f6e2`, written by the local session. The widgets and the comparison with WGT:
+[UI_WIDGETS.md](UI_WIDGETS.md), sections 4 (glow halos), 10 (the island and the dock) and 11 (the showcase).
+
+| Part | Files |
+| --- | --- |
+| glow halos | `src/esia/ui/layout.cpp`: the item map (`GlowContainment` from last frame's laid-out items, WGT's `ComputeGlowHalo`) and room for a glow in stacks, grids and flows |
+| the island, notifications, the dock | `src/esia/ui/overlays.cpp` (new); `Ui::Notify` / `SetActivity` / `ClearActivity`, `UiDesc::island`, `ui::Dock` in `ui.hpp` |
+| WGT's layout, pixel for pixel | `Context::Snap` snaps down as Dear ImGui did ([UI_CORE.md](UI_CORE.md) section 6); the Ui sets the core's item spacing from the theme as WGT did; `ViewRect()` includes the padding; section headers and footers take WGT's spacing; a group that fills the width inside a stack is a flexible child; scroll edge fades end at the display's edge when a window reaches past it (Dear ImGui's clip rects stayed on the display) |
+| fonts | Windows' chain: Yu Gothic UI instead of Yu Gothic (DirectWrite's choice; proportional kana) and Nirmala UI, Leelawadee UI, Ebrima, Gadugi, Myanmar Text, Javanese Text, Segoe UI Historic and Segoe UI Emoji for the scripts Segoe UI leaves out; Linux's gained Noto Sans Devanagari and Thai. The FreeType text system gives kana and Hangul to a fallback whose OS/2 code pages name Japanese or Korean, Han and CJK punctuation to the paragraph's CJK font before them, and a space to the requested font when it has one (as CSS and DirectWrite) |
+| Direct3D 9 (found running the showcase with `--debug`, which Windows put on the RTX 4080 while other programs' D3D9 ran on the AMD iGPU) | uploads to render targets and readback go through a system-memory texture: NVIDIA's driver has no L8 offscreen plain surface, so the glyph atlas never uploaded there and D3D9 drew no text on NVIDIA. A pixel shader over the device's instruction slots (a user effect on the glass variants, ~5.4k, against NVIDIA's 4096) is logged as information, not as an error (`d3d::InstructionSlots`). Tests: an R8 target uploaded and read back, the slot count of a glass variant |
+| the example frame | `glass_app`: `--scale` (pixels per UI unit whatever the monitor), fractional `--size`, a renderer hook (custom effects), the frame's CPU time and render stats |
+| the showcase | `examples/showcase`: WGT's demo (`main.cpp`), the wallpaper loaded with WIC (`image_file.cpp`) |
+| tests | `tests/ui/test_ui.cpp`: glow room, the island from another thread, dock tiles, a filling group, the edge fade at the display's edge; `tests/text/test_ft_cjk.cpp`: a space between fallback characters, kana from Yu Gothic UI (Windows), Devanagari and Thai in the chain |
+
+### Verified on Windows (the local session)
+
+* Clean builds of every backend with `ESIA_WERROR`, clang-cl and MSVC: every test passes with each.
+* The showcase with every panel open and `--debug`, 240 frames on each API: no debug-layer or validation message
+  on D3D9 (RTX 4080), D3D10, D3D11, D3D12, Vulkan and OpenGL.
+* The showcase captured like WGT's reference screenshots (branch `reference/wgt-1.1`), each panel dark and light at
+  UI scale 1 and 1.5, and compared pixel by pixel: [UI_WIDGETS.md](UI_WIDGETS.md) section 11 has the numbers and
+  what still differs.
+
+### Not verified
+
+* Linux and macOS: as for the first part, the showcase needs the Win32 platform layer.
+* By hand: the dock's magnification and the island's animations were looked at in captures and fixed-clock frames,
+  not used at a real frame rate.
+
 ## Widget layer, first part (`feat/ui-foundation`)
 
 Branch from `main` at `e43ea9f`, written by the local session. What is ported, how it maps onto the core and what
-is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 11.
+is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 12.
 
 | Part | Files |
 | --- | --- |
@@ -66,8 +102,8 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 11.
 
 * Clean builds of every backend with `ESIA_WERROR`, clang-cl 22.1.8 and MSVC 19.44: 36 of 36 tests pass with each,
   `esia_ui_tests` included (Metal's two conformance tests skip on Windows, as before).
-* `showcase` with `--debug` on D3D11 (light) and D3D12 (dark): no debug-layer message, and every widget of
-  [UI_WIDGETS.md](UI_WIDGETS.md) section 10 renders.
+* `showcase` (the first one, before WGT's demo replaced it) with `--debug` on D3D11 (light) and D3D12 (dark): no
+  debug-layer message, and every widget it showed renders.
 * `glass_window` after its frame moved into `glass_app`: D3D11, Vulkan and OpenGL with `--debug`, no message.
 
 ### Not verified

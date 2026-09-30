@@ -15,8 +15,9 @@ the core, and what of WGT is ported so far.
 * [7. Navigation, the tab bar and the search bar](#7-navigation-the-tab-bar-and-the-search-bar)
 * [8. Auto layout](#8-auto-layout)
 * [9. Custom widgets and animation](#9-custom-widgets-and-animation)
-* [10. The showcase](#10-the-showcase)
-* [11. Status: what of WGT is ported](#11-status-what-of-wgt-is-ported)
+* [10. The island, notifications and the dock](#10-the-island-notifications-and-the-dock)
+* [11. The showcase: WGT's demo](#11-the-showcase-wgts-demo)
+* [12. Status: what of WGT is ported](#12-status-what-of-wgt-is-ported)
 
 ## 1. Setting up
 
@@ -64,6 +65,8 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
 
 * **Built-in themes.** `ThemeLight()` and `ThemeDark()` hold WGT's values. `ThemeWithAccent(theme, color)` changes
   the accent and what derives from it.
+* **Spacing.** Every frame the Ui sets the core's item spacing (`Context::Metrics().itemSpacing`) from the theme:
+  `metrics.spacing` across and 0.8 of it down, times the scale, as WGT set Dear ImGui's `ItemSpacing`.
 * **Changing the theme.** `Ui::SetTheme(theme, animate)`, `SetDarkMode(dark)` (keeps the accent) and
   `SetAccent(color)` cross-fade over the theme's transition time; an accent set with `SetAccent` stays across
   theme changes (`Color::Clear()` returns to the theme's own). `LerpTheme` blends every color, material and
@@ -177,6 +180,16 @@ ui::SearchField("search", &query);                        // a field with the se
   on glass), `maxBytes`.
 * **Return values.** The functions that change a value return true in the frame they change it.
 
+**Glow halos** (WGT's item map). A widget with `glow` (a button, a toggle button, the chart's dot) lights the area
+around it, and the light stops short of its neighbors:
+
+* The Painter asks the Ui how far a glow may reach (`PainterEnv::glow`, a `GlowContainment`). The Ui answers from
+  the window's items of last frame (`Window::LaidOutItems()`, WGT's `ComputeGlowHalo`): on each side the halo ends
+  at the first item in its way (not its own, nor the containers it is in), and it fades out over the gap before it.
+* Inside a stack, grid or flow the glowing child keeps room for its glow: from the next frame, the gaps next to it
+  grow to the glow's reach, as if it had a margin. A glow drawn inside a nested container counts when that
+  container is laid out; a glow that stays inside its child (a toggle in a tile) takes no room.
+
 ## 5. Windows, cards, scroll areas
 
 * **`BeginWindow(title, &open, {size, pos, flags, subtitle, icon})`** is a liquid-glass window: a glass surface
@@ -195,6 +208,9 @@ ui::SearchField("search", &query);                        // a field with the se
     measuring frame.
   * With `size.x == 0` it fills the available width.
 * **`BeginScrollArea(id, size)`** is a child region with the core's smooth scrolling and an edge fade.
+* **Edge fades** (iOS's scroll edge effect): content dissolves toward an edge it can still scroll past, over up to
+  22 units at the top and 30 at the bottom, growing with the distance left to scroll. The edge is where the content
+  stops being visible: a window reaching past the display fades at the display's edge.
 * **Scrolling** is the same in a window's body, a scroll area and a navigation page:
   * the wheel and the core's scroll calls glide (`ChildFlags_SmoothScroll`);
   * pressed on empty space, the content follows the pointer, and let go it glides on with the drag's speed (no
@@ -325,31 +341,88 @@ if (it.pressed) ...;
 * **Springs** (`anim.hpp`) are analytic: the same curve at any frame rate, coming to rest exactly on the target. The
   presets are `Spring::Snappy`, `Smooth`, `Bouncy` and `Gentle`, as in SwiftUI.
 
-## 10. The showcase
+## 10. The island, notifications and the dock
 
-`examples/showcase` shows the widgets in a window over a drifting wallpaper. It uses the same frame as
-`glass_window`: the `glass_app` library, with the Win32 platform layer, every backend, and a render thread.
+```cpp
+ui.Notify({.title = "Download complete", .message = "HD texture pack", .icon = icons::Download});   // any thread
+ui.SetActivity("download", "Downloading texture pack", 0.4f, icons::Download);                     // any thread
+ui.ClearActivity("download");
 
-* **Components**: four tabs under a tab bar: every button kind, switches, checkboxes, sliders, a segmented
-  control and the stepper; text fields (plain, search, password, and one with text in six scripts), a picker and a
-  menu with a tooltip; progress bars and rings and badges; dark mode, the accent swatches and the glass look.
-* **Control Center**: a grid of glass cards with round toggles, Now Playing, and a brightness slider spanning two
-  columns.
-* **Telemetry**: two gauges in a flow, a frame-time line chart, and a card with wrapped mixed Latin / Chinese text.
-* **Settings**: WGT's Settings screen: a navigation stack whose root page has a custom profile row, sections of
-  every row kind (the Liquid Glass section edits the live theme) and the floating search bar; Accent Color opens a
-  second page.
-
-```
-showcase.exe --api d3d12 --dark --look frosted --size 1360x780 --frames 90 --fixed-dt 0.016667 --screenshot shot.png
+bool settingsOpen = true, effectsOpen = false;
+ui::Dock({{"Settings", icons::Settings, Color::Hex(0x8E8E93), &settingsOpen},
+          {"Effects Lab", icons::Brush, Color::Hex(0xFF375F), &effectsOpen}});                      // every frame
 ```
 
-`--tab 0|1|2|3` picks the Components tab, `--page accent` opens the Accent Color page and `--menu` the Inputs
-tab's menu. The options of
-`glass_window` (`app.hpp`) apply: `--api`, `--size`, `--frames`, `--fixed-dt`, `--screenshot` and
-`--debug`.
+* **The island** (WGT's Dynamic Island) draws itself at the top center of the display at `Ui::EndFrame`, over
+  everything (`UiDesc::island = false` turns it off).
+  * A notification arrives like the Siri orb: the island opens into a card big enough for the message, a black body
+    clearing into a lens that magnifies what lies below, with a streak of light where black turns into glass. Then
+    it settles into a pill (icon, title, time left) until its `duration` ends. Notifications queue: one after the
+    other.
+  * A live activity (`SetActivity`, `progress` 0..1, < 0 indeterminate) stays in the pill with a progress ring until
+    `ClearActivity`; a new one gets the same short arrival.
+  * `Notify`, `SetActivity` and `ClearActivity` take a lock: a worker thread calls them directly.
+* **The dock** (macOS) is a glass shelf of tiles along the bottom of the display, above the windows. A tile magnifies
+  under the mouse and shows its label; a click toggles its `open` flag, and a dot under the tile shows it is set.
+  `Dock` returns the tile clicked this frame, else -1. It is a window of its own size in the overlay layer, so
+  nothing around it takes the mouse.
 
-## 11. Status: what of WGT is ported
+## 11. The showcase: WGT's demo
+
+`examples/showcase` is WGT's demo (`examples/demo/showcase.cpp` at tag `wgt-1.1-final`) on Esia, panel for panel:
+liquid-glass windows over the wallpaper (cover-fitted, with drifting color blobs), the dock that opens them, the
+status bar, and a worker thread that posts notifications, a download activity and telemetry. It uses the same frame
+as `glass_window`: the `glass_app` library, with the Win32 platform layer, every backend, and a render thread.
+
+| Panel | What |
+| --- | --- |
+| Settings | a navigation stack: the root page (profile row, every row kind, the floating search bar), Accent Color, Performance |
+| Effects Lab | the glass materials over a moving stage, liquid morphing, a custom HLSL effect (an aurora), a bloom layer, gradients, shadows and glowing arcs |
+| Control Center | modules in groups: round toggles, tall sliders, Now Playing |
+| Components | three tabs under a tab bar: Controls, Inputs (text fields, picker, menu), Status (progress) |
+| Languages | one line in each of 13: English, Simplified and Traditional Chinese, Japanese, Korean, Arabic, Hebrew, Hindi, Thai, Russian, Greek, Vietnamese, emoji |
+| Telemetry | values a worker thread writes (gauges, a log) |
+| Plugin: Hello | WGT's plugin panel with its own effect (a hologram), drawn by the showcase (no plugin host yet) |
+
+```
+showcase.exe --api d3d11 --size 1600x1000 --scale 1 --open languages --fixed-dt 0.016667 --frames 120 --screenshot shot.png
+```
+
+* `--open list` opens those panels (`settings,effects,control,components,languages,telemetry,plugin`, `none`, or
+  `--open-all`); the default is the first three.
+* `--light` starts light (the demo starts dark), `--look` sets the glass look, `--tab n` the Components tab,
+  `--page accent|perf` the Settings page, `--menu` opens the Components menu.
+* The options of `glass_window` (`app.hpp`) apply: `--api`, `--size`, `--scale`, `--frames`, `--fixed-dt`,
+  `--screenshot` and `--debug`. `--scale s` renders at s pixels per UI unit whatever the monitor, and `--size` takes
+  fractions: `--size 1066.6667x666.6667 --scale 1.5` is 1600 x 1000 pixels at UI scale 1.5.
+
+**Compared with WGT's screenshots.** Branch `reference/wgt-1.1` holds WGT's captures of each panel, dark and light,
+at UI scale 1 and 1.5 (1600 x 1000 pixels each, the same clock). The showcase takes the same captures and each
+panel's window is compared pixel by pixel, the island masked (its timing differs). Mean difference per pixel
+(0 - 255), dark / light:
+
+| Panel | x1 | x1.5 |
+| --- | --- | --- |
+| Settings | 0.29 / 0.34 | 0.74 / 1.40 |
+| Effects Lab | 0.30 / 0.30 | 0.90 / 1.53 |
+| Control Center | 0.50 / 0.58 | 0.45 / 0.36 |
+| Components | 0.76 / 0.80 | 1.95 / 1.59 |
+| Languages | 1.20 / 1.05 | 0.54 / 0.76 |
+| Telemetry | 0.7 - 1.3 / 0.76 | 1.3 - 1.8 / 1.3 - 1.8 (from run to run: live values) |
+
+What still differs, and why:
+
+* Text: FreeType's rasterization is not DirectWrite's, so glyph edges differ by a few levels everywhere. This is
+  most of what is left in every panel.
+* Chinese: WGT asked DirectWrite's fallback for each character with the user's locale; under en-US that gives
+  Yu Gothic UI for all CJK text, so WGT drew Chinese with Japanese glyph forms. Esia keeps Microsoft YaHei for Chinese
+  (the same widths; the Japanese and Korean lines now match WGT).
+* Emoji are drawn as outlines (color glyphs are not drawn yet); the emoji line is below the fold in the captures.
+* Live values: the Telemetry log, the gauges and the island depend on the worker thread's timing.
+* At 1.5: a few buttons sit a pixel apart horizontally.
+* Texts reworded for Esia (the Telemetry note, the Settings footer, the version).
+
+## 12. Status: what of WGT is ported
 
 Ported, in the order the parts depend on each other:
 
@@ -365,7 +438,14 @@ Ported, in the order the parts depend on each other:
 * menus, the picker and `RowPicker`, tooltips (WGT's glass popups);
 * drag-to-scroll and the scroll indicator (WGT's `ScrollAreaEnd`);
 * the line chart;
-* stacks, adaptive stacks, grids and flows.
+* stacks, adaptive stacks, grids and flows;
+* glow halos (WGT's item map, section 4);
+* the island, notifications, live activities and the dock (WGT's `overlay.cpp`, section 10);
+* WGT's demo: Settings, Effects Lab, Control Center, Components, Languages, Telemetry and the plugin panel, compared
+  with WGT's screenshots (section 11).
+
+WGT's layout matches pixel for pixel because Esia now does what Dear ImGui did under WGT: layout positions snap
+down to the pixel (`Context::Snap`, [UI_CORE.md](UI_CORE.md) section 6), and the item spacing is WGT's (section 2).
 
 Two WGT bugs were fixed on the way:
 
@@ -374,13 +454,8 @@ Two WGT bugs were fixed on the way:
 * A stack inside a flow took the full width. It is now as wide as its content unless it has something to fill with
   (section 8).
 
-Not ported yet, in the planned order:
-
-1. the glow halo;
-2. the island, the dock, notifications;
-3. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
-
-Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
+Not ported: color emoji (the text system draws outlines), and WGT's plugin loading (the plugin panel is drawn by the
+showcase itself).
 
 **Tests** (`tests/ui/test_ui.cpp`, `esia_ui_tests`) run without a GPU, on a `Context` driven frame by frame:
 
@@ -401,8 +476,12 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 * popups: a picker's menu opens and takes a choice; the click that closes a menu does not reach the widget under
   it; a menu item closes its menu; a tooltip waits half a second, goes when the mouse leaves and waits again;
 * scrolling: the content follows a drag and glides on after it; the indicator dragged to the bottom takes the
-  content to its end;
+  content to its end; content past the display fades at the display's edge;
 * the line chart: the room it takes, none when it draws into a rect;
+* glow halos: a glowing child gets room for its glow in a stack;
+* the island and the dock: a notification and an activity from another thread open the island; a dock tile click
+  toggles its panel;
+* a group that fills the width is a flexible child (Control Center's modules side by side);
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.
