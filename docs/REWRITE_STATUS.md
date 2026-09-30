@@ -201,10 +201,15 @@ the test `SystemFonts.PlatformLookup` checks it with Tahoma's simulated oblique.
 
 Found by CI on macOS 15 (the first run of `system_fonts_apple.cpp`, 2026-09-30): Core Text resolves "PingFang SC" to
 `/System/Library/PrivateFrameworks/FontServices.framework/Resources/Reserved/PingFangUI.ttc`, the system UI's
-private copy. The runner's process could not load it, so no font of the chain covered Simplified Chinese
-(`SystemFonts.FallbackChainCoversEveryScript` failed). The Apple lookup now treats a file the process cannot read as
-not installed and takes the best readable face of the family instead. The macOS chain adds Hiragino Sans GB and Heiti
-SC / TC (STHeiti), which are ordinary files in `/System/Library/Fonts`.
+private copy. Our table reader can read that file, but FreeType cannot load it (a format of its own, most likely).
+So no font of the chain covered Simplified Chinese, and `SystemFonts.FallbackChainCoversEveryScript` failed.
+
+The fix, in two parts:
+* **The lookup skips the system's private fonts** (anything under `/PrivateFrameworks/`) and files the process cannot
+  read. It takes the best remaining face of the family instead, so PingFang is not installed as far as Esia is
+  concerned.
+* **The macOS chain gains Hiragino Sans GB and Heiti SC / TC** (STHeiti), which are ordinary files in
+  `/System/Library/Fonts`. The second CI run found both.
 
 ### Not verified
 

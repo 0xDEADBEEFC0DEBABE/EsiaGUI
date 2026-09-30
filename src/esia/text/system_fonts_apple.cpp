@@ -93,8 +93,11 @@ namespace esia::text::detail
             out.family = ToUtf8(family.Get());
             out.weight = traits.weight;
             out.style = traits.italic ? FontStyle::Italic : FontStyle::Upright;
-            // A file this process cannot read is not a font it has: Core Text also lists the system UI's private ones
-            // (PingFang in FontServices.framework/Resources/Reserved), which only the system may open.
+            // Core Text also lists the system UI's private fonts (PingFang in PrivateFrameworks/FontServices.framework/
+            // Resources/Reserved since macOS 12). They are no fonts of the process: FreeType cannot load PingFangUI.ttc
+            // (CI, macOS 15), and a file the process cannot read is no font of it either.
+            if (out.path.find("/PrivateFrameworks/") != std::string::npos)
+                return std::nullopt;
             const std::vector<FontFaceInfo> faces = ReadFontFaces(PathFromUtf8(out.path));
             if (faces.empty())
                 return std::nullopt;
