@@ -86,8 +86,11 @@ ESIA_TEST(FreeTypeCjk, FallsBackFromALatinFont)
     ESIA_CHECK(after.size.y == before.size.y && after.baseline == before.baseline);
     ESIA_CHECK(after.size.y != f.ts->Measure({f.noto, kSize}, "中").size.y);
 
-    // digits stay with DroidSans between the ideographs
+    // digits stay with DroidSans between the ideographs, and so does a space: the requested font has one
     ESIA_CHECK_NEAR(f.ts->Measure(fr, "2026年9月").size.x, f.ts->Measure(fr, "20269").size.x + 2.0f * kSize, 1e-3f);
+    const float space = f.ts->Measure(fr, "E E").size.x - f.ts->Measure(fr, "EE").size.x;
+    ESIA_CHECK(space > 0.0f && std::fabs(space - f.ts->Measure({f.noto, kSize}, "中 文").size.x + 2.0f * kSize) > 0.5f);   // Noto's differs
+    ESIA_CHECK_NEAR(f.ts->Measure(fr, "中 文").size.x, 2.0f * kSize + space, 1e-3f);
 
     DrawList dl = NewList();
     f.ts->Draw(dl, fr, Vec2(0, 0), Color::Black(), text);
@@ -200,7 +203,12 @@ ESIA_TEST(SystemFonts, FallbackChainCoversEveryScript)
         const char* script;
         char32_t c;
     } samples[] = {{"Latin", U'A'},    {"Simplified Chinese", U'语'}, {"Traditional Chinese", U'體'}, {"Japanese kana", U'の'},
-                   {"Korean", U'한'}, {"symbols", U'→'}};
+                   {"Korean", U'한'}, {"symbols", U'→'},
+#if defined(_WIN32)
+                   // the scripts of WGT's Languages panel that Segoe UI does not have
+                   {"Devanagari", U'ह'}, {"Thai", U'ไ'},
+#endif
+    };
     for (const auto& s : samples)
     {
         DrawList dl = NewList();
@@ -211,3 +219,34 @@ ESIA_TEST(SystemFonts, FallbackChainCoversEveryScript)
         ESIA_CHECK(!PlatformShipsItsChain());
     }
 }
+
+#if defined(_WIN32)
+ESIA_TEST(SystemFonts, KanaTakeAJapaneseFont)
+{
+    // Microsoft YaHei comes first among Windows' CJK fonts and has kana too (GB 18030), full width; they go to Yu
+    // Gothic UI, as with DirectWrite's own fallback
+    const std::vector<text::SystemFont> fonts = text::FindDefaultFallbackFonts();
+    const auto installed = [&](std::string_view family) {
+        return std::any_of(fonts.begin(), fonts.end(), [&](const text::SystemFont& f) { return f.family == family; });
+    };
+    if (!installed("Microsoft YaHei") || !installed("Yu Gothic UI"))
+    {
+        std::printf("  skipped: Microsoft YaHei or Yu Gothic UI is not installed\n");
+        return;
+    }
+    TextureRegistry textures;
+    std::unique_ptr<text::TextSystem> ts = text::CreateFreeTypeTextSystem(textures);
+    const std::vector<text::FontId> ids = text::AddFallbackFonts(*ts, fonts);
+    ts->NewFrame({});
+    const text::FontRef fr{ids[0], kSize};
+    ESIA_CHECK(ts->Measure(fr, "リキッド").size.x < 3.6f * kSize);   // Yu Gothic UI's kana are proportional
+    ESIA_CHECK_NEAR(ts->Measure(fr, "中文").size.x, 2.0f * kSize, 1e-3f);
+
+    // CJK punctuation (and Han) take the font of the paragraph's CJK text before them: the ideographic comma is
+    // 0.664 em in Yu Gothic UI, an em in YaHei
+    const auto comma = [&](const char* before, const char* with) { return ts->Measure(fr, with).size.x - ts->Measure(fr, before).size.x; };
+    ESIA_CHECK_NEAR(comma("の", "の、"), 0.664f * kSize, 0.05f * kSize);
+    ESIA_CHECK_NEAR(comma("の UI", "の UI、"), 0.664f * kSize, 0.05f * kSize);   // across Latin text
+    ESIA_CHECK_NEAR(comma("中", "中、"), kSize, 0.05f * kSize);
+}
+#endif

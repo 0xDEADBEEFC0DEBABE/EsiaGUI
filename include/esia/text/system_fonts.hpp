@@ -52,13 +52,17 @@ namespace esia::text
                                                              int weight = 400, FontStyle style = FontStyle::Upright);
 
     // This platform's fallback chain, in order:
-    //   Windows  Segoe UI, Microsoft YaHei, Microsoft JhengHei, Yu Gothic, Malgun Gothic, Segoe UI Symbol
+    //   Windows  Segoe UI, Microsoft YaHei, Microsoft JhengHei, Yu Gothic UI, Malgun Gothic, Nirmala UI, Leelawadee UI,
+    //            Ebrima, Gadugi, Myanmar Text, Javanese Text, Segoe UI Historic, Segoe UI Symbol, Segoe UI Emoji
     //   macOS    system-ui (SF), Helvetica Neue, Hiragino Sans GB, Heiti SC, Heiti TC, Hiragino Sans,
     //            Apple SD Gothic Neo, Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
     //            which is not installed for the process)
-    //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Symbols, Noto Sans Symbols 2,
-    //            WenQuanYi Zen Hei, Droid Sans Fallback
-    // Simplified Chinese comes before the other CJK fonts: characters the four share (Han unification) take its forms.
+    //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Devanagari, Noto Sans Thai,
+    //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback
+    // Simplified Chinese comes before the other CJK fonts: characters the four share (Han unification) take its forms,
+    // except after kana or Hangul in the same paragraph. The FreeType text system gives kana and Hangul to the first
+    // fallback whose OS/2 code pages name Japanese or Korean (Yu Gothic UI, Malgun Gothic), not to the first that
+    // has them (YaHei's kana: full width).
     ESIA_API std::span<const std::string_view> DefaultFallbackFamilies();
 
     // The installed fonts of DefaultFallbackFamilies(), in its order; missing families are left out, a face found for

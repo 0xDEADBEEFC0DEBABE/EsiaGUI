@@ -15,7 +15,8 @@ namespace esia::text::detail
     {
         constexpr std::string_view kChain[] = {
             "Noto Sans",         "Noto Sans CJK SC",    "Noto Sans CJK TC",  "Noto Sans CJK JP",   "Noto Sans CJK KR",
-            "DejaVu Sans",       "Noto Sans Symbols",   "Noto Sans Symbols 2", "WenQuanYi Zen Hei", "Droid Sans Fallback",
+            "DejaVu Sans",       "Noto Sans Devanagari", "Noto Sans Thai",   "Noto Sans Symbols",   "Noto Sans Symbols 2",
+            "WenQuanYi Zen Hei", "Droid Sans Fallback",
         };
         // system-ui: the first of these that is installed
         constexpr std::string_view kUiFamilies[] = {"Noto Sans", "DejaVu Sans"};

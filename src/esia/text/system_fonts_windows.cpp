@@ -16,7 +16,12 @@ namespace esia::text::detail
     namespace
     {
         constexpr std::string_view kChain[] = {
-            "Segoe UI", "Microsoft YaHei", "Microsoft JhengHei", "Yu Gothic", "Malgun Gothic", "Segoe UI Symbol",
+            "Segoe UI", "Microsoft YaHei", "Microsoft JhengHei", "Yu Gothic UI", "Malgun Gothic",
+            // the scripts Segoe UI leaves to others: Indic (Nirmala UI), Thai and Lao (Leelawadee UI), Ethiopic and N'Ko
+            // (Ebrima), Cherokee and Canadian syllabics (Gadugi), Myanmar, Javanese, historic scripts; then symbols and emoji
+            // (their outlines: color glyphs are not drawn yet)
+            "Nirmala UI", "Leelawadee UI", "Ebrima", "Gadugi", "Myanmar Text", "Javanese Text", "Segoe UI Historic", "Segoe UI Symbol",
+            "Segoe UI Emoji",
         };
 
         template <typename T>

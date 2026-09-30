@@ -14,6 +14,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+#include FT_TRUETYPE_TABLES_H
 #include <hb.h>
 
 #include <algorithm>
@@ -57,6 +58,20 @@ namespace esia::text
                    (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFF00 && c <= 0xFFEF) || (c >= 0x20000 && c <= 0x3FFFF);
         }
 
+        bool IsKana(char32_t c) { return (c >= 0x3040 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF) || (c >= 0xFF65 && c <= 0xFF9F); }
+
+        bool IsHangul(char32_t c)
+        {
+            return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F) || (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7FF) ||
+                   (c >= 0xFFA0 && c <= 0xFFDC);
+        }
+
+        // OS/2 code pages (ulCodePageRange1) naming the CJK convention a font is drawn for: the CJK fonts of a system's
+        // chain hold each other's kana and often Hangul (GB 18030 has both; Microsoft YaHei draws kana full width), so
+        // these go to a font made for them (Yu Gothic UI's proportional kana, Malgun Gothic) when the chain has one.
+        constexpr std::uint32_t kPageJapanese = 1u << 17;                   // JIS
+        constexpr std::uint32_t kPageKorean = (1u << 19) | (1u << 21);   // Wansung, Johab
+
         // Line-breaking rules of CJK typography (kinsoku, simplified): no line starts with closing punctuation, small
         // kana or the prolonged sound mark, and none ends with opening punctuation.
         bool NoBreakBefore(char32_t c)
@@ -79,6 +94,7 @@ namespace esia::text
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
             float ascent = 0.0f, descent = 0.0f, gap = 0.0f;   // design units, descent positive
+            std::uint32_t codePages = 0;                        // OS/2 ulCodePageRange1
 
             Face() = default;
             Face(const Face&) = delete;
@@ -520,6 +536,8 @@ namespace esia::text
                     face->descent = (float)-face->ft->descender;
                     face->gap = std::max(0.0f, (float)face->ft->height - face->ascent - face->descent);
                 }
+                if (const auto* os2 = static_cast<const TT_OS2*>(FT_Get_Sfnt_Table(face->ft, FT_SFNT_OS2)); os2 && os2->version >= 1 && os2->version != 0xFFFF)
+                    face->codePages = (std::uint32_t)os2->ulCodePageRange1;
                 faces_.push_back(std::move(face));
                 return (FontId)faces_.size();
             }
@@ -546,18 +564,29 @@ namespace esia::text
             }
 
             // The requested font if it has `c`, else the first fallback that has it, else the requested font (its
-            // .notdef). Marks, joiners, variation selectors, spaces and controls stay with the character before them,
-            // so they neither split a run nor separate a mark from its base.
-            std::uint16_t PickFace(std::uint16_t primary, char32_t c, int previous) const
+            // .notdef). Marks, joiners, variation selectors and controls stay with the character before them, so they
+            // neither split a run nor separate a mark from its base; so do spaces the requested font lacks (a space it
+            // has is its own, as with CSS and DirectWrite: Malgun Gothic's is 0.35 em, Segoe UI's 0.27). Kana and
+            // Hangul take the first fallback made for them (kPageJapanese / kPageKorean) that has them; Han and CJK
+            // punctuation the fallback of the paragraph's last CJK character (`cjk`) when it has them, so a Japanese
+            // sentence keeps Japanese forms.
+            std::uint16_t PickFace(std::uint16_t primary, char32_t c, int previous, int cjk = -1) const
             {
+                const bool inPrimary = faces_[primary]->Has(c);
                 if (previous >= 0)
                 {
                     const Face& prev = *faces_[(std::size_t)previous];
-                    if (IsJoinerOrSelector(c) || IsControl(c) || ((IsBreakingSpace(c) || IsMark(c)) && prev.Has(c)))
+                    if (IsJoinerOrSelector(c) || IsControl(c) || (IsMark(c) && prev.Has(c)) || (IsBreakingSpace(c) && !inPrimary && prev.Has(c)))
                         return (std::uint16_t)previous;
                 }
-                if (faces_[primary]->Has(c))
+                if (inPrimary)
                     return primary;
+                if (const std::uint32_t page = IsKana(c) ? kPageJapanese : IsHangul(c) ? kPageKorean : 0)
+                    for (const std::uint16_t f : fallbacks_)
+                        if ((faces_[f]->codePages & page) != 0 && faces_[f]->Has(c))
+                            return f;
+                if (cjk >= 0 && IsCjk(c) && faces_[(std::size_t)cjk]->Has(c))
+                    return (std::uint16_t)cjk;
                 for (const std::uint16_t f : fallbacks_)
                     if (faces_[f]->Has(c))
                         return f;
@@ -681,14 +710,16 @@ namespace esia::text
             {
                 cps_.clear();
                 runs_.clear();
-                int previous = -1;
+                int previous = -1, cjk = -1;
                 for (std::size_t i = 0; i < para.size();)
                 {
                     CodePoint cp;
                     cp.offset = (std::uint32_t)i;
                     cp.c = DecodeUtf8(para, i);
-                    cp.face = PickFace(primary, cp.c, previous);
+                    cp.face = PickFace(primary, cp.c, previous, cjk);
                     previous = cp.face;
+                    if (cp.face != primary && IsCjk(cp.c))
+                        cjk = cp.face;
                     cps_.push_back(cp);
                 }
                 // common / inherited characters (spaces, digits, punctuation, marks) join the script before them; at the
