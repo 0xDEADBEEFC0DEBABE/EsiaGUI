@@ -35,6 +35,9 @@ namespace esia::rhi::d3d9
         constexpr int kProfileSlots = 4;
         constexpr int kMaxStamps = 256;
         constexpr UINT kInitialInstanceIds = 16384;
+        constexpr std::uint64_t kStagingFrames = 3;          // frames before a kept staging texture is written again
+        constexpr std::size_t kMaxStaging = 8;               // staging textures kept
+        constexpr std::size_t kMaxStagingBytes = 4u << 20;   // larger uploads (whole images) get a temporary one
 
         // A defect of the shared FX shader: one feature test uses integer bit operations instead of FX_HAS, which
         // SM3 cannot compile (STATUS.md, core change requests). Replaced before compilation; a no-op once fixed.
@@ -482,15 +485,14 @@ namespace esia::rhi::d3d9
                 return;
             }
             // render targets cannot be locked: through system memory
-            ComPtr<IDirect3DTexture9> staging;
-            ComPtr<IDirect3DSurface9> sys;
-            if (!SystemMemorySurface((UINT)r.Width(), (UINT)r.Height(), t->format, "CreateTexture (upload)", staging, sys) ||
-                FAILED(sys->LockRect(&lr, nullptr, 0)))
+            const ComPtr<IDirect3DSurface9> sys = UploadStaging((UINT)r.Width(), (UINT)r.Height(), t->format, BytesPerPixel(t->desc.format));
+            const RECT area = {0, 0, r.Width(), r.Height()};
+            if (!sys || FAILED(sys->LockRect(&lr, &area, 0)))
                 return;
             CopyIn(t->desc.format, data, rowPitch, r.Width(), r.Height(), lr);
             sys->UnlockRect();
             const POINT at = {r.x0, r.y0};
-            log_.Check(dev_->UpdateSurface(sys.Get(), nullptr, t->surface.Get(), &at), "UpdateSurface");
+            log_.Check(dev_->UpdateSurface(sys.Get(), &area, t->surface.Get(), &at), "UpdateSurface");
         }
 
         void DestroyTexture(Texture tex) override
@@ -922,6 +924,50 @@ namespace esia::rhi::d3d9
                    log_.Check(tex->GetSurfaceLevel(0, &surface), what);
         }
 
+        // A system-memory surface for an upload of width x height texels to a render target: a texture kept from an
+        // earlier upload whose copy is kStagingFrames frames old (writing it then does not wait for that copy), else a
+        // new one with power-of-two sides, kept in place of the least recently used of kMaxStaging. The FX instance
+        // texture is uploaded every frame: a new texture each time (its pages written for the first time) took 25 us
+        // an upload on the RTX 4080, a kept one 3 us.
+        ComPtr<IDirect3DSurface9> UploadStaging(UINT width, UINT height, D3DFORMAT fmt, int bytesPerTexel)
+        {
+            Staging* pick = nullptr;
+            for (Staging& s : staging_)
+                if (s.format == fmt && s.width >= width && s.height >= height && s.used + kStagingFrames <= frame_ &&
+                    (!pick || s.width * s.height < pick->width * pick->height))
+                    pick = &s;
+            if (!pick)
+            {
+                Staging s;
+                s.format = fmt;
+                s.width = s.height = 1;
+                while (s.width < width)
+                    s.width *= 2;
+                while (s.height < height)
+                    s.height *= 2;
+                const bool keep = (std::size_t)s.width * s.height * (std::size_t)bytesPerTexel <= kMaxStagingBytes;
+                if (!keep)
+                {
+                    s.width = width;
+                    s.height = height;
+                }
+                if (!SystemMemorySurface(s.width, s.height, fmt, "CreateTexture (upload)", s.tex, s.surface))
+                    return {};
+                if (!keep)
+                    return s.surface;
+                if (staging_.size() >= kMaxStaging)
+                {
+                    auto oldest = std::min_element(staging_.begin(), staging_.end(), [](const Staging& a, const Staging& b) { return a.used < b.used; });
+                    *oldest = std::move(s);
+                    pick = &*oldest;
+                }
+                else
+                    pick = &staging_.emplace_back(std::move(s));
+            }
+            pick->used = frame_;
+            return pick->surface;
+        }
+
         // Creates `t` as a render-target texture cleared to transparent black.
         bool MakeRenderTarget(Tex& t)
         {
@@ -1158,6 +1204,16 @@ namespace esia::rhi::d3d9
         ComPtr<IDirect3DVertexBuffer9> cornerIds_, fullscreenIds_, instanceIds_;
         UINT instanceIdCount_ = 0;
         ComPtr<IDirect3DIndexBuffer9> quadIndices_;
+
+        struct Staging
+        {
+            D3DFORMAT format = D3DFMT_UNKNOWN;
+            UINT width = 0, height = 0;
+            ComPtr<IDirect3DTexture9> tex;
+            ComPtr<IDirect3DSurface9> surface;
+            std::uint64_t used = 0;   // frame of its last upload
+        };
+        std::vector<Staging> staging_;   // UploadStaging
 
         ComPtr<IDirect3DStateBlock9> hostState_;
         ComPtr<IDirect3DSurface9> hostTarget_, hostDepth_;

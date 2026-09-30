@@ -313,7 +313,9 @@ and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature 
   information, not as an error.
   Render targets cannot be locked, so uploads to them and readback go through a level of a `D3DPOOL_SYSTEMMEM`
   texture, which every texture format has; offscreen plain surfaces do not (NVIDIA's driver has no L8 one, the glyph
-  atlas's format, though it takes L8 render targets).
+  atlas's format, though it takes L8 render targets). Keep those textures for later uploads and write one again only
+  a few frames after its copy: the FX instance texture (a copy destination, so a render target) is uploaded every
+  frame, and a new texture each time cost 25 us an upload on the RTX 4080, a kept one 3 us.
 
 ## 5. API recipes
 
