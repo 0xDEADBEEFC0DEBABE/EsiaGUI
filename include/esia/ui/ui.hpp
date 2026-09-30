@@ -395,6 +395,24 @@ namespace esia::ui
         return TabBar(id, selected, std::span<const TabItem>(items.begin(), items.size()));
     }
 
+    // A line chart of `values`: a monotone curve (it never overshoots the data) with a gradient under it and a dot on
+    // the latest value. Without a fixed range it fits the data and eases to a new range instead of jumping.
+    struct LineChartOptions
+    {
+        float height = 90.0f;          // UI units
+        float width = -1.0f;           // < 0 = the available width
+        Rect rect = Rect();            // not empty: draw into this rect (a row's, a card's) instead of taking a place
+        Color tint = Color::Clear();   // Clear = accent
+        float thickness = 2.0f;
+        bool smooth = true;            // false: straight segments
+        bool fill = true;              // the gradient under the line
+        bool glow = false;             // a soft halo around the line
+        bool lastPoint = true;         // a dot on the latest value
+        float min = 0.0f, max = 0.0f;  // the value range; min == max: fitted to the data (from 0 for positive data)
+        int offset = 0;                // a ring buffer's oldest value
+    };
+    ESIA_API void LineChart(std::string_view id, std::span<const float> values, const LineChartOptions& options = {});
+
     // ============================================================= windows
     enum WindowFlags_ : std::uint32_t
     {

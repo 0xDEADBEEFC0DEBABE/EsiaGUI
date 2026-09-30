@@ -142,7 +142,8 @@ add_library(esia_ui STATIC
     ui/lists.cpp
     ui/navigation.cpp
     ui/text_field.cpp
-    ui/popups.cpp)
+    ui/popups.cpp
+    ui/charts.cpp)
 target_link_libraries(esia_ui PUBLIC esia_render esia_text)
 esia_target_defaults(esia_ui)
 add_library(esia::ui ALIAS esia_ui)

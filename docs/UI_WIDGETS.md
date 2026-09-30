@@ -126,6 +126,7 @@ edge. `TextWrapped` always wraps at the container's width. Inside an auto-layout
 | `Stepper(id, &n, min, max, step)` | - / + with auto-repeat |
 | `ProgressBar`, `ProgressRing`, `ActivityIndicator` | determinate (springs toward the value) and indeterminate progress |
 | `Badge(text, tint)`, `ColorSwatches(id, &i, colors, n)`, `Image(texture, size, radius)` | small parts |
+| `LineChart(id, values, {height, rect, tint, smooth, fill, glow, min, max, offset})` | a monotone curve (never overshooting the data) with a gradient under it and a dot on the latest value; fits the range to the data and eases it; a ring buffer through `offset`; `rect` draws into a row or card without taking room |
 | `Segmented(id, &i, {"A", "B", "C"}, width)` | the iOS 26 segmented control: tap a segment, or grab the selection and drag it; it travels as a clear lens that magnifies what it passes, then lands on the nearest segment as a solid pill. `*i` changes on release |
 
 * **Ids.** Labels may carry an id suffix: `"OK##dialog"` shows "OK", and `"##x"` shows nothing.
@@ -334,7 +335,7 @@ if (it.pressed) ...;
   menu with a tooltip; progress bars and rings and badges; dark mode, the accent swatches and the glass look.
 * **Control Center**: a grid of glass cards with round toggles, Now Playing, and a brightness slider spanning two
   columns.
-* **Telemetry**: two gauges in a flow, and a card with wrapped mixed Latin / Chinese text.
+* **Telemetry**: two gauges in a flow, a frame-time line chart, and a card with wrapped mixed Latin / Chinese text.
 * **Settings**: WGT's Settings screen: a navigation stack whose root page has a custom profile row, sections of
   every row kind (the Liquid Glass section edits the live theme) and the floating search bar; Accent Color opens a
   second page.
@@ -363,6 +364,7 @@ Ported, in the order the parts depend on each other:
 * the text field (WGT's `text_edit.cpp`);
 * menus, the picker and `RowPicker`, tooltips (WGT's glass popups);
 * drag-to-scroll and the scroll indicator (WGT's `ScrollAreaEnd`);
+* the line chart;
 * stacks, adaptive stacks, grids and flows.
 
 Two WGT bugs were fixed on the way:
@@ -376,8 +378,7 @@ Not ported yet, in the planned order:
 
 1. the glow halo;
 2. the island, the dock, notifications;
-3. LineChart;
-4. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
+3. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
 
 Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 
@@ -401,6 +402,7 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
   it; a menu item closes its menu; a tooltip waits half a second, goes when the mouse leaves and waits again;
 * scrolling: the content follows a drag and glides on after it; the indicator dragged to the bottom takes the
   content to its end;
+* the line chart: the room it takes, none when it draws into a rect;
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.

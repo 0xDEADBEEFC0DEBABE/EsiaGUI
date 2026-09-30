@@ -29,7 +29,7 @@ lookup and a fallback chain per platform cover Chinese, Japanese and Korean; CJK
 
 **Widget layer, first part** (branch `feat/ui-foundation`, 2026-09-30): `esia_ui` with WGT's theme, springs,
 styles, text, controls, cards, windows, auto layout, inset grouped lists, navigation, the tab bar, text fields,
-the search bar, menus, pickers and tooltips, and the `showcase` example. How to use it and what of WGT
+the search bar, menus, pickers, tooltips, scrolling and the line chart, and the `showcase` example. How to use it and what of WGT
 is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 
 * [Widget layer, first part](#widget-layer-first-part-featui-foundation)
@@ -53,7 +53,7 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 11.
 
 | Part | Files |
 | --- | --- |
-| the widget layer | `include/esia/ui` (`theme.hpp`, `anim.hpp`, `icons.hpp`, `ui.hpp`), `src/esia/ui` (`theme`, `anim`, `ui` with the style resolution, `controls`, `layout`, `containers`, `selection`, `lists`, `navigation`, `text_field`, `popups`) |
+| the widget layer | `include/esia/ui` (`theme.hpp`, `anim.hpp`, `icons.hpp`, `ui.hpp`), `src/esia/ui` (`theme`, `anim`, `ui` with the style resolution, `controls`, `layout`, `containers`, `selection`, `lists`, `navigation`, `text_field`, `popups`, `charts`) |
 | `Color::Lighter` / `Darker` | `include/esia/base/math.hpp` |
 | `Context::ViewRect()` | the core: what the innermost child region shows, where floating bars go ([UI_CORE.md](UI_CORE.md) section 15) |
 | `TextSystem::CaretStops` | the text interface: grapheme boundaries with caret x (a default for any text system; the FreeType one's in `ft_text_system.cpp`, tested in `test_ft_text.cpp`) |

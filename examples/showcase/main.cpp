@@ -47,6 +47,8 @@ namespace
         std::string openPage;   // --page: pushed on the first frame
         bool openMenu = false;  // --menu: the Inputs tab's menu opens on the first frame
         int size = 1, resolution = 2;
+        float frameTimes[120] = {};
+        int frameCursor = 0;
         bool pinned = true;
         std::string name = "Esia", query, password = "secret", settingsQuery;
         std::string scripts = "Hello · 你好 · مرحبا · こんにちは · café";
@@ -260,6 +262,12 @@ namespace
                 ui::EndStack();
             }
             ui::EndFlow();
+            ui::Spacer();
+            // frame time, a ring buffer of the last 120 frames (a made-up signal: this window has no GPU timings)
+            frameTimes[(std::size_t)frameCursor] = 8.0f + 3.0f * std::sin(t * 1.3f) + 1.5f * std::sin(t * 7.1f) + (frameCursor % 17 == 0 ? 4.0f : 0.0f);
+            frameCursor = (frameCursor + 1) % (int)std::size(frameTimes);
+            ui::Text(ui::TextStyle::Headline, "Frame time");
+            ui::LineChart("frametime", frameTimes, {.height = 70, .tint = Color::Hex(0x30D158), .glow = true, .offset = frameCursor});
             ui::Spacer();
             ui::BeginCard("log");
             ui::Text(ui::TextStyle::Headline, "Event log");

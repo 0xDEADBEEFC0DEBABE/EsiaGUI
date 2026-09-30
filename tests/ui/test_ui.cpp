@@ -711,3 +711,22 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     frame();
     ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
 }
+
+ESIA_TEST(UiCharts, LineChartTakesItsRoomOrDrawsIntoARect)
+{
+    UiHarness h;
+    Rect after1, after2;
+    const float values[] = {1.0f, 3.0f, 2.0f, 5.0f};
+    std::size_t cmds = 0;
+    h.Frame([&] {
+        ui::LineChart("a", values, {.height = 50});
+        after1 = Box("x", {10, 10});
+        ui::LineChart("b", values, {.rect = Rect(0, 300, 200, 350)});
+        after2 = Box("y", {10, 10});
+        ui::LineChart("c", std::span<const float>(values, 1));   // one value: nothing to draw, only its room
+        cmds = h.ctx.WindowDrawList().Commands().size();
+    });
+    ESIA_CHECK(after1.min.y == 50.0f + 8.0f);           // its height and the item spacing
+    ESIA_CHECK(after2.min.y == after1.max.y + 8.0f);    // in a rect it takes no room
+    ESIA_CHECK(cmds > 0);
+}
