@@ -1,10 +1,14 @@
 // glass_window - the frame the examples run in: options, the window thread, the render thread with its device,
 // Context, text system and frame loop, screenshots. An example gives what it draws per frame (App).
 //
-//   <example>.exe [--api d3d9|d3d10|d3d11|d3d12|opengl|vulkan] [--size 1280x800] [--vsync on|off] [--debug]
-//                 [--fixed-dt 0.016667] [--frames N] [--screenshot out.png] [--font file.ttf]... <the example's own>
+//   <example>.exe [--api d3d9|d3d10|d3d11|d3d12|opengl|vulkan] [--size 1280x800] [--scale 1.5] [--vsync on|off]
+//                 [--debug] [--fixed-dt 0.016667] [--frames N] [--screenshot out.png] [--font file.ttf]...
+//                 <the example's own>
 //
 //   --size          client area in UI units (pixels at 100 % scale; the window grows with the monitor's scale)
+//   --scale s       pixels per UI unit instead of the monitor's (the client area is size x s pixels, which may be
+//                   larger than the screen): captures at a given scale on any monitor. --size takes fractions, so a
+//                   pixel size at a scale is `--size 1066.667x666.667 --scale 1.5` (1600 x 1000 pixels)
 //   --frames N      quit after N frames; with --screenshot, the last one is read back from the swap chain image
 //   --fixed-dt s    the UI clock advances s seconds per frame (deterministic screenshots)
 //   --debug         the API's debug / validation layer; its message count is printed at exit (exit code 3 if any)
@@ -21,6 +25,12 @@
 #include <string>
 #include <vector>
 
+namespace esia::render
+{
+    class Renderer;
+    struct RenderStats;
+}
+
 namespace glass
 {
     struct SceneInfo
@@ -30,6 +40,8 @@ namespace glass
         int width = 0, height = 0;   // pixels
         float scale = 1.0f;          // pixels per UI unit
         float fps = 0.0f;
+        float cpuMs = 0.0f;          // the last frame's UI build (App::frame), milliseconds
+        const esia::render::RenderStats* stats = nullptr;   // the last frame the renderer drew
     };
 
     struct App
@@ -44,6 +56,8 @@ namespace glass
         // when no font loaded). `font` is the main font the frame loaded (0 with loadFonts = false); `fonts` are the
         // --font files.
         std::function<void(esia::Context& ctx, esia::text::TextSystem* text, esia::text::FontId font, const std::vector<std::string>& fonts)> init;
+        // Once, after init, with the renderer (user effects: Renderer::SetEffectSource).
+        std::function<void(esia::render::Renderer& renderer)> renderer;
         // Every frame, between Context::NewFrame and EndFrame.
         std::function<void(esia::Context& ctx, const SceneInfo& info)> frame;
         // Before the Context goes away.

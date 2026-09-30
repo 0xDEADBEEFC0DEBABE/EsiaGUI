@@ -8,6 +8,7 @@
 #include "esia/text/freetype.hpp"
 #endif
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,7 +24,8 @@ namespace glass
         struct Options
         {
             std::string api;
-            int width = 1280, height = 800;
+            float width = 1280.0f, height = 800.0f;   // UI units (fractions: a pixel size at a --scale)
+            float scale = 0.0f;   // pixels per UI unit (0 = the monitor's)
             bool vsync = true, debug = false;
             double fixedDt = 0.0;
             int frames = 0;
@@ -35,7 +37,7 @@ namespace glass
         {
             std::fprintf(stderr,
                          "%s: %s\n"
-                         "usage: %s [--api %s] [--size WxH] [--vsync on|off] [--debug] [--fixed-dt seconds]\n"
+                         "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--fixed-dt seconds]\n"
                          "       [--frames N] [--screenshot out.png] [--font file]...\n",
                          app.name, problem, app.name, BuiltApis().c_str());
             return 2;
@@ -97,13 +99,15 @@ namespace glass
             esia::render::Renderer renderer(host->Device());
             if (app.init)
                 app.init(ctx, text, font, opt.fonts);
+            if (app.renderer)
+                app.renderer(renderer);
             platform.SetContext(&ctx);   // input flows from here on
 
             using Clock = std::chrono::steady_clock;
             const Clock::time_point start = Clock::now();
             Clock::time_point fpsStart = start;
             int fpsFrames = 0, frame = 0, result = 0;
-            float fps = 0.0f;
+            float fps = 0.0f, cpuMs = 0.0f;
             int width = fi.width, height = fi.height;
             while (!platform.CloseRequested())
             {
@@ -125,12 +129,15 @@ namespace glass
                     continue;
                 }
                 const double now = std::chrono::duration<double>(Clock::now() - start).count();
-                ctx.NewFrame(fi.Params(opt.fixedDt > 0.0 ? frame * opt.fixedDt : now));
+                // fixed steps: frame N (from 1) is at N x dt, as WGT's demo counted (captures at the same moment)
+                ctx.NewFrame(fi.Params(opt.fixedDt > 0.0 ? (frame + 1) * opt.fixedDt : now));
                 if (text && app.loadFonts)
                     text->NewFrame({fi.scale});
+                const Clock::time_point uiStart = Clock::now();
                 if (app.frame)
-                    app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps});
+                    app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats()});
                 ctx.EndFrame();
+                cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
                 rp.frame = host->Frame();
                 if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
@@ -202,8 +209,14 @@ namespace glass
                     o.vsync = std::strcmp(value, "off") != 0;
                 else if (a == "--size" && needs())
                 {
-                    if (std::sscanf(value, "%dx%d", &o.width, &o.height) != 2 || o.width <= 0 || o.height <= 0)
+                    if (std::sscanf(value, "%fx%f", &o.width, &o.height) != 2 || !(o.width > 0.0f) || !(o.height > 0.0f))
                         problem = "--size wants WxH";
+                }
+                else if (a == "--scale" && needs())
+                {
+                    o.scale = (float)std::atof(value);
+                    if (!(o.scale > 0.0f))
+                        problem = "--scale wants a number above 0";
                 }
                 else if (a == "--fixed-dt" && needs())
                     o.fixedDt = std::atof(value);
@@ -241,10 +254,21 @@ namespace glass
         pw::Platform platform;
         std::string error;
         const std::unique_ptr<Host> probe = CreateHost(opt.api);
-        if (!pw::CreateAppWindow(platform, {"Esia " + std::string(app.name) + " - " + probe->Name(), opt.width, opt.height}, &error))
+        if (!pw::CreateAppWindow(platform, {"Esia " + std::string(app.name) + " - " + probe->Name(), (int)std::lround(opt.width), (int)std::lround(opt.height)}, &error))
         {
             std::fprintf(stderr, "%s: %s\n", app.name, error.c_str());
             return 1;
+        }
+        if (opt.scale > 0.0f)
+        {
+            // the UI scale asked for, and a client area of size x scale pixels (Windows keeps a window that is set
+            // larger than the screen: the swap chain covers all of it)
+            HWND hwnd = static_cast<HWND>(platform.Hwnd());
+            const UINT dpi = ::GetDpiForWindow(hwnd) ? ::GetDpiForWindow(hwnd) : USER_DEFAULT_SCREEN_DPI;
+            platform.SetUiScale(opt.scale * (float)USER_DEFAULT_SCREEN_DPI / (float)dpi);
+            RECT rc = {0, 0, (LONG)std::lround(opt.width * opt.scale), (LONG)std::lround(opt.height * opt.scale)};
+            ::AdjustWindowRectExForDpi(&rc, (DWORD)::GetWindowLongPtrW(hwnd, GWL_STYLE), FALSE, (DWORD)::GetWindowLongPtrW(hwnd, GWL_EXSTYLE), dpi);
+            ::SetWindowPos(hwnd, nullptr, 0, 0, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
         int result = 0;
         std::thread render([&] {
