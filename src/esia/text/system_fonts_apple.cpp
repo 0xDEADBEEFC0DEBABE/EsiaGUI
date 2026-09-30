@@ -10,12 +10,12 @@ namespace esia::text::detail
 {
     namespace
     {
-        // PingFang is the system UI's own CJK font since macOS 12, in a file only the system can read (below); the
-        // families after it are ordinary files in /System/Library/Fonts that cover Chinese where PingFang cannot be
-        // loaded: Hiragino Sans GB (Simplified), Heiti SC / TC (STHeiti).
+        // No PingFang: since macOS 12 it is the system UI's private font (below), which FreeType cannot load. Chinese
+        // comes from Hiragino Sans GB (Simplified) and Heiti SC / TC (STHeiti), ordinary files in /System/Library/Fonts
+        // on every macOS version.
         constexpr std::string_view kChain[] = {
-            kSystemUiFamily, "Helvetica Neue", "PingFang SC", "PingFang TC", "Hiragino Sans GB", "Heiti SC", "Heiti TC",
-            "Hiragino Sans", "Apple SD Gothic Neo", "Apple Symbols",
+            kSystemUiFamily, "Helvetica Neue", "Hiragino Sans GB", "Heiti SC", "Heiti TC", "Hiragino Sans", "Apple SD Gothic Neo",
+            "Apple Symbols",
         };
 
         template <typename T>

@@ -53,9 +53,9 @@ namespace esia::text
 
     // This platform's fallback chain, in order:
     //   Windows  Segoe UI, Microsoft YaHei, Microsoft JhengHei, Yu Gothic, Malgun Gothic, Segoe UI Symbol
-    //   macOS    system-ui (SF), Helvetica Neue, PingFang SC, PingFang TC, Hiragino Sans GB, Heiti SC,
-    //            Heiti TC, Hiragino Sans, Apple SD Gothic Neo, Apple Symbols (a family found only in files the
-    //            process cannot read - PingFang since macOS 12 - is not installed for it)
+    //   macOS    system-ui (SF), Helvetica Neue, Hiragino Sans GB, Heiti SC, Heiti TC, Hiragino Sans,
+    //            Apple SD Gothic Neo, Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
+    //            which is not installed for the process)
     //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Symbols, Noto Sans Symbols 2,
     //            WenQuanYi Zen Hei, Droid Sans Fallback
     // Simplified Chinese comes before the other CJK fonts: characters the four share (Han unification) take its forms.
