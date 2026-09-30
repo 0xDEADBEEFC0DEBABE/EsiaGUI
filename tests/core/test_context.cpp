@@ -149,14 +149,42 @@ ESIA_TEST(Context, DragEmptyAreaMovesWindow)
     ESIA_CHECK(h.ctx.ActiveId() != 0);
     h.Move({180, 170});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("Mover")->GetRect().min == Vec2(130, 120));
+    ESIA_CHECK(h.ctx.FindWindowByName("Mover")->GetRect().min == Vec2(130, 120));
     ESIA_CHECK(h.ctx.Requests().wantCaptureMouse);
     h.Up();
     frame();
     h.Move({300, 300});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("Mover")->GetRect().min == Vec2(130, 120));
+    ESIA_CHECK(h.ctx.FindWindowByName("Mover")->GetRect().min == Vec2(130, 120));
     ESIA_CHECK(h.ctx.ActiveId() == 0);
+}
+
+ESIA_TEST(Context, DragReleasedInTheFrameOfItsMovesStillMoves)
+{
+    // a slow frame (pipelines compiling, a hitch): the drag's moves and its release arrive together
+    Harness h;
+    auto frame = [&] {
+        h.Frame();
+        h.ctx.SetNextWindowPos({100, 100}, Cond::FirstUse);
+        h.ctx.SetNextWindowSize({200, 150}, Cond::FirstUse);
+        h.ctx.Begin("Quick");
+        h.ctx.End();
+        h.ctx.EndFrame();
+    };
+    h.Move({150, 150});
+    frame();
+    frame();
+    h.Down();
+    frame();
+    h.Move({170, 160});
+    h.Move({200, 190});
+    h.Up();
+    frame();
+    ESIA_CHECK(h.ctx.FindWindowByName("Quick")->GetRect().min == Vec2(150, 140));
+    ESIA_CHECK(h.ctx.ActiveId() == 0);
+    h.Move({400, 400});
+    frame();
+    ESIA_CHECK(h.ctx.FindWindowByName("Quick")->GetRect().min == Vec2(150, 140));
 }
 
 ESIA_TEST(Context, ResizeFromCornerWithMinSize)
@@ -181,10 +209,10 @@ ESIA_TEST(Context, ResizeFromCornerWithMinSize)
     h.Move({350, 300});
     frame();
     // grabbed 1 unit inside the corner: the corner keeps that distance to the pointer
-    ESIA_CHECK(h.ctx.FindWindow("Sizer")->GetRect() == Rect(100, 100, 351, 301));
+    ESIA_CHECK(h.ctx.FindWindowByName("Sizer")->GetRect() == Rect(100, 100, 351, 301));
     h.Move({0, 0});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("Sizer")->GetRect() == Rect(100, 100, 180, 160));   // clamped to the min size
+    ESIA_CHECK(h.ctx.FindWindowByName("Sizer")->GetRect() == Rect(100, 100, 180, 160));   // clamped to the min size
     h.Up();
     frame();
 }
@@ -243,7 +271,7 @@ ESIA_TEST(Context, ScrollAndClipVisibility)
     h.Move({50, 50});
     frame(&visible);
     ESIA_CHECK(!visible);
-    const Window* w = h.ctx.FindWindow("S");
+    const Window* w = h.ctx.FindWindowByName("S");
     ESIA_CHECK(w->ContentSize().y == 392.0f);             // 10 * 32 + 9 * 8 (last spacing not counted)
     ESIA_CHECK(w->ScrollMax().y == 392.0f - 76.0f);
     for (int i = 0; i < 20; ++i)

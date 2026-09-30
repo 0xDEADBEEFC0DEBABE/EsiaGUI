@@ -217,7 +217,7 @@ namespace esia
     }
 
     // ------------------------------------------------------------------ windows
-    Window* Context::FindWindow(std::string_view name) const
+    Window* Context::FindWindowByName(std::string_view name) const
     {
         const Id id = HashLabel(name, 0);
         for (const auto& w : windows_)
@@ -626,16 +626,31 @@ namespace esia
             return;
         Window& w = *dragWindow_;
         const Id expected = resizeEdges_ ? ResizeId(w) : MoveId(w);
-        if (activeId_ != expected || !input_.MouseDown(MouseButton::Left) || !input_.MouseValid())
+        const bool held = input_.MouseDown(MouseButton::Left);
+        // A quick drag's moves and its release can arrive in one frame (a slow frame): the position of the release
+        // is where the window goes, then the drag ends. A canceled release (focus lost) keeps the last position.
+        const bool released = !held && input_.MouseReleased(MouseButton::Left) && !input_.MouseCanceled(MouseButton::Left);
+        if (activeId_ != expected || !(held || released) || !input_.MouseValid())
         {
-            if (activeId_ == expected)
-                activeId_ = 0;
-            dragWindow_ = nullptr;
-            resizeEdges_ = 0;
+            EndMoveResize(expected);
             return;
         }
         activeAlive_ = true;
-        const Vec2 p = input_.MousePos() - dragOffset_;
+        ApplyMoveResize(w, input_.MousePos() - dragOffset_);
+        if (released)
+            EndMoveResize(expected);
+    }
+
+    void Context::EndMoveResize(Id expected)
+    {
+        if (activeId_ == expected)
+            activeId_ = 0;
+        dragWindow_ = nullptr;
+        resizeEdges_ = 0;
+    }
+
+    void Context::ApplyMoveResize(Window& w, Vec2 p)
+    {
         if (resizeEdges_ == 0)
         {
             w.rect_ = Rect::FromSize(p, w.rect_.Size());
@@ -756,7 +771,7 @@ namespace esia
                    WindowFlags_AutoSize;
         wo.layer = WindowLayer::Tooltip;
         wo.minSize = Vec2(0, 0);
-        Window* w = FindWindow(kTooltipName);
+        Window* w = FindWindowByName(kTooltipName);
         if (!w || !w->active_)
         {
             const Vec2 at = input_.MouseValid() ? input_.MousePos() + desc_.layout.tooltipOffset : Vec2(0, 0);

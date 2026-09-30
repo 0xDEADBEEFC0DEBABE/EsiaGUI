@@ -95,6 +95,7 @@ namespace esia
             {
                 k.pressed = true;
                 k.downTime = time_;
+                k.pressMods = e.mods;
             }
             else
                 k.released = true;
@@ -108,6 +109,13 @@ namespace esia
         case InputEvent::Type::ImeComposition:
             composition_ = e.text;
             compositionCursor_ = e.imeCursor;
+            {
+                // a range inside the string, or none
+                const int size = (int)composition_.size();
+                const int begin = std::clamp(e.imeTargetBegin, 0, size), end = std::clamp(e.imeTargetEnd, begin, size);
+                compositionTarget_[0] = begin;
+                compositionTarget_[1] = end;
+            }
             return true;
         case InputEvent::Type::Focus:
             focused_ = e.down;

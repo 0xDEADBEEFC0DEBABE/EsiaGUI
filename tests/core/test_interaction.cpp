@@ -60,7 +60,7 @@ ESIA_TEST(Context, PressOwnershipGameDrag)
     ESIA_CHECK(!h.ctx.Requests().wantCaptureMouse);   // the release is the game's too
     r = OneButton(h);
     ESIA_CHECK(r.hovered && h.ctx.Requests().wantCaptureMouse);   // no press held: over the UI is the UI's
-    ESIA_CHECK(h.ctx.FindWindow("W")->GetRect().min == Vec2(10, 10));
+    ESIA_CHECK(h.ctx.FindWindowByName("W")->GetRect().min == Vec2(10, 10));
 }
 
 // bug 2: a press on the UI dragged out stays the UI's until it is released
@@ -105,7 +105,7 @@ ESIA_TEST(Context, ContentRegionAvailIgnoresScroll)
     h.Wheel(0, -2);
     frame();
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("S")->Scroll().y == 96.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("S")->Scroll().y == 96.0f);
     ESIA_CHECK(atTop == Vec2(180, 80));
 }
 
@@ -148,7 +148,7 @@ ESIA_TEST(Context, DisabledItemBlocksWindowDrag)
     ESIA_CHECK(!r.hovered && !r.held && h.ctx.ActiveId() == 0);
     h.Move({80, 80});
     OneButton(h, 0, ItemFlags_Disabled);
-    ESIA_CHECK(h.ctx.FindWindow("W")->GetRect().min == Vec2(10, 10));
+    ESIA_CHECK(h.ctx.FindWindowByName("W")->GetRect().min == Vec2(10, 10));
     h.Up();
     ESIA_CHECK(!OneButton(h, 0, ItemFlags_Disabled).pressed);
 }
@@ -333,7 +333,7 @@ ESIA_TEST(Context, HitTestLayers)
     frame();
     h.Move({220, 290});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("L")->GetRect().min == Vec2(0, 0));
+    ESIA_CHECK(h.ctx.FindWindowByName("L")->GetRect().min == Vec2(0, 0));
     h.Up();
     frame();
 }

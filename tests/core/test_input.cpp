@@ -89,6 +89,44 @@ ESIA_TEST(Input, KeyRepeat)
     ESIA_CHECK(in.KeyReleased(Key::Backspace));
 }
 
+ESIA_TEST(Input, ShortcutKeepsTheModifiersOfItsPress)
+{
+    // a fast Ctrl+V: V's press and Ctrl's release come in one frame
+    InputState in;
+    Frame(in, 1.0, {InputEvent::KeyEvent(Key::LeftCtrl, true, Mod_Ctrl)});
+    Frame(in, 1.1, {InputEvent::KeyEvent(Key::V, true, Mod_Ctrl), InputEvent::KeyEvent(Key::LeftCtrl, false, 0)});
+    ESIA_CHECK(in.KeyPressed(Key::V, false));
+    ESIA_CHECK(in.Mods() == 0);                 // the state now: Ctrl is up
+    ESIA_CHECK(in.KeyMods(Key::V) == Mod_Ctrl);   // the chord that was typed
+    Frame(in, 1.2, {InputEvent::KeyEvent(Key::V, false, 0), InputEvent::KeyEvent(Key::W, true, Mod_Shift)});
+    ESIA_CHECK(in.KeyMods(Key::W) == Mod_Shift && in.KeyMods(Key::V) == Mod_Ctrl);   // until V's next press
+    ESIA_CHECK(in.KeyMods(Key::Count) == 0);
+}
+
+ESIA_TEST(Input, KeysBeyondTheBasics)
+{
+    InputState in;
+    Frame(in, 1.0, {InputEvent::KeyEvent(Key::Keypad5, true), InputEvent::KeyEvent(Key::F24, true),
+                    InputEvent::KeyEvent(Key::Minus, true), InputEvent::KeyEvent(Key::Menu, true)});
+    ESIA_CHECK(in.KeyPressed(Key::Keypad5, false) && in.KeyPressed(Key::F24, false));
+    ESIA_CHECK(in.KeyPressed(Key::Minus, false) && in.KeyPressed(Key::Menu, false));
+}
+
+ESIA_TEST(Input, CompositionTargetClause)
+{
+    InputState in;
+    // "你好shi|jie": the IME converts the first clause
+    Frame(in, 1.0, {InputEvent::Composition("\xE4\xBD\xA0\xE5\xA5\xBDshijie", 9, 0, 6)});
+    ESIA_CHECK(in.CompositionTargetBegin() == 0 && in.CompositionTargetEnd() == 6);
+    // a range past the string is cut to it; an inverted one is empty
+    Frame(in, 1.1, {InputEvent::Composition("ab", 2, 1, 50)});
+    ESIA_CHECK(in.CompositionTargetBegin() == 1 && in.CompositionTargetEnd() == 2);
+    Frame(in, 1.2, {InputEvent::Composition("ab", 2, 2, 1)});
+    ESIA_CHECK(in.CompositionTargetBegin() == in.CompositionTargetEnd());
+    Frame(in, 1.3, {InputEvent::Composition("", 0)});
+    ESIA_CHECK(in.CompositionTargetBegin() == 0 && in.CompositionTargetEnd() == 0);
+}
+
 ESIA_TEST(Input, TextImeAndMods)
 {
     InputState in;

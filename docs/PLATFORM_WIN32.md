@@ -350,8 +350,17 @@ For the UI core rework on `feat/ui-core-v2` (none of these were changed here):
 
 **After the merge with UI core v2** (the local session): 1 (`kNoMousePos`, `InputEvent::MouseLeave`), 5 (`RequestTextInput`
 leaves the cursor alone) and 9 (`Context::InputPending`, `PlatformRequests::inputPending`) are in the core. The platform
-and the example use the first two; the example renders every frame, so it needs no `InputPending`. 2, 3, 4, 6, 7, 8 and
-10 are still open.
+and the example use the first two; the example renders every frame, so it needs no `InputPending`.
+
+**Then the local session did 2, 3, 4, 6, 8 and 10** (`docs/UI_CORE.md` section 15, end):
+* 2: a drag ends at its release position.
+* 3: `InputState::KeyMods`; the example's Ctrl+C / Ctrl+V use it.
+* 4: `FindWindowByName`.
+* 6: every key listed above; the platform maps them.
+* 8: the target clause from `GCS_COMPATTR`; the example underlines it thicker.
+* 10: the wheel sign, documented.
+
+**7 (pointer events) is still open**: there is no touch or pen hardware here to test it with.
 
 1. **Mouse leave is a negative position.** While captured, positions left of or above the window are legitimately
    negative; the core reads them as "outside" (`MouseValid` false: hover lost, `MouseDelta` zero, drag distance not
@@ -394,7 +403,7 @@ and the example use the first two; the example renders every frame, so it needs 
 2. **D3D12 under Wine**: Esia's root signature is refused (vkd3d). On Windows the host runs (section 5.1).
 3. The IME behavior is designed from the documentation, Chromium's and WGT's code, and checked only with synthetic
    messages: section 6.7 decides.
-4. The core behaviors of section 7 that are still open (2, 3, 4, 6, 7, 8, 10).
+4. Pointer events (section 7, request 7): touch and pen still arrive through Windows' mouse promotion.
 5. The content of `glass_window`'s windows never overflows, so the wheel has nothing to scroll there: it is queued and
    unit-tested, not visible in the example.
 

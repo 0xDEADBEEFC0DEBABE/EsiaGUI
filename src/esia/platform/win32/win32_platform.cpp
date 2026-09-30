@@ -35,8 +35,10 @@ namespace esia::platform::win32
                 return (Key)((int)Key::A + (int)(vk - 'A'));
             if (vk >= '0' && vk <= '9')
                 return (Key)((int)Key::Num0 + (int)(vk - '0'));
-            if (vk >= VK_F1 && vk <= VK_F12)
+            if (vk >= VK_F1 && vk <= VK_F24)
                 return (Key)((int)Key::F1 + (int)(vk - VK_F1));
+            if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9)
+                return (Key)((int)Key::Keypad0 + (int)(vk - VK_NUMPAD0));
             switch (vk)
             {
             case VK_TAB: return Key::Tab;
@@ -66,7 +68,30 @@ namespace esia::platform::win32
             case VK_RMENU: return Key::RightAlt;
             case VK_LWIN: return Key::LeftSuper;
             case VK_RWIN: return Key::RightSuper;
-            default: return Key::None;   // not in esia::Key (keypad, punctuation, F13+ ...)
+            case VK_DECIMAL: return Key::KeypadDecimal;
+            case VK_DIVIDE: return Key::KeypadDivide;
+            case VK_MULTIPLY: return Key::KeypadMultiply;
+            case VK_SUBTRACT: return Key::KeypadSubtract;
+            case VK_ADD: return Key::KeypadAdd;
+            // the OEM keys by their US-layout position, as esia::Key names them
+            case VK_OEM_7: return Key::Apostrophe;
+            case VK_OEM_COMMA: return Key::Comma;
+            case VK_OEM_MINUS: return Key::Minus;
+            case VK_OEM_PERIOD: return Key::Period;
+            case VK_OEM_2: return Key::Slash;
+            case VK_OEM_1: return Key::Semicolon;
+            case VK_OEM_PLUS: return Key::Equal;
+            case VK_OEM_4: return Key::LeftBracket;
+            case VK_OEM_5: return Key::Backslash;
+            case VK_OEM_6: return Key::RightBracket;
+            case VK_OEM_3: return Key::GraveAccent;
+            case VK_CAPITAL: return Key::CapsLock;
+            case VK_SCROLL: return Key::ScrollLock;
+            case VK_NUMLOCK: return Key::NumLock;
+            case VK_SNAPSHOT: return Key::PrintScreen;   // Windows sends only its release
+            case VK_PAUSE: return Key::Pause;
+            case VK_APPS: return Key::Menu;
+            default: return Key::None;
             }
         }
 
@@ -418,8 +443,27 @@ namespace esia::platform::win32
         {
             const std::wstring comp = ReadCompositionString(himc, GCS_COMPSTR);
             const int caret = (flags & GCS_CURSORPOS) ? (int)LOWORD(::ImmGetCompositionStringW(himc, GCS_CURSORPOS, nullptr, 0)) : (int)comp.size();
+            // the clause being converted: the characters whose attribute is a target (one byte per UTF-16 unit)
+            int targetBegin = 0, targetEnd = 0;
+            if (flags & GCS_COMPATTR)
+            {
+                std::string attrs((std::size_t)std::max<LONG>(::ImmGetCompositionStringW(himc, GCS_COMPATTR, nullptr, 0), 0), '\0');
+                ::ImmGetCompositionStringW(himc, GCS_COMPATTR, attrs.data(), (DWORD)attrs.size());
+                int first = -1, last = -1;
+                for (int i = 0; i < (int)attrs.size() && i < (int)comp.size(); ++i)
+                    if (attrs[(std::size_t)i] == ATTR_TARGET_CONVERTED || attrs[(std::size_t)i] == ATTR_TARGET_NOTCONVERTED)
+                    {
+                        first = first < 0 ? i : first;
+                        last = i;
+                    }
+                if (first >= 0)
+                {
+                    targetBegin = Utf8Offset(comp, first);
+                    targetEnd = Utf8Offset(comp, last + 1);
+                }
+            }
             composing = !comp.empty();
-            Queue(InputEvent::Composition(Narrow(comp.data(), comp.size()), Utf8Offset(comp, caret)));
+            Queue(InputEvent::Composition(Narrow(comp.data(), comp.size()), Utf8Offset(comp, caret), targetBegin, targetEnd));
         }
         else if (composing)   // a result without a new composition, or none at all (lParam 0: cancelled)
             EndComposition();

@@ -54,7 +54,7 @@ ESIA_TEST(Layout, ProviderSlotsAndReports)
     ESIA_CHECK(seen[6].rect == Rect(10, 48, 20, 58));
     // the window keeps last frame's list
     frame();
-    const auto& items = h.ctx.FindWindow("P")->LaidOutItems();
+    const auto& items = h.ctx.FindWindowByName("P")->LaidOutItems();
     ESIA_CHECK(items.size() == 7 && items[5].rect == row);
 }
 
@@ -212,7 +212,7 @@ ESIA_TEST(Child, NestedScrollAreasAndWheel)
     frame();
     frame();
     ESIA_CHECK(outerScroll.y == 0.0f && innerScroll.y == 192.0f);
-    ESIA_CHECK(h.ctx.FindWindow("W")->Scroll().y == 0.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("W")->Scroll().y == 0.0f);
 }
 
 ESIA_TEST(Child, SmoothScroll)
@@ -364,5 +364,5 @@ ESIA_TEST(Child, PaddingIsPartOfTheRegion)
     h.Wheel(0, -1);
     frame();
     frame();
-    ESIA_CHECK(listScroll == 48.0f && h.ctx.FindWindow("W")->Scroll().y == 0.0f);
+    ESIA_CHECK(listScroll == 48.0f && h.ctx.FindWindowByName("W")->Scroll().y == 0.0f);
 }

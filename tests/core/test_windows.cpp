@@ -48,18 +48,18 @@ ESIA_TEST(Context, SetScrollClampsToThisFrame)
         h.End();
     };
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("S")->ScrollMax().y == 0.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("S")->ScrollMax().y == 0.0f);
     rows = 30;
     request = true;
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("S")->Scroll().y == 600.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("S")->Scroll().y == 600.0f);
     request = false;
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("S")->Scroll().y == 600.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("S")->Scroll().y == 600.0f);
     rows = 1;   // the content shrinks: the offset follows the range
     frame();
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("S")->Scroll().y == 0.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("S")->Scroll().y == 0.0f);
 }
 
 // bug 8: deferred scroll targets
@@ -94,7 +94,7 @@ ESIA_TEST(Context, ScrollTargets)
     };
     const Window* w = nullptr;
     frame();
-    w = h.ctx.FindWindow("T");
+    w = h.ctx.FindWindowByName("T");
     mode = 1;
     frame();
     ESIA_CHECK(w->Scroll().y == 480.0f);
@@ -139,7 +139,7 @@ ESIA_TEST(Context, ReopenedWindowComesToFront)
     frame();
     ESIA_CHECK(h.ctx.WindowsInDrawOrder().back()->Name() == "A");
     ESIA_CHECK(h.ctx.FocusedWindow() && h.ctx.FocusedWindow()->Name() == "A");
-    ESIA_CHECK(h.ctx.FindWindow("A")->Appearing());
+    ESIA_CHECK(h.ctx.FindWindowByName("A")->Appearing());
 }
 
 // bug 9: focus, hover and drag let go of a window that is no longer submitted
@@ -174,7 +174,7 @@ ESIA_TEST(Context, FocusAndDragClearedWhenWindowGone)
     frame();
     show = true;
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("D")->GetRect().min == Vec2(110, 110));   // it moved while dragged, no further
+    ESIA_CHECK(h.ctx.FindWindowByName("D")->GetRect().min == Vec2(110, 110));   // it moved while dragged, no further
 }
 
 // bug 9: dynamically named windows do not pile up
@@ -193,9 +193,9 @@ ESIA_TEST(Context, WindowGc)
     }
     int alive = 0;
     for (int i = 0; i < 20; ++i)
-        alive += h.ctx.FindWindow("doc " + std::to_string(i)) ? 1 : 0;
+        alive += h.ctx.FindWindowByName("doc " + std::to_string(i)) ? 1 : 0;
     ESIA_CHECK(alive <= 7);
-    ESIA_CHECK(h.ctx.FindWindow("doc 19") && !h.ctx.FindWindow("doc 0"));
+    ESIA_CHECK(h.ctx.FindWindowByName("doc 19") && !h.ctx.FindWindowByName("doc 0"));
 
     // a child region's scroll state goes the same way
     float scroll = -1.0f;
@@ -248,10 +248,10 @@ ESIA_TEST(Context, ResizeKeepsGrabOffset)
     h.Down();
     frame();
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("R")->GetRect() == Rect(100, 100, 300, 250));
+    ESIA_CHECK(h.ctx.FindWindowByName("R")->GetRect() == Rect(100, 100, 300, 250));
     h.Move({313, 200});
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("R")->GetRect() == Rect(100, 100, 310, 250));
+    ESIA_CHECK(h.ctx.FindWindowByName("R")->GetRect() == Rect(100, 100, 310, 250));
     h.Up();
     frame();
 }
@@ -273,14 +273,14 @@ ESIA_TEST(Context, KeepOnScreen)
     frame();
     h.Move({1500, -300});   // far past the right and the top
     frame();
-    const Rect r = h.ctx.FindWindow("K")->GetRect();
+    const Rect r = h.ctx.FindWindowByName("K")->GetRect();
     ESIA_CHECK(r.min.x == 800.0f - 24.0f && r.min.y == 0.0f);
     h.Up();
     frame();
     h.display = Vec2(400, 300);   // the display shrinks (a resolution change)
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("K")->GetRect().min.x == 400.0f - 24.0f);
-    ESIA_CHECK(h.ctx.FindWindow("K")->GetRect().Size() == Vec2(200, 150));
+    ESIA_CHECK(h.ctx.FindWindowByName("K")->GetRect().min.x == 400.0f - 24.0f);
+    ESIA_CHECK(h.ctx.FindWindowByName("K")->GetRect().Size() == Vec2(200, 150));
 }
 
 // DPI per window: the monitor under the window gives its scale; moving to another keeps the physical size
@@ -306,7 +306,7 @@ ESIA_TEST(Context, DpiScalePerWindow)
     pos = Vec2(100, 100);
     frame();
     ESIA_CHECK(scale == 1.0f && changed);
-    ESIA_CHECK(h.ctx.FindWindow("M")->GetRect().Size() == Vec2(50, 50));
+    ESIA_CHECK(h.ctx.FindWindowByName("M")->GetRect().Size() == Vec2(50, 50));
     frame();
     ESIA_CHECK(!changed);
 }
@@ -328,10 +328,10 @@ ESIA_TEST(Context, AutoSizeWindow)
         h.End();
     };
     frame();
-    ESIA_CHECK(h.ctx.FindWindow("A")->Hidden());
+    ESIA_CHECK(h.ctx.FindWindowByName("A")->Hidden());
     ESIA_CHECK(h.ctx.GetDrawData().lists.empty());   // not drawn at a size it does not have yet
     frame();
-    const Window* w = h.ctx.FindWindow("A");
+    const Window* w = h.ctx.FindWindowByName("A");
     ESIA_CHECK(!w->Hidden() && w->GetRect() == Rect(10, 10, 10 + 120 + 24, 10 + 68 + 24));
     ESIA_CHECK(h.ctx.GetDrawData().lists.size() == 1);
 }
@@ -364,7 +364,7 @@ ESIA_TEST(Context, PopupClickAway)
     ESIA_CHECK(!open && !h.ctx.IsPopupOpen(menu));
     h.ctx.OpenPopup(menu);
     frame();
-    ESIA_CHECK(open && h.ctx.FindWindow("##popup") == nullptr);   // popups are found by id, not by name
+    ESIA_CHECK(open && h.ctx.FindWindowByName("##popup") == nullptr);   // popups are found by id, not by name
     frame();
     h.Move({40, 40});
     frame();
@@ -469,7 +469,7 @@ ESIA_TEST(Context, Tooltip)
     frame();
     frame();
     frame();
-    const Window* tip = h.ctx.FindWindow("##tooltip");
+    const Window* tip = h.ctx.FindWindowByName("##tooltip");
     ESIA_CHECK(tip && !tip->Hidden() && tip->Layer() == WindowLayer::Tooltip);
     ESIA_CHECK(tip->GetRect().min == Vec2(116, 116) && tip->GetRect().Height() == 20 + 8 + 20 + 24);
     ESIA_CHECK(hoveredBelow);   // a tooltip never takes the hover
@@ -562,11 +562,11 @@ ESIA_TEST(Context, DpiBoundaryHysteresis)
     x = 600.0f;   // center at 1050, on the scale-1 monitor; halved (450) it would be back on the scale-2 one
     for (int i = 0; i < 6; ++i)
         frame();
-    ESIA_CHECK(changes == 0 && h.ctx.FindWindow("M")->Scale() == 2.0f && h.ctx.FindWindow("M")->GetRect().Width() == 900.0f);
+    ESIA_CHECK(changes == 0 && h.ctx.FindWindowByName("M")->Scale() == 2.0f && h.ctx.FindWindowByName("M")->GetRect().Width() == 900.0f);
     x = 1200.0f;   // well onto it: switches once
     for (int i = 0; i < 6; ++i)
         frame();
-    ESIA_CHECK(changes == 1 && h.ctx.FindWindow("M")->Scale() == 1.0f && h.ctx.FindWindow("M")->GetRect().Width() == 450.0f);
+    ESIA_CHECK(changes == 1 && h.ctx.FindWindowByName("M")->Scale() == 1.0f && h.ctx.FindWindowByName("M")->GetRect().Width() == 450.0f);
 }
 
 // review: SetNextScroll on an area's first frame, past last frame's (empty) range
@@ -615,7 +615,7 @@ ESIA_TEST(Context, SetNextScrollOnNewArea)
     h.ctx.EndChild();
     h.ctx.End();
     h.End();
-    ESIA_CHECK(childScroll == 0.0f && h.ctx.FindWindow("L")->Scroll().y == 150.0f);
+    ESIA_CHECK(childScroll == 0.0f && h.ctx.FindWindowByName("L")->Scroll().y == 150.0f);
 }
 
 // review: a fractional smooth-scroll target ends on a whole pixel, and the glide stops there

@@ -207,19 +207,18 @@ namespace glass
         {
             for (char32_t c : in.Text())
                 EncodeUtf8(field_, c);
-            // Mods() is the state after the frame's last key event: a Ctrl released in the same frame as the V it
-            // held down would turn Ctrl+V into V (docs/PLATFORM_WIN32.md, core requests)
-            const bool ctrl = (in.Mods() & Mod_Ctrl) || in.KeyReleased(Key::LeftCtrl) || in.KeyReleased(Key::RightCtrl);
+            // shortcuts read the modifiers of their own press (KeyMods): a Ctrl released in the same frame counts
+            auto shortcut = [&](Key k) { return in.KeyPressed(k, false) && (in.KeyMods(k) & Mod_Ctrl) != 0; };
             // while the IME composes, its keys are its own (they arrive as VK_PROCESSKEY and never get here)
             if (comp.empty())
             {
                 if (in.KeyPressed(Key::Backspace))
                     PopUtf8Char(field_);
-                if (ctrl && in.KeyPressed(Key::V, false))
+                if (shortcut(Key::V))
                     for (char c : ctx.GetClipboardText())
                         if (c != '\n' && c != '\r')
                             field_.push_back(c);
-                if (ctrl && in.KeyPressed(Key::C, false))
+                if (shortcut(Key::C))
                     ctx.SetClipboardText(field_);
                 if (in.KeyPressed(Key::Enter, false))
                 {
@@ -244,7 +243,8 @@ namespace glass
         float caretX = origin.x;
         if (text_)
         {
-            // committed text, then the composition in the accent color, underlined: the IME only shows candidates
+            // committed text, then the composition in the accent color, underlined: the IME only shows candidates.
+            // The clause the IME is converting gets a thicker line, as in Windows' own editors.
             const float committed = TextWidth(field_);
             p.Text(origin, {font_, kLabel}, Color::White(), field_);
             if (!shownComp.empty())
@@ -252,6 +252,10 @@ namespace glass
                 const Vec2 at = origin + Vec2(committed, 0);
                 p.Text(at, {font_, kLabel}, Color::Hex(0x9ECBFF), shownComp);
                 p.HLine(at.x, at.x + TextWidth(shownComp), origin.y + lineH, Color::Hex(0x9ECBFF), 1.0f);
+                const auto target0 = (std::size_t)in.CompositionTargetBegin(), target1 = (std::size_t)in.CompositionTargetEnd();
+                if (target1 > target0)
+                    p.HLine(at.x + TextWidth(shownComp.substr(0, target0)), at.x + TextWidth(shownComp.substr(0, target1)),
+                            origin.y + lineH, Color::Hex(0x9ECBFF), 2.5f);
             }
             caretX = origin.x + committed + TextWidth(shownComp.substr(0, (std::size_t)compCaret));
         }

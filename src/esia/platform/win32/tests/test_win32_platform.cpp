@@ -182,6 +182,17 @@ ESIA_TEST(Win32Platform, KeysAndModifiers)
     ESIA_CHECK(f.Frame().KeyDown(Key::RightCtrl));
 }
 
+ESIA_TEST(Win32Platform, KeypadPunctuationAndFunctionKeys)
+{
+    Fixture f;
+    f.Send(WM_KEYDOWN, VK_NUMPAD7, KeyLParam(0x47, false));
+    f.Send(WM_KEYDOWN, VK_OEM_MINUS, KeyLParam(0x0C, false));
+    f.Send(WM_KEYDOWN, VK_F13, KeyLParam(0x64, false));
+    f.Send(WM_KEYDOWN, VK_APPS, KeyLParam(0x5D, false) | (1 << 24));
+    const InputState& in = f.Frame();
+    ESIA_CHECK(in.KeyDown(Key::Keypad7) && in.KeyDown(Key::Minus) && in.KeyDown(Key::F13) && in.KeyDown(Key::Menu));
+}
+
 ESIA_TEST(Win32Platform, KeysTheImeTakesAreNotTheUis)
 {
     Fixture f;

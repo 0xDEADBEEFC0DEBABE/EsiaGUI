@@ -499,3 +499,21 @@ Against `main` before this work (`81ce5dc`):
   `ScrollToItem`, `SetNextScroll`); popups (`OpenPopup`, `ClosePopup`, `IsPopupOpen`, `BeginPopup`, `EndPopup`,
   `CloseCurrentPopup`, `PopupOptions`, `BeginTooltip`, `EndTooltip`); `State<T>`, `SetScopeData`,
   `FindScopeData`; `DrawList::Mark`, `MoveCommands`.
+
+After the Win32 platform layer (its core requests, `docs/PLATFORM_WIN32.md` section 7):
+
+* **Renamed**: `Context::FindWindow` is `FindWindowByName`. `<windows.h>`'s `FindWindow` macro renamed the member in
+  every file that includes it first, which then failed to link. The public-headers test calls it after `<windows.h>`.
+* **Changed**: a window drag or resize whose moves and release arrive in one frame ends at the release position.
+  Before, it ended without moving: the drag stopped before that frame's position was applied.
+* **Added**:
+  * `InputState::KeyMods(key)`: the modifiers of the key's last press, for shortcuts. `Mods()` stays the state after
+    the frame's last key event. A Ctrl released in the same frame as the V it held reads `KeyMods(Key::V) ==
+    Mod_Ctrl`.
+  * Keys: `F13` - `F24`, the keypad (`Keypad0` - `9`, `KeypadDecimal / Divide / Multiply / Subtract / Add`; its Enter
+    is `Enter`), punctuation by US position (`Apostrophe`, `Comma`, `Minus`, `Period`, `Slash`, `Semicolon`, `Equal`,
+    `LeftBracket`, `Backslash`, `RightBracket`, `GraveAccent`), `CapsLock`, `ScrollLock`, `NumLock`, `PrintScreen`,
+    `Pause`, `Menu`.
+  * IME clauses: `InputEvent::imeTargetBegin / End` (`Composition(text, cursor, targetBegin, targetEnd)`) and
+    `InputState::CompositionTargetBegin / End`, the clause the IME is converting (bytes).
+* **Documented**: the horizontal wheel sign. `x > 0` scrolls toward the left, as `y > 0` scrolls toward the top.

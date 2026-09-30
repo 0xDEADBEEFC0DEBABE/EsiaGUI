@@ -332,7 +332,7 @@ namespace esia
         bool Begin(std::string_view name, const WindowOptions& options = {});
         void End();
         Window* CurrentWindow() const { return stack_.empty() ? nullptr : stack_.back(); }
-        Window* FindWindow(std::string_view name) const;
+        Window* FindWindowByName(std::string_view name) const;
         Window* HoveredWindow() const { return hoveredWindow_; }
         Window* FocusedWindow() const { return focusedWindow_; }
         void FocusWindow(Window* w);
@@ -477,6 +477,8 @@ namespace esia
         void UpdatePressOwners();
         void UpdatePopupsAtNewFrame();
         void UpdateMoveResize();
+        void ApplyMoveResize(Window& w, Vec2 p);
+        void EndMoveResize(Id expected);
         void StartResize();
         void UpdateWheel();
         void UpdateTabNavigation();

@@ -22,8 +22,14 @@ namespace esia
         Tab, Left, Right, Up, Down, PageUp, PageDown, Home, End, Insert, Delete, Backspace, Space, Enter, Escape,
         A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
         Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
-        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20, F21, F22, F23, F24,
         LeftCtrl, RightCtrl, LeftShift, RightShift, LeftAlt, RightAlt, LeftSuper, RightSuper,
+        // the keypad (its Enter is Enter; with Num Lock off its keys arrive as Home, Left ... and Delete)
+        Keypad0, Keypad1, Keypad2, Keypad3, Keypad4, Keypad5, Keypad6, Keypad7, Keypad8, Keypad9,
+        KeypadDecimal, KeypadDivide, KeypadMultiply, KeypadSubtract, KeypadAdd,
+        // punctuation keys by their position on a US keyboard (what they type depends on the layout: use Text())
+        Apostrophe, Comma, Minus, Period, Slash, Semicolon, Equal, LeftBracket, Backslash, RightBracket, GraveAccent,
+        CapsLock, ScrollLock, NumLock, PrintScreen, Pause, Menu,
         Count
     };
 
@@ -49,10 +55,12 @@ namespace esia
         {
             MousePos,        // pos (UI units); kNoMousePos = the mouse left the window
             MouseButton,     // button, down
-            MouseWheel,      // wheel (x, y: notches, y > 0 = away from the user)
+            MouseWheel,      // wheel (x, y: notches; y > 0 = away from the user, scrolls toward the top; x > 0 scrolls
+                             // toward the left, i.e. a tilt / swipe to the left)
             Key,             // key, down, mods
             Text,            // text (UTF-8, committed characters)
-            ImeComposition,  // text = composition string (empty = composition ended), imeCursor = caret (bytes)
+            ImeComposition,  // text = composition string (empty = composition ended), imeCursor = caret (bytes),
+                             // [imeTargetBegin, imeTargetEnd) = the clause being converted (bytes; empty: none)
             Focus,           // down = the window gained focus
         };
         Type type = Type::MousePos;
@@ -64,6 +72,7 @@ namespace esia
         std::uint32_t mods = 0;
         std::string text;
         int imeCursor = 0;
+        int imeTargetBegin = 0, imeTargetEnd = 0;
 
         static InputEvent MouseMove(Vec2 p) { InputEvent e; e.type = Type::MousePos; e.pos = p; return e; }
         static InputEvent MouseLeave() { return MouseMove(Vec2(kNoMousePos, kNoMousePos)); }
@@ -71,7 +80,16 @@ namespace esia
         static InputEvent Wheel(float x, float y) { InputEvent e; e.type = Type::MouseWheel; e.wheel = Vec2(x, y); return e; }
         static InputEvent KeyEvent(Key k, bool isDown, std::uint32_t m = 0) { InputEvent e; e.type = Type::Key; e.key = k; e.down = isDown; e.mods = m; return e; }
         static InputEvent TextEvent(std::string utf8) { InputEvent e; e.type = Type::Text; e.text = std::move(utf8); return e; }
-        static InputEvent Composition(std::string utf8, int cursor) { InputEvent e; e.type = Type::ImeComposition; e.text = std::move(utf8); e.imeCursor = cursor; return e; }
+        static InputEvent Composition(std::string utf8, int cursor, int targetBegin = 0, int targetEnd = 0)
+        {
+            InputEvent e;
+            e.type = Type::ImeComposition;
+            e.text = std::move(utf8);
+            e.imeCursor = cursor;
+            e.imeTargetBegin = targetBegin;
+            e.imeTargetEnd = targetEnd;
+            return e;
+        }
         static InputEvent FocusEvent(bool focused) { InputEvent e; e.type = Type::Focus; e.down = focused; return e; }
     };
 
@@ -117,12 +135,20 @@ namespace esia
         bool KeyDown(Key k) const { return KeyAt(k).down; }
         bool KeyPressed(Key k, bool repeat = true) const;
         bool KeyReleased(Key k) const { return KeyAt(k).released; }
+        // The modifiers after the frame's last key event: for modifier state (Shift held while dragging).
         std::uint32_t Mods() const { return mods_; }
+        // The modifiers held when `k` was last pressed: for shortcuts. A fast Ctrl+V whose Ctrl is released in the
+        // same frame reads Mods() == 0 but KeyMods(Key::V) == Mod_Ctrl.
+        std::uint32_t KeyMods(Key k) const { return KeyAt(k).pressMods; }
 
         // ---- text
         const std::u32string& Text() const { return text_; }   // characters typed this frame
         const std::string& Composition() const { return composition_; }
         int CompositionCursor() const { return compositionCursor_; }
+        // The clause of the composition the IME is converting (bytes, [begin, end); begin == end: none). Editors
+        // draw it with a thicker underline, as Windows editors do.
+        int CompositionTargetBegin() const { return compositionTarget_[0]; }
+        int CompositionTargetEnd() const { return compositionTarget_[1]; }
         bool Focused() const { return focused_; }
         double Time() const { return time_; }
         float DeltaTime() const { return deltaTime_; }
@@ -140,6 +166,7 @@ namespace esia
         {
             bool down = false, pressed = false, released = false, changed = false;
             double downTime = 0.0;
+            std::uint32_t pressMods = 0;
         };
         // out-of-range values (a cast from a platform code) read the always-up state instead of past the arrays
         const ButtonState& Button(MouseButton b) const { return (std::size_t)b < mouse_.size() ? mouse_[(std::size_t)b] : kUp; }
@@ -159,6 +186,7 @@ namespace esia
         std::u32string text_;
         std::string composition_;
         int compositionCursor_ = 0;
+        int compositionTarget_[2] = {0, 0};
         bool focused_ = true;
     };
 }
