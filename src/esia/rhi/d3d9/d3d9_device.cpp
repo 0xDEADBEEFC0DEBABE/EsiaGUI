@@ -299,7 +299,7 @@ namespace esia::rhi::d3d9
                 error = "the d3d9 backend needs vertex texture fetch of A32B32G32R32F (the FX instances)";
             if (!error.empty())
                 return false;
-            // the glass variants of the FX shader take about 3.7k instruction slots (512 are guaranteed)
+            // the glass variants of the FX shader take about 2k instruction slots, the full shader 3.8k (512 are guaranteed)
             static bool warned = false;   // once per process: every headless device of the conformance suite asks
             if (dc.MaxPixelShader30InstructionSlots < 4096 && !std::exchange(warned, true))
                 log_.Printf(LogLevel::Info, "%lu pixel shader instruction slots: liquid-glass pipelines may fail to build",
@@ -314,7 +314,7 @@ namespace esia::rhi::d3d9
             caps_.sampleRenderTarget = true;
             caps_.readback = true;
             caps_.runtimeEffects = true;
-            // FX variants: a batch's variant is a fraction of the full shader (fill ~450 instruction slots, all ~5.4k),
+            // FX variants: a batch's variant is a fraction of the full shader (fill ~450 instruction slots, all ~3.8k),
             // compiled in the background: the first frames draw with the full shader, started below
             caps_.fxFeatureVariants = true;
             caps_.asyncPipelines = true;
@@ -984,8 +984,9 @@ namespace esia::rhi::d3d9
             {
                 const HRESULT hr = dev_->CreatePixelShader(words, &s.ps);
                 created = SUCCEEDED(hr);
-                // more instruction slots than the device has is a limit of the device, not an error: a user effect
-                // on the glass variants takes about 5.4k, NVIDIA's driver has 4096. The pipeline is not built.
+                // more instruction slots than the device has is a limit of the device, not an error (NVIDIA's driver
+                // has 4096; the full FX shader takes about 3.8k, a large user effect may take more). The pipeline is
+                // not built.
                 const unsigned slots = created ? 0u : d3d::InstructionSlots(code);
                 if (!created && slots > psSlots_)
                     log_.Printf(LogLevel::Info, "a pixel shader of about %u instruction slots exceeds the device's %lu: its pipeline is not built",

@@ -166,9 +166,17 @@ float WgtErf(float x)
     return s - s / (t * t);
 }
 
-// Cubic B-spline reconstruction with 4 bilinear taps: smooth magnification of low-res blur levels.
+// Cubic B-spline reconstruction with 4 bilinear taps: smooth magnification of low-res blur levels. The taps depend
+// on the level's size only, so they are computed once (WgtBSplineTaps) and each level's branch just reads its texture
+// (WgtBSplineRead): SM3 counts every branch's code against the pixel shader's instruction slots.
 // `uv` is top-left based; the flip for bottom-left APIs happens on the final taps.
-float4 WgtSampleBSpline(ESIA_TEXTURE_ARG tex, float2 uv, float4 level)
+struct WgtBSpline
+{
+    float2 t0, t1;   // the two bilinear tap positions per axis (uv, render-target orientation applied)
+    float2 s0, s1;   // their weights per axis
+};
+
+WgtBSpline WgtBSplineTaps(float2 uv, float4 level)
 {
     float2 texel = uv * level.xy - 0.5;
     float2 tc = floor(texel);
@@ -178,22 +186,36 @@ float4 WgtSampleBSpline(ESIA_TEXTURE_ARG tex, float2 uv, float4 level)
     float2 w1 = (1.0 / 6.0) * (3.0 * f3 - 6.0 * f2 + 4.0);
     float2 w2 = (1.0 / 6.0) * (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0);
     float2 w3 = (1.0 / 6.0) * f3;
-    float2 s0 = w0 + w1, s1 = w2 + w3;
-    float2 t0 = (tc - 0.5 + w1 / s0) * level.zw;
-    float2 t1 = (tc + 1.5 + w3 / s1) * level.zw;
-    return (ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t0.x, t0.y))) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t1.x, t0.y))) * s1.x) * s0.y
-         + (ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t0.x, t1.y))) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(t1.x, t1.y))) * s1.x) * s1.y;
+    WgtBSpline b;
+    b.s0 = w0 + w1;
+    b.s1 = w2 + w3;
+    b.t0 = (tc - 0.5 + w1 / b.s0) * level.zw;
+    b.t1 = (tc + 1.5 + w3 / b.s1) * level.zw;
+    return b;
 }
+
+// The four taps accumulated one by one: few live temporaries (SM3 has 32)
+float4 WgtBSplineRead(ESIA_TEXTURE_ARG tex, WgtBSpline b)
+{
+    float4 r = ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(b.t0.x, b.t0.y))) * (b.s0.x * b.s0.y);
+    r += ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(b.t1.x, b.t0.y))) * (b.s1.x * b.s0.y);
+    r += ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(b.t0.x, b.t1.y))) * (b.s0.x * b.s1.y);
+    r += ESIA_SAMPLE_LEVEL(tex, gLinear, WgtRtUv(float2(b.t1.x, b.t1.y))) * (b.s1.x * b.s1.y);
+    return r;
+}
+
+float4 WgtSampleBSpline(ESIA_TEXTURE_ARG tex, float2 uv, float4 level) { return WgtBSplineRead(tex, WgtBSplineTaps(uv, level)); }
 
 float4 WgtSampleLevel(int level, float2 uv)
 {
+    const WgtBSpline b = WgtBSplineTaps(uv, gLevel[clamp(level, 1, 5)]);
     float4 r;
     [branch] if (level <= 0)      r = ESIA_SAMPLE_LEVEL(gBackdrop0, gLinear, WgtRtUv(uv));
-    else if (level == 1)          r = WgtSampleBSpline(gBackdrop1, uv, gLevel[1]);
-    else if (level == 2)          r = WgtSampleBSpline(gBackdrop2, uv, gLevel[2]);
-    else if (level == 3)          r = WgtSampleBSpline(gBackdrop3, uv, gLevel[3]);
-    else if (level == 4)          r = WgtSampleBSpline(gBackdrop4, uv, gLevel[4]);
-    else                          r = WgtSampleBSpline(gBackdrop5, uv, gLevel[5]);
+    else if (level == 1)          r = WgtBSplineRead(gBackdrop1, b);
+    else if (level == 2)          r = WgtBSplineRead(gBackdrop2, b);
+    else if (level == 3)          r = WgtBSplineRead(gBackdrop3, b);
+    else if (level == 4)          r = WgtBSplineRead(gBackdrop4, b);
+    else                          r = WgtBSplineRead(gBackdrop5, b);
     return r;
 }
 
@@ -212,27 +234,39 @@ float4 WgtSampleLevelBilinear(int level, float2 uv)
     return r;
 }
 
-// WgtSampleBackdrop's soft sibling (bilinear per level): the blurred surroundings a rim reflects.
+// WgtSampleBackdrop's soft sibling (bilinear per level): the blurred surroundings a rim reflects. Its two levels are
+// read in a loop too.
 float3 WgtSampleBackdropSoft(float2 uv, float radiusPx)
 {
     float lv = clamp(log2(max(radiusPx, 1.0)) - 1.0, 0.0, 5.0);
     int l0 = (int)floor(lv);
     float f = lv - (float)l0;
-    float3 a = WgtSampleLevelBilinear(l0, uv).rgb;
-    [branch] if (f > 0.02 && l0 < 5)
-        a = lerp(a, WgtSampleLevelBilinear(l0 + 1, uv).rgb, f);
+    const bool blend = f > 0.02 && l0 < 5;
+    float3 a = float3(0.0, 0.0, 0.0);
+    [loop] for (int i = 0; i < 2; ++i)
+    {
+        if (i > 0 && !blend)
+            break;
+        a += WgtSampleLevelBilinear(l0 + i, uv).rgb * (blend ? (i == 0 ? 1.0 - f : f) : 1.0);
+    }
     return a;
 }
 
-// Samples the captured backdrop at screen uv (top-left based) with an (approximate) gaussian blur radius in pixels.
+// Samples the captured backdrop at screen uv (top-left based) with an (approximate) gaussian blur radius in pixels:
+// the two levels around it, blended. They are read in a loop, so the level sampling is compiled once.
 float3 WgtSampleBackdrop(float2 uv, float radiusPx)
 {
     float lv = clamp(log2(max(radiusPx, 1.0)) - 1.0, 0.0, 5.0);
     int l0 = (int)floor(lv);
     float f = lv - (float)l0;
-    float3 a = WgtSampleLevel(l0, uv).rgb;
-    [branch] if (f > 0.02 && l0 < 5)
-        a = lerp(a, WgtSampleLevel(l0 + 1, uv).rgb, f);
+    const bool blend = f > 0.02 && l0 < 5;
+    float3 a = float3(0.0, 0.0, 0.0);
+    [loop] for (int i = 0; i < 2; ++i)
+    {
+        if (i > 0 && !blend)
+            break;
+        a += WgtSampleLevel(l0 + i, uv).rgb * (blend ? (i == 0 ? 1.0 - f : f) : 1.0);
+    }
     return a;
 }
 

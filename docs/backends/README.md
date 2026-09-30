@@ -297,13 +297,17 @@ and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature 
   with `SetStreamSourceFreq`), `ESIA_FLAT` (empty), `ESIA_FLAT_UINT(v)` (round the interpolated index) and
   `ESIA_CLIP_POSITION(p)` (the half-pixel shift below; every vertex shader writes `SV_Position` through it).
   With `d3dcompiler_47` every program compiles for `vs_3_0` / `ps_3_0` (checked under Wine); the risk is the FX
-  pixel shader's size: a plain fill is ~450 instruction slots, the full shader ~5.4k, beyond the 512 that SM3
-  guarantees (`D3DCAPS9::MaxPixelShader30InstructionSlots` says what the device takes). `fxFeatureVariants` lets
-  batches compile only their features; the full shader, the fallback of refused and pending variants, may not be
-  creatable on a device limited to 512 slots. A shader over the device's slots (NVIDIA's driver has 4096: a user
-  effect on the glass variants, ~5.4k, is over) is refused by `CreatePixelShader`; the backend compares the
-  disassembly's slot count (`d3d::InstructionSlots`) with the device's and logs that as information, not as an
-  error.
+  pixel shader's size: a plain fill is ~450 instruction slots, glass ~2k, the full shader ~3.8k, beyond the 512
+  that SM3 guarantees (`D3DCAPS9::MaxPixelShader30InstructionSlots` says what the device takes; NVIDIA's driver has
+  4096, and the D3D9 test fails when the full shader stops fitting in it). SM3 counts code, so the backdrop
+  sampling is written to be compiled once: the B-spline taps of a pyramid level are computed before the branch that
+  picks the level's texture, and the two levels a blur blends are read in a loop (it was ~5.5k: the level
+  selection was inlined ten times). Registers are the other limit (32 temporaries): the dispersion's three reads
+  as a loop around that one did not compile for the full shader. `fxFeatureVariants` lets batches compile only
+  their features; the full shader, the fallback of refused and pending variants, may not be creatable on a device
+  limited to 512 slots. A shader over the device's slots (a large user effect) is refused by `CreatePixelShader`;
+  the backend compares the disassembly's slot count (`d3d::InstructionSlots`) with the device's and logs that as
+  information, not as an error.
   Render targets cannot be locked, so uploads to them and readback go through a level of a `D3DPOOL_SYSTEMMEM`
   texture, which every texture format has; offscreen plain surfaces do not (NVIDIA's driver has no L8 one, the glyph
   atlas's format, though it takes L8 render targets).

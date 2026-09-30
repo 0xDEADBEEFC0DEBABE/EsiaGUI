@@ -52,12 +52,16 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
                 std::fprintf(stderr, "  FX mask 0x%x failed\n", mask);
         }
 
-    // the instruction slots a shader takes, from the disassembly: the glass variant, about 3.7k of them
-    r.fxFeatures = 0x21u;
+    // Instruction slots, from the disassembly. NVIDIA's D3D9 driver takes 4096 per pixel shader, and the full FX shader
+    // (every feature, the fallback of variants still compiling) is the largest: while it fits, every variant does.
     r.stage = shaders::Stage::Pixel;
-    const unsigned slots = rhi::d3d::InstructionSlots(rhi::d3d::CompileShader(r, log));
-    std::printf("  the glass variant: about %u ps_3_0 instruction slots\n", slots);
-    ESIA_CHECK(slots > 2000 && slots < 4096);   // NVIDIA's D3D9 driver takes 4096
+    r.fxFeatures = 0x21u;
+    const unsigned glass = rhi::d3d::InstructionSlots(rhi::d3d::CompileShader(r, log));
+    r.fxFeatures = 0;
+    const unsigned full = rhi::d3d::InstructionSlots(rhi::d3d::CompileShader(r, log));
+    std::printf("  ps_3_0 instruction slots: the glass variant about %u, the full FX shader about %u (NVIDIA: 4096)\n", glass, full);
+    ESIA_CHECK(glass > 1000 && glass < full);
+    ESIA_CHECK(full > 0 && full < 4096);
 }
 
 // Textures the renderer uploads to (the glyph atlas: R8 with CopyDst, a render target in D3D9) go through a

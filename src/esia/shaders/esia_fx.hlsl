@@ -441,15 +441,14 @@ float3 DispersedRibbon(float y, float yc, float sigma, float spread)
 }
 
 // The bevel's Fresnel term `inside` UI units within the outline (0 outside it): (1 - N.z)^5 of the circle profile,
-// as EvalGlass has it at the pixel itself.
+// as EvalGlass has it at the pixel itself. On a circle profile N.z is the height h (the wall's slope u / h capped at
+// 8: N.z >= 0.124), and the fifth power is three multiplies.
 float BevelFresnel(float inside, float bezel)
 {
-    if (inside < 0.0)
-        return 0.0;
     const float u = saturate(1.0 - inside / bezel);
-    const float h = sqrt(saturate(1.0 - u * u));
-    const float slope = min(u / max(h, 1e-3), 8.0);
-    return pow(1.0 - rsqrt(1.0 + slope * slope), 5.0);
+    const float f = 1.0 - max(sqrt(saturate(1.0 - u * u)), 0.124);
+    const float f2 = f * f;
+    return inside < 0.0 ? 0.0 : f2 * f2 * f;
 }
 
 // px: UI units per pixel
@@ -492,17 +491,15 @@ GlassSample EvalGlass(float2 svpos, float2 p, float d, float px, FxInst I)
     float amb = 0.5;
     if (gTime.z > 0.5)
     {
+        col = WgtSampleBackdrop(uv + duv, blur);
         // rainbow fringes narrower than the frost cannot be seen: frosted glass skips the extra reads
         [branch] if (dispersion > 0.001 && u > 0.0 && lens * 0.3 * dispersion * rs > blur * 0.35)
         {
-            // shorter wavelengths bend more
+            // shorter wavelengths bend more (green is where the plain read looked)
             const float k = 0.3 * dispersion;
             col.r = WgtSampleBackdrop(uv + duv - rimUv * k, blur).r;
-            col.g = WgtSampleBackdrop(uv + duv, blur).g;
             col.b = WgtSampleBackdrop(uv + duv + rimUv * k, blur).b;
         }
-        else
-            col = WgtSampleBackdrop(uv + duv, blur);
         [branch] if (u > 0.0)
             env = WgtSampleBackdropSoft(uv + n * min(bezel * 0.5, 16.0) * gDisplay.zw * gTarget.zw, kGlassEnvBlur * rs);   // GlassEnvReach
         [branch] if (I.shape.x > 0.001)
