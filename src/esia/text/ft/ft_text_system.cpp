@@ -110,6 +110,7 @@ namespace esia::text
             std::uint32_t offset = 0;   // byte offset in the paragraph
             std::uint16_t face = 0;
             hb_script_t script = HB_SCRIPT_COMMON;
+            bool rtl = false;           // resolved direction
         };
 
         struct Run
@@ -274,6 +275,118 @@ namespace esia::text
                 atlas_.BeginFrame();
                 if (layouts_.size() > kLayoutCacheLimit)
                     std::erase_if(layouts_, [this](const auto& entry) { return entry.second.lastFrame + kLayoutCacheFrames < frame_; });
+            }
+
+            // ------------------------------------------------------------------ editing
+            void CaretStops(FontRef font, std::string_view text, std::vector<CaretStop>& out) override
+            {
+                out.clear();
+                if (font.id == 0 || font.id > faces_.size() || !(font.size > 0.0f))
+                {
+                    out.push_back({0, 0.0f});
+                    return;
+                }
+                Itemize((std::uint16_t)(font.id - 1), text);
+                Shape(text, font.size);
+                BuildClusters(text);
+                // every glyph's left edge as PlaceLine puts it: the runs left to right, a right-to-left run reversed
+                glyphX_.assign(glyphs_.size(), 0.0f);
+                float pen = 0.0f;
+                for (std::uint32_t g = 0; g < (std::uint32_t)glyphs_.size();)
+                {
+                    std::uint32_t e = g + 1;
+                    while (e < glyphs_.size() && glyphs_[e].run == glyphs_[g].run)
+                        ++e;
+                    const bool rtl = runs_[glyphs_[g].run].rtl;
+                    for (std::uint32_t j = 0; j < e - g; ++j)
+                    {
+                        const std::uint32_t k = rtl ? e - 1 - j : g + j;
+                        glyphX_[k] = pen;
+                        pen += glyphs_[k].advance;
+                    }
+                    g = e;
+                }
+                // a caret stands before a cluster at its leading edge (left in a left-to-right run, right in a
+                // right-to-left one); inside a cluster of several graphemes (a ligature) at even steps across it
+                std::size_t ci = 0;   // code points
+                float endX = 0.0f;
+                for (const Cluster& c : clusters_)
+                {
+                    float x0 = std::numeric_limits<float>::infinity(), x1 = -x0;
+                    for (std::uint32_t g = c.g0; g < c.g1; ++g)
+                    {
+                        x0 = std::min(x0, glyphX_[g]);
+                        x1 = std::max(x1, glyphX_[g] + glyphs_[g].advance);
+                    }
+                    const bool rtl = runs_[glyphs_[c.g0].run].rtl;
+                    while (ci < cps_.size() && cps_[ci].offset < c.begin)
+                        ++ci;
+                    graphemes_.clear();
+                    for (std::size_t k = ci; k < cps_.size() && cps_[k].offset < c.end; ++k)
+                        if (k == ci || GraphemeBreakBefore(k))
+                            graphemes_.push_back(cps_[k].offset);
+                    const float n = (float)std::max<std::size_t>(graphemes_.size(), 1);
+                    // a cluster that continues a grapheme (a flag or a ZWJ sequence the font has no glyph for) is no stop
+                    for (std::size_t j = GraphemeBreakBefore(ci) ? 0 : 1; j < graphemes_.size(); ++j)
+                    {
+                        const float t = (float)j / n;
+                        out.push_back({graphemes_[j], rtl ? x1 - (x1 - x0) * t : x0 + (x1 - x0) * t});
+                    }
+                    endX = rtl ? x0 : x1;   // after the last cluster: its trailing edge
+                }
+                out.push_back({(std::uint32_t)text.size(), endX});
+            }
+
+            // Grapheme cluster boundaries (UAX #29) inside a shaped cluster, the rules a caret needs: CR LF stays whole;
+            // marks, ZWJ / ZWNJ, emoji modifiers and tags extend the character before; a pictograph after ZWJ joins
+            // it; regional indicators pair; Hangul jamo form syllables; a consonant after a virama joins the conjunct.
+            // Clusters themselves are whole graphemes (HarfBuzz merges them), so this only splits ligatures.
+            bool GraphemeBreakBefore(std::size_t i) const
+            {
+                if (i == 0 || i >= cps_.size())
+                    return true;
+                const char32_t prev = cps_[i - 1].c, cur = cps_[i].c;
+                if (prev == U'\r' && cur == U'\n')
+                    return false;
+                if (IsControl32(prev) || IsControl32(cur))
+                    return true;
+                const hb_unicode_general_category_t gc = hb_unicode_general_category(unicode_, cur);
+                if (gc == HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK || gc == HB_UNICODE_GENERAL_CATEGORY_SPACING_MARK ||
+                    gc == HB_UNICODE_GENERAL_CATEGORY_ENCLOSING_MARK || cur == 0x200C || cur == 0x200D || (cur >= 0x1F3FB && cur <= 0x1F3FF) ||
+                    (cur >= 0xE0020 && cur <= 0xE007F))
+                    return false;
+                if (prev == 0x200D && (gc == HB_UNICODE_GENERAL_CATEGORY_OTHER_SYMBOL || (cur >= 0x1F000 && cur <= 0x1FAFF)))
+                    return false;
+                if (IsRegionalIndicator(cur) && IsRegionalIndicator(prev))
+                {
+                    std::size_t run = 0;
+                    for (std::size_t k = i; k > 0 && IsRegionalIndicator(cps_[k - 1].c); --k)
+                        ++run;
+                    return run % 2 == 0;
+                }
+                const int hp = HangulKind(prev), hc = HangulKind(cur);
+                if ((hp == kHangulL && hc != 0 && hc != kHangulT) || ((hp == kHangulV || hp == kHangulLV) && (hc == kHangulV || hc == kHangulT)) ||
+                    ((hp == kHangulT || hp == kHangulLVT) && hc == kHangulT))
+                    return false;
+                if (hb_unicode_combining_class(unicode_, prev) == HB_UNICODE_COMBINING_CLASS_VIRAMA && gc == HB_UNICODE_GENERAL_CATEGORY_OTHER_LETTER)
+                    return false;
+                return true;
+            }
+
+            static bool IsControl32(char32_t c) { return c < 0x20 || (c >= 0x7F && c < 0xA0) || c == 0x2028 || c == 0x2029; }
+            static bool IsRegionalIndicator(char32_t c) { return c >= 0x1F1E6 && c <= 0x1F1FF; }
+            static constexpr int kHangulL = 1, kHangulV = 2, kHangulT = 3, kHangulLV = 4, kHangulLVT = 5;
+            static int HangulKind(char32_t c)
+            {
+                if ((c >= 0x1100 && c <= 0x115F) || (c >= 0xA960 && c <= 0xA97C))
+                    return kHangulL;
+                if ((c >= 0x1160 && c <= 0x11A7) || (c >= 0xD7B0 && c <= 0xD7C6))
+                    return kHangulV;
+                if ((c >= 0x11A8 && c <= 0x11FF) || (c >= 0xD7CB && c <= 0xD7FB))
+                    return kHangulT;
+                if (c >= 0xAC00 && c <= 0xD7A3)
+                    return (c - 0xAC00) % 28 == 0 ? kHangulLV : kHangulLVT;
+                return 0;
             }
 
             // ------------------------------------------------------------------ layout and drawing
@@ -592,19 +705,77 @@ namespace esia::text
                 const hb_script_t first = firstReal != cps_.end() ? firstReal->script : HB_SCRIPT_COMMON;
                 for (auto it = cps_.begin(); it != firstReal; ++it)
                     it->script = first;
+                ResolveDirections();
 
                 for (std::size_t i = 0; i < cps_.size(); ++i)
                 {
-                    if (i == 0 || cps_[i].face != cps_[i - 1].face || cps_[i].script != cps_[i - 1].script)
+                    if (i == 0 || cps_[i].face != cps_[i - 1].face || cps_[i].script != cps_[i - 1].script || cps_[i].rtl != cps_[i - 1].rtl)
                     {
                         Run r;
                         r.begin = cps_[i].offset;
                         r.face = cps_[i].face;
                         r.script = cps_[i].script;
-                        r.rtl = hb_script_get_horizontal_direction(r.script) == HB_DIRECTION_RTL;
+                        r.rtl = cps_[i].rtl;
                         runs_.push_back(r);
                     }
                     runs_.back().end = i + 1 < cps_.size() ? cps_[i + 1].offset : (std::uint32_t)para.size();
+                }
+            }
+
+            // The direction of every code point, a small part of UAX #9 for left-to-right paragraphs with right-to-left
+            // words in them (paragraphs are not reordered): letters of right-to-left scripts are right to left; digits
+            // and the letters of other scripts left to right; marks follow their base; white space, punctuation and
+            // symbols between two right-to-left characters stay right to left and take their script, elsewhere they are
+            // left to right ("a <Arabic> b": the spaces around the Arabic word stay where they are typed).
+            void ResolveDirections()
+            {
+                enum : std::uint8_t { kNeutral, kL, kR };
+                std::vector<std::uint8_t>& dir = directions_;
+                dir.assign(cps_.size(), kNeutral);
+                for (std::size_t i = 0; i < cps_.size(); ++i)
+                {
+                    const char32_t c = cps_[i].c;
+                    switch (hb_unicode_general_category(unicode_, c))
+                    {
+                    case HB_UNICODE_GENERAL_CATEGORY_UPPERCASE_LETTER:
+                    case HB_UNICODE_GENERAL_CATEGORY_LOWERCASE_LETTER:
+                    case HB_UNICODE_GENERAL_CATEGORY_TITLECASE_LETTER:
+                    case HB_UNICODE_GENERAL_CATEGORY_MODIFIER_LETTER:
+                    case HB_UNICODE_GENERAL_CATEGORY_OTHER_LETTER:
+                        dir[i] = hb_script_get_horizontal_direction(hb_unicode_script(unicode_, c)) == HB_DIRECTION_RTL ? kR : kL;
+                        break;
+                    case HB_UNICODE_GENERAL_CATEGORY_DECIMAL_NUMBER:
+                        dir[i] = kL;
+                        break;
+                    case HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK:
+                    case HB_UNICODE_GENERAL_CATEGORY_SPACING_MARK:
+                    case HB_UNICODE_GENERAL_CATEGORY_ENCLOSING_MARK:
+                        dir[i] = i > 0 ? dir[i - 1] : kL;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                for (std::size_t i = 0; i < cps_.size();)
+                {
+                    if (dir[i] != kNeutral)
+                    {
+                        cps_[i].rtl = dir[i] == kR;
+                        ++i;
+                        continue;
+                    }
+                    std::size_t j = i;
+                    while (j < cps_.size() && dir[j] == kNeutral)
+                        ++j;
+                    const bool rtl = i > 0 && j < cps_.size() && dir[i - 1] == kR && dir[j] == kR;
+                    for (std::size_t k = i; k < j; ++k)
+                    {
+                        cps_[k].rtl = rtl;
+                        // a left-to-right neutral after a right-to-left word takes the script of what follows it
+                        if (!rtl && hb_script_get_horizontal_direction(cps_[k].script) == HB_DIRECTION_RTL)
+                            cps_[k].script = j < cps_.size() && dir[j] == kL ? cps_[j].script : HB_SCRIPT_COMMON;
+                    }
+                    i = j;
                 }
             }
 
@@ -879,6 +1050,9 @@ namespace esia::text
             std::vector<Run> runs_;
             std::vector<RunGlyph> glyphs_;
             std::vector<Cluster> clusters_;
+            std::vector<float> glyphX_;               // CaretStops: each glyph's left edge
+            std::vector<std::uint8_t> directions_;    // ResolveDirections
+            std::vector<std::uint32_t> graphemes_;    // CaretStops: the graphemes of a cluster
             std::vector<Line> lines_;
             std::vector<LineInfo> lineInfo_;
             std::vector<RunGlyph> ellipsis_;

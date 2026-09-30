@@ -97,7 +97,7 @@ strategy, how the public API migrates, and the phases. What exists today is summ
 | `esia_rhi` | `include/esia/rhi`, `src/esia/rhi` | - | `rhi::Device` interface, caps, formats, backend registry, null device | done |
 | `esia_shaders` | `src/esia/shaders` | rhi | HLSL sources + generated SPIR-V / GLSL / ESSL / MSL (+ DXBC / DXIL once built on Windows), lookup table | done |
 | `esia_rhi_<api>` | `src/esia/rhi/<api>` | rhi, shaders | one backend each; the DirectX branch shares `src/esia/rhi/d3d_common` | backend sessions |
-| `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no bidi algorithm, color glyphs or system fonts yet) |
+| `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no right-to-left paragraphs or color glyphs yet) |
 | `esia_ui` | `include/esia/ui`, `src/esia/ui` | core, render, text | port of `src/ui` (controls, lists, windows, navigation, overlay, selection, text edit, auto layout), `Theme`, `ItemStyle`, `anim` | phase 3 |
 | `esia_platform_<os>` | `src/esia/platform/<os>` | core | window, input / IME translation, clipboard, DPI, cursor, frame pacing | phase 4 |
 | `wgt` (compat) | `src/compat` | everything | the `wgt::` API on Esia, so existing hosts recompile | phase 5 |
@@ -382,8 +382,10 @@ Implementations:
   (exact area coverage, 4 horizontal sub-pixel phases) and packed by `GlyphAtlas` into the
   `TextureRegistry`. FreeType 2.14.3 and HarfBuzz 14.5.0 are built from pinned sources where the system has
   neither (`ESIA_TEXT_DEPS=auto|bundled|system`, `cmake/EsiaTextDeps.cmake`), so the same text system runs on
-  Windows too. Not yet: the Unicode bidi algorithm (right-to-left runs are shaped and drawn right to left, but the
-  runs of a line are laid out left to right - fribidi / ICU in phase 2), color glyphs.
+  Windows too. Right-to-left words in left-to-right text are laid out right to left, and the white space and
+  punctuation around them stay where they were typed (a small part of UAX #9: neutrals between two right-to-left
+  characters are right to left, elsewhere left to right; digits are left to right). Not yet: the rest of the bidi
+  algorithm (right-to-left paragraphs, whose runs would be reordered - fribidi / ICU), color glyphs.
 * **System fonts** (`include/esia/text/system_fonts.hpp`, in `esia_text`; done): `FindSystemFont(family, weight,
   style)` locates an installed face (file path + face index) - DirectWrite's system font collection on Windows, Core
   Text descriptors on macOS, fontconfig or the standard font directories on Linux - and each platform has a default
@@ -399,7 +401,11 @@ Every implementation feeds its outlines to the same rasterizer and atlas, so a g
 library read the font.
 
 Editing (grapheme-cluster caret movement, selection, undo, IME composition drawn inline) is WGT's
-`ui/text_edit.cpp`, ported onto the interface plus a grapheme / caret query the interface gains in phase 3.
+`ui/text_edit.cpp`, ported onto the interface (`ui::TextField`, [UI_WIDGETS.md](UI_WIDGETS.md) section 4) with one
+query added for it: `CaretStops(font, text)`, every grapheme boundary of a line with the x where the caret is drawn
+(right-to-left runs and ligatures included). Its default implementation stops at every code point and measures the
+text before it; the FreeType system takes the boundaries from HarfBuzz's clusters and splits a ligature between its
+graphemes (UAX #29's rules for marks, ZWJ sequences, regional indicators, Hangul and conjuncts).
 
 ## 10. Platform layer
 

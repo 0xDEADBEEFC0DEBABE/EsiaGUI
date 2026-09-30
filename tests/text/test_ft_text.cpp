@@ -355,3 +355,105 @@ ESIA_TEST(FreeType, RendersTheGoldenImage)
     pages.Collect(f.textures);
     CheckGolden(Composite(dl, pages, 480, 190), "ft_gray");
 }
+
+ESIA_TEST(FreeType, CaretStopsAtGraphemesWhereTheGlyphsAre)
+{
+    Fixture f;
+    const text::FontRef fr{f.droid, 16.0f};
+    std::vector<text::CaretStop> s;
+
+    // one stop per character, where the text before it ends (its trailing space included)
+    const std::string_view t = "ab c";
+    f.ts->CaretStops(fr, t, s);
+    ESIA_CHECK(s.size() == 5);
+    for (std::size_t i = 0; i < s.size() && i < 5; ++i)
+    {
+        ESIA_CHECK(s[i].offset == i);
+        ESIA_CHECK_NEAR(s[i].x, i > 0 ? f.ts->Measure(fr, t.substr(0, i)).size.x : 0.0f, 1e-3f);
+    }
+
+    // a combining mark belongs to the character before it: e + U+0301 is one grapheme
+    f.ts->CaretStops(fr, "e\xCC\x81x", s);
+    ESIA_CHECK(s.size() == 3 && s[1].offset == 3 && s[2].offset == 4);
+    ESIA_CHECK(s.size() == 3 && std::fabs(s[1].x - f.ts->Measure(fr, "e").size.x) < 1e-3f);
+
+    // kerned: the stop between A and V is where V is drawn, the last one the kerned width
+    f.ts->CaretStops(fr, "AV", s);
+    ESIA_CHECK(s.size() == 3 && s[1].x > 0.0f && s[1].x < s[2].x);
+    ESIA_CHECK(s.size() == 3 && std::fabs(s[2].x - f.ts->Measure(fr, "AV").size.x) < 1e-3f);
+
+    // a flag is two regional indicators, one grapheme (the font has no glyph for it)
+    f.ts->CaretStops(fr, "\xF0\x9F\x87\xAF\xF0\x9F\x87\xB5" "a", s);
+    ESIA_CHECK(s.size() == 3 && s[1].offset == 8 && s[2].offset == 9);
+
+    // nothing: one stop at 0
+    f.ts->CaretStops(fr, "", s);
+    ESIA_CHECK(s.size() == 1 && s[0].offset == 0 && s[0].x == 0.0f);
+
+    // a ligature (when the font has one for "fi") is split evenly between its characters
+    DrawList dl = NewList();
+    f.ts->Draw(dl, fr, Vec2(0, 0), Color::Black(), "fi");
+    if (Quads(dl).size() == 1)
+    {
+        f.ts->CaretStops(fr, "fi", s);
+        ESIA_CHECK(s.size() == 3 && std::fabs(s[1].x - s[2].x * 0.5f) < 1e-3f);
+    }
+}
+
+namespace
+{
+    // A text system of fixed-width characters: what the interface's default CaretStops works on
+    struct MonoTextSystem final : text::TextSystem
+    {
+        text::FontId AddFontFile(const char*, int) override { return 1; }
+        text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
+        void AddFallback(text::FontId) override {}
+        void NewFrame(const text::RasterParams&) override {}
+        text::TextMetrics Measure(text::FontRef, std::string_view text, float, std::uint32_t) override
+        {
+            float n = 0.0f;
+            for (std::size_t i = 0; i < text.size();)
+            {
+                DecodeUtf8(text, i);
+                n += 1.0f;
+            }
+            return {Vec2(10.0f * n, 16.0f), 12.0f, 1};
+        }
+        Vec2 Draw(DrawList&, text::FontRef, Vec2, Color, std::string_view, float, std::uint32_t, float) override { return Vec2(); }
+        void DrawGlyph(DrawList&, text::FontRef, char32_t, Vec2, Color) override {}
+    };
+}
+
+ESIA_TEST(TextSystem, DefaultCaretStopsAtEveryCodePoint)
+{
+    MonoTextSystem ts;
+    std::vector<text::CaretStop> s;
+    ts.CaretStops({1, 16.0f}, "a\xC3\xA9z", s);   // a, U+00E9 (2 bytes), z
+    ESIA_CHECK(s.size() == 4);
+    if (s.size() == 4)
+    {
+        ESIA_CHECK(s[0].offset == 0 && s[1].offset == 1 && s[2].offset == 3 && s[3].offset == 4);
+        ESIA_CHECK(s[0].x == 0.0f && s[1].x == 10.0f && s[2].x == 20.0f && s[3].x == 30.0f);
+    }
+}
+
+ESIA_TEST(FreeType, NeutralsAroundARightToLeftWordStayInPlace)
+{
+    // "a <Arabic AIN BEH> b": the Arabic word is drawn right to left (the font has no Arabic: its glyphs are the
+    // notdef box, the direction comes from the script), the spaces around it stay where they were typed
+    Fixture f;
+    const text::FontRef fr{f.droid, 16.0f};
+    const std::string_view t = "a \xD8\xB9\xD8\xA8 b";   // offsets: a 0, space 1, AIN 2, BEH 4, space 6, b 7, end 8
+    std::vector<text::CaretStop> s;
+    f.ts->CaretStops(fr, t, s);
+    ESIA_CHECK(s.size() == 7);
+    if (s.size() != 7)
+        return;
+    const float space = f.ts->Measure(fr, " ").size.x;
+    const float word = s[1].x;   // "a" + nothing: the caret before the first space
+    ESIA_CHECK(s[1].offset == 1 && s[2].offset == 2 && s[3].offset == 4 && s[4].offset == 6 && s[5].offset == 7);
+    // inside the Arabic word the caret moves left as the offset grows: AIN is its rightmost glyph
+    ESIA_CHECK(s[2].x > s[3].x && s[3].x > word + space - 1e-3f);
+    // the space after it is right of the whole word, then b
+    ESIA_CHECK(s[4].x >= s[2].x - 1e-3f && std::fabs(s[5].x - s[4].x - space) < 1e-3f && s[6].x > s[5].x);
+}

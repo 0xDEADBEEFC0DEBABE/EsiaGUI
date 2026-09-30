@@ -11,7 +11,9 @@
 // Threading: a TextSystem belongs to one UI thread (like the Context that uses it).
 #pragma once
 #include "esia/base/math.hpp"
+#include "esia/base/utf8.hpp"
 #include <string_view>
+#include <vector>
 
 namespace esia
 {
@@ -43,6 +45,13 @@ namespace esia::text
         Vec2 size;               // box of the laid-out text (UI units)
         float baseline = 0.0f;   // first baseline, from the top of the box
         int lines = 0;
+    };
+
+    // A place a caret can stand in a line of text: a grapheme cluster boundary.
+    struct CaretStop
+    {
+        std::uint32_t offset = 0;   // bytes into the UTF-8 text
+        float x = 0.0f;             // where the caret is drawn, from the start of the line (UI units)
     };
 
     // How glyphs are rasterized this frame.
@@ -77,5 +86,22 @@ namespace esia::text
                           std::uint32_t flags = 0, float scale = 1.0f) = 0;
         // One glyph (icon fonts) optically centered on `center`; `size` = em size in UI units.
         virtual void DrawGlyph(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, Color color) = 0;
+
+        // ---- editing
+        // The caret stops of `text` laid out as one line (line breaks are not honored: single-line fields), in logical
+        // order: the first at offset 0, the last at text.size(). x is where Draw puts the caret, so it decreases
+        // through a right-to-left run; a ligature of several characters is split evenly. This default stops at every
+        // code point and measures the text before it; the FreeType system stops at grapheme cluster boundaries.
+        virtual void CaretStops(FontRef font, std::string_view text, std::vector<CaretStop>& out)
+        {
+            out.clear();
+            for (std::size_t i = 0;;)
+            {
+                out.push_back({(std::uint32_t)i, i > 0 ? Measure(font, text.substr(0, i)).size.x : 0.0f});
+                if (i >= text.size())
+                    break;
+                DecodeUtf8(text, i);
+            }
+        }
     };
 }
