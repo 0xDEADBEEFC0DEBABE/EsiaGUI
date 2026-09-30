@@ -1,9 +1,11 @@
-// glass_window - Direct3D 9Ex host: a windowed device (its implicit swap chain, one back buffer) and Present.
+// glass_window - Direct3D 9Ex host: a windowed device whose implicit swap chain uses the flip model, and Present.
 #include "host.hpp"
 #include "esia/rhi/d3d9.hpp"
 #include <d3d9.h>
 #include <wrl/client.h>
+#include <algorithm>
 #include <cstdio>
+#include <vector>
 
 namespace glass
 {
@@ -29,9 +31,11 @@ namespace glass
                 if (SUCCEEDED(d3d_->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &id)))
                     adapter_ = id.Description;
                 pp_.Windowed = TRUE;
-                pp_.SwapEffect = D3DSWAPEFFECT_DISCARD;
+                // the flip model (9Ex, as DXGI's): DWM takes the back buffer instead of a copy of it. The copy model
+                // (DISCARD) kept vsync at 90 fps on a 240 Hz display driven by another GPU than the device's
+                pp_.SwapEffect = D3DSWAPEFFECT_FLIPEX;
                 pp_.BackBufferFormat = D3DFMT_X8R8G8B8;
-                pp_.BackBufferCount = 1;
+                pp_.BackBufferCount = 2;   // the flip model needs two at least
                 pp_.BackBufferWidth = (UINT)width;
                 pp_.BackBufferHeight = (UINT)height;
                 pp_.hDeviceWindow = hwnd;
@@ -51,41 +55,47 @@ namespace glass
                 d.device = device_.Get();
                 d.debug.debugLayer = o.debug;   // D3D9 has no info queue: failed calls only get more verbose
                 esia_ = esia::rhi::d3d9::CreateDevice(d, &error);
-                return esia_ && CreateTarget();
+                return esia_ != nullptr;
             }
 
             esia::rhi::Device& Device() override { return *esia_; }
 
             void Resize(int width, int height) override
             {
-                // the wrapped target holds the back buffer; with 9Ex every other resource survives ResetEx
-                esia_->DestroyTexture(target_);
+                // the wrapped targets hold the back buffers; with 9Ex every other resource survives ResetEx
+                for (const esia::rhi::Texture t : wrapped_)
+                    esia_->DestroyTexture(t);
+                wrapped_.clear();
                 target_ = {};
                 pp_.BackBufferWidth = (UINT)width;
                 pp_.BackBufferHeight = (UINT)height;
-                if (SUCCEEDED(device_->ResetEx(&pp_, nullptr)))
-                    CreateTarget();
+                reset_ = SUCCEEDED(device_->ResetEx(&pp_, nullptr));
             }
 
-            bool BeginFrame() override { return (bool)target_; }
+            // The flip model rotates the back buffers: this frame's is buffer 0 now. Wrapping a buffer seen before
+            // gives its texture again.
+            bool BeginFrame() override
+            {
+                target_ = {};
+                ComPtr<IDirect3DSurface9> back;
+                if (!reset_ || FAILED(device_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+                    return false;
+                target_ = esia::rhi::d3d9::WrapRenderTarget(*esia_, back.Get());
+                if (target_ && std::find(wrapped_.begin(), wrapped_.end(), target_) == wrapped_.end())
+                    wrapped_.push_back(target_);
+                return (bool)target_;
+            }
 
         protected:
             void Present() override { device_->Present(nullptr, nullptr, nullptr, nullptr); }
 
         private:
-            bool CreateTarget()
-            {
-                ComPtr<IDirect3DSurface9> back;
-                if (FAILED(device_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
-                    return false;
-                target_ = esia::rhi::d3d9::WrapRenderTarget(*esia_, back.Get());
-                return (bool)target_;
-            }
-
             ComPtr<IDirect3D9Ex> d3d_;
             ComPtr<IDirect3DDevice9Ex> device_;
             D3DPRESENT_PARAMETERS pp_ = {};
             std::unique_ptr<esia::rhi::Device> esia_;
+            std::vector<esia::rhi::Texture> wrapped_;   // the back buffers wrapped so far
+            bool reset_ = true;                          // false: ResetEx failed, no buffers to draw into
         };
     }
 
