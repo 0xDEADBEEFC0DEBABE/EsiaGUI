@@ -3,9 +3,15 @@
 # compiled by Apple's compiler. See docs/CI.md.
 name: macOS
 
+# main and pull requests into it; any other branch by hand (Actions > the workflow > Run workflow). The hosted
+# runners' minutes are metered (macOS at 10x, Windows at 2x): see docs/CI.md, section 5
 on:
   push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
 
 permissions:
@@ -21,7 +27,7 @@ jobs:
     # than macOS 11 must be behind @available (-Wunguarded-availability-new is an error with ESIA_WERROR)
     name: macos-clang${{ matrix.deployment && format(' (macOS {0})', matrix.deployment) || '' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

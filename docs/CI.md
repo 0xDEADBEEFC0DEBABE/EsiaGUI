@@ -1,6 +1,8 @@
 # Continuous integration
 
-GitHub Actions runs three workflows on every push and pull request (`.github/workflows`), one per host OS. Every job
+GitHub Actions runs three workflows (`.github/workflows`), one per host OS, on every push to `main` and every pull
+request into it that changes more than documentation, and on any branch by hand (section 5: the minutes are
+metered). Every job
 builds with `-DESIA_WERROR=ON`, runs `ctest`, writes a table of every test and every conformance scene to the job's
 summary (`.github/scripts/ctest_report.py`) and uploads the conformance images, the diff images of failures, the
 CTest JUnit file and the test logs as an artifact named after the job (kept 14 days).
@@ -90,7 +92,7 @@ from a clean checkout.
 
 ## 2. What CI proves and what it does not
 
-**Proves**, on every push:
+**Proves**, on every run:
 
 * every preset builds warning-free with `ESIA_WERROR` on clang 18 (Linux), the runner's clang-cl and MSVC 19.44
   (Windows), Homebrew LLVM against Apple's SDK (macOS), and the GNU-ABI cross build;
@@ -280,6 +282,14 @@ the Diagnostics step's log).
 
 ## 5. Maintenance
 
+* **Minutes**: the repository is private, so the hosted runners' minutes come out of the account's monthly
+  allowance (3,000 with GitHub Pro), macOS at 10x and Windows at 2x: one run of the three workflows is about
+  100 minutes, most of it macOS. Hence the triggers: pushes to `main` and pull requests into it, not feature branches,
+  and no run for a change to `docs/` or Markdown alone; `[skip ci]` in the head commit's message skips a push.
+  Branches are tested locally first (every backend on Windows with real GPUs); to check a branch on another OS
+  before merging, run only the workflow that matters from the Actions tab (*Run workflow*, pick the branch). Job
+  timeouts are about three times a normal run (Linux 30, macOS 20, Windows 45 minutes), so a hang costs little.
+  Usage: *Settings > Billing and licensing > Overview*.
 * **Goldens**: a rendering change that moves a scene past its tolerance fails every backend's job. Regenerate with
   OpenGL on llvmpipe (`docs/backends/README.md`, section 7) after reviewing the uploaded `*.diff.png` files; never
   widen a tolerance for one backend's software renderer.

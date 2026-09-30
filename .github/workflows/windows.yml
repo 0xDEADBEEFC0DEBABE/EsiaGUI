@@ -3,9 +3,15 @@
 # (llvmpipe opengl32.dll, lavapipe) with the Khronos validation layer of the Vulkan SDK. See docs/CI.md.
 name: Windows
 
+# main and pull requests into it; any other branch by hand (Actions > the workflow > Run workflow). The hosted
+# runners' minutes are metered (macOS at 10x, Windows at 2x): see docs/CI.md, section 5
 on:
   push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
 
 permissions:
@@ -43,7 +49,7 @@ jobs:
   windows:
     name: ${{ matrix.preset }}
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

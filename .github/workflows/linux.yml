@@ -3,9 +3,15 @@
 # and the Windows cross build (compile / link check of every D3D backend). See docs/CI.md.
 name: Linux
 
+# main and pull requests into it; any other branch by hand (Actions > the workflow > Run workflow). The hosted
+# runners' minutes are metered (macOS at 10x, Windows at 2x): see docs/CI.md, section 5
 on:
   push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
 
 permissions:
@@ -27,7 +33,7 @@ jobs:
   linux-clang:
     name: ${{ matrix.preset }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
