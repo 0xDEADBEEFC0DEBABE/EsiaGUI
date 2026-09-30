@@ -306,6 +306,7 @@ namespace esia::rhi::d3d9
                             (unsigned long)dc.MaxPixelShader30InstructionSlots);
 
             renderTargets_ = std::max<DWORD>(1, dc.NumSimultaneousRTs);
+            psSlots_ = dc.MaxPixelShader30InstructionSlots;
             caps_.fxStorage = FxStorage::Texture;
             caps_.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm3;
             caps_.halfPixelOffset = true;
@@ -477,10 +478,10 @@ namespace esia::rhi::d3d9
                 }
                 return;
             }
-            // render targets cannot be locked: through a system-memory surface
+            // render targets cannot be locked: through system memory
+            ComPtr<IDirect3DTexture9> staging;
             ComPtr<IDirect3DSurface9> sys;
-            if (!log_.Check(dev_->CreateOffscreenPlainSurface((UINT)r.Width(), (UINT)r.Height(), t->format, D3DPOOL_SYSTEMMEM, &sys, nullptr),
-                            "CreateOffscreenPlainSurface (upload)") ||
+            if (!SystemMemorySurface((UINT)r.Width(), (UINT)r.Height(), t->format, "CreateTexture (upload)", staging, sys) ||
                 FAILED(sys->LockRect(&lr, nullptr, 0)))
                 return;
             CopyIn(t->desc.format, data, rowPitch, r.Width(), r.Height(), lr);
@@ -889,9 +890,9 @@ namespace esia::rhi::d3d9
                     return false;
                 src = resolved;
             }
+            ComPtr<IDirect3DTexture9> staging;
             ComPtr<IDirect3DSurface9> sys;
-            if (!log_.Check(dev_->CreateOffscreenPlainSurface((UINT)t->desc.width, (UINT)t->desc.height, t->format, D3DPOOL_SYSTEMMEM, &sys, nullptr),
-                            "CreateOffscreenPlainSurface (readback)") ||
+            if (!SystemMemorySurface((UINT)t->desc.width, (UINT)t->desc.height, t->format, "CreateTexture (readback)", staging, sys) ||
                 !log_.Check(dev_->GetRenderTargetData(src.Get(), sys.Get()), "GetRenderTargetData") ||
                 !log_.Check(sys->LockRect(&lr, &rc, D3DLOCK_READONLY), "LockRect (readback)"))
                 return false;
@@ -907,6 +908,15 @@ namespace esia::rhi::d3d9
         bool Supports(DWORD usage, D3DFORMAT fmt) const
         {
             return SUCCEEDED(d3d_->CheckDeviceFormat(adapter_, deviceType_, adapterFormat_, usage, D3DRTYPE_TEXTURE, fmt));
+        }
+
+        // A system-memory image of a render target's format to go through (uploads, readback): a level of a
+        // system-memory texture, which every texture format has. Offscreen plain surfaces do not: NVIDIA's driver has
+        // no L8 one, the glyph atlas's format, and accepts L8 render targets.
+        bool SystemMemorySurface(UINT width, UINT height, D3DFORMAT fmt, const char* what, ComPtr<IDirect3DTexture9>& tex, ComPtr<IDirect3DSurface9>& surface)
+        {
+            return log_.Check(dev_->CreateTexture(width, height, 1, 0, fmt, D3DPOOL_SYSTEMMEM, &tex, nullptr), what) &&
+                   log_.Check(tex->GetSurfaceLevel(0, &surface), what);
         }
 
         // Creates `t` as a render-target texture cleared to transparent black.
@@ -967,8 +977,22 @@ namespace esia::rhi::d3d9
             Shader s;
             std::string error;
             const auto* words = reinterpret_cast<const DWORD*>(code->data());
-            const bool created = vertex ? log_.Check(dev_->CreateVertexShader(words, &s.vs), "CreateVertexShader")
-                                        : log_.Check(dev_->CreatePixelShader(words, &s.ps), "CreatePixelShader");
+            bool created = false;
+            if (vertex)
+                created = log_.Check(dev_->CreateVertexShader(words, &s.vs), "CreateVertexShader");
+            else
+            {
+                const HRESULT hr = dev_->CreatePixelShader(words, &s.ps);
+                created = SUCCEEDED(hr);
+                // more instruction slots than the device has is a limit of the device, not an error: a user effect
+                // on the glass variants takes about 5.4k, NVIDIA's driver has 4096. The pipeline is not built.
+                const unsigned slots = created ? 0u : d3d::InstructionSlots(code);
+                if (!created && slots > psSlots_)
+                    log_.Printf(LogLevel::Info, "a pixel shader of about %u instruction slots exceeds the device's %lu: its pipeline is not built",
+                                slots, (unsigned long)psSlots_);
+                else if (!created)
+                    log_.Check(hr, "CreatePixelShader");
+            }
             if (!created)
                 return nullptr;
             if (!ParseConstantTable(*code, s.info, error))
@@ -1115,6 +1139,7 @@ namespace esia::rhi::d3d9
         D3DDEVTYPE deviceType_ = D3DDEVTYPE_HAL;
         D3DFORMAT adapterFormat_ = D3DFMT_X8R8G8B8;
         DWORD renderTargets_ = 1;   // D3DCAPS9::NumSimultaneousRTs
+        DWORD psSlots_ = 512;       // D3DCAPS9::MaxPixelShader30InstructionSlots
         bool restore_ = true;
         d3d::Logger log_;
         Caps caps_;

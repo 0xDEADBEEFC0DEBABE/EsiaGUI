@@ -51,6 +51,49 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
             if (!code)
                 std::fprintf(stderr, "  FX mask 0x%x failed\n", mask);
         }
+
+    // the instruction slots a shader takes, from the disassembly: the glass variant, about 3.7k of them
+    r.fxFeatures = 0x21u;
+    r.stage = shaders::Stage::Pixel;
+    const unsigned slots = rhi::d3d::InstructionSlots(rhi::d3d::CompileShader(r, log));
+    ESIA_CHECK(slots > 2000 && slots < 4096);
+}
+
+// Textures the renderer uploads to (the glyph atlas: R8 with CopyDst, a render target in D3D9) go through a
+// system-memory texture: NVIDIA's driver has no L8 offscreen plain surface.
+ESIA_TEST(D3D9Textures, UploadAndReadBackAnR8Target)
+{
+    EsiaRegisterBackend_d3d9();
+    const rhi::BackendInfo* backend = rhi::FindBackend("d3d9");
+    rhi::HeadlessDesc hd;
+    hd.width = hd.height = 16;
+    std::string error;
+    rhi::HeadlessDevice h = backend ? backend->createHeadless(hd, error) : rhi::HeadlessDevice{};
+    if (!h.device)
+    {
+        std::printf("  skipped: no D3D9 device (%s)\n", error.c_str());
+        return;
+    }
+    rhi::TextureDesc d;
+    d.width = 64;
+    d.height = 32;
+    d.format = rhi::Format::R8_UNORM;
+    d.usage = rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst;
+    std::vector<std::uint8_t> pixels(64 * 32, 40);
+    const rhi::Texture t = h.device->CreateTexture(d, pixels.data());
+    ESIA_CHECK((bool)t);
+    const std::vector<std::uint8_t> patch(8 * 4, 200);
+    h.device->UpdateTexture(t, rhi::IRect{16, 8, 24, 12}, patch.data());
+    std::vector<std::uint8_t> px;
+    ESIA_CHECK(h.device->ReadPixels(t, rhi::IRect{0, 0, 64, 32}, px) && px.size() == 64 * 32 * 4);
+    if (px.size() == 64 * 32 * 4)
+    {
+        ESIA_CHECK(px[0] == 40);                            // the initial data (red channel)
+        ESIA_CHECK(px[(9 * 64 + 20) * 4] == 200);           // the patch
+        ESIA_CHECK(px[(12 * 64 + 20) * 4] == 40);           // below it
+    }
+    ESIA_CHECK(h.device->ValidationErrors() == 0);
+    h.device->DestroyTexture(t);
 }
 
 ESIA_TEST(D3D9Host, WrapDrawRestore)

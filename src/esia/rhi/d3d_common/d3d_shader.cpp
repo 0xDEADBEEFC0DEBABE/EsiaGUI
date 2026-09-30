@@ -14,10 +14,14 @@ namespace esia::rhi::d3d
     {
         // Loaded at runtime rather than linked: a missing DLL then fails device creation with a message (the
         // conformance suite reports SKIP) instead of the process failing to start.
+        // D3DDisassemble's type, declared here (not every SDK's d3dcompiler.h names it)
+        using DisassembleFn = HRESULT(WINAPI*)(LPCVOID data, SIZE_T size, UINT flags, LPCSTR comments, ID3DBlob** out);
+
         struct CompilerDll
         {
             HMODULE module = nullptr;
             pD3DCompile compile = nullptr;
+            DisassembleFn disassemble = nullptr;
             std::string error;
 
             CompilerDll()
@@ -29,6 +33,7 @@ namespace esia::rhi::d3d
                     return;
                 }
                 compile = reinterpret_cast<pD3DCompile>(reinterpret_cast<void*>(GetProcAddress(module, "D3DCompile")));
+                disassemble = reinterpret_cast<DisassembleFn>(reinterpret_cast<void*>(GetProcAddress(module, "D3DDisassemble")));
                 if (!compile)
                     error = "d3dcompiler_47.dll has no D3DCompile";
             }
@@ -274,5 +279,20 @@ namespace esia::rhi::d3d
             Report(result, log);
         }
         return out ? CompileState::Ready : CompileState::Failed;
+    }
+
+    unsigned InstructionSlots(const Bytecode& code)
+    {
+        CompilerDll& dll = Dll();
+        ComPtr<ID3DBlob> text;
+        if (!code || !dll.disassemble || FAILED(dll.disassemble(code->data(), code->size(), 0, nullptr, &text)) || !text)
+            return 0;
+        const std::string listing(static_cast<const char*>(text->GetBufferPointer()), text->GetBufferSize());
+        const char* const kMark = "// approximately ";
+        const std::size_t at = listing.rfind(kMark);
+        unsigned slots = 0;
+        if (at == std::string::npos || std::sscanf(listing.c_str() + at + std::strlen(kMark), "%u instruction slots", &slots) != 1)
+            return 0;
+        return slots;
     }
 }

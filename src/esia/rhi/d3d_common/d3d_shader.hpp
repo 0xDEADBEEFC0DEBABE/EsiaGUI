@@ -48,4 +48,9 @@ namespace esia::rhi::d3d
 
     // The profile string ("ps_5_0" ...) of a request.
     const char* ShaderProfile(ShaderModel model, shaders::Stage stage);
+
+    // The instruction slots an SM3 shader takes, as the compiler's disassembly counts them ("approximately N
+    // instruction slots used"); 0 when unknown. For a shader a device refused: more than its slots is a limit of the
+    // device, not an error (D3DCAPS9::MaxPixelShader30InstructionSlots).
+    unsigned InstructionSlots(const Bytecode& code);
 }
