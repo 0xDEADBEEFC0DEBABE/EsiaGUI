@@ -191,11 +191,13 @@ Steps 1 - 4 of the Windows test plan below, on `0c5fad2`, clean build directorie
 | a probe on `FindSystemFont` / `FindFontInDirectories` / `AddSystemFont` | YaHei 700 → `MSYHBD.TTC`, YaHei 300 → `MSYHL.TTC` (290); Segoe UI italic → `SEGOEUII.TTF`, bold italic → `SEGOEUIZ.TTF`, 600 → `SEGUISB.TTF`; `system-ui` → Segoe UI; `宋体` and `SimSun` → `SIMSUN.TTC`; Arial 900 → `ARIBLK.TTF`; "Comic Sans" (not a family) → nothing; fonts installed for the current user only (Source Sans 3 400 / 600 in `%LOCALAPPDATA%\Microsoft\Windows\Fonts`) found; a font in a directory named `字体 测试` found by `FindFontInDirectories` and loaded through its UTF-8 path (`你好，世界` at 20 → 100 x 28.96); the whole chain loaded (6 fonts) measures Latin, Simplified and Traditional Chinese, kana, Hangul and ★ together |
 | `ft_cjk.png` written by the Windows runs | matches the golden; line breaks keep closing punctuation off the start of a line |
 
-Found on Windows, not fixed here (see "Known gaps"): the weight DirectWrite reports is not always the weight of the face
-that is loaded. `SimSun` at 700 returns `SIMSUN.TTC` face 0 with weight 700: DirectWrite simulates the bold, the file
-is regular. Variable fonts (`Segoe UI Variable Text` → `SEGUIVAR.TTF`, `Noto Serif CJK SC` → `NotoSerifCJK-VF.ttf.ttc`
-face 2) report the named instance's weight (400 or 700) for the same face index, and FreeType loads the font's default
-instance.
+Found on Windows, then fixed by the local session: the weight DirectWrite reports was not always the weight of the face
+that is loaded. `SimSun` at 700 returned `SIMSUN.TTC` face 0 with weight 700 (DirectWrite simulates the bold, the file
+is regular); variable fonts (`Segoe UI Variable Text` → `SEGUIVAR.TTF`, `Noto Serif CJK SC` → `NotoSerifCJK-VF.ttf.ttc`
+face 2) reported the named instance's weight for the same face index, while FreeType loads the default instance. The
+Windows lookup now reports the stored face's own weight and style (read from the file's `OS/2` / `head` tables):
+SimSun 700 → 400, Segoe UI Variable Text 700 → 400, Noto Serif CJK SC → 200 (its default instance is ExtraLight);
+the test `SystemFonts.PlatformLookup` checks it with Tahoma's simulated oblique.
 
 ### Not verified
 
@@ -245,11 +247,9 @@ freetype harfbuzz`.
   share one copy); loading a fallback only when a character needs it is future work.
 * **Security**: font files are parsed by FreeType and HarfBuzz as before; the lookup's own table reader is bounded
   (faces, name table size, every read checked against the file size).
-* **Simulated and variable faces on Windows** (found by the local session): `SystemFont::weight` / `style` come from
-  DirectWrite, which counts its bold / oblique simulations (`IDWriteFont::GetSimulations`) and the named instances of
-  variable fonts. The text system then loads the plain face (regular glyphs, or the variable font's default
-  instance). Either report the face's own weight and style (and skip simulated matches), or carry the named instance
-  (FreeType's face index `instance << 16 | face`) and the simulation in `SystemFont`.
+* **Variable fonts: the default instance only.** `SystemFont` reports the stored face as it is (above), so a request for
+  a bold from a variable font gets the font's default instance and says so. Loading a named instance would need it in
+  `SystemFont` (FreeType's face index `instance << 16 | face`); bold / oblique simulation is not done either.
 
 ## 0. Round 3: sub-pixel text removed
 
@@ -404,6 +404,20 @@ scratch copy), `text_lcd` still passes a single frame on llvmpipe (a fresh textu
 
 ## 3. Results on Windows (the local session)
 
+**Which GPU (2026-09-30).** The local machine also has the AMD Radeon iGPU of its Ryzen, and at the time of this
+check the monitor was connected to it. The headless devices do not all pick the same GPU:
+- Vulkan takes the discrete GPU (the RTX 4080).
+- D3D10 / 11 / 12 take the system's default adapter, D3D9 the adapter of the display, and WGL the ICD of the
+  hidden window's display: all three are the GPU driving the monitor.
+
+So results below that say "RTX 4080" for those backends are the 4080's only while the monitor was connected to it,
+and that was not recorded. The conformance suite now prints each backend's adapter (`ADAPTER` lines), and
+`ESIA_D3D_ADAPTER=high-performance` puts D3D10 / 11 / 12 on the 4080. On `main` after the step-3 merges, with the
+debug layers on (`ESIA_D3D_DEBUG=1`), every backend passes 17 / 17 on both GPUs it can reach:
+- OpenGL, GLES, D3D9, D3D10, D3D11 and D3D12 on the AMD Radeon iGPU;
+- Vulkan, D3D10, D3D11 and D3D12 on the RTX 4080;
+- D3D12 with GPU-based validation (`ESIA_D3D_DEBUG=2`) and `--frames 3` on both GPUs.
+
 Windows 11, NVIDIA GeForce RTX 4080 SUPER (driver 610.88), clang-cl 22.1.8 + lld-link and MSVC 19.44, before this
 round's core changes; reported in the backend branches' STATUS files and commits (`cc75e82`, `2f150f9`, `eea8c0c`),
 not re-run here:
@@ -518,13 +532,14 @@ CTest properties (`esia-vulkan` request 2, optional).
    texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
 7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
    their owners.
-8. **Direct3D 12 after OpenGL in one process, with the debug layer** (found by the local session, NVIDIA 4080 SUPER).
-   `esia_conformance --backend opengl --backend d3d12` (or `gles` first) with `ESIA_D3D_DEBUG=1` skips every D3D12
-   scene: `D3D12CreateDevice` returns `DXGI_ERROR_DEVICE_RESET`. Without the debug layer, or with any other backend
-   first, D3D12 runs. The likely cause: NVIDIA's OpenGL driver creates a D3D12 device of its own in the process,
-   enabling the debug layer afterwards removes the devices that exist, and D3D12 hands out one device per adapter.
-   CTest runs each backend in its own process, so the suite never meets it. To do: run D3D12 before OpenGL in
-   `esia_conformance`, or report this cause in the skip reason.
+8. **Direct3D 12 after AMD's OpenGL driver in one process, with the debug layer** (found by the local session on
+   the AMD Radeon iGPU of its Ryzen, driver 32.0.21045.5002). `esia_conformance --backend opengl --backend d3d12` (or
+   `gles` first) with `ESIA_D3D_DEBUG=1` skips every D3D12 scene: `D3D12CreateDevice` returns
+   `DXGI_ERROR_DEVICE_RESET`. A small program reproduces it without Esia. It happens only when a WGL context of
+   AMD's driver (`atio6axx.dll`) exists and the D3D12 debug layer is enabled before creating a device on the AMD
+   adapter. The same sequence gives a working device without the debug layer, or on the RTX 4080
+   (`ESIA_D3D_ADAPTER=high-performance`); a D3D12 device made before enabling the layer is no problem either. A
+   driver issue, not Esia's. CTest runs each backend in its own process, so the suite never meets it.
 
 ## 7. Building and testing
 
