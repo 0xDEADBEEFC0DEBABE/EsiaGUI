@@ -440,15 +440,21 @@ float3 DispersedRibbon(float y, float yc, float sigma, float spread)
     return c / float3(4.21, 4.06, 3.62);   // the taps add up to white
 }
 
-// The bevel's Fresnel term `inside` UI units within the outline (0 outside it): (1 - N.z)^5 of the circle profile,
-// as EvalGlass has it at the pixel itself. On a circle profile N.z is the height h (the wall's slope u / h capped at
-// 8: N.z >= 0.124), and the fifth power is three multiplies.
-float BevelFresnel(float inside, float bezel)
+// The rim light's profile across the outline, twice integrated: G(t) = the integral from 0 to t of the integral
+// from 0 to t' of f, `t` UI units within the outline (f = 0 outside it). f is the bevel's Fresnel term
+// (1 - N.z)^5; on the circle profile N.z is the height h (the wall's slope capped at 8: N.z >= 0.124), and near
+// the rim, where f is not negligible, h = sqrt(x (2 - x)) ~ sqrt(2 x) (x = t / bezel). In the variable v =
+// sqrt(2 x) both integrals of (1 - max(v, 0.124))^5 are polynomials (v >= 1: f = 0, G grows linearly).
+float RimG(float t, float bezel)
 {
-    const float u = saturate(1.0 - inside / bezel);
-    const float f = 1.0 - max(sqrt(saturate(1.0 - u * u)), 0.124);
-    const float f2 = f * f;
-    return inside < 0.0 ? 0.0 : f2 * f2 * f;
+    const float x = max(t, 0.0) / bezel;
+    const float v = clamp(sqrt(2.0 * x), 0.124, 1.0);
+    const float q = 1.0 - v;
+    const float q2 = q * q;
+    const float q7 = q2 * q2 * q2 * q;
+    const float mid = -0.000989689137 + 0.0113648364 * v * v + q7 * (1.0 / 42.0 + q * (-0.0386904762 + q / 63.0));
+    const float g = x < 0.007688 ? 0.257923276 * x * x : (x < 0.5 ? mid : 0.0103751473 + 0.0227296729 * (x - 0.5));
+    return g * bezel * bezel;
 }
 
 // px: UI units per pixel
@@ -531,15 +537,19 @@ GlassSample EvalGlass(float2 svpos, float2 p, float d, float px, FxInst I)
     const float2 L = float2(cos(I.glassParams.w), sin(I.glassParams.w));
     const float facing = dot(n, L);
     const float lit = pow(saturate(facing), 1.5) + 0.4 * pow(saturate(-facing), 1.5);
-    // The Fresnel term peaks within a fraction of a pixel of the outline: sampled at the pixel center, the rim line
-    // flickered along a curve (brighter and darker from pixel to pixel, its peak jumping in and out, so a round
-    // button looked dented). It is filtered across the outline with a tent 1.6 px wide; taps outside the shape
-    // count 0, so the rim carries its own coverage (applied once, in FxPS).
-    const float pxn = px * (abs(n.x) + abs(n.y));   // the pixel's width across the outline
+    // The Fresnel term peaks within a fraction of a pixel of the outline, and ends there at once: sampled at the
+    // pixel center the rim line flickered along a curve (a round button looked dented), and a few taps across the
+    // outline left steps and light above the top of a circle (a notch). It is averaged over the pixel exactly: the
+    // pixel's square seen across the outline is a trapezoid (a box |n.x| px wide convolved with one |n.y| px wide),
+    // and the average of f over it is a second difference of RimG. Outside the shape f = 0, so the rim carries its
+    // own coverage (applied once, in FxPS). The same as 16 x 16 samples a pixel to 2 / 255.
+    const float inside = -d;
+    const float hx = px * (0.5 * abs(n.x) + 0.02), hy = px * (0.5 * abs(n.y) + 0.02);   // half widths
     float rimFresnel = 0.0;
-    [unroll] for (int k = -2; k <= 2; ++k)
-        rimFresnel += (3.0 - abs((float)k)) * BevelFresnel(-d + (float)k * 0.4 * pxn, bezel);
-    gs.rim = rimFresnel / 9.0 * lit * I.glassParams.z * 1.6;
+    [branch] if (inside + hx + hy > 0.0 && inside - hx - hy < 0.5 * bezel)   // else f = 0 over the pixel (G is linear)
+        rimFresnel = (RimG(inside + hx + hy, bezel) - RimG(inside + hx - hy, bezel) - RimG(inside - hx + hy, bezel) +
+                      RimG(inside - hx - hy, bezel)) / (4.0 * hx * hy);
+    gs.rim = rimFresnel * lit * I.glassParams.z * 1.6;
     // light: the side of the slab facing it and the whole bevel glow a little (clear glass too)
     const float2 center = (I.rect.xy + I.rect.zw) * 0.5;
     const float toward = saturate(0.5 + 0.5 * dot((p - center) / halfSize, L));

@@ -416,8 +416,8 @@ What still differs, and why:
 * Text: FreeType's rasterization is not DirectWrite's, so glyph edges differ by a few levels everywhere. This is
   most of what is left in every panel.
 * Glass edges, on purpose: WGT's rim light flickered along curves (thinner than a pixel, sampled at the pixel
-  center: a round button looked dented). Esia filters it across the outline, so glass edges differ by a few levels;
-  most of Control Center's difference at 1x (0.50 / 0.58 before the filter).
+  center: a round button looked dented). Esia averages it over each pixel exactly, so glass edges differ by a few
+  levels; most of Control Center's difference at 1x (0.50 / 0.58 before).
 * Chinese: WGT asked DirectWrite's fallback for each character with the user's locale; under en-US that gives
   Yu Gothic UI for all CJK text, so WGT drew Chinese with Japanese glyph forms. Esia keeps Microsoft YaHei for Chinese
   (the same widths; the Japanese and Korean lines now match WGT).
