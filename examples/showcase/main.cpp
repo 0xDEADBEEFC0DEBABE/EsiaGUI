@@ -9,6 +9,7 @@
 //
 //   --open list     settings,effects,control,components,languages,telemetry,plugin (default: the first three),
 //                   none, or --open-all
+//   --open-later p@n  panel p opens at frame n, as a click on its dock tile would (what a first appearance costs)
 //   --light         the light theme (the demo starts dark)
 //   --look l        theme | clear | frosted (default)
 //   --tab n         the Components panel's tab
@@ -107,6 +108,7 @@ float4 WgtEffect(WgtFx fx)
         std::unique_ptr<ui::Ui> ui;
         esia::Context* ctx = nullptr;
         bool open[PanelCount] = {};
+        int openLater = -1, openLaterFrame = 0, frameCount = 0;   // --open-later panel@frame
 
         // appearance
         bool darkMode = true;
@@ -1021,6 +1023,8 @@ float4 WgtEffect(WgtFx fx)
 
         void Frame()
         {
+            if (++frameCount == openLaterFrame && openLater >= 0)
+                open[openLater] = true;
             ui->NewFrame();
             Background();
             StatusBar();
@@ -1090,6 +1094,19 @@ int main(int argc, char** argv)
             for (int i = 0; i < PanelCount; ++i)
                 d.open[i] = list.find(std::string(",") + kPanels[i].id + ",") != std::string::npos;
             return true;
+        }
+        if (o == "--open-later")
+        {
+            // panel@frame: the panel opens at that frame, as a click on its dock tile would
+            const std::string v = value;
+            const std::size_t at = v.find('@');
+            for (int i = 0; i < PanelCount && at != std::string::npos; ++i)
+                if (v.compare(0, at, kPanels[i].id) == 0)
+                {
+                    d.openLater = i;
+                    d.openLaterFrame = std::atoi(v.c_str() + at + 1);
+                }
+            return d.openLater >= 0;
         }
         if (o == "--look")
         {

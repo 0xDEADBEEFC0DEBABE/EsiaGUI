@@ -434,6 +434,33 @@ ESIA_TEST(Renderer, UserEffectsNeedRuntimeCompilation)
     }
 }
 
+ESIA_TEST(Renderer, UserEffectsStartCompilingAtTheNextFrame)
+{
+    // the first frame after SetEffectSource asks for the effect's pipeline before any shape uses it (a device compiles
+    // it in hundreds of milliseconds), and a shape that does later gets that one
+    Caps caps;
+    caps.runtimeEffects = true;
+    Setup s(caps);
+    Renderer r(s.dev);
+    r.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return fx.fill; }");
+    DrawList plain = MakeList();
+    Painter pp(plain);
+    pp.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()));
+    r.Render(Data({&plain}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev));
+    ESIA_CHECK(Lines(s.dev, "Fx strip premul RGBA8_UNORM effect=3") == 1);
+    // once ready it draws one instance where no pixel is written (drivers that compile at the first draw do it now),
+    // then the shape's own batch draws with its own pipeline and scissor
+    ESIA_CHECK(Lines(s.dev, "scissor [0,0 0x0]") == 1 && Lines(s.dev, "draw instanced 4 x 1") == 2);
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev));
+    ESIA_CHECK(Lines(s.dev, "Fx strip premul RGBA8_UNORM effect=3") == 1);
+    ESIA_CHECK(Lines(s.dev, "scissor [0,0 0x0]") == 1);   // once
+}
+
 ESIA_TEST(Renderer, ReleasesEverythingAndSkipsEmptyFrames)
 {
     Setup s;

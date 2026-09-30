@@ -1,5 +1,8 @@
 // glass_window - the examples' frame (app.hpp): options, window thread, render thread and frame loop.
 #include "app.hpp"
+#if defined(GLASS_D3D)
+#include "esia/rhi/d3d_common.hpp"
+#endif
 #include "host.hpp"
 #include "image.hpp"
 #include "esia/platform/win32.hpp"
@@ -27,6 +30,7 @@ namespace glass
             float width = 1280.0f, height = 800.0f;   // UI units (fractions: a pixel size at a --scale)
             float scale = 0.0f;   // pixels per UI unit (0 = the monitor's)
             bool vsync = true, debug = false;
+            bool shaderCache = true;   // the D3D backends' compiled shaders kept in %LOCALAPPDATA%\Esia\ShaderCache
             double fixedDt = 0.0;
             int frames = 0;
             std::string screenshot;
@@ -37,7 +41,7 @@ namespace glass
         {
             std::fprintf(stderr,
                          "%s: %s\n"
-                         "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--fixed-dt seconds]\n"
+                         "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--no-shader-cache] [--fixed-dt seconds]\n"
                          "       [--frames N] [--screenshot out.png] [--font file]...\n",
                          app.name, problem, app.name, BuiltApis().c_str());
             return 2;
@@ -203,6 +207,8 @@ namespace glass
                 bool usedValue = false;
                 if (a == "--debug")
                     o.debug = true;
+                else if (a == "--no-shader-cache")
+                    o.shaderCache = false;
                 else if (a == "--api" && needs())
                     o.api = value;
                 else if (a == "--vsync" && needs())
@@ -251,6 +257,11 @@ namespace glass
         if (!Parse(app, argc, argv, opt, problem))
             return Usage(app, problem.c_str());
 
+#if defined(GLASS_D3D)
+        // the D3D backends compile their shaders at runtime (hundreds of milliseconds each): kept for the next run
+        if (const char* local = std::getenv("LOCALAPPDATA"); opt.shaderCache && local && *local)
+            esia::rhi::d3d::SetShaderCacheDirectory(std::string(local) + "\\Esia\\ShaderCache");
+#endif
         pw::Platform platform;
         std::string error;
         const std::unique_ptr<Host> probe = CreateHost(opt.api);

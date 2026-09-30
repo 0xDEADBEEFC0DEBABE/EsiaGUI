@@ -275,7 +275,10 @@ and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature 
   `shaders::FindSource(SourceOf(p).file)`, an `ID3DInclude` that serves `shaders::FindSource(name)`, entry points
   from `SourceOf`, profiles `vs_5_0` / `ps_5_0` (D3D11 / 12), `vs_4_0` / `ps_4_0` with `ESIA_FX_STORAGE_TEXTURE=1`
   (D3D10), `vs_3_0` / `ps_3_0` with `ESIA_FX_STORAGE_TEXTURE=1` and the SM3 prelude (D3D9). Cache the bytecode (the
-  FX pixel shader takes about a second to compile).
+  FX pixel shader takes about a second to compile): `d3d_common` keeps it per process and, when the host calls
+  `esia::rhi::d3d::SetShaderCacheDirectory` (`esia/rhi/d3d_common.hpp`; glass_app: `%LOCALAPPDATA%\Esia\ShaderCache`),
+  on disk, keyed by the preprocessed source, profile, flags and compiler DLL. On the RTX 4080 the showcase's first
+  frame went from 0.65 s (D3D11) and 1.8 s (D3D9) to 30 ms and 0.2 s once cached.
 * Registers: `cbuffer` b0-b2, textures t0-t7, samplers s0-s1; D3D12's root signature: 3 root CBVs (or root
   constants for Draw), one SRV table t0-t7, two static samplers.
 * User effects: compile `esia_fx.hlsl` with `ESIA_CUSTOM_EFFECT=1`, the include handler returning the user's
@@ -428,10 +431,14 @@ queries).
   target). `esia-directx`'s prelude does exactly this.
 * Constants: `SetVertexShaderConstantF` / `SetPixelShaderConstantF` at the registers of the bytecode's constant table.
 * sRGB: `D3DRS_SRGBWRITEENABLE` for sRGB targets, `D3DSAMP_SRGBTEXTURE` always off.
-* `fxFeatureVariants = true`, `runtimeEffects = true`.
+* `runtimeEffects = true`; `fxFeatureVariants` only on a device whose `MaxPixelShader30InstructionSlots` cannot take
+  the full FX shader (below 4096): NVIDIA's D3D9 driver compiles a shader again at its first draw, every run, so
+  twenty variants stalled the showcase's first frames for 0.85 s on an RTX 4080 where the full shader runs as fast.
 * Variants compile with `D3DCompile` in the first frames that use them: up to 2.6 s each on a real driver (masks
   0x822 / 0x823 / 0x826 on an RTX 4080). Report `asyncPipelines` and compile them on a worker thread (section 2,
   "Background pipelines"), with the full shader built first.
+* A driver that compiles at the first draw would stall the frame a user effect first shows in (140 ms on the RTX
+  4080): the renderer draws a ready effect pipeline once where no pixel is written, in the first frames.
 
 ## 6. LLVM toolchain
 

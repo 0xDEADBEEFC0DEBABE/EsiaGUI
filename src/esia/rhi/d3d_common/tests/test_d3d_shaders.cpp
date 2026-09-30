@@ -1,9 +1,13 @@
 // Direct3D shared code: every program compiles for SM4 (D3D10) and SM5 (D3D11 / 12) with the machine's
-// d3dcompiler_47.dll, a user effect compiles on a worker thread, and the readback / format helpers.
+// d3dcompiler_47.dll, a user effect compiles on a worker thread, the disk cache, and the readback / format helpers.
 #include "d3d_shader.hpp"
+#include "esia/rhi/d3d_common.hpp"
 #include "esia_test.hpp"
 #include <chrono>
+#include <filesystem>
+#include <string>
 #include <thread>
+#include <vector>
 
 using namespace esia;
 using namespace esia::rhi::d3d;
@@ -70,6 +74,59 @@ ESIA_TEST(D3DShaders, FeatureVariantAndUserEffect)
     for (int i = 0; i < 600 && (st = CompileShaderAsync(r, log, effect)) == CompileState::Pending; ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     ESIA_CHECK(st == CompileState::Failed);
+}
+
+ESIA_TEST(D3DShaders, DiskCache)
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("esia_shader_cache_test_" + std::to_string(GetCurrentProcessId()));
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    const auto files = [&] {
+        std::vector<fs::path> out;
+        for (const auto& e : fs::directory_iterator(dir, ec))
+            out.push_back(e.path());
+        return out;
+    };
+    // the log tells a compile from a load (Info messages need debugLayer)
+    static std::vector<std::string> messages;
+    DebugDesc d;
+    d.debugLayer = true;
+    d.log = [](void*, LogLevel, const char* msg) { messages.push_back(msg); };
+    const Logger log(d);
+    const auto loaded = [&] { return !messages.empty() && messages.back().find("from the shader cache") != std::string::npos; };
+
+    SetShaderCacheDirectory(reinterpret_cast<const char*>(dir.u8string().c_str()));
+    ShaderRequest r;
+    r.program = rhi::ShaderProgram::Fx;
+    r.stage = shaders::Stage::Pixel;
+    r.model = ShaderModel::Sm4;
+    r.fxFeatures = 0x13u;   // no other test of this process compiles it
+    const Bytecode compiled = CompileShader(r, log);
+    ESIA_CHECK(compiled && !loaded());
+    ESIA_CHECK(files().size() == 1);   // written, and no temporary file left
+
+    // a new process (here: the process's shaders forgotten) reads it back, the same bytecode
+    ForgetCompiledShaders();
+    const Bytecode again = CompileShader(r, log);
+    ESIA_CHECK(again && loaded() && *again == *compiled);
+
+    // another shader is another entry; a damaged entry is compiled again and rewritten
+    r.fxFeatures = 0x15u;
+    ESIA_CHECK(CompileShader(r, log) && !loaded() && files().size() == 2);
+    for (const fs::path& f : files())
+        fs::resize_file(f, 10, ec);
+    ForgetCompiledShaders();
+    r.fxFeatures = 0x13u;
+    const Bytecode rebuilt = CompileShader(r, log);
+    ESIA_CHECK(rebuilt && !loaded() && *rebuilt == *compiled);
+    ForgetCompiledShaders();
+    ESIA_CHECK(CompileShader(r, log) && loaded());
+
+    SetShaderCacheDirectory("");
+    ForgetCompiledShaders();
+    ESIA_CHECK(CompileShader(r, log) && !loaded());   // no cache: compiled
+    fs::remove_all(dir, ec);
 }
 
 ESIA_TEST(D3DCommon, FormatsAndReadback)

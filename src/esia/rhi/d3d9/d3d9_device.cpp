@@ -315,8 +315,11 @@ namespace esia::rhi::d3d9
             caps_.readback = true;
             caps_.runtimeEffects = true;
             // FX variants: a batch's variant is a fraction of the full shader (fill ~450 instruction slots, all ~3.8k),
-            // compiled in the background: the first frames draw with the full shader, started below
-            caps_.fxFeatureVariants = true;
+            // compiled in the background: the first frames draw with the full shader, started below. Only where the
+            // full shader does not fit (the D3D9 test keeps it under 4096): each variant is a shader the driver
+            // compiles again at its first draw, every run (~20 in the showcase, 0.85 s of stalled frames on NVIDIA),
+            // and a device that takes the full shader runs it as fast
+            caps_.fxFeatureVariants = dc.MaxPixelShader30InstructionSlots < 4096;
             caps_.asyncPipelines = true;
             caps_.maxTextureSize = (int)std::min(dc.MaxTextureWidth, dc.MaxTextureHeight);
             // FxFetch computes `instance % perRow` and `instance / perRow` in floats here (SM3 has no integers), and

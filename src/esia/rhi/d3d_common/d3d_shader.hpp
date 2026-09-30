@@ -53,4 +53,8 @@ namespace esia::rhi::d3d
     // instruction slots used"); 0 when unknown. For a shader a device refused: more than its slots is a limit of the
     // device, not an error (D3DCAPS9::MaxPixelShader30InstructionSlots).
     unsigned InstructionSlots(const Bytecode& code);
+
+    // Tests: drops the process's compiled shaders (after the compiles in flight), so the next request compiles or
+    // loads from the disk cache again.
+    void ForgetCompiledShaders();
 }

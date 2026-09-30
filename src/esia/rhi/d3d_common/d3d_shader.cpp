@@ -1,10 +1,13 @@
 // Esia - runtime HLSL compilation for the Direct3D backends (see d3d_shader.hpp)
 #include "d3d_shader.hpp"
+#include "esia/rhi/d3d_common.hpp"
 #include <d3dcompiler.h>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <condition_variable>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <thread>
 
@@ -12,16 +15,20 @@ namespace esia::rhi::d3d
 {
     namespace
     {
+        // D3DDisassemble's and D3DPreprocess's types, declared here (not every SDK's d3dcompiler.h names them)
+        using DisassembleFn = HRESULT(WINAPI*)(LPCVOID data, SIZE_T size, UINT flags, LPCSTR comments, ID3DBlob** out);
+        using PreprocessFn = HRESULT(WINAPI*)(LPCVOID data, SIZE_T size, LPCSTR name, const D3D_SHADER_MACRO* defines, ID3DInclude* include,
+                                              ID3DBlob** out, ID3DBlob** errors);
+
         // Loaded at runtime rather than linked: a missing DLL then fails device creation with a message (the
         // conformance suite reports SKIP) instead of the process failing to start.
-        // D3DDisassemble's type, declared here (not every SDK's d3dcompiler.h names it)
-        using DisassembleFn = HRESULT(WINAPI*)(LPCVOID data, SIZE_T size, UINT flags, LPCSTR comments, ID3DBlob** out);
-
         struct CompilerDll
         {
             HMODULE module = nullptr;
             pD3DCompile compile = nullptr;
             DisassembleFn disassemble = nullptr;
+            PreprocessFn preprocess = nullptr;
+            std::string identity;   // the DLL's path, size and time: a new compiler invalidates the disk cache
             std::string error;
 
             CompilerDll()
@@ -34,8 +41,20 @@ namespace esia::rhi::d3d
                 }
                 compile = reinterpret_cast<pD3DCompile>(reinterpret_cast<void*>(GetProcAddress(module, "D3DCompile")));
                 disassemble = reinterpret_cast<DisassembleFn>(reinterpret_cast<void*>(GetProcAddress(module, "D3DDisassemble")));
+                preprocess = reinterpret_cast<PreprocessFn>(reinterpret_cast<void*>(GetProcAddress(module, "D3DPreprocess")));
                 if (!compile)
                     error = "d3dcompiler_47.dll has no D3DCompile";
+                wchar_t path[MAX_PATH] = {};
+                WIN32_FILE_ATTRIBUTE_DATA a = {};
+                if (GetModuleFileNameW(module, path, MAX_PATH) && GetFileAttributesExW(path, GetFileExInfoStandard, &a))
+                {
+                    char buf[64];
+                    std::snprintf(buf, sizeof(buf), "%lu:%lu:%lu:%lu", (unsigned long)a.nFileSizeHigh, (unsigned long)a.nFileSizeLow,
+                                  (unsigned long)a.ftLastWriteTime.dwHighDateTime, (unsigned long)a.ftLastWriteTime.dwLowDateTime);
+                    identity = buf;
+                    for (const wchar_t* c = path; *c; ++c)
+                        identity += (char)(*c & 0x7F);
+                }
             }
         };
 
@@ -96,6 +115,78 @@ namespace esia::rhi::d3d
             return k;
         }
 
+        // ------------------------------------------------------------------ disk cache
+        // A shader is found by what makes its bytecode: the preprocessed source (every include and macro expanded),
+        // the entry, the profile, the flags and the compiler. File <hash>.dxbc: "ESIADXBC", a second hash of the
+        // same text (a collision of the first cannot load a wrong shader), the size, the bytecode.
+        struct DiskCache
+        {
+            std::mutex mutex;
+            std::filesystem::path dir;   // empty: no cache
+        };
+
+        DiskCache& Disk()
+        {
+            static DiskCache* d = new DiskCache;   // never destroyed: workers may still compile at exit
+            return *d;
+        }
+
+        std::filesystem::path DiskDir()
+        {
+            DiskCache& d = Disk();
+            std::lock_guard lock(d.mutex);
+            return d.dir;
+        }
+
+        std::uint64_t Fnv1a(const std::string& text, std::uint64_t h)
+        {
+            for (const char c : text)
+                h = (h ^ (std::uint8_t)c) * 1099511628211ull;
+            return h;
+        }
+
+        constexpr char kDiskMagic[8] = {'E', 'S', 'I', 'A', 'D', 'X', 'B', 'C'};
+
+        Bytecode DiskLoad(const std::filesystem::path& file, std::uint64_t check)
+        {
+            std::ifstream in(file, std::ios::binary);
+            char magic[8] = {};
+            std::uint64_t storedCheck = 0;
+            std::uint32_t size = 0;
+            if (!in.read(magic, 8) || std::memcmp(magic, kDiskMagic, 8) != 0 || !in.read(reinterpret_cast<char*>(&storedCheck), 8) ||
+                storedCheck != check || !in.read(reinterpret_cast<char*>(&size), 4) || size == 0 || size > (64u << 20))
+                return {};
+            auto code = std::make_unique<std::vector<std::uint8_t>>(size);
+            if (!in.read(reinterpret_cast<char*>(code->data()), size))
+                return {};
+            return Bytecode(code.release());
+        }
+
+        void DiskStore(const std::filesystem::path& file, std::uint64_t check, const std::vector<std::uint8_t>& code)
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(file.parent_path(), ec);
+            // written beside and renamed over: a process reading it never sees half a file
+            std::filesystem::path tmp = file;
+            tmp += "." + std::to_string(GetCurrentProcessId()) + "." + std::to_string(GetCurrentThreadId()) + ".tmp";
+            {
+                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                const std::uint32_t size = (std::uint32_t)code.size();
+                out.write(kDiskMagic, 8);
+                out.write(reinterpret_cast<const char*>(&check), 8);
+                out.write(reinterpret_cast<const char*>(&size), 4);
+                out.write(reinterpret_cast<const char*>(code.data()), (std::streamsize)code.size());
+                if (!out)
+                {
+                    out.close();
+                    std::filesystem::remove(tmp, ec);
+                    return;
+                }
+            }
+            if (!MoveFileExW(tmp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING))
+                std::filesystem::remove(tmp, ec);
+        }
+
         // What a compile produced, and the message to log for it (effects compile on workers, which never call the
         // host's log callback: the device that asks next logs it, on the render thread).
         struct Compiled
@@ -145,17 +236,47 @@ namespace esia::rhi::d3d
             // as tools/shaders/build_shaders.py runs fxc: /O3, /Gec for SM3 (legacy syntax), /Ges otherwise
             UINT flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
             flags |= r.model == ShaderModel::Sm3 ? D3DCOMPILE_ENABLE_BACKWARDS_COMPATIBILITY : D3DCOMPILE_ENABLE_STRICTNESS;
-            Includes includes(r);
-            ComPtr<ID3DBlob> code, errors;
-            const auto t0 = std::chrono::steady_clock::now();
-            const HRESULT hr = dll.compile(source.data(), source.size(), src.file, macros.data(), &includes, EntryOf(r),
-                                           ShaderProfile(r.model, r.stage), flags, 0, &code, &errors);
-            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             char variant[32] = "";
             if (fx && r.fxFeatures)
                 std::snprintf(variant, sizeof(variant), ", features 0x%x", r.fxFeatures);
             char what[128];
             std::snprintf(what, sizeof(what), "%s (%s%s%s)", EntryOf(r), ShaderProfile(r.model, r.stage), variant, effect ? ", user effect" : "");
+            const auto t0 = std::chrono::steady_clock::now();
+
+            // the disk cache: keyed by the preprocessed text (a few milliseconds; a compile takes hundreds)
+            const std::filesystem::path dir = DiskDir();
+            std::filesystem::path cached;
+            std::uint64_t check = 0;
+            if (!dir.empty() && dll.preprocess)
+            {
+                Includes preIncludes(r);
+                ComPtr<ID3DBlob> pre, preErrors;
+                if (SUCCEEDED(dll.preprocess(source.data(), source.size(), src.file, macros.data(), &preIncludes, &pre, &preErrors)) && pre)
+                {
+                    std::string key = "esia-dxbc-1|" + dll.identity + "|" + EntryOf(r) + "|" + ShaderProfile(r.model, r.stage) + "|" +
+                                      std::to_string(flags) + "|";
+                    key.append(static_cast<const char*>(pre->GetBufferPointer()), pre->GetBufferSize());
+                    char name[32];
+                    std::snprintf(name, sizeof(name), "%016llx.dxbc", (unsigned long long)Fnv1a(key, 14695981039346656037ull));
+                    cached = dir / name;
+                    check = Fnv1a(key, 0x9E3779B97F4A7C15ull);
+                    if (Bytecode code = DiskLoad(cached, check))
+                    {
+                        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                        char head[192];
+                        std::snprintf(head, sizeof(head), "loaded %s from the shader cache in %.0f ms", what, ms);
+                        out.message = head;
+                        out.code = std::move(code);
+                        return out;
+                    }
+                }
+            }
+
+            Includes includes(r);
+            ComPtr<ID3DBlob> code, errors;
+            const HRESULT hr = dll.compile(source.data(), source.size(), src.file, macros.data(), &includes, EntryOf(r),
+                                           ShaderProfile(r.model, r.stage), flags, 0, &code, &errors);
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
             if (FAILED(hr) || !code)
             {
                 char head[192];
@@ -169,6 +290,8 @@ namespace esia::rhi::d3d
             out.message = std::string(head) + (errors ? std::string(": ") + static_cast<const char*>(errors->GetBufferPointer()) : std::string());
             const auto* b = static_cast<const std::uint8_t*>(code->GetBufferPointer());
             out.code = Bytecode(new std::vector<std::uint8_t>(b, b + code->GetBufferSize()));
+            if (!cached.empty())
+                DiskStore(cached, check, *out.code);
             return out;
         }
 
@@ -294,5 +417,25 @@ namespace esia::rhi::d3d
         if (at == std::string::npos || std::sscanf(listing.c_str() + at + std::strlen(kMark), "%u instruction slots", &slots) != 1)
             return 0;
         return slots;
+    }
+
+    void SetShaderCacheDirectory(const std::string& utf8Directory)
+    {
+        DiskCache& d = Disk();
+        std::lock_guard lock(d.mutex);
+        d.dir = std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(utf8Directory.data()), utf8Directory.size()));
+    }
+
+    void ForgetCompiledShaders()
+    {
+        Cache& c = TheCache();
+        std::unique_lock lock(c.mutex);
+        c.finished.wait(lock, [&] {
+            for (const auto& [key, entry] : c.entries)
+                if (!entry->done)
+                    return false;
+            return true;
+        });
+        c.entries.clear();
     }
 }

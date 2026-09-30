@@ -130,7 +130,11 @@ ESIA_TEST(D3D9Host, WrapDrawRestore)
     ESIA_CHECK(dev != nullptr);
     if (!dev)
         return;
-    ESIA_CHECK(dev->GetCaps().halfPixelOffset && dev->GetCaps().fxFeatureVariants);
+    ESIA_CHECK(dev->GetCaps().halfPixelOffset);
+    // feature variants only where the full FX shader does not fit
+    D3DCAPS9 dc = {};
+    device->GetDeviceCaps(&dc);
+    ESIA_CHECK(dev->GetCaps().fxFeatureVariants == (dc.MaxPixelShader30InstructionSlots < 4096));
     // perRow = maxFxDataWidth / 24 is a power of two (exact float modulo in FxFetch)
     const int perRow = dev->GetCaps().maxFxDataWidth / 24;
     ESIA_CHECK(perRow > 0 && (perRow & (perRow - 1)) == 0 && perRow * 24 == dev->GetCaps().maxFxDataWidth);

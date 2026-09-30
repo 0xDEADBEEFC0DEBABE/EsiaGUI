@@ -2,6 +2,7 @@
 // The capture, pyramid and glow-layer logic is the one of WGT's src/backends/d3d11_backend.cpp, on the RHI.
 #include "esia/render/renderer.hpp"
 #include "gpu_constants.hpp"
+#include <algorithm>
 #include <bit>
 #include <cstring>
 #include <unordered_map>
@@ -75,6 +76,8 @@ namespace esia::render
         };
         std::unordered_map<EffectId, Effect> effects;
         std::unordered_map<EffectId, std::uint64_t> effectTried;   // frame of the last pipeline attempt
+        std::vector<EffectId> prewarm;                             // effects to start compiling at the next frame
+        std::vector<EffectId> warmUp;                              // prewarmed effects not drawn yet (WarmUp)
         std::uint64_t frame = 0;
 
         rhi::Texture white;
@@ -758,9 +761,41 @@ namespace esia::render
                 fxDataBound = true;
             }
             BindDraw(op.fade, op.instStart);
+            if (!warmUp.empty() && passFormat == targetDesc.format && passSamples == targetDesc.samples && WarmUp(op))
+            {
+                BindPipeline(p);
+                dev.SetScissor(boundScissor);
+            }
             dev.DrawInstanced(4, op.instCount);
             ++stats.drawCalls;
             ++stats.fxBatches;
+        }
+
+        // A prewarmed effect whose pipeline is ready draws the batch's first instance once where no pixel is written
+        // (an empty scissor), with this batch's bindings: drivers that compile a shader at its first draw (NVIDIA's
+        // Direct3D 9: 140 ms for an effect on the RTX 4080) do it now, not in the frame a shape first shows the effect.
+        // True when it drew: the caller binds its pipeline and scissor again.
+        bool WarmUp(const RenderOp& op)
+        {
+            bool drew = false;
+            for (auto it = warmUp.begin(); it != warmUp.end();)
+            {
+                const rhi::Pipeline wp = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, *it);
+                if (!wp)
+                {
+                    ++it;   // still compiling (asked again next frame)
+                    continue;
+                }
+                if (op.instCount > 0 && BindPipeline(wp))
+                {
+                    dev.SetScissor(rhi::IRect{0, 0, 0, 0});
+                    dev.DrawInstanced(4, 1);
+                    ++stats.drawCalls;
+                    drew = true;
+                }
+                it = warmUp.erase(it);
+            }
+            return drew;
         }
 
         void RunCallback(const RenderOp& op)
@@ -801,6 +836,32 @@ namespace esia::render
                 EndLayer(end);
             }
             ProfileRun(RunNone);
+        }
+
+        // Effects set since the last frame start compiling now - their pipeline for this target, on the device's
+        // worker - not when a shape first uses one: a compile takes hundreds of milliseconds, and the shape would
+        // draw without its effect until then. Where the backend builds feature variants, which one a shape needs is
+        // not known before it draws.
+        void Prewarm()
+        {
+            if (prewarm.empty())
+                return;
+            if (caps.runtimeEffects && !caps.fxFeatureVariants)
+            {
+                const rhi::Format format = passFormat;
+                const int samples = passSamples;
+                passFormat = targetDesc.format;
+                passSamples = targetDesc.samples;
+                for (const EffectId id : prewarm)
+                {
+                    GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, id);
+                    if (std::find(warmUp.begin(), warmUp.end(), id) == warmUp.end())
+                        warmUp.push_back(id);
+                }
+                passFormat = format;
+                passSamples = samples;
+            }
+            prewarm.clear();
         }
 
         bool Render(const DrawData& dd, TextureRegistry* registry, rhi::Texture t, const RenderParams& params)
@@ -849,6 +910,7 @@ namespace esia::render
             }
             const bool uploaded = Upload(params.maxFxInstancesPerRow);
             FillFrameConstants(dd, params);
+            Prewarm();
 
             captures = 0;
             budget = std::max(1, params.maxBackdropCaptures);
@@ -890,6 +952,7 @@ namespace esia::render
     {
         impl_->effects[id] = {name, source};
         impl_->effectTried.erase(id);
+        impl_->prewarm.push_back(id);
         // a changed source invalidates the pipelines built from the old one
         for (auto it = impl_->pipelines.begin(); it != impl_->pipelines.end();)
         {

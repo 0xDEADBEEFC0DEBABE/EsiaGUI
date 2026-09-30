@@ -12,6 +12,8 @@
 //   --frames N      quit after N frames; with --screenshot, the last one is read back from the swap chain image
 //   --fixed-dt s    the UI clock advances s seconds per frame (deterministic screenshots)
 //   --debug         the API's debug / validation layer; its message count is printed at exit (exit code 3 if any)
+//   --no-shader-cache  the D3D backends compile every shader (by default a shader compiled once is kept in
+//                   %LOCALAPPDATA%\Esia\ShaderCache and read back in later runs: esia::rhi::d3d::SetShaderCacheDirectory)
 //   --font          font files, the first the main one, the others fallbacks (default: Segoe UI + Microsoft YaHei);
 //                   for examples that load their own fonts, passed on to them
 //

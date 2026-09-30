@@ -389,7 +389,8 @@ showcase.exe --api d3d11 --size 1600x1000 --scale 1 --open languages --fixed-dt 
 ```
 
 * `--open list` opens those panels (`settings,effects,control,components,languages,telemetry,plugin`, `none`, or
-  `--open-all`); the default is the first three.
+  `--open-all`); the default is the first three. `--open-later panel@frame` opens one at a frame, as a click on its
+  dock tile would (what a panel's first appearance costs).
 * `--light` starts light (the demo starts dark), `--look` sets the glass look, `--tab n` the Components tab,
   `--page accent|perf` the Settings page, `--menu` opens the Components menu.
 * The options of `glass_window` (`app.hpp`) apply: `--api`, `--size`, `--scale`, `--frames`, `--fixed-dt`,

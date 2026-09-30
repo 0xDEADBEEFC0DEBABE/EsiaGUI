@@ -78,7 +78,9 @@ namespace esia::render
         bool Render(const DrawData& dd, TextureRegistry* textures, rhi::Texture target, const RenderParams& params = {});
 
         // A user effect (HLSL defining `float4 WgtEffect(WgtFx fx)`, see docs/REWRITE.md). Shapes using it draw with
-        // the built-in shader until the device compiled it (Caps::runtimeEffects), or for good when it cannot.
+        // the built-in shader until the device compiled it (Caps::runtimeEffects), or for good when it cannot. The
+        // compile starts at the next frame, before a shape uses the effect (not where the backend builds feature
+        // variants: the one a shape needs is known when it draws).
         void SetEffectSource(EffectId id, const std::string& name, const std::string& source);
 
         // Releases the size-dependent surfaces (backdrop copy, pyramid, glow layer); they come back when needed.

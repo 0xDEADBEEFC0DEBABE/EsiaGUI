@@ -2,6 +2,7 @@
 // where their messages go and whether they forward the Direct3D debug layer's.
 #pragma once
 #include "esia/rhi/rhi.hpp"
+#include <string>
 
 namespace esia::rhi::d3d
 {
@@ -24,4 +25,12 @@ namespace esia::rhi::d3d
         LogFn log = nullptr;
         void* logUser = nullptr;
     };
+
+    // A directory for the shaders the backends compile (UTF-8, created when missing; empty, the default: none).
+    // The D3D backends compile HLSL at runtime - the FX shader, its feature variants on D3D9, user effects - and a
+    // compile takes hundreds of milliseconds; a shader compiled once is then read back in later runs. Entries are
+    // keyed by the preprocessed source, the profile, the flags and d3dcompiler_47.dll, so a changed shader or
+    // compiler never loads a stale one; nothing is ever deleted. Process-wide, any thread; set it before the first
+    // device.
+    ESIA_API void SetShaderCacheDirectory(const std::string& utf8Directory);
 }
