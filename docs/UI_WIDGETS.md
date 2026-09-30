@@ -130,6 +130,28 @@ edge. `TextWrapped` always wraps at the container's width. Inside an auto-layout
 
 * **Ids.** Labels may carry an id suffix: `"OK##dialog"` shows "OK", and `"##x"` shows nothing.
 
+**Menus, pickers and tooltips** are glass popups on the core's popups ([UI_CORE.md](UI_CORE.md) section 9):
+
+```cpp
+if (ui::IconButton("more", ui::icons::More)) ui::OpenMenu("actions");
+if (ui::BeginMenu("actions", {.anchor = {r.max.x, r.max.y + 6}, .pivot = {1, 0}})) {   // under the button
+    if (ui::MenuItem("Rename", ui::icons::Edit)) ...;
+    if (ui::MenuItem("Pinned", ui::icons::Pin, pinned)) pinned = !pinned;           // with a check mark
+    ui::EndMenu();
+}
+ui::Picker("size", &size, {"Small", "Medium", "Large"});   // shows the choice, opens a menu of the choices
+ui::Tooltip("What it does");                                // for the widget before it
+```
+
+* A menu opens with `OpenMenu` (at the mouse, or at `MenuOptions::anchor` with `pivot`) and is submitted with
+  `BeginMenu` every frame. It fades in and grows from 96 % on the popover glass, sized to its widest item (at least
+  `minWidth`). Choosing an item, a click outside it or Escape closes it. The click outside belongs to the menu:
+  the widget under it does not react (iOS).
+* `Picker` is a pop-up button: its menu opens under it, right-aligned, with a check at the current choice.
+  `RowPicker` is the same in a list row.
+* `Tooltip` shows a glass tip after half a second over the widget before it, following the mouse. It waits again
+  when the mouse comes back.
+
 **Text fields** (WGT's single-line editor):
 
 ```cpp
@@ -299,8 +321,8 @@ if (it.pressed) ...;
 `glass_window`: the `glass_app` library, with the Win32 platform layer, every backend, and a render thread.
 
 * **Components**: four tabs under a tab bar: every button kind, switches, checkboxes, sliders, a segmented
-  control and the stepper; text fields (plain, search, password, and one with text in six scripts); progress bars
-  and rings and badges; dark mode, the accent swatches and the glass look.
+  control and the stepper; text fields (plain, search, password, and one with text in six scripts), a picker and a
+  menu with a tooltip; progress bars and rings and badges; dark mode, the accent swatches and the glass look.
 * **Control Center**: a grid of glass cards with round toggles, Now Playing, and a brightness slider spanning two
   columns.
 * **Telemetry**: two gauges in a flow, and a card with wrapped mixed Latin / Chinese text.
@@ -312,7 +334,8 @@ if (it.pressed) ...;
 showcase.exe --api d3d12 --dark --look frosted --size 1360x780 --frames 90 --fixed-dt 0.016667 --screenshot shot.png
 ```
 
-`--tab 0|1|2|3` picks the Components tab and `--page accent` opens the Accent Color page. The options of
+`--tab 0|1|2|3` picks the Components tab, `--page accent` opens the Accent Color page and `--menu` the Inputs
+tab's menu. The options of
 `glass_window` (`app.hpp`) apply: `--api`, `--size`, `--frames`, `--fixed-dt`, `--screenshot` and
 `--debug`.
 
@@ -329,6 +352,7 @@ Ported, in the order the parts depend on each other:
 * sections and rows (WGT's `lists.cpp`), except `RowPicker`, which waits for the picker;
 * navigation, the tab bar and the search bar (WGT's `navigation.cpp`);
 * the text field (WGT's `text_edit.cpp`);
+* menus, the picker and `RowPicker`, tooltips (WGT's glass popups);
 * stacks, adaptive stacks, grids and flows.
 
 Two WGT bugs were fixed on the way:
@@ -340,11 +364,10 @@ Two WGT bugs were fixed on the way:
 
 Not ported yet, in the planned order:
 
-1. pickers and popups (and `RowPicker`), tooltips;
-2. the scroll indicator and drag-to-scroll, the glow halo;
-3. the island, the dock, notifications;
-4. LineChart;
-5. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
+1. the scroll indicator and drag-to-scroll, the glow halo;
+2. the island, the dock, notifications;
+3. LineChart;
+4. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
 
 Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 
@@ -364,6 +387,8 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 * the text field: typing, graphemes, selection, select all, delete, undo, redo; the clipboard, a paste on one
   line; Tab to the next field; Enter; a password (not copied) and the length limit; the IME composition shown but
   not written, its committed text written;
+* popups: a picker's menu opens and takes a choice; the click that closes a menu does not reach the widget under
+  it; a menu item closes its menu; a tooltip waits half a second, goes when the mouse leaves and waits again;
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.

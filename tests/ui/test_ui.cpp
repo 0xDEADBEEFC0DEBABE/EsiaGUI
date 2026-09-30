@@ -4,6 +4,7 @@
 #include "esia_test.hpp"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <vector>
 
 using namespace esia;
@@ -546,4 +547,112 @@ ESIA_TEST(UiTextField, CompositionPasswordAndLimit)
     h.ctx.QueueInput(InputEvent::TextEvent("\xE4\xBD\xA0"));   // U+4F60
     h.Step();
     ESIA_CHECK(h.b == "\xE4\xBD\xA0" && h.rb.changed);
+}
+
+namespace
+{
+    void ClickAt(UiHarness& h, Vec2 at, const std::function<void()>& frame)
+    {
+        h.ctx.QueueInput(InputEvent::MouseMove(at));
+        frame();
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+        frame();
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+        frame();
+    }
+}
+
+ESIA_TEST(UiPopups, PickerOpensItsMenuAndTakesAChoice)
+{
+    UiHarness h;
+    int choice = 0, changes = 0, behind = 0;
+    auto frame = [&] {
+        h.Frame([&] {
+            // 200 x 34 at (0, 0): its menu opens under it, right-aligned: 200 wide (at least the picker), rows of 34
+            // from y 40 + 6
+            if (ui::Picker("pick", &choice, {"One", "Two", "Three"}, 200))
+                ++changes;
+            h.ctx.SetCursorPos({0, 300});
+            if (ui::Interact("behind", {600, 100}).pressed)   // under the click that dismisses the menu
+                ++behind;
+        });
+    };
+    frame();
+    ClickAt(h, {100, 17}, frame);
+    for (int i = 0; i < 3; ++i)
+        frame();   // shown (an auto-sized popup is measured in its first frame)
+    ClickAt(h, {100, 46 + 34 + 17}, frame);   // the second row
+    ESIA_CHECK(choice == 1 && changes == 1);
+
+    // a click outside closes it, and belongs to it: the item under it does not react
+    ClickAt(h, {100, 17}, frame);
+    for (int i = 0; i < 3; ++i)
+        frame();
+    ClickAt(h, {300, 350}, frame);
+    ESIA_CHECK(behind == 0 && choice == 1);
+    ClickAt(h, {300, 350}, frame);
+    ESIA_CHECK(behind == 1);   // closed: the next click reaches it
+}
+
+ESIA_TEST(UiPopups, MenuItemsCloseTheMenu)
+{
+    UiHarness h;
+    int open = 0, renamed = 0;
+    auto frame = [&] {
+        h.Frame([&] {
+            if (ui::Interact("more", {40, 40}).pressed)
+                ui::OpenMenu("actions");
+            if (ui::BeginMenu("actions", {.anchor = {0, 50}}))
+            {
+                ++open;
+                if (ui::MenuItem("Rename", ui::icons::Edit))
+                    ++renamed;
+                ui::MenuItem("Delete", ui::icons::Delete);
+                ui::EndMenu();
+            }
+        });
+    };
+    frame();
+    ESIA_CHECK(open == 0);
+    ClickAt(h, {20, 20}, frame);
+    for (int i = 0; i < 3; ++i)
+        frame();
+    ESIA_CHECK(open > 0);
+    ClickAt(h, {90, 50 + 6 + 17}, frame);   // Rename
+    ESIA_CHECK(renamed == 1);
+    open = 0;
+    frame();
+    frame();
+    ESIA_CHECK(open == 0);
+}
+
+ESIA_TEST(UiPopups, TooltipAfterAShortHover)
+{
+    UiHarness h;
+    auto frame = [&](double dt) {
+        h.Frame(
+            [&] {
+                ui::Interact("button", {100, 40});
+                ui::Tooltip("What it does");
+            },
+            dt);
+    };
+    const auto lists = [&] { return h.ctx.GetDrawData().lists.size(); };
+    frame(0.1);
+    const std::size_t alone = lists();
+    h.ctx.QueueInput(InputEvent::MouseMove({50, 20}));
+    frame(0.1);
+    frame(0.1);
+    ESIA_CHECK(lists() == alone && h.ui.Animating());   // waiting: frames keep coming
+    for (int i = 0; i < 5; ++i)
+        frame(0.1);
+    ESIA_CHECK(lists() == alone + 1);   // the tooltip's window
+    h.ctx.QueueInput(InputEvent::MouseMove({300, 300}));
+    frame(0.1);
+    frame(0.1);
+    ESIA_CHECK(lists() == alone);
+    h.ctx.QueueInput(InputEvent::MouseMove({50, 20}));
+    frame(0.1);
+    frame(0.1);
+    ESIA_CHECK(lists() == alone);   // back over it: it waits again
 }

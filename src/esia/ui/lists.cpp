@@ -383,6 +383,22 @@ namespace esia::ui
         return SegmentedAt(Salt(L.id, 4), r, selected, items);
     }
 
+    bool RowPicker(std::string_view label, int* selected, std::span<const std::string_view> items, RowIcon icon)
+    {
+        ItemScope scope;
+        const int count = (int)items.size();
+        const int sel = count > 0 ? std::clamp(*selected, 0, count - 1) : 0;
+        Accessory acc;
+        acc.natural = (count > 0 ? BodyWidth(VisibleLabel(items[(std::size_t)sel])) : 0.0f) + Sc(30);
+        acc.min = std::min(acc.natural, Sc(80));
+        acc.height = Sc(30);
+        const RowLayout L = RowStart(label, icon, acc, 0.0f, false);
+        if (!L.visible)
+            return false;
+        const Rect r(L.accessory.min.x, L.accessory.Center().y - Sc(15), L.accessory.max.x, L.accessory.Center().y + Sc(15));
+        return PickerAt(Salt(L.id, 5), r, selected, items, true);
+    }
+
     void RowValue(std::string_view label, std::string_view value, RowIcon icon)
     {
         ItemScope scope;

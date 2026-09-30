@@ -104,6 +104,11 @@ namespace esia::ui
             std::size_t from = 0, to = 0;
         };
         std::vector<FloatBlock> floats;
+
+        // the item a tooltip waits on (popups.cpp)
+        Id tooltipItem = 0;
+        Rect tooltipRect;
+        double tooltipSince = 0.0;
     };
 
     namespace detail
@@ -213,6 +218,13 @@ namespace esia::ui
         bool StepperAt(Id id, const Rect& r, int* value, int mn, int mx, int step);
         void IconTile(Painter& p, const Rect& r, Icon icon, Color color);
         bool SegmentedAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items);
+        // plain: in a list row (no well, the choice in the secondary color)
+        bool PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain);
+
+        // ---- glass popups (popups.cpp): a popup of the core on glass, its rows without gaps
+        bool BeginGlassPopup(Id id, PopupOptions options, float minWidth);
+        void EndGlassPopup();
+        bool PopupRow(std::string_view label, bool selected, Icon icon = 0);
 
         // ---- the liquid selection of segmented controls and tab bars (selection.cpp)
         struct LiquidSelection

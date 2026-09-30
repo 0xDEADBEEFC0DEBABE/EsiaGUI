@@ -256,6 +256,38 @@ namespace esia::ui
         return Segmented(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
     }
 
+    // ================================================ menus, pickers, tips
+    // A glass menu (iOS pull-down / context menu). OpenMenu when it should open (a click), BeginMenu every frame: it is
+    // true while the menu is open. Choosing an item, a click outside or Escape closes it.
+    //
+    //   if (ui::IconButton("more", ui::icons::More)) ui::OpenMenu("actions");
+    //   if (ui::BeginMenu("actions")) {
+    //       if (ui::MenuItem("Rename", ui::icons::Edit)) ...;
+    //       if (ui::MenuItem("Delete", ui::icons::Delete)) ...;
+    //       ui::EndMenu();
+    //   }
+    struct MenuOptions
+    {
+        Vec2 anchor = Vec2(-1, -1);    // where it opens (< 0: where the mouse was at OpenMenu)
+        Vec2 pivot = Vec2(0, 0);       // the point of the menu on the anchor (0,0 top-left, 1,0 top-right)
+        float minWidth = 180.0f;
+    };
+    ESIA_API void OpenMenu(std::string_view id);
+    ESIA_API bool BeginMenu(std::string_view id, const MenuOptions& options = {});
+    ESIA_API bool MenuItem(std::string_view label, Icon icon = 0, bool checked = false);   // chosen (closes the menu)
+    ESIA_API void EndMenu();                                                               // when BeginMenu returned true
+
+    // A pop-up button showing the choice, with a menu of the choices (iOS). width: > 0 fixed, < 0 the available
+    // width, 0 = the widest choice. True when the choice changed.
+    ESIA_API bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, float width = 0.0f);
+    inline bool Picker(std::string_view id, int* selected, std::initializer_list<std::string_view> items, float width = 0.0f)
+    {
+        return Picker(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
+    }
+
+    // A glass tip for the widget before it, after half a second of hover.
+    ESIA_API void Tooltip(std::string_view text);
+
     // ========================================================= text fields
     struct TextFieldOptions
     {
@@ -318,6 +350,11 @@ namespace esia::ui
     inline bool RowSegmented(std::string_view label, int* selected, std::initializer_list<std::string_view> items, RowIcon icon = {})
     {
         return RowSegmented(label, selected, std::span<const std::string_view>(items.begin(), items.size()), icon);
+    }
+    ESIA_API bool RowPicker(std::string_view label, int* selected, std::span<const std::string_view> items, RowIcon icon = {});
+    inline bool RowPicker(std::string_view label, int* selected, std::initializer_list<std::string_view> items, RowIcon icon = {})
+    {
+        return RowPicker(label, selected, std::span<const std::string_view>(items.begin(), items.size()), icon);
     }
     ESIA_API void RowValue(std::string_view label, std::string_view value, RowIcon icon = {});
     ESIA_API bool RowButton(std::string_view label, bool destructive = false, RowIcon icon = {});   // pressed

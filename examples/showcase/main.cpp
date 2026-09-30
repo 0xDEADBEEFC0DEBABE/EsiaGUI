@@ -1,7 +1,7 @@
 // showcase - the widget layer (esia::ui) in a window: WGT's showcase, screen by screen as the widgets are ported.
 //
 //   showcase.exe [app options, see ../glass_window/app.hpp] [--dark] [--look theme|clear|frosted] [--tab 0|1|2|3]
-//                [--page accent]
+//                [--page accent] [--menu]
 #include "app.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/ui/ui.hpp"
@@ -45,6 +45,9 @@ namespace
         bool previewOn = true;
         float previewValue = 0.6f;
         std::string openPage;   // --page: pushed on the first frame
+        bool openMenu = false;  // --menu: the Inputs tab's menu opens on the first frame
+        int size = 1, resolution = 2;
+        bool pinned = true;
         std::string name = "Esia", query, password = "secret", settingsQuery;
         std::string scripts = "Hello · 你好 · مرحبا · こんにちは · café";
         std::string renderer;   // the API and the adapter
@@ -137,6 +140,30 @@ namespace
                 ui::Headline("Any script");
                 ui::TextField("scripts", &scripts, "Type in any language", {.icon = ui::icons::Globe});
                 ui::TextSecondary("Graphemes, words (Ctrl), selection, clipboard, undo, IME in place.");
+
+                ui::Spacer();
+                ui::Headline("Pickers and menus");
+                bool openActions = openMenu;
+                openMenu = false;
+                ui::BeginHStack("pickers", {.spacing = 10, .align = ui::Align::Center});
+                ui::Picker("size", &size, {"Small", "Medium", "Large", "Extra Large"});
+                ui::FlexSpacer();
+                openActions |= ui::IconButton("more", ui::icons::More, {.kind = ui::ButtonKind::Gray});
+                const Rect more = ui->GetContext().LastItemStatus().rect;
+                ui::Tooltip("More actions");
+                ui::EndStack();
+                if (openActions)
+                    ui::OpenMenu("actions");
+                if (ui::BeginMenu("actions", {.anchor = Vec2(more.max.x, more.max.y + ui::S(6)), .pivot = Vec2(1, 0)}))
+                {
+                    ui::MenuItem("Duplicate", ui::icons::Copy);
+                    ui::MenuItem("Rename", ui::icons::Edit);
+                    ui::MenuItem("Share", ui::icons::Share);
+                    if (ui::MenuItem("Pinned", ui::icons::Pin, pinned))
+                        pinned = !pinned;
+                    ui::MenuItem("Delete", ui::icons::Delete);
+                    ui::EndMenu();
+                }
             }
             else if (tab == 2)
             {
@@ -335,6 +362,7 @@ namespace
             ui::BeginSection("Display", "The numbers are this window's; the frame limit is not wired to the host yet.");
             ui::RowToggle("VSync", &vsync, {ui::icons::FullScreen, Color::Hex(0x0A84FF)});
             ui::RowSegmented("Frame Limit", &frameLimit, {"Off", "60", "120", "144"}, {ui::icons::Lightning, Color::Hex(0xFF9F0A)});
+            ui::RowPicker("Resolution", &resolution, {"1280 x 720", "1920 x 1080", "2560 x 1440", "3840 x 2160"}, {ui::icons::View, Color::Hex(0x5E5CE6)});
             char rate[64];
             const float dt = std::max(ui::DeltaTime(), 1e-4f);
             std::snprintf(rate, sizeof(rate), "%.0f fps  ·  %.2f ms", 1.0f / dt, dt * 1000.0f);
@@ -386,6 +414,8 @@ int main(int argc, char** argv)
             s.tab = std::clamp(std::atoi(value), 0, 3);
             return true;
         }
+        if (o == "--menu")
+            return s.openMenu = true;
         if (o == "--page" && value)
         {
             usedValue = true;
