@@ -324,6 +324,7 @@ namespace esia::rhi::d3d9
             // and a device that takes the full shader runs it as fast
             caps_.fxFeatureVariants = dc.MaxPixelShader30InstructionSlots < 4096;
             caps_.asyncPipelines = true;
+            caps_.firstDrawCompiles = true;   // NVIDIA's driver: 140 ms at a user effect's first draw (RTX 4080)
             caps_.maxTextureSize = (int)std::min(dc.MaxTextureWidth, dc.MaxTextureHeight);
             // FxFetch computes `instance % perRow` and `instance / perRow` in floats here (SM3 has no integers), and
             // fxc's float modulo is inexact for most divisors (6 % 682 comes out as 5.9999, truncated to the previous

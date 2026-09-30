@@ -187,6 +187,7 @@ With `asyncPipelines`, `CreatePipeline` may return a handle at once and build it
 | `runtimeEffects` | user HLSL effects compiled at runtime | yes | yes | yes | yes | no | no | no | no |
 | `fxFeatureVariants` | one FX pipeline per batch feature mask (`PipelineDesc::fxFeatures`) | yes | optional | optional | optional | no | no | no | no |
 | `asyncPipelines` | variants build off the render thread; batches draw with a ready pipeline meanwhile (section 2) | recommended | optional | optional | optional | no | no | no | no |
+| `firstDrawCompiles` | the driver finishes a shader at its first draw: the renderer draws a ready user effect once where no pixel is written (an empty scissor) | yes (NVIDIA) | no | no | no (its debug layer warns about the empty scissor) | no | no | no | no |
 | `maxTextureSize`, `maxFxDataWidth` | limits (the FX texture is `perRow * 24` wide) | device caps; `maxFxDataWidth` = 24 x a power of two | 8192 | 16384 | 16384 | `GL_MAX_TEXTURE_SIZE` | same | limits | 16384 |
 
 ## 4. Shaders and the binding model
@@ -441,7 +442,8 @@ queries).
   0x822 / 0x823 / 0x826 on an RTX 4080). Report `asyncPipelines` and compile them on a worker thread (section 2,
   "Background pipelines"), with the full shader built first.
 * A driver that compiles at the first draw would stall the frame a user effect first shows in (140 ms on the RTX
-  4080): the renderer draws a ready effect pipeline once where no pixel is written, in the first frames.
+  4080): report `firstDrawCompiles`, and the renderer draws a ready effect pipeline once where no pixel is written,
+  in the first frames.
 
 ## 6. LLVM toolchain
 

@@ -272,6 +272,10 @@ namespace esia::rhi
         // features, else with the full shader, and switches when the variant is ready: no frame waits for a
         // variant (Direct3D 9 compiles one for up to seconds). Optional.
         bool asyncPipelines = false;
+        // The driver finishes a shader at its first draw (NVIDIA's Direct3D 9: 140 ms for a user effect on an RTX
+        // 4080). The renderer then draws a prewarmed user effect once where no pixel is written (an empty scissor)
+        // in the first frames, not in the frame a shape first shows it. Optional.
+        bool firstDrawCompiles = false;
         int maxTextureSize = 4096;
         int maxFxDataWidth = 4096;      // FxStorage::Texture: width of the instance texture in texels
     };

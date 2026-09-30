@@ -440,6 +440,7 @@ ESIA_TEST(Renderer, UserEffectsStartCompilingAtTheNextFrame)
     // it in hundreds of milliseconds), and a shape that does later gets that one
     Caps caps;
     caps.runtimeEffects = true;
+    caps.firstDrawCompiles = true;
     Setup s(caps);
     Renderer r(s.dev);
     r.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return fx.fill; }");
@@ -459,6 +460,17 @@ ESIA_TEST(Renderer, UserEffectsStartCompilingAtTheNextFrame)
     ESIA_CHECK(NoErrors(s.dev));
     ESIA_CHECK(Lines(s.dev, "Fx strip premul RGBA8_UNORM effect=3") == 1);
     ESIA_CHECK(Lines(s.dev, "scissor [0,0 0x0]") == 1);   // once
+
+    // a device whose pipelines are complete when created: the prewarm, no warm-up draw
+    Caps complete;
+    complete.runtimeEffects = true;
+    Setup s2(complete);
+    Renderer r2(s2.dev);
+    r2.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return fx.fill; }");
+    r2.Render(Data({&plain}), nullptr, s2.target);
+    ESIA_CHECK(NoErrors(s2.dev));
+    ESIA_CHECK(Lines(s2.dev, "Fx strip premul RGBA8_UNORM effect=3") == 1);
+    ESIA_CHECK(Lines(s2.dev, "scissor [0,0 0x0]") == 0 && Lines(s2.dev, "draw instanced 4 x 1") == 1);
 }
 
 ESIA_TEST(Renderer, ReleasesEverythingAndSkipsEmptyFrames)

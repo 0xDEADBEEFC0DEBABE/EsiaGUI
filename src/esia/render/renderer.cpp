@@ -771,9 +771,10 @@ namespace esia::render
             ++stats.fxBatches;
         }
 
-        // A prewarmed effect whose pipeline is ready draws the batch's first instance once where no pixel is written
-        // (an empty scissor), with this batch's bindings: drivers that compile a shader at its first draw (NVIDIA's
-        // Direct3D 9: 140 ms for an effect on the RTX 4080) do it now, not in the frame a shape first shows the effect.
+        // Caps::firstDrawCompiles: a prewarmed effect whose pipeline is ready draws the batch's first instance once
+        // where no pixel is written (an empty scissor), with this batch's bindings. The driver compiles it now (NVIDIA's
+        // Direct3D 9: 140 ms for an effect on the RTX 4080), not in the frame a shape first shows the effect. Only
+        // there: Direct3D 12's debug layer warns about the empty scissor, and its pipelines are complete anyway.
         // True when it drew: the caller binds its pipeline and scissor again.
         bool WarmUp(const RenderOp& op)
         {
@@ -855,7 +856,7 @@ namespace esia::render
                 for (const EffectId id : prewarm)
                 {
                     GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, id);
-                    if (std::find(warmUp.begin(), warmUp.end(), id) == warmUp.end())
+                    if (caps.firstDrawCompiles && std::find(warmUp.begin(), warmUp.end(), id) == warmUp.end())
                         warmUp.push_back(id);
                 }
                 passFormat = format;
