@@ -284,7 +284,7 @@ namespace
         return r == Result::Pass && scene.checkCopy ? CheckCopy(scene, dev, h.target, image, detail) : r;
     }
 
-    Result RunScene(const Options& o, const rhi::BackendInfo& backend, const Scene& scene, std::string& detail)
+    Result RunScene(const Options& o, const rhi::BackendInfo& backend, const Scene& scene, std::string& detail, std::string& adapter)
     {
         std::string error;
         rhi::HeadlessDevice h = backend.createHeadless(HeadlessDescOf(scene), error);
@@ -293,6 +293,7 @@ namespace
             detail = error.empty() ? "no headless device" : error;
             return Result::Skip;
         }
+        adapter = h.adapter;
         const Result r = RenderAndCheck(o, backend, scene, h, detail);
         // counted after the readback: reading back is checked too
         if (const std::uint32_t messages = h.device->ValidationErrors())
@@ -384,12 +385,19 @@ int main(int argc, char** argv)
     {
         if (!Selected(o.backends, backend.name))
             continue;
+        std::string shownAdapter;
         for (const Scene& scene : Scenes())
         {
             if (!Selected(o.scenes, scene.name))
                 continue;
-            std::string detail;
-            const Result r = RunScene(o, backend, scene, detail);
+            std::string detail, adapter;
+            const Result r = RunScene(o, backend, scene, detail, adapter);
+            // which GPU the results are from: on a machine with two, the backends do not all pick the same one
+            if (!adapter.empty() && adapter != shownAdapter)
+            {
+                std::printf("%-9s %-8s %s\n", "ADAPTER", backend.name, adapter.c_str());
+                shownAdapter = adapter;
+            }
             ++run;
             if (r == Result::Fail || (r == Result::NoGolden && o.strict))
                 ++failed;

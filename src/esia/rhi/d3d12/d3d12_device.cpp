@@ -1346,6 +1346,8 @@ namespace esia::rhi::d3d12
                     return {};
                 }
             }
+            else
+                adapter = d3d::AdapterFromEnvironment();
             ComPtr<ID3D12Device> device;
             const HRESULT hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device));
             if (FAILED(hr))
@@ -1372,6 +1374,7 @@ namespace esia::rhi::d3d12
             h.device = CreateDevice(d, &error);
             if (!h.device)
                 return {};
+            h.adapter = d3d::AdapterName(device->GetAdapterLuid());
             TextureDesc td;
             td.width = hd.width;
             td.height = hd.height;

@@ -70,6 +70,8 @@ namespace esia::rhi::opengl
         gl_.GetIntegerv(GL_MINOR_VERSION, &glMinor_);
         const char* version = reinterpret_cast<const char*>(gl_.GetString(GL_VERSION));
         const bool esContext = version && std::strncmp(version, "OpenGL ES", 9) == 0;
+        if (const char* renderer = reinterpret_cast<const char*>(gl_.GetString(GL_RENDERER)))
+            renderer_ = renderer;
         const int v = glMajor_ * 10 + glMinor_;
         if (esContext != desc_.es || v < (desc_.es ? 30 : 33))
         {

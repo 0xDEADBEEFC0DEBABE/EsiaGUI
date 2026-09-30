@@ -1222,6 +1222,10 @@ namespace esia::rhi::d3d9
             h.device = CreateDevice(d, &error);
             if (!h.device)
                 return {};
+            // D3D9 only lists adapters with a display: the default one is the GPU of the main display
+            D3DADAPTER_IDENTIFIER9 id = {};
+            if (SUCCEEDED(d3dEx->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &id)))
+                h.adapter = id.Description;
             TextureDesc td;
             td.width = hd.width;
             td.height = hd.height;

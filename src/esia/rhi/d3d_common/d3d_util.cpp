@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dxgi1_6.h>
 
 namespace esia::rhi::d3d
 {
@@ -79,6 +80,51 @@ namespace esia::rhi::d3d
     {
         const char* v = std::getenv("ESIA_D3D_DRIVER");
         return v && (std::strcmp(v, "warp") == 0 || std::strcmp(v, "WARP") == 0);
+    }
+
+    ComPtr<IDXGIAdapter> AdapterFromEnvironment()
+    {
+        const char* v = std::getenv("ESIA_D3D_ADAPTER");
+        if (!v || (std::strcmp(v, "high-performance") != 0 && std::strcmp(v, "minimum-power") != 0))
+            return {};
+        const DXGI_GPU_PREFERENCE preference =
+            std::strcmp(v, "high-performance") == 0 ? DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE : DXGI_GPU_PREFERENCE_MINIMUM_POWER;
+        ComPtr<IDXGIFactory6> factory;   // Windows 10 1803 and later
+        ComPtr<IDXGIAdapter> adapter;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->EnumAdapterByGpuPreference(0, preference, IID_PPV_ARGS(&adapter))))
+            return {};
+        return adapter;
+    }
+
+    namespace
+    {
+        std::string Description(IDXGIAdapter* adapter)
+        {
+            DXGI_ADAPTER_DESC d = {};
+            if (!adapter || FAILED(adapter->GetDesc(&d)))
+                return {};
+            char name[sizeof(d.Description) * 2] = {};
+            WideCharToMultiByte(CP_UTF8, 0, d.Description, -1, name, (int)sizeof(name), nullptr, nullptr);
+            return name;
+        }
+    }
+
+    std::string AdapterName(IUnknown* dxgiDevice)
+    {
+        ComPtr<IDXGIDevice> device;
+        ComPtr<IDXGIAdapter> adapter;
+        if (!dxgiDevice || FAILED(dxgiDevice->QueryInterface(IID_PPV_ARGS(&device))) || FAILED(device->GetAdapter(&adapter)))
+            return {};
+        return Description(adapter.Get());
+    }
+
+    std::string AdapterName(LUID adapterLuid)
+    {
+        ComPtr<IDXGIFactory4> factory;
+        ComPtr<IDXGIAdapter> adapter;
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->EnumAdapterByLuid(adapterLuid, IID_PPV_ARGS(&adapter))))
+            return {};
+        return Description(adapter.Get());
     }
 
     // ------------------------------------------------------------------ formats

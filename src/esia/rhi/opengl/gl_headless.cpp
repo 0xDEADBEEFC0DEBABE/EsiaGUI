@@ -430,6 +430,7 @@ namespace esia::rhi::opengl
                     " is not a render target format here";
             return {};
         }
+        h.adapter = device->RendererName();
         h.device = std::move(device);
         return h;
     }

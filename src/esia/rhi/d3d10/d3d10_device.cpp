@@ -904,7 +904,9 @@ namespace esia::rhi::d3d10
         HeadlessDevice CreateHeadless(const HeadlessDesc& hd, std::string& error)
         {
             const int debug = d3d::DebugLevelFromEnvironment();
-            const D3D10_DRIVER_TYPE driver = d3d::UseWarpFromEnvironment() ? D3D10_DRIVER_TYPE_WARP : D3D10_DRIVER_TYPE_HARDWARE;
+            const bool warp = d3d::UseWarpFromEnvironment();
+            const D3D10_DRIVER_TYPE driver = warp ? D3D10_DRIVER_TYPE_WARP : D3D10_DRIVER_TYPE_HARDWARE;   // also with an adapter
+            const ComPtr<IDXGIAdapter> adapter = warp ? nullptr : d3d::AdapterFromEnvironment();
             // D3D10CreateDevice1 from the DLL: mingw-w64 has no d3d10_1 import library
             HMODULE dll = LoadLibraryW(L"d3d10_1.dll");
             auto create = dll ? reinterpret_cast<decltype(&D3D10CreateDevice1)>(reinterpret_cast<void*>(GetProcAddress(dll, "D3D10CreateDevice1"))) : nullptr;
@@ -921,7 +923,7 @@ namespace esia::rhi::d3d10
                 const UINT flags = attempt == 0 ? D3D10_CREATE_DEVICE_DEBUG : 0u;
                 for (D3D10_FEATURE_LEVEL1 level : {D3D10_FEATURE_LEVEL_10_1, D3D10_FEATURE_LEVEL_10_0})
                     if (FAILED(hr))
-                        hr = create(nullptr, driver, nullptr, flags, level, D3D10_1_SDK_VERSION, &device);
+                        hr = create(adapter.Get(), driver, nullptr, flags, level, D3D10_1_SDK_VERSION, &device);
             }
             if (FAILED(hr))
             {
@@ -938,6 +940,7 @@ namespace esia::rhi::d3d10
             h.device = CreateDevice(d, &error);
             if (!h.device)
                 return {};
+            h.adapter = d3d::AdapterName(device.Get());
             TextureDesc td;
             td.width = hd.width;
             td.height = hd.height;

@@ -11,7 +11,7 @@ add_library(esia_rhi_d3d_common STATIC
     d3d_shader.cpp)
 # the private headers (d3d_util.hpp, d3d_shader.hpp) are for the backends next door
 target_include_directories(esia_rhi_d3d_common PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(esia_rhi_d3d_common PUBLIC esia_rhi esia_shaders)
+target_link_libraries(esia_rhi_d3d_common PUBLIC esia_rhi esia_shaders PRIVATE dxgi)
 esia_target_defaults(esia_rhi_d3d_common)
 
 if(BUILD_TESTING)

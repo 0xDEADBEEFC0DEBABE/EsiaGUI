@@ -945,7 +945,10 @@ namespace esia::rhi::d3d11
         {
             const int debug = d3d::DebugLevelFromEnvironment();
             const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
-            const D3D_DRIVER_TYPE driver = d3d::UseWarpFromEnvironment() ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_HARDWARE;
+            const bool warp = d3d::UseWarpFromEnvironment();
+            const ComPtr<IDXGIAdapter> adapter = warp ? nullptr : d3d::AdapterFromEnvironment();
+            // an explicit adapter wants the "unknown" driver type
+            const D3D_DRIVER_TYPE driver = warp ? D3D_DRIVER_TYPE_WARP : adapter ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE;
             ComPtr<ID3D11Device> device;
             ComPtr<ID3D11DeviceContext> context;
             HRESULT hr = E_FAIL;
@@ -953,9 +956,9 @@ namespace esia::rhi::d3d11
             {
                 // the debug layer needs the Graphics Tools optional feature: without it, run without
                 const UINT flags = attempt == 0 ? D3D11_CREATE_DEVICE_DEBUG : 0u;
-                hr = D3D11CreateDevice(nullptr, driver, nullptr, flags, levels, 2, D3D11_SDK_VERSION, &device, nullptr, &context);
+                hr = D3D11CreateDevice(adapter.Get(), driver, nullptr, flags, levels, 2, D3D11_SDK_VERSION, &device, nullptr, &context);
                 if (FAILED(hr))   // runtimes before 11.1 reject the 11_1 level
-                    hr = D3D11CreateDevice(nullptr, driver, nullptr, flags, levels + 1, 1, D3D11_SDK_VERSION, &device, nullptr, &context);
+                    hr = D3D11CreateDevice(adapter.Get(), driver, nullptr, flags, levels + 1, 1, D3D11_SDK_VERSION, &device, nullptr, &context);
             }
             if (FAILED(hr))
             {
@@ -973,6 +976,7 @@ namespace esia::rhi::d3d11
             h.device = CreateDevice(d, &error);
             if (!h.device)
                 return {};
+            h.adapter = d3d::AdapterName(device.Get());
             TextureDesc td;
             td.width = hd.width;
             td.height = hd.height;

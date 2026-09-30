@@ -334,6 +334,7 @@ namespace esia::rhi::vulkan
             return {};
         }
         h.device = std::move(dev);
+        h.adapter = props.deviceName;
         return h;
     }
 

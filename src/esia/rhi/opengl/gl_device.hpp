@@ -35,6 +35,8 @@ namespace esia::rhi::opengl
         ~GlDevice() override;
         // Loads the functions and reads the context's limits and extensions; false (with `error`) if it cannot run.
         bool Init(std::string& error);
+        // GL_RENDERER of the context ("NVIDIA GeForce RTX 4080 SUPER/PCIe/SSE2", "llvmpipe (LLVM 20.1.2, 256 bits)")
+        const std::string& RendererName() const { return renderer_; }
 
         const char* Name() const override { return desc_.es ? "gles" : "opengl"; }
         const Caps& GetCaps() const override { return caps_; }
@@ -198,6 +200,7 @@ namespace esia::rhi::opengl
         GlApi gl_;
         Caps caps_;
         int glMajor_ = 0, glMinor_ = 0;
+        std::string renderer_;
         bool ready_ = false;               // Init got far enough to create objects: the destructor releases them
         bool srgbDecodeControl_ = false;   // EXT_texture_sRGB_decode: sRGB textures can be sampled raw
         bool debugOutput_ = false;         // our KHR_debug callback is installed

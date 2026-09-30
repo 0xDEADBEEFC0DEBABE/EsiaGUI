@@ -18,7 +18,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <dxgiformat.h>
+#include <dxgi.h>   // DXGI formats, and the adapter of the headless devices
 
 namespace esia::rhi::d3d
 {
@@ -118,6 +118,14 @@ namespace esia::rhi::d3d
     int DebugLevelFromEnvironment();
     // ESIA_D3D_DRIVER=warp: headless D3D10 / 11 / 12 devices on the WARP software rasterizer (else hardware)
     bool UseWarpFromEnvironment();
+    // ESIA_D3D_ADAPTER=high-performance | minimum-power: the hardware adapter of the headless D3D10 / 11 / 12 devices,
+    // by DXGI's GPU preference (a machine with an integrated and a discrete GPU). Unset: null, the system's default
+    // adapter - the one DXGI lists first, usually the GPU that drives the main display, not necessarily the fastest.
+    ComPtr<IDXGIAdapter> AdapterFromEnvironment();
+    // The adapter's description ("NVIDIA GeForce RTX 4080 SUPER"), UTF-8; empty when unknown. The D3D10 / 11 form
+    // takes the device (IDXGIDevice), the D3D12 one its adapter LUID.
+    std::string AdapterName(IUnknown* dxgiDevice);
+    std::string AdapterName(LUID adapterLuid);
 
     // ------------------------------------------------------------------ handles
     // Handles are numbered from 1 in creation order and never reused (a stale handle finds nothing).

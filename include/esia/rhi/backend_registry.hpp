@@ -25,6 +25,9 @@ namespace esia::rhi
     {
         std::unique_ptr<Device> device;
         Texture target;   // render target of HeadlessDesc's size / format, owned by the device
+        // The GPU or software renderer it runs on, as the driver names it (reports only; empty when unknown). On a
+        // machine with two GPUs the backends do not all pick the same one.
+        std::string adapter;
     };
 
     struct BackendInfo

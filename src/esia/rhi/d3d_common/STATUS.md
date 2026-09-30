@@ -60,7 +60,10 @@ reason - under Wine, see 2), 4 (the backends follow the null device's rules; the
 Headless devices (the conformance suite): D3D9Ex on a hidden window; D3D10.1 (then 10.0); D3D11 (11_1, then
 11_0); D3D12 (11_0) with its own queue. `ESIA_D3D_DEBUG=1` enables the debug layer (falls back without it when
 the Graphics Tools are not installed), `ESIA_D3D_DEBUG=2` also D3D12's GPU-based validation, and
-`ESIA_D3D_DRIVER=warp` uses WARP for D3D10 / 11 / 12.
+`ESIA_D3D_DRIVER=warp` uses WARP for D3D10 / 11 / 12. `ESIA_D3D_ADAPTER=high-performance | minimum-power` picks the
+D3D10 / 11 / 12 adapter by DXGI's GPU preference; unset, they take the system's default adapter, which is the GPU of
+the main display, not necessarily the fastest. D3D9 has no choice: it only lists adapters with a display. The
+conformance suite prints each backend's adapter on an `ADAPTER` line.
 
 ## 2. Conformance
 
