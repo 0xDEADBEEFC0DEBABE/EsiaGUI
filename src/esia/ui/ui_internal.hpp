@@ -1,6 +1,7 @@
 // Esia UI - what the widget files share: the Ui's state, style resolution, animation and drawing helpers.
 #pragma once
 #include "esia/ui/ui.hpp"
+#include <mutex>
 #include <span>
 #include <string>
 #include <vector>
@@ -46,6 +47,7 @@ namespace esia::ui
             int depth = 0;
             bool hidden = false;        // measuring frame: its content is clipped away
             bool stylePushed = false;   // it took a Next() style for itself and its children
+            const DrawList* list = nullptr;   // its window's draw list (glows drawn there reserve room in it)
         };
         std::vector<LayoutEntry> layouts;
 
@@ -62,7 +64,7 @@ namespace esia::ui
             float cornerCut = 0.0f;
             bool edgeFade = false;
             Id child = 0;                   // window / scroll area: its scrolling child region
-            Rect view;                      // window: what its content region shows
+            Rect view;                      // window: its content region (ViewRect: padding included)
             float padX = 0.0f;              // window: the content's side padding (the scroll indicator's lane)
         };
         std::vector<ContainerEntry> containers;
@@ -108,6 +110,28 @@ namespace esia::ui
             std::size_t from = 0, to = 0;
         };
         std::vector<FloatBlock> floats;
+
+        // the island (overlays.cpp): what Notify / SetActivity queued (any thread), and what it shows
+        bool islandEnabled = true;
+        std::mutex islandMutex;
+        std::vector<Notification> islandQueue;
+        struct Activity
+        {
+            std::string id, title;
+            float progress = -1.0f;
+            Icon icon = 0;
+            Color tint = Color::Clear();
+        };
+        std::vector<Activity> activities;
+        struct IslandState
+        {
+            bool hasItem = false;
+            Notification item;
+            double start = 0.0;
+            std::vector<std::string> knownActs;   // activity ids already shown (a new one arrives once)
+            double actStart = -100.0;
+        };
+        IslandState island;
 
         // the item a tooltip waits on (popups.cpp)
         Id tooltipItem = 0;
@@ -219,6 +243,12 @@ namespace esia::ui
         // In an auto-layout container, true while the item being submitted is one of its direct children.
         bool InLayoutContainer();
         void MarkFill();   // the item being submitted fills what it is offered
+        // WGT's item map for Painter (PainterEnv::glow): an outer glow fades out before the neighbouring items of its
+        // window (last frame's laid-out items), and the layout container of a glowing child keeps room for the glow.
+        GlowContainment* ItemMapGlow();
+
+        // ---- overlays
+        void IslandFrame();   // Ui::EndFrame: the island on the foreground draw list
 
         // ---- interaction
         Interaction InteractImpl(Id id, const Rect& r, std::uint32_t flags);

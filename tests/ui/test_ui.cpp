@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <thread>
 #include <vector>
 
 using namespace esia;
@@ -16,6 +17,7 @@ namespace
         Context ctx;
         ui::Ui ui{ctx, {}};
         double t = 1.0;
+        Vec2 display{800, 600};
 
         explicit UiHarness(const ContextDesc& desc = {}) : ctx(desc) {}
 
@@ -24,7 +26,7 @@ namespace
         void Frame(F&& body, double dt = 1.0 / 60.0)
         {
             t += dt;
-            ctx.NewFrame({{800, 600}, {1, 1}, t});
+            ctx.NewFrame({display, {1, 1}, t});
             ui.NewFrame();
             ctx.SetNextWindowPos({0, 0}, Cond::FirstUse);
             ctx.SetNextWindowSize({600, 400}, Cond::FirstUse);
@@ -712,6 +714,29 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
 }
 
+ESIA_TEST(UiScroll, ContentFadesAtTheDisplaysEdge)
+{
+    // a scroll area reaching past the bottom of the display: its content fades at the display's edge (y 300), where
+    // it stops being visible, not at its own (400)
+    UiHarness h;
+    h.display = {800, 300};
+    const DrawList* list = nullptr;
+    for (int i = 0; i < 3; ++i)
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 400});
+            ui::Spacer(1000);
+            list = &h.ctx.WindowDrawList();
+            ui::EndScrollArea();
+        });
+    ESIA_CHECK(list != nullptr && list->Fades().size() == 1);
+    if (list != nullptr && list->Fades().size() == 1)
+    {
+        const fx::FadeParams& f = list->Fades()[0];
+        ESIA_CHECK(f.y0 == 0.0f && f.y1 == 300.0f);
+        ESIA_CHECK(f.top == 0.0f && f.bottom == 30.0f);   // at the top: only the bottom fades
+    }
+}
+
 ESIA_TEST(UiCharts, LineChartTakesItsRoomOrDrawsIntoARect)
 {
     UiHarness h;
@@ -729,4 +754,103 @@ ESIA_TEST(UiCharts, LineChartTakesItsRoomOrDrawsIntoARect)
     ESIA_CHECK(after1.min.y == 50.0f + 8.0f);           // its height and the item spacing
     ESIA_CHECK(after2.min.y == after1.max.y + 8.0f);    // in a rect it takes no room
     ESIA_CHECK(cmds > 0);
+}
+
+ESIA_TEST(UiGlow, AGlowingChildGetsRoomForItsGlow)
+{
+    UiHarness h;
+    Rect plain[2], glowing[2];
+    auto frame = [&] {
+        h.Frame([&] {
+            // the same row twice: plain buttons, then the first one glowing
+            ui::BeginHStack("plain", {.spacing = 8});
+            ui::Button("A##p");
+            plain[1] = Box("next##p", {40, 40});
+            ui::EndStack();
+            plain[0] = h.ctx.LastItemStatus().rect;
+            ui::BeginHStack("glowing", {.spacing = 8});
+            ui::Button("A##g", {.glow = true});
+            glowing[1] = Box("next##g", {40, 40});
+            ui::EndStack();
+            glowing[0] = h.ctx.LastItemStatus().rect;
+        });
+    };
+    for (int i = 0; i < 90; ++i)
+        frame();   // measured, then moved there on the layout's spring
+    // the stacks start at the same x: the glowing button's neighbour sits further away (a 16-unit glow reserves 12,
+    // more than the spacing of 8)
+    ESIA_CHECK(glowing[0].min.x == plain[0].min.x && glowing[1].min.x >= plain[1].min.x + 3.5f);
+}
+
+ESIA_TEST(UiOverlays, DockTilesToggleTheirPanels)
+{
+    UiHarness h;
+    bool a = false, b = true;
+    int clicked = -1;
+    auto frame = [&] {
+        h.Frame([&] {
+            // three tiles of 46, gaps of 12, padding 11: 184 x 68, centered at the bottom of the 800 x 600 display, 16 up
+            const int c = ui::Dock({{"A", ui::icons::Settings, Color::Clear(), &a}, {"B", ui::icons::Apps, Color::Clear(), &b}, {"C", ui::icons::Globe}});
+            if (c >= 0)
+                clicked = c;
+        });
+    };
+    frame();
+    ClickAt(h, {308 + 11 + 23, 516 + 34}, frame);   // the first tile
+    ESIA_CHECK(a && b && clicked == 0);
+    ClickAt(h, {308 + 11 + 46 + 12 + 23, 516 + 34}, frame);
+    ESIA_CHECK(a && !b && clicked == 1);
+    ClickAt(h, {308 + 11 + 2 * 58 + 23, 516 + 34}, frame);   // a tile without a flag: only reported
+    ESIA_CHECK(a && !b && clicked == 2);
+}
+
+ESIA_TEST(UiOverlays, TheIslandShowsNotificationsAndActivities)
+{
+    UiHarness h;
+    const auto drawn = [&] { return h.ctx.ForegroundDrawList().Commands().size(); };
+    h.Frame([] {}, 0.1);
+    const std::size_t idle = drawn();
+    ui::Notification n;
+    n.title = "Hello";
+    n.message = "from a test";
+    n.duration = 1.0f;
+    h.ui.Notify(n);
+    h.Frame([] {}, 0.1);
+    h.Frame([] {}, 0.1);
+    ESIA_CHECK(drawn() > idle && h.ui.Animating());
+    for (int i = 0; i < 30; ++i)
+        h.Frame([] {}, 0.1);   // its second is over, the island closed
+    ESIA_CHECK(drawn() == idle);
+
+    // a live activity, set from another thread, stays until it is cleared
+    std::thread([&] { h.ui.SetActivity("download", "Downloading", 0.3f, ui::icons::Download); }).join();
+    for (int i = 0; i < 30; ++i)
+        h.Frame([] {}, 0.1);
+    ESIA_CHECK(drawn() > idle);
+    h.ui.ClearActivity("download");
+    for (int i = 0; i < 30; ++i)
+        h.Frame([] {}, 0.1);
+    ESIA_CHECK(drawn() == idle);
+}
+
+ESIA_TEST(UiLayout, AGroupThatFillsIsAFlexibleChild)
+{
+    // two modules side by side (WGT's Control Center): each a group asking for the available width inside it
+    UiHarness h;
+    Rect a, b;
+    for (int i = 0; i < 90; ++i)
+        h.Frame([&] {
+            ui::BeginHStack("pair", {.spacing = 12});
+            for (Rect* r : {&a, &b})
+            {
+                h.ctx.BeginGroup();
+                const float w = ui::AvailableWidth();
+                *r = Rect::FromSize(h.ctx.CursorPos(), Vec2(w, 40));
+                h.ctx.ItemSize(r->Size());
+                h.ctx.EndGroup();
+            }
+            ui::EndStack();
+        });
+    ESIA_CHECK(std::fabs(a.Width() - 294.0f) < 1.0f && std::fabs(b.Width() - 294.0f) < 1.0f);   // (600 - 12) / 2 each
+    ESIA_CHECK(std::fabs(b.min.x - (a.max.x + 12.0f)) < 1.0f);
 }

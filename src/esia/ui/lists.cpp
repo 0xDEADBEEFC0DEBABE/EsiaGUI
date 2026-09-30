@@ -203,7 +203,8 @@ namespace esia::ui
         if (!header.empty())
         {
             SectionNote(Salt(id, 2), header);
-            c.ItemSize(Vec2(0.0f, Sc(6)));
+            // WGT's gap: a spacer of 2 between two item spacings
+            c.ItemSize(Vec2(0.0f, Sc(2) + 2.0f * c.Metrics().itemSpacing.y));
         }
 
         Section s;
@@ -251,10 +252,12 @@ namespace esia::ui
         persist.lastCard = card;
         persist.valid = true;
 
+        const float spacing = c.Metrics().itemSpacing.y;
         if (!s.footer.empty())
         {
-            c.ItemSize(Vec2(0.0f, Sc(6)));
+            c.ItemSize(Vec2(0.0f, Sc(6) + spacing));
             SectionNote(Salt(s.id, 4), s.footer);
+            c.ItemSize(Vec2(0.0f, spacing));
         }
         c.ItemSize(Vec2(0.0f, Sc(t.metrics.sectionSpacing)));
         c.EndContainer();

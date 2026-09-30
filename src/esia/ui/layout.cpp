@@ -77,6 +77,8 @@ namespace esia::ui
             c.flex = pendingFlex;
             c.span = pendingSpan;
             c.fill = pendingFill;
+            if (hasPendingGlow_)
+                c.overflow = PokeOut(child.rect, pendingGlow_);   // a glow drawn inside it while it was open
             now_.push_back(c);
             ResetPending();
             return Slot((int)now_.size());
@@ -109,7 +111,35 @@ namespace esia::ui
             pendingFlex = 0.0f;
             pendingSpan = 1;
             pendingFill = false;
+            hasPendingGlow_ = false;
         }
+
+        // How far `reach` extends past `item` on its farthest side.
+        static float PokeOut(const Rect& item, const Rect& reach)
+        {
+            return std::max({item.min.x - reach.min.x, reach.max.x - item.max.x, item.min.y - reach.min.y, reach.max.y - item.max.y, 0.0f});
+        }
+
+    public:
+        // A glow reaching `reach` around `shape`, drawn in this container: the child it is drawn on keeps room for it
+        // (its overflow widens the gaps next frame); drawn inside a child still open (a nested container), it counts
+        // when that child is laid out. A glow that stays inside its child (a toggle in a tile) takes no room.
+        void ReportGlow(const Rect& shape, const Rect& reach)
+        {
+            for (auto it = now_.rbegin(); it != now_.rend(); ++it)
+            {
+                const Rect item(it->pos, it->pos + it->size);
+                if (item.Expanded(1.0f).Overlaps(shape))
+                {
+                    it->overflow = std::max(it->overflow, PokeOut(item, reach));
+                    return;
+                }
+            }
+            pendingGlow_ = hasPendingGlow_ ? pendingGlow_.Union(reach) : reach;
+            hasPendingGlow_ = true;
+        }
+
+    private:
 
         static float AlignFactor(Align a) { return a == Align::Center ? 0.5f : a == Align::End ? 1.0f : 0.0f; }
         static float FlexOf(const LayoutChild& c) { return c.flex > 0.0f ? c.flex : (c.fill ? 1.0f : 0.0f); }
@@ -403,6 +433,8 @@ namespace esia::ui
         bool horizontal_ = true;
         bool measured_ = false;
         std::vector<LayoutChild> last_, now_;
+        Rect pendingGlow_;
+        bool hasPendingGlow_ = false;
         std::vector<Rect> regions_;
         std::vector<Vec2> places_;
         std::vector<SlotSpring> springs_;
@@ -453,6 +485,7 @@ namespace esia::ui
                 MarkFill();   // it lays out in the width it is offered, and takes it in its parent
             Ui::Impl::LayoutEntry e;
             e.layout = &L;
+            e.list = &c.WindowDrawList();
             e.hidden = !L.Measured();
             const Vec2 origin = c.CursorPos();
             ContainerOptions co;
@@ -493,10 +526,87 @@ namespace esia::ui
 
     bool detail::InLayoutContainer() { return CurrentBox() != nullptr; }
 
+    // Marks the next child of the innermost auto-layout container of this window, also from inside that child (a group,
+    // a card): a child with something in it that fills the width fills too (WGT's pending flag).
     void detail::MarkFill()
     {
-        if (BoxLayout* L = CurrentBox())
-            L->pendingFill = true;
+        Ui::Impl& m = M();
+        if (!m.layouts.empty() && m.layouts.back().list == &m.ctx->WindowDrawList())
+            m.layouts.back().layout->pendingFill = true;
+    }
+
+    namespace
+    {
+        class ItemMap final : public GlowContainment
+        {
+        public:
+            void ReportGlowReach(const DrawList& dl, const Rect& restShape, float reach) override
+            {
+                Ui::Impl& m = M();
+                if (!m.layouts.empty() && m.layouts.back().list == &dl && reach > 0.0f)
+                    m.layouts.back().layout->ReportGlow(restShape, restShape.Expanded(reach));
+            }
+
+            // WGT's ComputeGlowHalo: the glow is bounded at the first item in its way on each side (not its own item,
+            // nor the containers it is in), and fades out over the gap before it.
+            bool GlowBounds(const DrawList& dl, const Rect& shape, float extent, Rect& bound, float& fade) override
+            {
+                Context& c = *M().ctx;
+                const Window* w = c.CurrentWindow();
+                if (!w || &w->GetDrawList() != &dl)
+                    return false;
+                const Rect self = shape.Expanded(0.5f);
+                bound = shape.Expanded(extent);
+                bool constrained = false;
+                float minGap = extent;
+                for (const LaidOutItem& item : w->LaidOutItems())
+                {
+                    const Rect& o = item.rect;
+                    if (!o.Overlaps(bound) || o.Overlaps(self))
+                        continue;
+                    const float gapT = shape.min.y - o.max.y, gapB = o.min.y - shape.max.y;
+                    const float gapL = shape.min.x - o.max.x, gapR = o.min.x - shape.max.x;
+                    const bool xOverlap = o.max.x > shape.min.x && o.min.x < shape.max.x;
+                    const bool yOverlap = o.max.y > shape.min.y && o.min.y < shape.max.y;
+                    // above / below, beside, or diagonal: cut the roomier axis
+                    const bool vertical = xOverlap ? true : yOverlap ? false : std::max(gapT, gapB) >= std::max(gapL, gapR);
+                    float gap;
+                    if (vertical && gapT >= 0.0f)
+                    {
+                        bound.min.y = std::max(bound.min.y, o.max.y);
+                        gap = gapT;
+                    }
+                    else if (vertical)
+                    {
+                        bound.max.y = std::min(bound.max.y, o.min.y);
+                        gap = gapB;
+                    }
+                    else if (gapL >= 0.0f)
+                    {
+                        bound.min.x = std::max(bound.min.x, o.max.x);
+                        gap = gapL;
+                    }
+                    else
+                    {
+                        bound.max.x = std::min(bound.max.x, o.min.x);
+                        gap = gapR;
+                    }
+                    constrained = true;
+                    minGap = std::min(minGap, std::max(gap, 0.0f));
+                }
+                if (!constrained)
+                    return false;
+                bound = bound.Union(shape);
+                fade = std::clamp(minGap * 0.85f, 1.0f, extent);
+                return true;
+            }
+        };
+    }
+
+    GlowContainment* detail::ItemMapGlow()
+    {
+        static ItemMap map;   // stateless: it reads the current Ui
+        return &map;
     }
 
     void BeginVStack(std::string_view id, const StackOptions& o) { BeginBox(id, LayoutKind::VStack, &o, nullptr, nullptr); }

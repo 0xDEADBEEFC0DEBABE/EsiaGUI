@@ -41,6 +41,16 @@
 namespace esia::ui
 {
     // ============================================================== the Ui
+    // A notification the island shows (Ui::Notify).
+    struct Notification
+    {
+        std::string title;
+        std::string message;
+        Icon icon = 0;                 // 0 = a bell
+        Color tint = Color::Clear();   // Clear = accent
+        float duration = 3.5f;         // seconds on screen
+    };
+
     struct UiDesc
     {
         // Required for text. The Ui loads its fonts into it (below); the host renders with it (PainterEnv).
@@ -54,6 +64,8 @@ namespace esia::ui
         bool fallbackChain = true;
         Theme theme = ThemeLight();
         GlassLook glassLook = GlassLook::Frosted;
+        // Draw the island (notifications, live activities) at the top of the display at EndFrame.
+        bool island = true;
     };
 
     class ESIA_API Ui
@@ -85,6 +97,12 @@ namespace esia::ui
 
         // Something moved this frame (springs, the theme): an event-driven host renders another frame.
         bool Animating() const;
+
+        // ---- the island (any thread): a notification opens it for its duration, one after the other; live
+        // activities (a download ...) stay in it until cleared. progress < 0: indeterminate.
+        void Notify(const Notification& notification);
+        void SetActivity(std::string_view id, std::string_view title, float progress, Icon icon = 0, Color tint = Color::Clear());
+        void ClearActivity(std::string_view id);
 
         struct Impl;
         Impl& GetImpl() const { return *impl_; }
@@ -255,6 +273,19 @@ namespace esia::ui
     {
         return Segmented(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
     }
+
+    // ================================================================ dock
+    struct DockItem
+    {
+        std::string_view label;
+        Icon icon = 0;
+        Color color = Color::Clear();  // the tile's color (Clear = accent)
+        bool* open = nullptr;          // a click toggles it; a dot under the tile while it is true
+    };
+    // A glass dock along the bottom of the display, above the windows (macOS): its tiles magnify under the mouse and
+    // show their label. Returns the index of the tile clicked this frame, else -1.
+    ESIA_API int Dock(std::span<const DockItem> items);
+    inline int Dock(std::initializer_list<DockItem> items) { return Dock(std::span<const DockItem>(items.begin(), items.size())); }
 
     // ================================================ menus, pickers, tips
     // A glass menu (iOS pull-down / context menu). OpenMenu when it should open (a click), BeginMenu every frame: it is

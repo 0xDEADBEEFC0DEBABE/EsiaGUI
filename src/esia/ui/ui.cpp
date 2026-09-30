@@ -49,6 +49,7 @@ namespace esia::ui
         m.text = desc.text;
         m.theme.Set(desc.theme, false);
         m.look = desc.glassLook;
+        m.islandEnabled = desc.island;
         if (!m.text)
             return;
         for (int w = 0; w < (int)FontWeight::Count; ++w)
@@ -92,6 +93,9 @@ namespace esia::ui
         m.time = in.Time();
         m.dt = std::clamp(in.DeltaTime(), 0.0f, 0.1f);   // a hitch must not fling springs
         m.theme.Step(m.dt);
+        // the core's spacing between items follows the theme (WGT's: the spacing across, 80 % of it down)
+        const float spacing = m.theme.current.metrics.spacing * m.theme.current.metrics.scale;
+        m.ctx->Metrics().itemSpacing = Vec2(spacing, spacing * 0.8f);
         m.animating = m.theme.Animating();
         // containers left open last frame (a missing End) must not leak into this one
         ESIA_ASSERT(m.styles.empty() && m.layouts.empty() && m.containers.empty() && m.sections.empty() && m.rowStyles.empty() && m.navs.empty() &&
@@ -115,6 +119,8 @@ namespace esia::ui
     void Ui::EndFrame()
     {
         Impl& m = *impl_;
+        if (m.islandEnabled && g_current == this)
+            detail::IslandFrame();
         // floating bars to the end of their window's draw list, in the order they were submitted
         for (std::size_t i = 0; i < m.floats.size(); ++i)
         {
@@ -262,6 +268,7 @@ namespace esia::ui
         env.pixelScale = m.ctx->Scale();
         env.alpha = detail::StyleAlpha();
         env.text = m.text;
+        env.glow = detail::ItemMapGlow();
         return Painter(m.ctx->WindowDrawList(), env);
     }
 

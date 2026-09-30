@@ -23,7 +23,8 @@ namespace esia::ui
     namespace detail
     {
         // iOS's scroll edge effect, adding no color. The fades grow with the distance left to scroll: nothing fades at
-        // the very top or end.
+        // the very top or end. They are at the edges of what is visible: a window reaching past the display fades
+        // at the display's edge (as WGT's, whose Dear ImGui clip rects stayed on the display).
         bool BeginScrollEdgeFade()
         {
             Context& c = Ctx();
@@ -33,7 +34,7 @@ namespace esia::ui
             if (top <= 0.5f && bottom <= 0.5f)
                 return false;
             Painter p = GetPainter();
-            p.BeginEdgeFade(c.WindowDrawList().ClipRect(), top, bottom);
+            p.BeginEdgeFade(c.WindowDrawList().ClipRect().Intersect(Rect(Vec2(0.0f, 0.0f), c.DisplaySize())), top, bottom);
             return true;
         }
 
@@ -74,7 +75,7 @@ namespace esia::ui
             const Ui::Impl& m = M();
             for (auto it = m.containers.rbegin(); it != m.containers.rend(); ++it)
                 if (it->kind == Ui::Impl::ContainerEntry::Kind::Window)
-                    return std::fabs(view.max.x - it->view.max.x) < 1.0f && it->padX >= IndicatorLane() - 0.5f ? it->view.max.x + it->padX * 0.5f : -1.0f;
+                    return std::fabs(view.max.x - (it->view.max.x - it->padX)) < 1.0f && it->padX >= IndicatorLane() - 0.5f ? it->view.max.x - it->padX * 0.5f : -1.0f;
             return -1.0f;
         }
 
@@ -465,7 +466,7 @@ namespace esia::ui
         c.ItemSize(Vec2(0, std::max(Sc(T().metrics.padding), e.cornerCut)));
         EndScrollEdgeFade(e.edgeFade);
         if (!(e.windowFlags & WindowFlags_NoScroll))
-            ScrollEnd(e.child, e.padX >= Sc(12) - 0.5f ? e.view.max.x + e.padX * 0.5f : -1.0f);
+            ScrollEnd(e.child, e.padX >= Sc(12) - 0.5f ? e.view.max.x - e.padX * 0.5f : -1.0f);
         c.EndChild();
 
         // resize affordance at the bottom-right corner, shown while the mouse is near it
