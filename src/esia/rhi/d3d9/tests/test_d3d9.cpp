@@ -56,7 +56,8 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
     r.fxFeatures = 0x21u;
     r.stage = shaders::Stage::Pixel;
     const unsigned slots = rhi::d3d::InstructionSlots(rhi::d3d::CompileShader(r, log));
-    ESIA_CHECK(slots > 2000 && slots < 4096);
+    std::printf("  the glass variant: about %u ps_3_0 instruction slots\n", slots);
+    ESIA_CHECK(slots > 2000 && slots < 4096);   // NVIDIA's D3D9 driver takes 4096
 }
 
 // Textures the renderer uploads to (the glyph atlas: R8 with CopyDst, a render target in D3D9) go through a

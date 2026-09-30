@@ -440,7 +440,20 @@ float3 DispersedRibbon(float y, float yc, float sigma, float spread)
     return c / float3(4.21, 4.06, 3.62);   // the taps add up to white
 }
 
-GlassSample EvalGlass(float2 svpos, float2 p, float d, FxInst I)
+// The bevel's Fresnel term `inside` UI units within the outline (0 outside it): (1 - N.z)^5 of the circle profile,
+// as EvalGlass has it at the pixel itself.
+float BevelFresnel(float inside, float bezel)
+{
+    if (inside < 0.0)
+        return 0.0;
+    const float u = saturate(1.0 - inside / bezel);
+    const float h = sqrt(saturate(1.0 - u * u));
+    const float slope = min(u / max(h, 1e-3), 8.0);
+    return pow(1.0 - rsqrt(1.0 + slope * slope), 5.0);
+}
+
+// px: UI units per pixel
+GlassSample EvalGlass(float2 svpos, float2 p, float d, float px, FxInst I)
 {
     GlassSample gs;
     const float rs = gDisplay.z;                 // UI units -> render-target pixels (render scale)
@@ -521,7 +534,15 @@ GlassSample EvalGlass(float2 svpos, float2 p, float d, FxInst I)
     const float2 L = float2(cos(I.glassParams.w), sin(I.glassParams.w));
     const float facing = dot(n, L);
     const float lit = pow(saturate(facing), 1.5) + 0.4 * pow(saturate(-facing), 1.5);
-    gs.rim = fres * lit * I.glassParams.z * 1.6;
+    // The Fresnel term peaks within a fraction of a pixel of the outline: sampled at the pixel center, the rim line
+    // flickered along a curve (brighter and darker from pixel to pixel, its peak jumping in and out, so a round
+    // button looked dented). It is filtered across the outline with a tent 1.6 px wide; taps outside the shape
+    // count 0, so the rim carries its own coverage (applied once, in FxPS).
+    const float pxn = px * (abs(n.x) + abs(n.y));   // the pixel's width across the outline
+    float rimFresnel = 0.0;
+    [unroll] for (int k = -2; k <= 2; ++k)
+        rimFresnel += (3.0 - abs((float)k)) * BevelFresnel(-d + (float)k * 0.4 * pxn, bezel);
+    gs.rim = rimFresnel / 9.0 * lit * I.glassParams.z * 1.6;
     // light: the side of the slab facing it and the whole bevel glow a little (clear glass too)
     const float2 center = (I.rect.xy + I.rect.zw) * 0.5;
     const float toward = saturate(0.5 + 0.5 * dot((p - center) / halfSize, L));
@@ -646,7 +667,7 @@ float4 FxPS(FxPSIn i) : SV_Target
         FX_FETCH(I, glassTint)
         FX_FETCH(I, glassParams)
         FX_FETCH(I, shape2Params)
-        GlassSample gs = EvalGlass(spos, p, d, I);
+        GlassSample gs = EvalGlass(spos, p, d, px, I);
         rim = gs.rim;
         acc = Over(float4(gs.color * cov, cov), acc);
     }
@@ -768,8 +789,8 @@ float4 FxPS(FxPSIn i) : SV_Target
         acc = Over(Premul(I.glow, saturate(g)), acc);
     }
 
-    // 7. glass specular rim (additive light)
-    acc.rgb += rim * cov * acc.a;
+    // 7. glass specular rim (additive light): it carries its own coverage (EvalGlass), not multiplied by it again
+    acc.rgb += rim * saturate(acc.a / max(cov, 1e-3));
 
     // 8. stroke
     [branch] if FX_HAS(feat, F_STROKE)

@@ -403,17 +403,20 @@ panel's window is compared pixel by pixel, the island masked (its timing differs
 
 | Panel | x1 | x1.5 |
 | --- | --- | --- |
-| Settings | 0.29 / 0.34 | 0.74 / 1.40 |
-| Effects Lab | 0.30 / 0.30 | 0.90 / 1.53 |
-| Control Center | 0.50 / 0.58 | 0.45 / 0.36 |
-| Components | 0.76 / 0.80 | 1.95 / 1.59 |
-| Languages | 1.20 / 1.05 | 0.54 / 0.76 |
-| Telemetry | 0.7 - 1.3 / 0.76 | 1.3 - 1.8 / 1.3 - 1.8 (from run to run: live values) |
+| Settings | 0.38 / 0.41 | 0.74 / 1.41 |
+| Effects Lab | 0.41 / 0.41 | 0.93 / 1.57 |
+| Control Center | 0.81 / 0.81 | 0.49 / 0.40 |
+| Components | 0.85 / 0.88 | 1.97 / 1.63 |
+| Languages | 1.24 / 1.09 | 0.54 / 0.76 |
+| Telemetry | 0.7 - 1.3 / 0.76 | 1.3 - 1.8 / 1.2 - 1.8 (from run to run: live values) |
 
 What still differs, and why:
 
 * Text: FreeType's rasterization is not DirectWrite's, so glyph edges differ by a few levels everywhere. This is
   most of what is left in every panel.
+* Glass edges, on purpose: WGT's rim light flickered along curves (thinner than a pixel, sampled at the pixel
+  center: a round button looked dented). Esia filters it across the outline, so glass edges differ by a few levels;
+  most of Control Center's difference at 1x (0.50 / 0.58 before the filter).
 * Chinese: WGT asked DirectWrite's fallback for each character with the user's locale; under en-US that gives
   Yu Gothic UI for all CJK text, so WGT drew Chinese with Japanese glyph forms. Esia keeps Microsoft YaHei for Chinese
   (the same widths; the Japanese and Korean lines now match WGT).
