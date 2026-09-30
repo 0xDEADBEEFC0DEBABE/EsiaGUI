@@ -2,7 +2,7 @@
 
 GitHub Actions runs three workflows (`.github/workflows`), one per host OS, on every push to `main` and every pull
 request into it that changes more than documentation, and on any branch by hand (section 5: the minutes are
-metered). Every job
+metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches (section 5). Every job
 builds with `-DESIA_WERROR=ON`, runs `ctest`, writes a table of every test and every conformance scene to the job's
 summary (`.github/scripts/ctest_report.py`) and uploads the conformance images, the diff images of failures, the
 CTest JUnit file and the test logs as an artifact named after the job (kept 14 days).
@@ -292,7 +292,17 @@ the Diagnostics step's log).
   Usage: *Settings > Billing and licensing > Overview*.
 * **Goldens**: a rendering change that moves a scene past its tolerance fails every backend's job. Regenerate with
   OpenGL on llvmpipe (`docs/backends/README.md`, section 7) after reviewing the uploaded `*.diff.png` files; never
-  widen a tolerance for one backend's software renderer.
+  widen a tolerance for one backend's software renderer. Where llvmpipe is not at hand, carry the change into the
+  goldens instead: golden + (new - old), per pixel, from two renders of one backend on one device with and without
+  the change (`esia_conformance --out`), so every pixel the change does not touch stays llvmpipe's (the glass rim
+  filter, 2026-10-01, from D3D11).
+* **Shader library**: the generated files must be exactly what Ubuntu 24.04's glslang and SPIRV-Cross make (the
+  `shaders` check), and other versions (a Vulkan SDK's) make different files. The files themselves run anywhere
+  (SPIR-V, GLSL, ESSL and MSL do not depend on where they were made); the versions are pinned only so the check can
+  regenerate them byte for byte. Where those packages are not
+  installed, push the shader change to a branch named `shaders/<anything>`: the `Shaders` workflow
+  (`shaders.yml`, about a minute on Linux) regenerates the library and commits it to that branch. Take its
+  `src/esia/shaders/generated` into the change, then delete the branch.
 * **Pinned versions**: `VULKAN_SDK_VERSION` and `MESA_DIST_WIN_VERSION` in `windows.yml`. Updating one changes what
   the Windows tests run on: note the new numbers here.
 * **Runner images** move (clang, Mesa, Xcode versions). The toolchain and driver versions of each run are at the top

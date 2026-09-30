@@ -1,0 +1,41 @@
+# Shaders: regenerates the shader library (tools/shaders/build_shaders.py) with the Ubuntu packages the Linux
+# workflow's check uses, and commits it to the branch. The generated files must be what those tool versions make,
+# byte for byte, and other glslang / SPIRV-Cross versions (a Vulkan SDK's) differ: push a shader change to a branch
+# named shaders/<anything>, let this run, then take its commit's src/esia/shaders/generated. See docs/CI.md.
+name: Shaders
+
+on:
+  push:
+    branches: ['shaders/**']
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    name: regenerate the shader library
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # the same packages as linux.yml's shader library check
+      - name: Install glslang, SPIRV-Tools, SPIRV-Cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends glslang-tools spirv-cross spirv-tools python3
+      - name: Tool versions
+        run: dpkg-query -W glslang-tools spirv-cross spirv-tools
+      - name: Regenerate
+        run: python3 tools/shaders/build_shaders.py
+      # a push with GITHUB_TOKEN starts no workflow run, so this does not run again
+      - name: Commit the generated files
+        run: |
+          git add src/esia/shaders/generated
+          if git diff --cached --quiet; then
+            echo "the generated shaders are up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Shaders: regenerate the shader library (build_shaders.py)"
+          git push
