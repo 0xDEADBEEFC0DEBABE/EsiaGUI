@@ -256,6 +256,42 @@ namespace esia::ui
         return Segmented(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
     }
 
+    // ========================================================= text fields
+    struct TextFieldOptions
+    {
+        float width = 0.0f;            // > 0 fixed, else the available width
+        Icon icon = 0;                 // a symbol before the text (SearchField: Search)
+        bool password = false;         // bullets; nothing is copied, no IME
+        bool clearButton = true;       // an x while there is text
+        bool background = true;        // false: no fill (the field sits on glass or a surface of its own)
+        std::size_t maxBytes = 0;      // > 0: the longest text it takes (UTF-8 bytes)
+    };
+    struct TextFieldResult
+    {
+        bool changed = false;          // the text changed this frame
+        bool submitted = false;        // Enter was pressed (the field let go of the keyboard)
+        explicit operator bool() const { return changed; }
+    };
+    // A single-line editor: any script the text system shapes; the caret moves by graphemes, by words with Ctrl
+    // (Option on macOS); selection by drag, double click (a word), triple click (all) and Shift; clipboard; undo and
+    // redo; the IME's composition in place, its candidate window at the caret. A click or Tab gives it the keyboard,
+    // Enter or Escape (or a click elsewhere) takes it away. Every change is written to *text at once.
+    //
+    //   if (ui::TextField("name", &name, "Your name")) ...;
+    ESIA_API TextFieldResult TextField(std::string_view id, std::string* text, std::string_view placeholder = {}, const TextFieldOptions& options = {});
+    ESIA_API TextFieldResult SearchField(std::string_view id, std::string* text, std::string_view placeholder = "Search");
+
+    // A search field in a glass bar floating over the bottom of the area it is submitted in, as the tab bar (iOS
+    // Settings): the content scrolls under it. Submit it last in its area.
+    struct SearchBarOptions
+    {
+        std::string_view placeholder = "Search";
+        GlassLook look = GlassLook::Clear;   // the bar's glass: Clear (no frost, no tint), Frosted, or Theme (the bar material)
+        bool base = true;                    // a soft base color inside the glass (false: nothing but the glass)
+        Color fill = Color::Clear();         // the base color (Clear = the theme's: light white / dark gray)
+    };
+    ESIA_API TextFieldResult SearchBar(std::string_view id, std::string* text, const SearchBarOptions& options = {});
+
     // ================================================= inset grouped lists
     // iOS Settings: sections of rows on a card, with an optional header and footer. A row's label takes what its
     // accessory (switch, value, slider ...) leaves; when even a short label does not fit beside it, the row stacks

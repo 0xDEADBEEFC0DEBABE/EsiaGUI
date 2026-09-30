@@ -502,6 +502,8 @@ namespace esia::ui
             return Override(ApplyLook(LookOf(s), themed), s);
         }
 
+        GlassMaterial GlassFieldsOver(const GlassMaterial& m) { return Override(m, ResolvedStyle()); }
+
         GlassMaterial SurfaceMaterial(const GlassMaterial& themed, Color surface)
         {
             const ItemStyle& s = ResolvedStyle();

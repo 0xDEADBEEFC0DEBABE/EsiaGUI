@@ -1,6 +1,6 @@
 // showcase - the widget layer (esia::ui) in a window: WGT's showcase, screen by screen as the widgets are ported.
 //
-//   showcase.exe [app options, see ../glass_window/app.hpp] [--dark] [--look theme|clear|frosted] [--tab 0|1|2]
+//   showcase.exe [app options, see ../glass_window/app.hpp] [--dark] [--look theme|clear|frosted] [--tab 0|1|2|3]
 //                [--page accent]
 #include "app.hpp"
 #include "esia/render/painter.hpp"
@@ -45,6 +45,8 @@ namespace
         bool previewOn = true;
         float previewValue = 0.6f;
         std::string openPage;   // --page: pushed on the first frame
+        std::string name = "Esia", query, password = "secret", settingsQuery;
+        std::string scripts = "Hello · 你好 · مرحبا · こんにちは · café";
         std::string renderer;   // the API and the adapter
 
         void Wallpaper(esia::Context& ctx)
@@ -127,6 +129,17 @@ namespace
             }
             else if (tab == 1)
             {
+                ui::Headline("Text fields");
+                ui::TextField("name", &name, "Your name");
+                ui::SearchField("search", &query);
+                ui::TextField("password", &password, "Password", {.password = true});
+                ui::Spacer();
+                ui::Headline("Any script");
+                ui::TextField("scripts", &scripts, "Type in any language", {.icon = ui::icons::Globe});
+                ui::TextSecondary("Graphemes, words (Ctrl), selection, clipboard, undo, IME in place.");
+            }
+            else if (tab == 2)
+            {
                 ui::Headline("Progress");
                 ui::ProgressBar(volume);
                 ui::BeginFlow("rings", {.spacing = 18});
@@ -160,7 +173,7 @@ namespace
                 if (ui::Segmented("look", &glassLook, {"Theme", "Clear", "Frosted"}))
                     ui->SetGlassLook((ui::GlassLook)glassLook);
             }
-            ui::TabBar("tabs", &tab, {{ui::icons::Apps, "Controls"}, {ui::icons::Diagnostic, "Status"}, {ui::icons::Palette, "Style"}});
+            ui::TabBar("tabs", &tab, {{ui::icons::Apps, "Controls"}, {ui::icons::Edit, "Inputs"}, {ui::icons::Diagnostic, "Status"}, {ui::icons::Palette, "Style"}});
             ui::EndWindow();
         }
 
@@ -352,6 +365,8 @@ namespace
             ui::RowValue("Renderer", renderer, {ui::icons::Game, Color::Hex(0xFF375F)});
             ui::RowButton("Reset All Settings", true);
             ui::EndSection();
+            // the floating Liquid Glass search field: the list scrolls under it (iOS Settings)
+            ui::SearchBar("settings_search", &settingsQuery);
         }
     };
 }
@@ -368,7 +383,7 @@ int main(int argc, char** argv)
         if (o == "--tab" && value)
         {
             usedValue = true;
-            s.tab = std::clamp(std::atoi(value), 0, 2);
+            s.tab = std::clamp(std::atoi(value), 0, 3);
             return true;
         }
         if (o == "--page" && value)

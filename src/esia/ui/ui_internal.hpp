@@ -153,6 +153,7 @@ namespace esia::ui
         float ItemRadius(float themed);
         GlassMaterial ApplyLook(GlassLook look, GlassMaterial m);
         GlassMaterial StyledMaterial(const GlassMaterial& themed);                 // look + glass fields
+        GlassMaterial GlassFieldsOver(const GlassMaterial& m);                     // the glass fields only
         GlassMaterial SurfaceMaterial(const GlassMaterial& themed, Color surface);  // a glass surface with a color of its own
         bool LookClear();
         bool GlassSurface();                 // flat surfaces render as glass (Clear / Frosted / glass fields)

@@ -299,4 +299,48 @@ namespace esia::ui
         c.ItemSize(Vec2(0.0f, barH + Sc(22)));
         return sel.changed;
     }
+
+    // ============================================================ search bar
+    TextFieldResult SearchBar(std::string_view id, std::string* text, const SearchBarOptions& so)
+    {
+        ItemScope scope;
+        Ui::Impl& m = M();
+        Context& c = *m.ctx;
+        const Theme& t = T();
+        const Palette& pc = t.colors;
+        // floats over the bottom of its area like the tab bar: the list scrolls under the glass
+        const Rect vis = c.ViewRect();
+        const float barH = Sc(46);
+        const Rect bar(vis.min.x + Sc(14), vis.max.y - Sc(14) - barH, std::max(vis.max.x - Sc(14), vis.min.x + Sc(15)), vis.max.y - Sc(14));
+        DrawList& dl = c.WindowDrawList();
+        const std::size_t from = dl.Mark();
+        ChildOptions co;
+        co.flags = ChildFlags_Floating;
+        co.rect = bar;
+        c.BeginChild(id, co);
+        Painter p = GetPainter();
+        {
+            // clear glass by default (no frost, no tint) with a soft base inside; a Clear look from the style makes it
+            // fully transparent (no base), another look from the style overrides so.look
+            const bool clear = LookClear();
+            const ItemStyle& st = ResolvedStyle();
+            GlassMaterial mat = st.Has(ItemStyle::kLook) || clear ? StyledMaterial(t.materials.bar) : GlassFieldsOver(ApplyLook(so.look, t.materials.bar));
+            Style bs = Style().Glass(mat).Shadow(pc.shadow.Fade(0.25f), Sc(16), Vec2(0, Sc(4)));
+            if ((so.base && !clear) || st.Has(ItemStyle::kFill))
+                bs.Fill(so.fill.a > 0.0f ? so.fill : FillOr(t.dark ? Color(0.11f, 0.11f, 0.13f, 0.55f) : Color::White(0.6f)));
+            ScopedUnclip unclip(bar, ShadowExtent(Sc(18), Vec2(0, Sc(6))));
+            DrawPill(p, bar, bs);
+        }
+        const float fieldH = Sc(38);
+        c.SetCursorPos(Vec2(bar.min.x + Sc(6), std::floor(bar.Center().y - fieldH * 0.5f)));
+        TextFieldOptions o;
+        o.icon = icons::Search;
+        o.background = false;   // the glass is the field
+        o.width = (bar.Width() - Sc(12)) / Sc(1.0f);
+        const TextFieldResult r = TextField("##field", text, so.placeholder, o);
+        c.EndChild();
+        m.floats.push_back({&dl, from, dl.Mark()});   // drawn over the content at EndFrame
+        c.ItemSize(Vec2(0.0f, barH + Sc(22)));
+        return r;
+    }
 }

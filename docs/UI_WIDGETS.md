@@ -12,7 +12,7 @@ the core, and what of WGT is ported so far.
 * [4. Text and controls](#4-text-and-controls)
 * [5. Windows, cards, scroll areas](#5-windows-cards-scroll-areas)
 * [6. Lists: sections and rows](#6-lists-sections-and-rows)
-* [7. Navigation and the tab bar](#7-navigation-and-the-tab-bar)
+* [7. Navigation, the tab bar and the search bar](#7-navigation-the-tab-bar-and-the-search-bar)
 * [8. Auto layout](#8-auto-layout)
 * [9. Custom widgets and animation](#9-custom-widgets-and-animation)
 * [10. The showcase](#10-the-showcase)
@@ -129,6 +129,29 @@ edge. `TextWrapped` always wraps at the container's width. Inside an auto-layout
 | `Segmented(id, &i, {"A", "B", "C"}, width)` | the iOS 26 segmented control: tap a segment, or grab the selection and drag it; it travels as a clear lens that magnifies what it passes, then lands on the nearest segment as a solid pill. `*i` changes on release |
 
 * **Ids.** Labels may carry an id suffix: `"OK##dialog"` shows "OK", and `"##x"` shows nothing.
+
+**Text fields** (WGT's single-line editor):
+
+```cpp
+if (ui::TextField("name", &name, "Your name"))           // true when the text changed
+    ...;
+ui::TextField("pin", &pin, "PIN", {.password = true, .maxBytes = 8});
+ui::SearchField("search", &query);                        // a field with the search symbol
+```
+
+* The field edits a `std::string` and writes every change back at once. The result also tells whether Enter was
+  pressed (`.submitted`).
+* A click or Tab gives it the keyboard; Enter, Escape or a click elsewhere takes it away. It claims only the keys it
+  uses, so Tab still moves the focus.
+* The caret moves by graphemes, as the text system reports them (`TextSystem::CaretStops`). So it steps over a
+  letter with its accents, an emoji sequence or a flag as one, and through a right-to-left word in the direction
+  it is drawn. Ctrl moves and deletes by words (Option on macOS).
+* Selection: drag, Shift with the keys, double click (a word), triple click (all). Clipboard: Ctrl+A / C / X / V
+  (Cmd on macOS); a paste becomes one line. Undo and redo keep 200 steps; typing within a second is one step.
+* The IME's composition is drawn in the text, underlined, with the clause it converts underlined thicker. Its
+  candidate window opens at the caret (`Context::RequestTextInput`).
+* Options: `width`, `icon`, `password` (bullets per grapheme, nothing copied), `clearButton`, `background` (off
+  on glass), `maxBytes`.
 * **Return values.** The functions that change a value return true in the frame they change it.
 
 ## 5. Windows, cards, scroll areas
@@ -181,7 +204,7 @@ ui::EndSection();
   inset like the labels. Widgets submitted in between go inside it, and widgets that fill the available width stay
   in the row.
 
-## 7. Navigation and the tab bar
+## 7. Navigation, the tab bar and the search bar
 
 ```cpp
 ui::BeginNavigation("settings", "root");   // takes the room left in its area
@@ -193,6 +216,7 @@ if (ui::BeginPage("accent", "Accent Color")) { ...; ui::EndPage(); }
 ui::EndNavigation();
 
 ui::TabBar("tabs", &tab, {{ui::icons::Apps, "Controls"}, {ui::icons::Palette, "Style"}});   // last in its area
+ui::SearchBar("search", &query);                                                           // or this
 ```
 
 * **Navigation** is a stack of pages, as in iOS.
@@ -213,6 +237,9 @@ ui::TabBar("tabs", &tab, {{ui::icons::Apps, "Controls"}, {ui::icons::Palette, "S
     bar's draw commands are moved to the end of its window's draw list at `Ui::EndFrame`: it draws over all the
     window's content and is not faded. (WGT's bars were ImGui child windows, drawn after their parent.) Card and
     section backgrounds, which are moved under their content, go through the same bookkeeping.
+* **The search bar** floats the same way: a text field with the search symbol in a glass pill across the bottom of
+  its area (iOS Settings). Its glass is clear by default with a soft base inside (`SearchBarOptions::look`, `base`,
+  `fill`); a Clear look from the style makes it fully transparent.
 
 ## 8. Auto layout
 
@@ -271,20 +298,21 @@ if (it.pressed) ...;
 `examples/showcase` shows the widgets in a window over a drifting wallpaper. It uses the same frame as
 `glass_window`: the `glass_app` library, with the Win32 platform layer, every backend, and a render thread.
 
-* **Components**: three tabs under a tab bar: every button kind, switches, checkboxes, sliders, a segmented
-  control and the stepper; progress bars and rings and badges; dark mode, the accent swatches and the glass look.
+* **Components**: four tabs under a tab bar: every button kind, switches, checkboxes, sliders, a segmented
+  control and the stepper; text fields (plain, search, password, and one with text in six scripts); progress bars
+  and rings and badges; dark mode, the accent swatches and the glass look.
 * **Control Center**: a grid of glass cards with round toggles, Now Playing, and a brightness slider spanning two
   columns.
 * **Telemetry**: two gauges in a flow, and a card with wrapped mixed Latin / Chinese text.
-* **Settings**: WGT's Settings screen without its search bar: a navigation stack whose root page has a custom
-  profile row and sections of every row kind (the Liquid Glass section edits the live theme); Accent Color opens a
+* **Settings**: WGT's Settings screen: a navigation stack whose root page has a custom profile row, sections of
+  every row kind (the Liquid Glass section edits the live theme) and the floating search bar; Accent Color opens a
   second page.
 
 ```
 showcase.exe --api d3d12 --dark --look frosted --size 1360x780 --frames 90 --fixed-dt 0.016667 --screenshot shot.png
 ```
 
-`--tab 0|1|2` picks the Components tab and `--page accent` opens the Accent Color page. The options of
+`--tab 0|1|2|3` picks the Components tab and `--page accent` opens the Accent Color page. The options of
 `glass_window` (`app.hpp`) apply: `--api`, `--size`, `--frames`, `--fixed-dt`, `--screenshot` and
 `--debug`.
 
@@ -299,7 +327,8 @@ Ported, in the order the parts depend on each other:
 * every control in section 4, with the liquid selection of segmented controls (WGT's `selection.cpp`);
 * cards, scroll areas and windows;
 * sections and rows (WGT's `lists.cpp`), except `RowPicker`, which waits for the picker;
-* navigation and the tab bar (WGT's `navigation.cpp`), except the search bar, which waits for the text field;
+* navigation, the tab bar and the search bar (WGT's `navigation.cpp`);
+* the text field (WGT's `text_edit.cpp`);
 * stacks, adaptive stacks, grids and flows.
 
 Two WGT bugs were fixed on the way:
@@ -311,7 +340,7 @@ Two WGT bugs were fixed on the way:
 
 Not ported yet, in the planned order:
 
-1. TextField (WGT's `text_edit`) and the search bar; pickers and popups (and `RowPicker`), tooltips;
+1. pickers and popups (and `RowPicker`), tooltips;
 2. the scroll indicator and drag-to-scroll, the glow halo;
 3. the island, the dock, notifications;
 4. LineChart;
@@ -332,6 +361,9 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
 * navigation: a push shows both pages while it moves and then only the new one; the back button pops;
 * the tab bar: its place at the bottom of its area, the room it reserves, a tap; its draw commands last in the
   window's list, also inside a card;
+* the text field: typing, graphemes, selection, select all, delete, undo, redo; the clipboard, a paste on one
+  line; Tab to the next field; Enter; a password (not copied) and the length limit; the IME composition shown but
+  not written, its committed text written;
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.

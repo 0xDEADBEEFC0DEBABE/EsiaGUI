@@ -16,6 +16,8 @@ namespace
         ui::Ui ui{ctx, {}};
         double t = 1.0;
 
+        explicit UiHarness(const ContextDesc& desc = {}) : ctx(desc) {}
+
         // One frame: `body` runs inside a window at (0, 0) of 600 x 400 without padding.
         template <class F>
         void Frame(F&& body, double dt = 1.0 / 60.0)
@@ -406,4 +408,142 @@ ESIA_TEST(UiTabBar, DrawsOverWhatIsSubmittedAfterIt)
         if (!cmds.empty())
             ESIA_CHECK(cmds.back().clip.min.y > 300.0f);
     }
+}
+
+namespace
+{
+    // A field at (0, 0) of 600 x 38 in the harness window; `second` below it (y 46 .. 84)
+    struct FieldHarness : UiHarness
+    {
+        std::string a, b;
+        ui::TextFieldResult ra, rb;
+        ui::TextFieldOptions oa;
+        std::string clipboard;
+
+        FieldHarness() : UiHarness(Desc(clipboard)) {}
+        static ContextDesc Desc(std::string& clip)
+        {
+            ContextDesc d;
+            d.getClipboard = [&clip] { return clip; };
+            d.setClipboard = [&clip](const std::string& v) { clip = v; };
+            return d;
+        }
+        void Step()
+        {
+            Frame([&] {
+                ra = ui::TextField("a", &a, "First", oa);
+                rb = ui::TextField("b", &b, "Second");
+            });
+        }
+        void Click(Vec2 at)
+        {
+            ctx.QueueInput(InputEvent::MouseMove(at));
+            Step();
+            ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+            Step();
+            ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+            Step();
+        }
+        void Key(esia::Key k, std::uint32_t mods = 0)
+        {
+            ctx.QueueInput(InputEvent::KeyEvent(k, true, mods));
+            Step();
+            ctx.QueueInput(InputEvent::KeyEvent(k, false, mods));
+            Step();
+        }
+        void Type(const char* text)
+        {
+            ctx.QueueInput(InputEvent::TextEvent(text));
+            Step();
+        }
+    };
+
+#if defined(__APPLE__)
+    constexpr std::uint32_t kShortcut = Mod_Super;
+#else
+    constexpr std::uint32_t kShortcut = Mod_Ctrl;
+#endif
+}
+
+ESIA_TEST(UiTextField, TypesEditsAndUndoes)
+{
+    FieldHarness h;
+    h.Step();
+    h.Type("ignored");   // nobody has the keyboard
+    ESIA_CHECK(h.a.empty());
+    h.Click({300, 19});
+    ESIA_CHECK(h.ctx.KeyboardFocusId() != 0);
+    h.ctx.QueueInput(InputEvent::TextEvent("h\xC3\xA9llo"));   // h, U+00E9, l, l, o
+    h.Step();
+    ESIA_CHECK(h.a == "h\xC3\xA9llo" && h.ra.changed);
+    h.Key(Key::Backspace);
+    ESIA_CHECK(h.a == "h\xC3\xA9ll");
+    // two to the left, then select one more and replace it
+    h.Key(Key::Left);
+    h.Key(Key::Left);
+    h.Key(Key::Left, Mod_Shift);
+    h.Type("E");
+    ESIA_CHECK(h.a == "hEll");   // the two-byte character went as one
+    // select all, delete, undo, redo
+    h.Key(Key::A, kShortcut);
+    h.Key(Key::Delete);
+    ESIA_CHECK(h.a.empty());
+    h.Key(Key::Z, kShortcut);
+    ESIA_CHECK(h.a == "hEll");
+    h.Key(Key::Y, kShortcut);
+    ESIA_CHECK(h.a.empty());
+}
+
+ESIA_TEST(UiTextField, ClipboardEnterAndTab)
+{
+    FieldHarness h;
+    h.Step();
+    h.Click({300, 19});
+    h.Type("copy me");
+    h.Key(Key::A, kShortcut);
+    h.Key(Key::C, kShortcut);
+    ESIA_CHECK(h.clipboard == "copy me");
+    h.Key(Key::End);
+    h.clipboard = "\r\nand this\t";
+    h.Key(Key::V, kShortcut);
+    ESIA_CHECK(h.a == "copy meand this");   // pasted on one line
+
+    // Tab gives the keyboard to the next field
+    h.Key(Key::Tab);
+    h.Type("second");
+    ESIA_CHECK(h.b == "second" && h.a == "copy meand this");
+
+    // Enter submits and lets go of the keyboard
+    h.ctx.QueueInput(InputEvent::KeyEvent(Key::Enter, true));
+    h.Step();
+    ESIA_CHECK(h.rb.submitted && h.ctx.KeyboardFocusId() == 0);
+    h.ctx.QueueInput(InputEvent::KeyEvent(Key::Enter, false));
+    h.Step();
+    h.Type("x");
+    ESIA_CHECK(h.b == "second");
+}
+
+ESIA_TEST(UiTextField, CompositionPasswordAndLimit)
+{
+    FieldHarness h;
+    h.oa.password = true;
+    h.oa.maxBytes = 4;
+    h.Step();
+    h.Click({300, 19});
+    h.Type("abc");
+    h.Type("de");   // "abcde" is longer than 4 bytes: refused
+    ESIA_CHECK(h.a == "abc");
+    h.Key(Key::A, kShortcut);
+    h.Key(Key::C, kShortcut);
+    ESIA_CHECK(h.clipboard.empty());   // a password is not copied
+
+    // the IME's composition is shown, not written; what it commits is typed text
+    h.Click({300, 46 + 19});
+    h.ctx.QueueInput(InputEvent::Composition("ni", 2));
+    h.Step();
+    ESIA_CHECK(h.b.empty() && !h.rb.changed);
+    h.ctx.QueueInput(InputEvent::Composition("", 0));
+    h.ctx.QueueInput(InputEvent::TextEvent("\xE4\xBD\xA0"));   // U+4F60
+    h.Step();
+    ESIA_CHECK(h.b == "\xE4\xBD\xA0" && h.rb.changed);
 }

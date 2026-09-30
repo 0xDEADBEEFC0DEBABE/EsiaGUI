@@ -140,7 +140,8 @@ add_library(esia_ui STATIC
     ui/containers.cpp
     ui/selection.cpp
     ui/lists.cpp
-    ui/navigation.cpp)
+    ui/navigation.cpp
+    ui/text_field.cpp)
 target_link_libraries(esia_ui PUBLIC esia_render esia_text)
 esia_target_defaults(esia_ui)
 add_library(esia::ui ALIAS esia_ui)
