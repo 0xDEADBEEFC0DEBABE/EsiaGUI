@@ -216,9 +216,11 @@ layout keeps the line's baseline (`LineBaseline()`), `AlignToLineBaseline(baseli
 item's baseline lines up with the items before it on the line (a label after a taller field), and `StackLayout`
 aligns horizontal children on their baselines with `Align::Baseline`.
 
-**Pixel snapping.** Positions produced by the layout (the cursor after an item, `SameLine`, slots) are rounded to
+**Pixel snapping.** Positions produced by the layout (the cursor after an item, `SameLine`, slots) are snapped to
 physical pixels of the window's scale (section 7): at 1.25x a 10-unit item followed by 8 units of spacing lands on
-a pixel boundary, so text and hairlines stay crisp. Integer layouts at scale 1 are unchanged.
+a pixel boundary, so text and hairlines stay crisp. They snap down, as Dear ImGui truncated its cursor, so WGT's
+layouts land on the same pixels at fractional scales (a thousandth of a pixel of tolerance keeps a whole pixel
+whole). Integer layouts at scale 1 are unchanged.
 
 ## 7. Windows
 
@@ -520,5 +522,6 @@ After the Win32 platform layer (its core requests, `docs/PLATFORM_WIN32.md` sect
 
 For the widget layer (`esia_ui`, [UI_WIDGETS.md](UI_WIDGETS.md)):
 
-* **Added**: `Context::ViewRect()`, what the innermost child region being submitted shows (else the window's
-  content), unmoved by its own scroll. The tab bar floats at its bottom.
+* **Added**: `Context::ViewRect()`, what the innermost child region being submitted shows (else the window): its
+  rect, padding included, unmoved by its own scroll. The tab bar and the search bar float at its bottom.
+* **Changed**: `Context::Snap` snaps down instead of to the nearest pixel (section 6), as WGT's Dear ImGui did.

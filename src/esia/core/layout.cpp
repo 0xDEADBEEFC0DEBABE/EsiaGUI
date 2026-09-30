@@ -43,9 +43,10 @@ namespace esia
 
     float Context::Snap(float v) const
     {
-        // layout positions land on physical pixels: text and hairlines stay crisp at fractional scales
+        // layout positions land on physical pixels: text and hairlines stay crisp at fractional scales. Down, as
+        // Dear ImGui truncates its cursor (WGT's layouts, pixel for pixel); the epsilon keeps a whole pixel whole
         const float s = Scale();
-        return s > 0.0f ? std::round(v * s) / s : v;
+        return s > 0.0f ? std::floor(v * s + 1e-3f) / s : v;
     }
 
     void Context::InitRootFrame(Window& w)
@@ -199,8 +200,8 @@ namespace esia
             return Rect();
         for (auto it = w->frames_.rbegin(); it != w->frames_.rend(); ++it)
             if (it->childIndex >= 0)
-                return Rect(it->origin + it->padding, it->origin + it->fixedSize - it->padding);
-        return w->ContentRect();
+                return Rect(it->origin, it->origin + it->fixedSize);
+        return w->GetRect();
     }
 
     float Context::LineBaseline() const { return CurFrame().lineBaseline; }

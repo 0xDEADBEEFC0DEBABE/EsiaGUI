@@ -409,8 +409,8 @@ namespace esia
         void Unindent(float width = 0.0f);
         Vec2 ContentRegionAvail() const;
         Rect WorkRect() const;
-        // What the innermost child region being submitted shows (else the window's content): its content rect where
-        // it is, not moved by its own scroll. Bars that float over an area (tab bars, search bars) are placed in it.
+        // What the innermost child region being submitted shows (else the window): its rect where it is, padding
+        // included, not moved by its own scroll. Bars that float over an area (tab bars, search bars) are placed in it.
         Rect ViewRect() const;
         int CurrentDepth() const;
         // The current line's baseline from its top (< 0 = none) and moving the cursor down so an item with
