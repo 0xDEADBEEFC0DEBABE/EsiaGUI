@@ -44,6 +44,134 @@ namespace esia::ui
             Painter p = GetPainter();
             p.EndEdgeFade();
         }
+
+        namespace
+        {
+            struct ScrollState
+            {
+                bool dragging = false;       // drag-to-scroll
+                float startMouse = 0.0f, startScroll = 0.0f, lastMouse = 0.0f, velocity = 0.0f;
+                bool follow = false;         // this frame's offset is followY (a drag of the content or the indicator)
+                float followY = 0.0f;
+                bool indicatorDrag = false;
+                float indicatorGrab = 0.0f;
+                float lastScroll = 0.0f;
+                double lastActivity = -10.0;
+            };
+
+            float IndicatorLane() { return Sc(12); }
+        }
+
+        void ScrollBegin(Id child)
+        {
+            ScrollState& s = Ctx().State<ScrollState>(Salt(child, 0x5C));
+            if (s.follow)
+                Ctx().SetNextScroll(Vec2(-1.0f, s.followY));   // no glide: the content stays under the pointer
+        }
+
+        float WindowLane(const Rect& view)
+        {
+            const Ui::Impl& m = M();
+            for (auto it = m.containers.rbegin(); it != m.containers.rend(); ++it)
+                if (it->kind == Ui::Impl::ContainerEntry::Kind::Window)
+                    return std::fabs(view.max.x - it->view.max.x) < 1.0f && it->padX >= IndicatorLane() - 0.5f ? it->view.max.x + it->padX * 0.5f : -1.0f;
+            return -1.0f;
+        }
+
+        void ScrollEnd(Id child, float laneX)
+        {
+            Ui::Impl& m = M();
+            Context& c = *m.ctx;
+            const InputState& in = c.Input();
+            ScrollState& s = c.State<ScrollState>(Salt(child, 0x5C));
+            const Rect view = c.ViewRect();
+            const float scroll = c.Scroll().y, max = std::max(c.ScrollMax().y, 0.0f);
+            if (std::fabs(scroll - s.lastScroll) > 0.5f)
+                s.lastActivity = m.time;   // the wheel, a glide: the indicator shows
+            s.lastScroll = scroll;
+            s.follow = false;
+
+            // the indicator (auto-hiding, wider under the mouse, draggable) in its lane, over the content without one;
+            // submitted before a drag of the content is decided, so a press on it is its own
+            const Theme& t = T();
+            const float lane = IndicatorLane();
+            const float x = laneX >= 0.0f ? laneX : view.max.x - lane * 0.5f;
+            const float trackPad = Sc(6);
+            const float trackH = std::max(view.Height() - trackPad * 2.0f, 1.0f);
+            const float thumbH = std::min(std::max(Sc(36), trackH * view.Height() / (view.Height() + max)), trackH);
+            const float thumbY = view.min.y + trackPad + (trackH - thumbH) * (max > 0.0f ? Saturate(scroll / max) : 0.0f);
+            const Rect hit(x - lane * 0.5f, view.min.y, x + lane * 0.5f, view.max.y);
+            const bool scrolls = max > 0.5f;
+            Interaction it;
+            c.PushClipRect(hit, false);   // the lane may lie in a parent's padding
+            if (scrolls)
+                it = InteractImpl(Salt(child, 0x1D1), Rect(hit.min.x, thumbY, hit.max.x, thumbY + thumbH), InteractFlags_PressOnClick);
+            if (it.pressed)
+            {
+                s.indicatorDrag = true;
+                s.indicatorGrab = in.MousePos().y - thumbY;
+            }
+            if (s.indicatorDrag)
+            {
+                if (it.held)
+                {
+                    s.follow = true;
+                    s.followY = max * Saturate((in.MousePos().y - s.indicatorGrab - view.min.y - trackPad) / std::max(trackH - thumbH, 1.0f));
+                    s.lastActivity = m.time;
+                }
+                else
+                    s.indicatorDrag = false;
+            }
+
+            // drag-to-scroll: pressed on the area's empty space, the content follows the pointer; let go, it glides on
+            const Id dragId = Salt(child, 0xD2A6);
+            if (!s.dragging && scrolls && in.MouseClicked(MouseButton::Left) && c.HoveredChild() == child && c.HoveredId() == 0 && c.ActiveId() == 0)
+            {
+                s.dragging = true;
+                s.startMouse = s.lastMouse = in.MousePos().y;
+                s.startScroll = scroll;
+                s.velocity = 0.0f;
+                c.SetActiveId(dragId);
+            }
+            if (s.dragging)
+            {
+                if (c.ActiveId() == dragId && in.MouseDown(MouseButton::Left))
+                {
+                    c.KeepAliveId(dragId);
+                    const float dy = in.MousePos().y - s.lastMouse;
+                    s.lastMouse = in.MousePos().y;
+                    s.velocity = Lerp(s.velocity, -dy / std::max(m.dt, 1e-3f), 0.35f);
+                    s.follow = true;
+                    s.followY = Clamp(s.startScroll - (in.MousePos().y - s.startMouse), 0.0f, max);
+                    s.lastActivity = m.time;
+                }
+                else
+                {
+                    s.dragging = false;
+                    if (c.ActiveId() == dragId)
+                        c.ClearActiveId();
+                    c.SetScrollY(Clamp(scroll + s.velocity * 0.28f, 0.0f, max));   // momentum: the smooth scroll glides there
+                }
+            }
+
+            if (scrolls)
+            {
+                if (in.MouseValid() && hit.Contains(in.MousePos()) && c.HoveredWindow() == c.CurrentWindow())
+                    s.lastActivity = std::max(s.lastActivity, m.time - 0.5);
+                const bool shown = (m.time - s.lastActivity) < 0.9 || it.held;
+                if (shown)
+                    m.animating = true;   // a frame when it is time to hide
+                const float show = ui::Anim(Salt(child, 0x1D2), shown ? 1.0f : 0.0f, shown ? SpringFast() : t.motion.gentle);
+                const float wide = ui::Anim(Salt(child, 0x1D3), (it.hovered || it.held) ? 1.0f : 0.0f, SpringFast());
+                if (show > 0.01f)
+                {
+                    const float w = Sc(t.metrics.scrollIndicator) + Sc(3) * wide;
+                    Painter p = GetPainter();
+                    p.Capsule(Rect(x - w * 0.5f, thumbY, x + w * 0.5f, thumbY + thumbH), Style().Fill(C().label.Fade((0.28f + 0.2f * wide) * show)));
+                }
+            }
+            c.PopClipRect();
+        }
     }
 
     // ================================================================ cards
@@ -122,9 +250,11 @@ namespace esia::ui
         co.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
         if (size.x <= 0.0f)
             MarkFill();
-        c.BeginChild(id, co);
         Entry e;
         e.kind = Entry::Kind::Scroll;
+        e.child = c.GetId(id);
+        ScrollBegin(e.child);
+        c.BeginChild(id, co);
         e.edgeFade = BeginScrollEdgeFade();
         m.containers.push_back(e);
         return true;
@@ -134,6 +264,7 @@ namespace esia::ui
     {
         const Entry e = PopEntry(Entry::Kind::Scroll);
         EndScrollEdgeFade(e.edgeFade);
+        ScrollEnd(e.child, WindowLane(Ctx().ViewRect()));
         Ctx().EndChild();
     }
 
@@ -309,7 +440,12 @@ namespace esia::ui
         // the clip is measured from the content rect (inside the padding): out to half the padding at the sides, to
         // the header (or the corner cut) at the top and to the corner cut at the bottom
         co.clipInset = Rect(-(padX - side), headerH > cut ? -padY : cut - padY, -(padX - side), cut - padY);
+        e.child = c.GetId("##content");
+        if (!(o.flags & WindowFlags_NoScroll))
+            ScrollBegin(e.child);
         c.BeginChild("##content", co);
+        e.view = c.ViewRect();
+        e.padX = padX;
         e.edgeFade = !(o.flags & WindowFlags_NoScroll) && BeginScrollEdgeFade();
         m.containers.push_back(e);
 
@@ -328,6 +464,8 @@ namespace esia::ui
         // breathing room at the bottom, so the last row never sticks to the rounded edge (and clears the corner clip)
         c.ItemSize(Vec2(0, std::max(Sc(T().metrics.padding), e.cornerCut)));
         EndScrollEdgeFade(e.edgeFade);
+        if (!(e.windowFlags & WindowFlags_NoScroll))
+            ScrollEnd(e.child, e.padX >= Sc(12) - 0.5f ? e.view.max.x + e.padX * 0.5f : -1.0f);
         c.EndChild();
 
         // resize affordance at the bottom-right corner, shown while the mouse is near it

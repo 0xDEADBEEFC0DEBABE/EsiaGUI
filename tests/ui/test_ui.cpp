@@ -656,3 +656,58 @@ ESIA_TEST(UiPopups, TooltipAfterAShortHover)
     frame(0.1);
     ESIA_CHECK(lists() == alone);   // back over it: it waits again
 }
+
+ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
+{
+    UiHarness h;
+    float scroll = 0.0f, max = 0.0f;
+    auto frame = [&] {
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 200});
+            ui::Spacer(1000);   // content without items: empty space to drag
+            scroll = h.ctx.Scroll().y;
+            max = h.ctx.ScrollMax().y;
+            ui::EndScrollArea();
+        });
+    };
+    frame();
+    frame();
+    ESIA_CHECK(max > 700.0f);
+
+    // drag the content up by 100: it follows the pointer
+    h.ctx.QueueInput(InputEvent::MouseMove({300, 150}));
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+    frame();
+    for (int i = 1; i <= 10; ++i)
+    {
+        h.ctx.QueueInput(InputEvent::MouseMove({300, 150 - 10.0f * (float)i}));
+        frame();
+    }
+    frame();
+    ESIA_CHECK(std::fabs(scroll - 100.0f) < 1.0f);
+    // let go: it glides on
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+    for (int i = 0; i < 60; ++i)
+        frame();
+    ESIA_CHECK(scroll > 110.0f && scroll <= max);
+
+    // the indicator: at the right edge (no window padding to be its lane here), 6 in from the ends of the view;
+    // dragged to the bottom, the content goes to its end
+    const float trackH = 200.0f - 12.0f;
+    const float thumbH = std::max(36.0f, trackH * 200.0f / (200.0f + max));
+    const float thumbMid = 6.0f + (trackH - thumbH) * scroll / max + thumbH * 0.5f;
+    h.ctx.QueueInput(InputEvent::MouseMove({594, thumbMid}));
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+    frame();
+    for (float y = thumbMid; y < 199.0f; y += 20.0f)
+    {
+        h.ctx.QueueInput(InputEvent::MouseMove({594, std::min(y + 20.0f, 199.0f)}));
+        frame();
+    }
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+    frame();
+    ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
+}

@@ -172,8 +172,10 @@ namespace esia::ui
         sco.size = Vec2(W, std::max(1.0f, H - barH));
         sco.padding = Vec2(0.0f, Sc(4));
         sco.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
-        c.BeginChild("##page", sco);
         Ui::Impl::PageEntry pe;
+        pe.child = c.GetId("##page");
+        ScrollBegin(pe.child);
+        c.BeginChild("##page", sco);
         pe.clipped = below;
         pe.edgeFade = BeginScrollEdgeFade();
         if (below)
@@ -198,6 +200,7 @@ namespace esia::ui
         Context& c = *m.ctx;
         c.ItemSize(Vec2(0.0f, Sc(12)));
         EndScrollEdgeFade(pe.edgeFade);
+        ScrollEnd(pe.child, WindowLane(c.ViewRect()));
         c.EndChild();   // the scrolling content
         if (pe.clipped && pe.shadowAlpha > 0.0f)
         {

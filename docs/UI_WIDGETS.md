@@ -194,6 +194,15 @@ ui::SearchField("search", &query);                        // a field with the se
     measuring frame.
   * With `size.x == 0` it fills the available width.
 * **`BeginScrollArea(id, size)`** is a child region with the core's smooth scrolling and an edge fade.
+* **Scrolling** is the same in a window's body, a scroll area and a navigation page:
+  * the wheel and the core's scroll calls glide (`ChildFlags_SmoothScroll`);
+  * pressed on empty space, the content follows the pointer, and let go it glides on with the drag's speed (no
+    rubber band past the ends: the core keeps the offset in range - WGT's rubber band did nothing either);
+  * the indicator shows while the content moves and for 0.9 s after, and when the mouse comes near. It widens under
+    the mouse and can be dragged. It runs in a lane in the window's right padding (also for a page or scroll area
+    flush with the window's content), else over the content at the right edge;
+  * a drag on empty space scrolls instead of moving the window; the header, and content that cannot scroll, still
+    move it (the core moves a window only when no widget took the click).
 
 ## 6. Lists: sections and rows
 
@@ -353,6 +362,7 @@ Ported, in the order the parts depend on each other:
 * navigation, the tab bar and the search bar (WGT's `navigation.cpp`);
 * the text field (WGT's `text_edit.cpp`);
 * menus, the picker and `RowPicker`, tooltips (WGT's glass popups);
+* drag-to-scroll and the scroll indicator (WGT's `ScrollAreaEnd`);
 * stacks, adaptive stacks, grids and flows.
 
 Two WGT bugs were fixed on the way:
@@ -364,7 +374,7 @@ Two WGT bugs were fixed on the way:
 
 Not ported yet, in the planned order:
 
-1. the scroll indicator and drag-to-scroll, the glow halo;
+1. the glow halo;
 2. the island, the dock, notifications;
 3. LineChart;
 4. WGT's demo screens: Settings, Components, Effects, Control Center, Languages, Telemetry.
@@ -389,6 +399,8 @@ Each is checked against WGT's screenshots (branch `reference/wgt-1.1`).
   not written, its committed text written;
 * popups: a picker's menu opens and takes a choice; the click that closes a menu does not reach the widget under
   it; a menu item closes its menu; a tooltip waits half a second, goes when the mouse leaves and waits again;
+* scrolling: the content follows a drag and glides on after it; the indicator dragged to the bottom takes the
+  content to its end;
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.

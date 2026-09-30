@@ -61,6 +61,9 @@ namespace esia::ui
             std::uint32_t windowFlags = 0;
             float cornerCut = 0.0f;
             bool edgeFade = false;
+            Id child = 0;                   // window / scroll area: its scrolling child region
+            Rect view;                      // window: what its content region shows
+            float padX = 0.0f;              // window: the content's side padding (the scroll indicator's lane)
         };
         std::vector<ContainerEntry> containers;
         int windowCascade = 0;
@@ -89,6 +92,7 @@ namespace esia::ui
         struct PageEntry
         {
             bool clipped = false;          // the page below during a transition: clipped to the top page's edge
+            Id child = 0;                  // its scrolling content
             bool edgeFade = false;
             Rect edgeShadow;               // the top page's shadow on it
             float shadowAlpha = 0.0f;
@@ -202,6 +206,14 @@ namespace esia::ui
         // Content dissolves toward an edge it can still scroll past (the innermost scroll area being submitted).
         bool BeginScrollEdgeFade();
         void EndScrollEdgeFade(bool started);
+        // WGT's ScrollAreaBegin / End on the core's scrolling: ScrollBegin before the area's BeginChild (a drag in
+        // progress sets the offset), ScrollEnd inside it before EndChild, after its edge fade: drag-to-scroll on empty
+        // space with momentum, and the auto-hiding, draggable indicator in the lane at `laneX` (< 0: over the content
+        // at the right edge). `child`: the id BeginChild gave the area.
+        void ScrollBegin(Id child);
+        void ScrollEnd(Id child, float laneX);
+        // The lane of a scroll area flush with the right of the innermost window's content: in its padding (else -1).
+        float WindowLane(const Rect& view);
 
         // ---- layout
         // In an auto-layout container, true while the item being submitted is one of its direct children.
