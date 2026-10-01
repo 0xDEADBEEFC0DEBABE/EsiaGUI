@@ -1,0 +1,989 @@
+// Esia - renderer (see esia/render/renderer.hpp): executes a FramePlan through an rhi::Device.
+// The capture, pyramid and glow-layer logic is the one of WGT's src/backends/d3d11_backend.cpp, on the RHI.
+#include "esia/render/renderer.hpp"
+#include "gpu_constants.hpp"
+#include <algorithm>
+#include <bit>
+#include <cstring>
+#include <unordered_map>
+
+namespace esia::render
+{
+    namespace
+    {
+        // Scissor of a pixel rect: the ImGui / WGT convention (truncate both edges, clamp to the target).
+        rhi::IRect ToScissor(const PxRect& r, int w, int h)
+        {
+            rhi::IRect s;
+            s.x0 = (int)std::max(0.0f, r.x0);
+            s.y0 = (int)std::max(0.0f, r.y0);
+            s.x1 = (int)std::min((float)w, r.x1);
+            s.y1 = (int)std::min((float)h, r.y1);
+            s.x1 = std::max(s.x1, s.x0);
+            s.y1 = std::max(s.y1, s.y0);
+            return s;
+        }
+
+        rhi::Format FormatOf(TextureFormat f) { return f == TextureFormat::Alpha8 ? rhi::Format::R8_UNORM : rhi::Format::RGBA8_UNORM; }
+
+        enum Run { RunNone = -1, RunCapture = (int)rhi::ProfileCategory::Capture, RunLayer = (int)rhi::ProfileCategory::Layer,
+                   RunFx = (int)rhi::ProfileCategory::Fx, RunFxGlass = (int)rhi::ProfileCategory::FxGlass,
+                   RunGeometry = (int)rhi::ProfileCategory::Geometry };
+
+        struct DeviceTexture
+        {
+            rhi::Texture tex;
+            TextureInfo info;
+        };
+
+        struct PipelineKey
+        {
+            rhi::ShaderProgram program;
+            rhi::BlendMode blend;
+            rhi::Format format;
+            int samples;
+            EffectId effect;
+            std::uint32_t features;   // FX shader variant (Caps::fxFeatureVariants), 0 = every feature
+            bool operator==(const PipelineKey&) const = default;
+        };
+
+        struct PipelineKeyHash
+        {
+            std::size_t operator()(const PipelineKey& k) const
+            {
+                const std::uint64_t a = (std::uint64_t)k.program | ((std::uint64_t)k.blend << 8) | ((std::uint64_t)k.format << 16) |
+                                        ((std::uint64_t)(k.samples & 0xFF) << 24) | ((std::uint64_t)k.effect << 32);
+                return std::hash<std::uint64_t>()(a ^ ((std::uint64_t)k.features * 0x9E3779B97F4A7C15ull));
+            }
+        };
+    }
+
+    struct Renderer::Impl
+    {
+        explicit Impl(rhi::Device& d) : dev(d), caps(d.GetCaps()) {}
+
+        rhi::Device& dev;
+        const rhi::Caps caps;
+        FramePlan plan;
+        RenderStats stats;
+
+        std::unordered_map<TextureId, DeviceTexture> textures;
+        std::vector<TextureChange> changes;
+        std::unordered_map<PipelineKey, rhi::Pipeline, PipelineKeyHash> pipelines;
+        struct Effect
+        {
+            std::string name, source;
+        };
+        std::unordered_map<EffectId, Effect> effects;
+        std::unordered_map<EffectId, std::uint64_t> effectTried;   // frame of the last pipeline attempt
+        std::vector<EffectId> prewarm;                             // effects to start compiling at the next frame
+        std::vector<EffectId> warmUp;                              // prewarmed effects not drawn yet (WarmUp)
+        std::uint64_t frame = 0;
+
+        rhi::Texture white;
+        rhi::Buffer vb, ib, fxBuf;
+        std::size_t vbCap = 0, ibCap = 0, fxCap = 0;
+        rhi::Texture fxTex;
+        int fxTexW = 0, fxTexH = 0, fxPerRow = 1;
+        std::vector<float> staging;
+
+        // size-dependent surfaces
+        rhi::Texture copy, levels[kBackdropLevels], layer;
+        int surfW = 0, surfH = 0;
+        rhi::Format surfFormat = rhi::Format::Unknown;
+        // whether all of a pyramid level holds defined values: not when new, nor after a DontCare pass (a tiler
+        // stores garbage where the pass did not write)
+        bool levelDefined[kBackdropLevels] = {};
+
+        // this frame
+        rhi::Texture target;
+        rhi::TextureDesc targetDesc;
+        int W = 0, H = 0;
+        FrameConstants frameMain{}, frameLayer{};
+        int layerDepth = 0;
+        bool layerPending = false;      // the open layer has not been cleared yet (its pass did not start)
+        PxRect layerRegion;             // ... and the region to clear then
+        fx::LayerParams activeLayer{};
+        int captures = 0, budget = 64;
+        // where glass gets this target's backdrop: a copy (CopySrc), a direct read (Sampled), or nowhere
+        bool canCopy = false, canRead = false, backdrop = false;
+        // the pyramid passes keep what the levels hold outside the region they write (section "keepLevels" below)
+        bool keepLevels = false;
+        int run = RunNone;
+        bool profile = true;
+        int profileScopes = 0, maxProfileScopes = 32;
+
+        // what the current pass has bound (every pass starts empty, rhi.hpp)
+        rhi::Texture passTarget;
+        rhi::Format passFormat = rhi::Format::Unknown;
+        int passSamples = 1;
+        const FrameConstants* passFrame = nullptr;
+        bool inPass = false, frameSet = false, geometryBound = false, fxDataBound = false;
+        rhi::Pipeline boundPipeline;
+        rhi::Texture boundTex[rhi::kTextureSlots];
+        rhi::IRect boundScissor;
+        bool scissorSet = false;
+        DrawConstants boundDraw{};
+        bool drawSet = false;
+
+        // ------------------------------------------------------------ resources
+        void Release(rhi::Texture& t)
+        {
+            if (t)
+                dev.DestroyTexture(t);
+            t = {};
+        }
+
+        void ReleaseSurfaces()
+        {
+            Release(copy);
+            for (rhi::Texture& l : levels)
+                Release(l);
+            for (bool& d : levelDefined)
+                d = false;
+            Release(layer);
+            surfW = surfH = 0;
+            surfFormat = rhi::Format::Unknown;
+        }
+
+        void ReleaseAll()
+        {
+            ReleaseSurfaces();
+            for (auto& [id, t] : textures)
+                Release(t.tex);
+            textures.clear();
+            Release(white);
+            Release(fxTex);
+            for (rhi::Buffer* b : {&vb, &ib, &fxBuf})
+                if (*b)
+                {
+                    dev.DestroyBuffer(*b);
+                    *b = {};
+                }
+            for (auto& [key, p] : pipelines)
+                if (p)
+                    dev.DestroyPipeline(p);
+            pipelines.clear();
+        }
+
+        rhi::Format LayerFormat() const { return caps.floatRenderTargets ? rhi::Format::RGBA16_FLOAT : rhi::Format::RGBA8_UNORM; }
+
+        rhi::Texture MakeTexture(int w, int h, rhi::Format f, std::uint32_t usage, const char* name, const void* data = nullptr)
+        {
+            rhi::TextureDesc d;
+            d.width = w;
+            d.height = h;
+            d.format = f;
+            d.usage = usage;
+            d.debugName = name;
+            return dev.CreateTexture(d, data, 0);
+        }
+
+        // The backdrop copy (glass on a copyable target) and the pyramid + layer (glass and glow layers), created
+        // before the first pass of the frame that needs them, at the target's size.
+        bool EnsureSurfaces(bool copyNeeded, bool glowLayer)
+        {
+            if (surfW != W || surfH != H || surfFormat != targetDesc.format)
+                ReleaseSurfaces();
+            surfW = W;
+            surfH = H;
+            surfFormat = targetDesc.format;
+            static const char* kLevelNames[kBackdropLevels] = {"", "pyramid-1", "pyramid-2", "pyramid-3", "pyramid-4", "pyramid-5"};
+            bool ok = true;
+            if (copyNeeded && !copy)
+            {
+                // zeroed: glass past the capture budget or a user effect may read where no capture copied yet
+                const rhi::Format f = rhi::RawFormat(targetDesc.format);
+                const std::vector<std::uint8_t> zeros((std::size_t)W * (std::size_t)H * (std::size_t)rhi::BytesPerPixel(f), 0);
+                ok = (bool)(copy = MakeTexture(W, H, f, rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst, "backdrop-copy", zeros.data()));
+            }
+            for (int l = 1; ok && l < kBackdropLevels; ++l)
+                if (!levels[l])
+                {
+                    ok = (bool)(levels[l] = MakeTexture(LevelSize(W, l), LevelSize(H, l), LayerFormat(), rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled,
+                                                        kLevelNames[l]));
+                    levelDefined[l] = false;
+                }
+            if (ok && glowLayer && !layer)
+                ok = (bool)(layer = MakeTexture(W, H, LayerFormat(), rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "glow-layer"));
+            if (!ok)
+                ReleaseSurfaces();
+            return ok;
+        }
+
+        void ApplyTextureChanges(TextureRegistry* registry)
+        {
+            if (!registry)
+                return;
+            registry->TakeChanges(changes);
+            for (TextureChange& c : changes)
+            {
+                switch (c.kind)
+                {
+                case TextureChange::Kind::Create:
+                {
+                    rhi::TextureDesc d;
+                    d.width = c.width;
+                    d.height = c.height;
+                    d.format = FormatOf(c.info.format);
+                    d.usage = rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst;
+                    d.debugName = c.info.format == TextureFormat::Alpha8 ? "glyphs" : "image";
+                    const rhi::Texture t = dev.CreateTexture(d, c.pixels.data(), 0);
+                    if (t)
+                        textures[c.id] = {t, c.info};
+                    break;
+                }
+                case TextureChange::Kind::Update:
+                {
+                    auto it = textures.find(c.id);
+                    if (it != textures.end())
+                        dev.UpdateTexture(it->second.tex, rhi::IRect{c.x, c.y, c.x + c.width, c.y + c.height}, c.pixels.data(), 0);
+                    break;
+                }
+                case TextureChange::Kind::Destroy:
+                {
+                    auto it = textures.find(c.id);
+                    if (it != textures.end())
+                    {
+                        dev.DestroyTexture(it->second.tex);
+                        textures.erase(it);
+                    }
+                    break;
+                }
+                }
+            }
+            changes.clear();
+        }
+
+        bool EnsureBuffer(rhi::Buffer& buf, std::size_t& cap, std::size_t bytes, rhi::BufferKind kind, const char* name)
+        {
+            if (buf && cap >= bytes)
+                return true;
+            if (buf)
+                dev.DestroyBuffer(buf);
+            cap = std::max<std::size_t>(bytes + bytes / 2, 4096);
+            rhi::BufferDesc d;
+            d.kind = kind;
+            d.size = cap;
+            d.debugName = name;
+            buf = dev.CreateBuffer(d);
+            return (bool)buf;
+        }
+
+        // Vertex, index and FX instance data, once per frame before the first pass. Instances go to the GPU with
+        // their integer row (flags) as float values: the shaders read every row as float4 (FxFetch).
+        bool Upload(int maxPerRow)
+        {
+            if (!plan.vertices.empty())
+            {
+                const std::size_t vbytes = plan.vertices.size() * sizeof(Vertex), ibytes = plan.indices.size() * sizeof(std::uint32_t);
+                if (!EnsureBuffer(vb, vbCap, vbytes, rhi::BufferKind::Vertex, "ui-vertices") ||
+                    !EnsureBuffer(ib, ibCap, std::max<std::size_t>(ibytes, 4), rhi::BufferKind::Index, "ui-indices"))
+                    return false;
+                dev.UpdateBuffer(vb, plan.vertices.data(), vbytes);
+                if (ibytes)
+                    dev.UpdateBuffer(ib, plan.indices.data(), ibytes);
+            }
+            const std::size_t n = plan.instances.size();
+            if (n == 0)
+                return true;
+            const bool texture = caps.fxStorage == rhi::FxStorage::Texture;
+            fxPerRow = texture ? std::max(1, caps.maxFxDataWidth / (int)fx::kInstanceVec4Count) : 1;
+            if (texture && maxPerRow > 0)
+                fxPerRow = std::min(fxPerRow, maxPerRow);
+            const std::size_t rows = texture ? (n + (std::size_t)fxPerRow - 1) / (std::size_t)fxPerRow : 1;
+            staging.resize(n * fx::kInstanceVec4Count * 4);
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                float* dst = staging.data() + i * fx::kInstanceVec4Count * 4;
+                std::memcpy(dst, &plan.instances[i], sizeof(fx::Instance));
+                for (int k = 0; k < 4; ++k)
+                    dst[(fx::kInstanceVec4Count - 1) * 4 + (std::size_t)k] = (float)plan.instances[i].flags[k];
+            }
+            if (!texture)
+            {
+                const std::size_t bytes = n * sizeof(fx::Instance);
+                if (!EnsureBuffer(fxBuf, fxCap, bytes, rhi::BufferKind::FxInstances, "fx-instances"))
+                    return false;
+                dev.UpdateBuffer(fxBuf, staging.data(), bytes);
+                return true;
+            }
+            const int w = fxPerRow * (int)fx::kInstanceVec4Count, h = (int)rows;
+            if (!fxTex || fxTexW != w || fxTexH < h)
+            {
+                Release(fxTex);
+                fxTexW = w;
+                fxTexH = std::max(h, fxTexH * 2);
+                fxTexH = std::min(std::max(fxTexH, h), caps.maxTextureSize);
+                if (h > fxTexH)
+                    return false;
+                fxTex = MakeTexture(fxTexW, fxTexH, rhi::Format::RGBA32_FLOAT, rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst, "fx-instances");
+                if (!fxTex)
+                    return false;
+            }
+            // the full rows, then the used part of the last one: the texels past the last instance are never read
+            const int rowPitch = w * (int)sizeof(float) * 4;
+            if (h > 1)
+                dev.UpdateTexture(fxTex, rhi::IRect{0, 0, w, h - 1}, staging.data(), rowPitch);
+            const std::size_t last = n - (std::size_t)(h - 1) * (std::size_t)fxPerRow;
+            dev.UpdateTexture(fxTex, rhi::IRect{0, h - 1, (int)(last * fx::kInstanceVec4Count), h},
+                              staging.data() + (std::size_t)(h - 1) * (std::size_t)fxPerRow * fx::kInstanceVec4Count * 4, rowPitch);
+            return true;
+        }
+
+        void FillFrameConstants(const DrawData& dd, const RenderParams& p)
+        {
+            FrameConstants& fc = frameMain;
+            const float sx = dd.framebufferScale.x, sy = dd.framebufferScale.y;
+            const float L = dd.displayPos.x, T = dd.displayPos.y;
+            // the viewport is the whole target: pixel = (ui - displayPos) * framebufferScale
+            fc.xform[0] = 2.0f * sx / (float)W;
+            fc.xform[1] = -2.0f * sy / (float)H;
+            fc.xform[2] = -1.0f - 2.0f * sx * L / (float)W;
+            fc.xform[3] = 1.0f + 2.0f * sy * T / (float)H;
+            if (caps.clipSpaceYDown)
+            {
+                fc.xform[1] = -fc.xform[1];
+                fc.xform[3] = -fc.xform[3];
+            }
+            fc.target[0] = (float)W;
+            fc.target[1] = (float)H;
+            fc.target[2] = 1.0f / (float)W;
+            fc.target[3] = 1.0f / (float)H;
+            fc.display[0] = L;
+            fc.display[1] = T;
+            fc.display[2] = sx;
+            fc.display[3] = sy;
+            fc.time[0] = (float)std::fmod(dd.time, 3600.0);
+            fc.time[1] = dd.deltaTime;
+            fc.time[2] = backdrop ? 1.0f : 0.0f;
+            fc.time[3] = rhi::IsSrgb(targetDesc.format) ? 1.0f : 0.0f;
+            for (int l = 0; l < kBackdropLevels; ++l)
+            {
+                const int w = LevelSize(W, l), h = LevelSize(H, l);
+                fc.level[l][0] = (float)w;
+                fc.level[l][1] = (float)h;
+                fc.level[l][2] = 1.0f / (float)w;
+                fc.level[l][3] = 1.0f / (float)h;
+            }
+            fc.text[0] = p.text.gamma;
+            fc.text[1] = p.text.grayscaleContrast;
+            fc.text[2] = fc.text[3] = 0.0f;
+            fc.conv[0] = caps.framebufferOriginBottomLeft ? 1.0f : 0.0f;
+            fc.conv[1] = caps.halfPixelOffset ? 0.5f : 0.0f;
+            fc.conv[2] = caps.fxStorage == rhi::FxStorage::Texture ? (float)fxPerRow : 0.0f;
+            fc.conv[3] = 0.0f;
+            frameLayer = fc;
+            frameLayer.time[3] = 0.0f;   // layers are composed in gamma space and converted on composite
+        }
+
+        // ------------------------------------------------------------ passes and bindings
+        void BeginPass(rhi::Texture t, rhi::LoadOp load, const FrameConstants& fc, const char* name)
+        {
+            rhi::PassDesc d;
+            d.target = t;
+            d.load = load;
+            d.debugName = name;
+            dev.BeginPass(d);
+            const rhi::TextureDesc td = dev.GetTextureDesc(t);
+            passTarget = t;
+            passFormat = td.format;
+            passSamples = td.samples;
+            passFrame = &fc;
+            inPass = true;
+            ForgetBindings();
+            ++stats.passes;
+        }
+
+        void EndPass()
+        {
+            if (inPass)
+                dev.EndPass();
+            inPass = false;
+        }
+
+        void ForgetBindings()
+        {
+            frameSet = geometryBound = fxDataBound = scissorSet = drawSet = false;
+            boundPipeline = {};
+            for (rhi::Texture& t : boundTex)
+                t = {};
+        }
+
+        // Passes start lazily, at the first draw that needs them: a capture or a layer ends the current pass, and
+        // nothing is loaded and stored again until something is drawn (an empty pass costs a full-target load and
+        // store on tile-based GPUs). Content goes to the open glow layer or to the target.
+        void EnsureContentPass()
+        {
+            const bool toLayer = layerDepth > 0 && layer;
+            const rhi::Texture want = toLayer ? layer : target;
+            if (inPass && passTarget == want)
+                return;
+            EndPass();
+            if (toLayer && layerPending)
+            {
+                // a new layer: nothing outside the region is ever read, so nothing is loaded; the region is cleared
+                BeginPass(layer, rhi::LoadOp::DontCare, frameLayer, "glow-layer");
+                if (BindPipeline(GetPipeline(rhi::ShaderProgram::Clear, rhi::BlendMode::Opaque)) && SetScissor(layerRegion))
+                {
+                    EnsureFrame();
+                    dev.Draw(3, 0);
+                    ++stats.drawCalls;
+                }
+                layerPending = false;
+            }
+            else if (toLayer)
+                BeginPass(layer, rhi::LoadOp::Load, frameLayer, "glow-layer");
+            else
+                BeginPass(target, rhi::LoadOp::Load, frameMain, "ui");
+        }
+
+        void EnsureFrame()
+        {
+            if (!frameSet)
+            {
+                dev.SetConstants(rhi::ConstantSlot::Frame, passFrame, sizeof(FrameConstants));
+                frameSet = true;
+            }
+        }
+
+        rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0, std::uint32_t features = 0,
+                                  bool background = false)
+        {
+            const PipelineKey key{program, blend, passFormat, passSamples, effect, features};
+            auto it = pipelines.find(key);
+            if (it != pipelines.end() && (it->second || effect == 0))
+                return it->second;   // built-in programs are asked once; a refusal is final
+            if (effect != 0)
+            {
+                // an effect compiling in the background (or failed): ask again on a later frame, not on every draw
+                auto tried = effectTried.find(effect);
+                if (tried != effectTried.end() && tried->second == frame)
+                    return {};
+                effectTried[effect] = frame;
+            }
+            rhi::PipelineDesc d;
+            d.program = program;
+            const bool ui = program == rhi::ShaderProgram::UiGeometry || program == rhi::ShaderProgram::TextGray;
+            d.layout = ui ? rhi::VertexLayout::UiVertex : rhi::VertexLayout::None;
+            d.topology = program == rhi::ShaderProgram::Fx ? rhi::Topology::TriangleStrip : rhi::Topology::TriangleList;
+            d.blend = blend;
+            d.targetFormat = passFormat;
+            d.samples = passSamples;
+            d.fxFeatures = features;
+            d.background = background;
+            if (effect != 0)
+            {
+                auto e = effects.find(effect);
+                if (e == effects.end())
+                    return {};
+                d.effect = effect;
+                d.effectSource = e->second.source.c_str();
+            }
+            const rhi::Pipeline p = dev.CreatePipeline(d);
+            pipelines[key] = p;
+            return p;
+        }
+
+        // An FX batch's pipeline: its feature variant (Caps::fxFeatureVariants) when it is ready. While the variant
+        // compiles in the background (Caps::asyncPipelines) a ready variant that covers the batch's features stands
+        // in - the smallest one - else the full shader; a refused or failed variant falls back to the full shader.
+        // The full shader is only asked for when it is needed: on SM3 it is the slowest compile of all.
+        rhi::Pipeline FxPipeline(std::uint32_t features)
+        {
+            if (features == 0)
+                return GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+            const rhi::Pipeline variant = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, 0, features, caps.asyncPipelines);
+            const rhi::PipelineStatus status = variant ? dev.GetPipelineStatus(variant) : rhi::PipelineStatus::Failed;
+            if (status == rhi::PipelineStatus::Ready)
+                return variant;
+            if (status == rhi::PipelineStatus::Failed)
+            {
+                ++stats.fxFallbacks;
+                return GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+            }
+            ++stats.fxPendingVariants;
+            rhi::Pipeline best;
+            int bestBits = 33;
+            for (const auto& [k, p] : pipelines)
+            {
+                if (k.program != rhi::ShaderProgram::Fx || k.effect != 0 || k.blend != rhi::BlendMode::Premultiplied || k.format != passFormat ||
+                    k.samples != passSamples || k.features == 0 || (k.features & features) != features || std::popcount(k.features) >= bestBits || !p ||
+                    dev.GetPipelineStatus(p) != rhi::PipelineStatus::Ready)
+                    continue;
+                best = p;
+                bestBits = std::popcount(k.features);
+            }
+            return best ? best : GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied);
+        }
+
+        bool BindPipeline(rhi::Pipeline p)
+        {
+            if (!p)
+                return false;
+            if (!(p == boundPipeline))
+            {
+                dev.SetPipeline(p);
+                boundPipeline = p;
+            }
+            return true;
+        }
+
+        void BindTexture(int slot, rhi::Texture t)
+        {
+            if (!(boundTex[slot] == t))
+            {
+                dev.SetTexture(slot, t);
+                boundTex[slot] = t;
+            }
+        }
+
+        rhi::Texture TextureOf(TextureId id) const
+        {
+            auto it = textures.find(id);
+            return it != textures.end() ? it->second.tex : white;
+        }
+
+        // t1..t6: the backdrop pyramid (white while there is none: every declared texture must be bound). A target
+        // that cannot be copied has no full-resolution level: level 1 stands in for it (blurrier, but valid).
+        void BindBackdrop()
+        {
+            const bool substitute = backdrop && !canCopy && levels[1];
+            BindTexture(rhi::kSlotBackdrop0, copy ? copy : (substitute ? levels[1] : white));
+            for (int l = 1; l < kBackdropLevels; ++l)
+                BindTexture(rhi::kSlotBackdrop0 + l, levels[l] ? levels[l] : white);
+        }
+
+        bool SetScissor(const PxRect& r)
+        {
+            const rhi::IRect s = ToScissor(r, W, H);
+            if (s.Empty())
+                return false;
+            if (!scissorSet || !(s == boundScissor))
+            {
+                dev.SetScissor(s);
+                boundScissor = s;
+                scissorSet = true;
+            }
+            return true;
+        }
+
+        void BindDraw(const float fade[4], std::uint32_t firstInstance)
+        {
+            DrawConstants dc{};
+            std::memcpy(dc.fade, fade, sizeof(dc.fade));
+            dc.info[0] = (float)firstInstance;
+            if (!drawSet || std::memcmp(&dc, &boundDraw, sizeof(dc)) != 0)
+            {
+                dev.SetConstants(rhi::ConstantSlot::Draw, &dc, sizeof(dc));
+                boundDraw = dc;
+                drawSet = true;
+            }
+        }
+
+        // Timestamps around runs of one category (non-nesting). They stop after maxProfileScopes runs: two queries
+        // per switch between geometry and FX add up to hundreds in a busy frame.
+        void ProfileRun(int kind)
+        {
+            if (!caps.timestampQueries || !profile || kind == run)
+                return;
+            if (run != RunNone)
+                dev.EndProfile();
+            run = RunNone;
+            if (kind != RunNone && profileScopes < maxProfileScopes)
+            {
+                dev.BeginProfile((rhi::ProfileCategory)kind);
+                ++profileScopes;
+                run = kind;
+            }
+        }
+
+        // ------------------------------------------------------------ post passes
+        // Downsamples `source` (full resolution) into pyramid levels 1..levels inside `region` (pixels).
+        //
+        // keepLevels: a pass only writes its region and every read is clamped to the region refreshed last, so the
+        // levels normally start DontCare (tilers need not load them). But glass past the capture budget reuses the
+        // last capture, and a user effect may sample the backdrop outside its margin: both read what a level holds
+        // outside the region written this frame, which DontCare leaves undefined (garbage, NaN in RGBA16F). In such
+        // frames the passes load, and a level whose content is undefined is cleared instead.
+        void BuildPyramid(rhi::Texture source, const PxRect& region, int count)
+        {
+            PyramidStep step = PyramidStep::First(region, W, H);
+            rhi::Texture src = source;
+            int srcW = W, srcH = H;
+            for (int l = 1; l <= std::min(count, kBackdropLevels - 1); ++l)
+            {
+                const int dw = LevelSize(W, l), dh = LevelSize(H, l);
+                const PxRect written = step.Next(region, l, dw, dh);
+                if (written.Empty())
+                    break;
+                const rhi::LoadOp load = !keepLevels ? rhi::LoadOp::DontCare : levelDefined[l] ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
+                BeginPass(levels[l], load, frameMain, "pyramid");
+                levelDefined[l] = keepLevels;
+                if (!BindPipeline(GetPipeline(rhi::ShaderProgram::Downsample, rhi::BlendMode::Opaque)))
+                {
+                    EndPass();   // no downsample program: the levels keep what they had
+                    break;
+                }
+                EnsureFrame();
+                dev.SetScissor(rhi::IRect{(int)written.x0, (int)written.y0, (int)written.x1, (int)written.y1});
+                const PassConstants pc = step.Constants(srcW, srcH);
+                dev.SetConstants(rhi::ConstantSlot::Pass, &pc, sizeof(pc));
+                BindTexture(rhi::kSlotTexture, src);
+                dev.Draw(3, 0);
+                ++stats.drawCalls;
+                EndPass();
+                step.valid = written;
+                src = levels[l];
+                srcW = dw;
+                srcH = dh;
+            }
+        }
+
+        // `level0`: the part of the capture that glass reads at full resolution (clear glass, user effects), empty
+        // when every batch it serves is frosted.
+        void CaptureBackdrop(const PxRect& wanted, int count, const PxRect& level0)
+        {
+            const PxRect region = AlignCaptureRegion(wanted, W, H);
+            if (region.Empty())
+                return;
+            ProfileRun(RunCapture);
+            EndPass();
+            // A target that can be read builds the pyramid straight from itself - the same values as from a copy,
+            // without the copy's bandwidth - and only level 0 is copied, only where glass reads it: a frosted window
+            // with one clear control copies the control's region, not the window's. A target that cannot be copied
+            // is read directly always; level 1 then stands in for level 0 (BindBackdrop), so it is always built. One
+            // that cannot be read (multisampled, not sampleable) is copied whole and the pyramid built from the copy.
+            if (canRead)
+            {
+                const PxRect want0 = level0.Intersect(region);
+                const PxRect r0 = canCopy && !want0.Empty() ? AlignCopyRegion(want0, W, H) : PxRect{};
+                if (!r0.Empty())
+                    dev.CopyTexture(copy, (int)r0.x0, (int)r0.y0, target, rhi::IRect{(int)r0.x0, (int)r0.y0, (int)r0.x1, (int)r0.y1});
+                else
+                    ++stats.directCaptures;
+                BuildPyramid(target, region, canCopy ? count : std::max(count, 1));
+            }
+            else
+            {
+                dev.CopyTexture(copy, (int)region.x0, (int)region.y0, target, rhi::IRect{(int)region.x0, (int)region.y0, (int)region.x1, (int)region.y1});
+                BuildPyramid(copy, region, count);
+            }
+        }
+
+        void BeginLayer(const RenderOp& op)
+        {
+            if (layerDepth++ > 0 || !layer)
+                return;   // nested layers draw into the outer one; without a layer the content draws unbloomed
+            ProfileRun(RunNone);
+            // the layer pass starts with its first draw; only the region the layer is sampled in gets cleared (the
+            // pyramid clamps to it)
+            layerPending = true;
+            layerRegion = AlignCaptureRegion(op.bounds, W, H);
+            activeLayer = op.layer;
+        }
+
+        void EndLayer(const RenderOp& op)
+        {
+            if (layerDepth == 0)
+                return;
+            if (--layerDepth > 0 || !layer)
+                return;
+            if (layerPending)
+            {
+                layerPending = false;   // nothing was drawn into it: nothing to bloom
+                return;
+            }
+            ProfileRun(RunLayer);
+            EndPass();
+            const PxRect region = AlignCaptureRegion(op.bounds, W, H);
+            BuildPyramid(layer, region, LevelsForBloom(op.blurPx));
+            EnsureContentPass();
+            if (BindPipeline(GetPipeline(rhi::ShaderProgram::LayerComposite, rhi::BlendMode::Premultiplied)) && SetScissor(op.bounds))
+            {
+                EnsureFrame();
+                const PassConstants pc = {{activeLayer.color[0], activeLayer.color[1], activeLayer.color[2], activeLayer.color[3]},
+                                          {activeLayer.intensity, activeLayer.radius, activeLayer.opacity, 0.0f}};
+                dev.SetConstants(rhi::ConstantSlot::Pass, &pc, sizeof(pc));
+                BindTexture(rhi::kSlotTexture, layer);
+                BindBackdrop();
+                dev.Draw(3, 0);
+                ++stats.drawCalls;
+                ++stats.glowLayers;
+            }
+        }
+
+        // ------------------------------------------------------------ ops
+        void DrawGeometry(const RenderOp& op)
+        {
+            ProfileRun(RunGeometry);
+            const rhi::ShaderProgram program = op.coverage ? rhi::ShaderProgram::TextGray : rhi::ShaderProgram::UiGeometry;
+            EnsureContentPass();
+            if (!BindPipeline(GetPipeline(program, rhi::BlendMode::Straight)) || !SetScissor(op.clip))
+                return;
+            EnsureFrame();
+            BindTexture(rhi::kSlotTexture, TextureOf(op.texture));
+            BindDraw(op.fade, 0);
+            if (!geometryBound)
+            {
+                dev.SetVertexBuffer(vb);
+                dev.SetIndexBuffer(ib);
+                geometryBound = true;
+            }
+            dev.DrawIndexed(op.idxCount, op.idxOffset);
+            ++stats.drawCalls;
+        }
+
+        void DrawFx(const RenderOp& op)
+        {
+            // captures are planned per frame (FramePlan::PlanCaptures): one serves many glass batches
+            if (op.glass && !op.captureRegion.Empty() && backdrop)
+            {
+                if (captures < budget)
+                {
+                    CaptureBackdrop(op.captureRegion, op.captureLevels, op.captureLevel0 ? op.captureLevel0Region : PxRect{});
+                    ++captures;
+                }
+                else
+                    stats.overBudget = true;
+            }
+            ProfileRun(op.glass ? RunFxGlass : RunFx);
+            EnsureContentPass();
+            // a shader specialized to the features this batch uses, where the backend builds variants
+            const std::uint32_t features = caps.fxFeatureVariants ? op.features : 0u;
+            rhi::Pipeline p = op.effect != 0 && caps.runtimeEffects ? GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, op.effect, features)
+                                                                    : rhi::Pipeline{};
+            if (!p)
+                p = FxPipeline(features);
+            if (!BindPipeline(p) || !SetScissor(op.clip))
+                return;
+            EnsureFrame();
+            BindTexture(rhi::kSlotTexture, TextureOf(op.texture));
+            BindBackdrop();
+            if (!fxDataBound)
+            {
+                if (caps.fxStorage == rhi::FxStorage::Buffer)
+                    dev.SetFxBuffer(fxBuf);
+                else
+                    BindTexture(rhi::kSlotFxData, fxTex);
+                fxDataBound = true;
+            }
+            BindDraw(op.fade, op.instStart);
+            if (!warmUp.empty() && passFormat == targetDesc.format && passSamples == targetDesc.samples && WarmUp(op))
+            {
+                BindPipeline(p);
+                dev.SetScissor(boundScissor);
+            }
+            dev.DrawInstanced(4, op.instCount);
+            ++stats.drawCalls;
+            ++stats.fxBatches;
+        }
+
+        // Caps::firstDrawCompiles: a prewarmed effect whose pipeline is ready draws the batch's first instance once
+        // where no pixel is written (an empty scissor), with this batch's bindings. The driver compiles it now (NVIDIA's
+        // Direct3D 9: 140 ms for an effect on the RTX 4080), not in the frame a shape first shows the effect. Only
+        // there: Direct3D 12's debug layer warns about the empty scissor, and its pipelines are complete anyway.
+        // True when it drew: the caller binds its pipeline and scissor again.
+        bool WarmUp(const RenderOp& op)
+        {
+            bool drew = false;
+            for (auto it = warmUp.begin(); it != warmUp.end();)
+            {
+                const rhi::Pipeline wp = GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, *it);
+                if (!wp)
+                {
+                    ++it;   // still compiling (asked again next frame)
+                    continue;
+                }
+                if (op.instCount > 0 && BindPipeline(wp))
+                {
+                    dev.SetScissor(rhi::IRect{0, 0, 0, 0});
+                    dev.DrawInstanced(4, 1);
+                    ++stats.drawCalls;
+                    drew = true;
+                }
+                it = warmUp.erase(it);
+            }
+            return drew;
+        }
+
+        void RunCallback(const RenderOp& op)
+        {
+            // a callback with nothing visible does not run: SetScissor would keep the previous scissor, and the host
+            // code would draw unclipped
+            if (ToScissor(op.clip, W, H).Empty())
+                return;
+            ProfileRun(RunNone);
+            EnsureContentPass();
+            SetScissor(op.clip);
+            void* state = dev.NativeRenderState();
+            op.cmd->callback(*op.list, *op.cmd, state);
+            ForgetBindings();   // the host may have changed anything
+        }
+
+        void Execute()
+        {
+            for (const RenderOp& op : plan.ops)
+            {
+                switch (op.type)
+                {
+                case RenderOp::Draw: DrawGeometry(op); break;
+                case RenderOp::FxBatch: DrawFx(op); break;
+                case RenderOp::LayerBegin: BeginLayer(op); break;
+                case RenderOp::LayerEnd: EndLayer(op); break;
+                case RenderOp::Callback: RunCallback(op); break;
+                }
+            }
+            // a layer the draw lists left open still composites
+            while (layerDepth > 0)
+            {
+                RenderOp end;
+                end.type = RenderOp::LayerEnd;
+                end.bounds = {0, 0, (float)W, (float)H};
+                end.blurPx = activeLayer.radius * frameMain.display[2];
+                layerDepth = 1;
+                EndLayer(end);
+            }
+            ProfileRun(RunNone);
+        }
+
+        // Effects set since the last frame start compiling now - their pipeline for this target, on the device's
+        // worker - not when a shape first uses one: a compile takes hundreds of milliseconds, and the shape would
+        // draw without its effect until then. Where the backend builds feature variants, which one a shape needs is
+        // not known before it draws.
+        void Prewarm()
+        {
+            if (prewarm.empty())
+                return;
+            if (caps.runtimeEffects && !caps.fxFeatureVariants)
+            {
+                const rhi::Format format = passFormat;
+                const int samples = passSamples;
+                passFormat = targetDesc.format;
+                passSamples = targetDesc.samples;
+                for (const EffectId id : prewarm)
+                {
+                    GetPipeline(rhi::ShaderProgram::Fx, rhi::BlendMode::Premultiplied, id);
+                    if (caps.firstDrawCompiles && std::find(warmUp.begin(), warmUp.end(), id) == warmUp.end())
+                        warmUp.push_back(id);
+                }
+                passFormat = format;
+                passSamples = samples;
+            }
+            prewarm.clear();
+        }
+
+        bool Render(const DrawData& dd, TextureRegistry* registry, rhi::Texture t, const RenderParams& params)
+        {
+            const rhi::GpuProfile gpu = stats.gpu;
+            stats = RenderStats();
+            stats.gpu = gpu;
+            ++frame;
+            targetDesc = dev.GetTextureDesc(t);
+            W = targetDesc.width;
+            H = targetDesc.height;
+            if (W <= 0 || H <= 0 || !(targetDesc.usage & rhi::TextureUsage_RenderTarget))
+                return false;
+            // a Metal framebufferOnly drawable or a swap-chain image without TRANSFER_SRC cannot be copied: glass then
+            // reads it directly if it can be sampled, else it has no backdrop
+            canCopy = (targetDesc.usage & rhi::TextureUsage_CopySrc) != 0;
+            canRead = caps.sampleRenderTarget && targetDesc.samples == 1 && (targetDesc.usage & rhi::TextureUsage_Sampled) != 0;
+            if (!dev.BeginFrame(params.frame))
+                return false;
+            target = t;
+
+            ApplyTextureChanges(registry);
+            plan.Build(dd, [this](TextureId id, TextureInfo& out) {
+                auto it = textures.find(id);
+                if (it == textures.end())
+                    return false;
+                out = it->second.info;
+                return true;
+            });
+            stats.fxInstances = plan.fxCount;
+            stats.vertices = (int)plan.vertices.size();
+            stats.indices = (int)plan.indices.size();
+
+            const bool glass = plan.anyGlass && (canCopy || canRead);
+            const bool surfaces = (glass || plan.anyLayer) && EnsureSurfaces(glass && canCopy, plan.anyLayer);
+            backdrop = glass && surfaces;
+            if (!white)
+            {
+                const std::uint32_t px = 0xFFFFFFFFu;
+                rhi::TextureDesc d;
+                d.width = d.height = 1;
+                d.format = rhi::Format::RGBA8_UNORM;
+                d.usage = rhi::TextureUsage_Sampled;
+                d.debugName = "white";
+                white = dev.CreateTexture(d, &px, 0);
+            }
+            const bool uploaded = Upload(params.maxFxInstancesPerRow);
+            FillFrameConstants(dd, params);
+            Prewarm();
+
+            captures = 0;
+            budget = std::max(1, params.maxBackdropCaptures);
+            bool userEffects = false;
+            for (const RenderOp& op : plan.ops)
+                userEffects |= op.type == RenderOp::FxBatch && op.effect != 0;
+            keepLevels = backdrop && (plan.plannedCaptures > budget || (userEffects && caps.runtimeEffects));
+            profile = params.profile;
+            profileScopes = 0;
+            maxProfileScopes = std::max(0, params.maxProfileScopes);
+            layerDepth = 0;
+            layerPending = false;
+            inPass = false;
+            run = RunNone;
+            if (uploaded && white)
+            {
+                Execute();
+                EndPass();
+            }
+            stats.backdropCaptures = captures;
+            dev.EndFrame();
+            rhi::GpuProfile latest;
+            if (dev.ReadProfile(latest))
+                stats.gpu = latest;
+            return true;
+        }
+    };
+
+    Renderer::Renderer(rhi::Device& device) : impl_(std::make_unique<Impl>(device)) {}
+
+    Renderer::~Renderer() { impl_->ReleaseAll(); }
+
+    bool Renderer::Render(const DrawData& dd, TextureRegistry* textures, rhi::Texture target, const RenderParams& params)
+    {
+        return impl_->Render(dd, textures, target, params);
+    }
+
+    void Renderer::SetEffectSource(EffectId id, const std::string& name, const std::string& source)
+    {
+        impl_->effects[id] = {name, source};
+        impl_->effectTried.erase(id);
+        impl_->prewarm.push_back(id);
+        // a changed source invalidates the pipelines built from the old one
+        for (auto it = impl_->pipelines.begin(); it != impl_->pipelines.end();)
+        {
+            if (it->first.effect == id)
+            {
+                if (it->second)
+                    impl_->dev.DestroyPipeline(it->second);
+                it = impl_->pipelines.erase(it);
+            }
+            else
+                ++it;
+        }
+    }
+
+    void Renderer::ReleaseSurfaces() { impl_->ReleaseSurfaces(); }
+
+    const RenderStats& Renderer::Stats() const { return impl_->stats; }
+    const FramePlan& Renderer::Plan() const { return impl_->plan; }
+
+    rhi::Texture Renderer::GpuTexture(TextureId id) const
+    {
+        auto it = impl_->textures.find(id);
+        return it != impl_->textures.end() ? it->second.tex : rhi::Texture{};
+    }
+}

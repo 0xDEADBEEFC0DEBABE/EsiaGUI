@@ -1,0 +1,76 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "esia-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "macos-clang",
+      "displayName": "Esia - macOS, clang + lld (Debug)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/macos-clang",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-macos.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ios",
+      "displayName": "Esia - iOS (arm64), Xcode's clang (Release): the examples as signed app bundles",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/ios",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/apple-ios.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ESIA_TEXT_DEPS": "bundled",
+        "BUILD_TESTING": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ios-simulator",
+      "displayName": "Esia - iOS Simulator (arm64), Xcode's clang (Release)",
+      "inherits": "ios",
+      "binaryDir": "${sourceDir}/build/ios-simulator",
+      "cacheVariables": {
+        "ESIA_IOS_PLATFORM": "iphonesimulator",
+        "ESIA_IOS_CODESIGN": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-clang",
+      "configurePreset": "macos-clang"
+    },
+    {
+      "name": "ios",
+      "configurePreset": "ios"
+    },
+    {
+      "name": "ios-simulator",
+      "configurePreset": "ios-simulator"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "macos-clang",
+      "configurePreset": "macos-clang",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
