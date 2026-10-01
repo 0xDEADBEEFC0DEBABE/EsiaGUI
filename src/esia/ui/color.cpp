@@ -81,14 +81,16 @@ namespace esia::ui
             bool hexEditing = false;
         };
 
-        // A checkerboard under translucent colors.
+        // A checkerboard under translucent colors. The cells' edges lie on physical pixels: between pixels each cell's
+        // anti-aliased edge blended into its neighbours as a faint seam (the mask still smooths the outline).
         void Checker(Painter& p, const Rect& r, float cell)
         {
             p.FillRect(r, Color::White());
             const int nx = (int)std::ceil(r.Width() / cell), ny = (int)std::ceil(r.Height() / cell);
+            const auto edge = [&](float from, float to, int i) { return i <= 0 ? from : p.SnapToPixel(std::min(from + (float)i * cell, to)); };
             for (int y = 0; y < ny; ++y)
                 for (int x = (y & 1); x < nx; x += 2)
-                    p.FillRect(Rect(r.min.x + x * cell, r.min.y + y * cell, std::min(r.min.x + (x + 1) * cell, r.max.x), std::min(r.min.y + (y + 1) * cell, r.max.y)),
+                    p.FillRect(Rect(edge(r.min.x, r.max.x, x), edge(r.min.y, r.max.y, y), edge(r.min.x, r.max.x, x + 1), edge(r.min.y, r.max.y, y + 1)),
                                Color::Hex(0xC8C8C8));
         }
 
@@ -192,12 +194,13 @@ namespace esia::ui
             p.PushMask(hue, barH * 0.5f);
             for (int i = 0; i < 6; ++i)
             {
-                const float x0 = hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f;
-                const float x1 = hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f;
+                // the segments meet on physical pixels: no overlap, no seam
+                const float x0 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f);
+                const float x1 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f);
                 // the ends keep their pure color under the capsule's round caps
                 if (i == 0)
-                    p.FillRect(Rect(hue.min.x, hue.min.y, x0 + 0.5f, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
-                p.Rect(Rect(x0, hue.min.y, x1 + 0.5f, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
+                    p.FillRect(Rect(hue.min.x, hue.min.y, x0, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
+                p.Rect(Rect(x0, hue.min.y, x1, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
                 if (i == 5)
                     p.FillRect(Rect(x1, hue.min.y, hue.max.x, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
             }
@@ -220,9 +223,9 @@ namespace esia::ui
                 p.PushMask(bar, barH * 0.5f);
                 Checker(p, bar, Sc(6));
                 const Color opaque = Color::Hsv(h.h, h.s, h.v);
-                p.FillRect(Rect(bar.min.x, bar.min.y, bar.min.x + inset, bar.max.y), opaque.WithAlpha(0.0f));
-                p.Rect(Rect(bar.min.x + inset, bar.min.y, bar.max.x - inset, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
-                p.FillRect(Rect(bar.max.x - inset - 0.5f, bar.min.y, bar.max.x, bar.max.y), opaque);
+                const float g0 = p.SnapToPixel(bar.min.x + inset), g1 = p.SnapToPixel(bar.max.x - inset);   // clear left of g0
+                p.Rect(Rect(g0, bar.min.y, g1, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
+                p.FillRect(Rect(g1, bar.min.y, bar.max.x, bar.max.y), opaque);
                 p.PopMask();
                 p.Capsule(bar, Style().Stroke(1.0f, pc.separator));
                 Handle(p, Vec2(bar.min.x + inset + color->a * (bar.Width() - inset * 2.0f), bar.Center().y), Sc(10), opaque,
