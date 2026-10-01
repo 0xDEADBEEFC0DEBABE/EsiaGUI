@@ -18,8 +18,9 @@ namespace glass
         public:
             const char* Name() const override { return "Direct3D 9Ex"; }
 
-            bool Init(HWND hwnd, int width, int height, const HostOptions& o, std::string& error) override
+            bool Init(const NativeWindow& window, int width, int height, const HostOptions& o, std::string& error) override
             {
+                const HWND hwnd = window.hwnd;
                 vsync_ = o.vsync;
                 HRESULT hr = ::Direct3DCreate9Ex(D3D_SDK_VERSION, &d3d_);
                 if (FAILED(hr))

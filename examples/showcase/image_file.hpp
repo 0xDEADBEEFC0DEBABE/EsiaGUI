@@ -1,4 +1,5 @@
-// showcase - image files (the wallpaper) through the Windows Imaging Component, as straight-alpha RGBA8.
+// showcase - image files (the wallpaper) as straight-alpha RGBA8: the Windows Imaging Component (image_file.cpp), ImageIO
+// on Apple systems (image_file_apple.mm), PNG and JPEG on Linux (image_file_linux.cpp).
 #pragma once
 #include <cstdint>
 #include <string>

@@ -23,8 +23,9 @@ namespace glass
 
             const char* Name() const override { return "Direct3D 12"; }
 
-            bool Init(HWND hwnd, int width, int height, const HostOptions& o, std::string& error) override
+            bool Init(const NativeWindow& window, int width, int height, const HostOptions& o, std::string& error) override
             {
+                const HWND hwnd = window.hwnd;
                 vsync_ = o.vsync;
                 if (o.debug)
                 {

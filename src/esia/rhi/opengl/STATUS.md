@@ -209,9 +209,10 @@ any more (the GLES 3.0 minimum lacked only dual-source blending).
 * **Platforms.** Linux / EGL and Windows / WGL ran. The `libEGL.dll` fallback on Windows (ANGLE) was not run; macOS
   (`dlsym` default loader, `libEGL.dylib`) and Android (`libEGL.so`) were not compiled. The GLX branch of the Linux
   default loader was not exercised (the tests pass EGL's lookup).
-* **`CreateDevice` on a host context** is exercised only indirectly (the headless path is `GlDevice` on an EGL
-  context, and the tests act as the host with wrapped FBOs, host state and callbacks); no windowed application
-  (GLFW / SDL, swap chains, the default framebuffer 0 as a target) was run.
+* **`CreateDevice` on a host context**: the tests exercise it indirectly (the headless path is `GlDevice` on an EGL
+  context, and the tests act as the host with wrapped FBOs, host state and callbacks). The examples' hosts run it on a
+  window with the default framebuffer 0 as the target: WGL on Windows (NVIDIA), EGL on X11 on Linux (VMware SVGA3D,
+  OpenGL 4.3 core, 2026-10-02). GLFW / SDL hosts were not run.
 * **Performance**: no comparison with WGT's D3D11 numbers yet (the NVIDIA GPU times above are of a 320 x 240 test
   scene).
 * **Desktop contexts older than 4.5**: Mesa gives a 4.5 core context when 3.3 is requested, so "3.3" is checked by

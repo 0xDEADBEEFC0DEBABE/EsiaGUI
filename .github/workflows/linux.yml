@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain, Mesa, Vulkan, shader tools, FreeType / HarfBuzz
+      - name: Install toolchain, Mesa, Vulkan, shader tools, FreeType / HarfBuzz, X11 (the examples' frame)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -49,7 +49,7 @@ jobs:
             glslang-tools spirv-cross spirv-tools \
             libegl-dev libgles-dev libgl-dev libegl-mesa0 libgl1-mesa-dri mesa-utils \
             libvulkan-dev libvulkan1 mesa-vulkan-drivers vulkan-validationlayers vulkan-tools \
-            libfreetype-dev libharfbuzz-dev
+            libfreetype-dev libharfbuzz-dev libx11-dev libjpeg-dev
 
       - name: Drivers (what the conformance suite runs on)
         run: |

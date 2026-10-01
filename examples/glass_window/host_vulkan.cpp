@@ -1,13 +1,19 @@
 // glass_window - Vulkan host: VkSurfaceKHR + swapchain, two frames in flight of its own (fence, acquire semaphore and
 // command buffer per frame slot, a present semaphore per swapchain image), Esia recording into the frame's command
-// buffer. vulkan-1.dll is loaded at run time, as the backend does: no import library needed.
+// buffer. The loader (vulkan-1.dll, libvulkan.so.1) is loaded at run time, as the backend does: no import library
+// needed. The surface: VK_KHR_win32_surface on Windows, VK_KHR_xlib_surface on Linux (the X11 frame, app_linux.cpp).
+#if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
+#endif
 #define VK_NO_PROTOTYPES
 #include "host.hpp"
 #include "esia/rhi/vulkan.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
 
 namespace glass
 {
@@ -18,7 +24,7 @@ namespace glass
 #define GLASS_VK_INSTANCE_FUNCTIONS(X)                                                                                  \
     X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceFeatures2) \
     X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkEnumerateDeviceExtensionProperties) X(vkCreateDevice)               \
-    X(vkGetDeviceProcAddr) X(vkCreateWin32SurfaceKHR) X(vkDestroySurfaceKHR) X(vkGetPhysicalDeviceSurfaceSupportKHR)    \
+    X(vkGetDeviceProcAddr) X(vkDestroySurfaceKHR) X(vkGetPhysicalDeviceSurfaceSupportKHR) GLASS_VK_SURFACE_FUNCTION(X)  \
     X(vkGetPhysicalDeviceSurfaceCapabilitiesKHR) X(vkGetPhysicalDeviceSurfaceFormatsKHR)                               \
     X(vkGetPhysicalDeviceSurfacePresentModesKHR)
 #define GLASS_VK_DEVICE_FUNCTIONS(X)                                                                                    \
@@ -27,6 +33,25 @@ namespace glass
     X(vkCreateCommandPool) X(vkDestroyCommandPool) X(vkAllocateCommandBuffers) X(vkBeginCommandBuffer)                  \
     X(vkEndCommandBuffer) X(vkResetCommandBuffer) X(vkQueueSubmit) X(vkCreateFence) X(vkDestroyFence)                   \
     X(vkWaitForFences) X(vkResetFences) X(vkCreateSemaphore) X(vkDestroySemaphore)
+
+#if defined(_WIN32)
+#define GLASS_VK_SURFACE_FUNCTION(X) X(vkCreateWin32SurfaceKHR)
+        constexpr const char* kSurfaceExtension = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+#else
+#define GLASS_VK_SURFACE_FUNCTION(X)
+        // VK_KHR_xlib_surface, declared here: vulkan_xlib.h needs Xlib.h, whose macros (None, Bool, Status ...) are also
+        // names in C++ code
+        constexpr const char* kSurfaceExtension = "VK_KHR_xlib_surface";
+        struct XlibSurfaceCreateInfo
+        {
+            VkStructureType sType = static_cast<VkStructureType>(1000004000);   // VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR
+            const void* pNext = nullptr;
+            VkFlags flags = 0;
+            void* dpy = nullptr;        // Display*
+            unsigned long window = 0;   // Window
+        };
+        using PFN_CreateXlibSurface = VkResult(VKAPI_PTR*)(VkInstance, const XlibSurfaceCreateInfo*, const VkAllocationCallbacks*, VkSurfaceKHR*);
+#endif
 
         struct Vk
         {
@@ -79,18 +104,23 @@ namespace glass
                         vk_.vkDestroyDebugUtilsMessengerEXT(instance_, messenger_, nullptr);
                     vk_.vkDestroyInstance(instance_, nullptr);
                 }
+#if defined(_WIN32)
                 if (library_)
                     ::FreeLibrary(library_);
+#else
+                if (library_)
+                    ::dlclose(library_);
+#endif
             }
 
             const char* Name() const override { return "Vulkan"; }
 
-            bool Init(HWND hwnd, int width, int height, const HostOptions& o, std::string& error) override
+            bool Init(const NativeWindow& window, int width, int height, const HostOptions& o, std::string& error) override
             {
                 vsync_ = o.vsync;
                 width_ = width;
                 height_ = height;
-                return CreateInstance(hwnd, o.debug, error) && CreateDevice(error) && CreateSwapchain(error);
+                return CreateInstance(window, o.debug, error) && CreateDevice(error) && CreateSwapchain(error);
             }
 
             esia::rhi::Device& Device() override { return *esia_; }
@@ -192,14 +222,22 @@ namespace glass
                 return reinterpret_cast<Fn>(vk_.vkGetInstanceProcAddr(instance_, name));
             }
 
-            bool CreateInstance(HWND hwnd, bool debug, std::string& error)
+            bool CreateInstance(const NativeWindow& window, bool debug, std::string& error)
             {
+#if defined(_WIN32)
+                const char* loader = "vulkan-1.dll";
                 library_ = ::LoadLibraryW(L"vulkan-1.dll");
                 if (library_)
                     vk_.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(reinterpret_cast<void*>(::GetProcAddress(library_, "vkGetInstanceProcAddr")));
+#else
+                const char* loader = "libvulkan.so.1";
+                library_ = ::dlopen(loader, RTLD_NOW | RTLD_LOCAL);
+                if (library_)
+                    vk_.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(::dlsym(library_, "vkGetInstanceProcAddr"));
+#endif
                 if (!vk_.vkGetInstanceProcAddr)
                 {
-                    error = "no Vulkan loader (vulkan-1.dll)";
+                    error = std::string("no Vulkan loader (") + loader + ")";
                     return false;
                 }
                 vk_.vkEnumerateInstanceVersion = Load<PFN_vkEnumerateInstanceVersion>("vkEnumerateInstanceVersion");
@@ -216,7 +254,7 @@ namespace glass
                 }
                 apiVersion_ = std::min<std::uint32_t>(version, VK_API_VERSION_1_3);
 
-                std::vector<const char*> extensions = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME};
+                std::vector<const char*> extensions = {VK_KHR_SURFACE_EXTENSION_NAME, kSurfaceExtension};
                 std::vector<const char*> layers;
                 if (debug)
                 {
@@ -262,14 +300,26 @@ namespace glass
                         vk_.vkCreateDebugUtilsMessengerEXT(instance_, &mi, nullptr, &messenger_);
                     debugUtils_ = messenger_ != VK_NULL_HANDLE;
                 }
+#if defined(_WIN32)
                 VkWin32SurfaceCreateInfoKHR si{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
                 si.hinstance = ::GetModuleHandleW(nullptr);
-                si.hwnd = hwnd;
+                si.hwnd = window.hwnd;
                 if ((r = vk_.vkCreateWin32SurfaceKHR(instance_, &si, nullptr, &surface_)) != VK_SUCCESS)
                 {
                     error = "vkCreateWin32SurfaceKHR failed (" + std::to_string(r) + ")";
                     return false;
                 }
+#else
+                XlibSurfaceCreateInfo si;
+                si.dpy = window.display;
+                si.window = window.window;
+                const auto createSurface = Load<PFN_CreateXlibSurface>("vkCreateXlibSurfaceKHR");
+                if (!createSurface || (r = createSurface(instance_, &si, nullptr, &surface_)) != VK_SUCCESS)
+                {
+                    error = "vkCreateXlibSurfaceKHR failed (" + std::to_string(createSurface ? r : VK_ERROR_EXTENSION_NOT_PRESENT) + ")";
+                    return false;
+                }
+#endif
                 return true;
             }
 
@@ -511,7 +561,11 @@ namespace glass
             }
 
             Vk vk_;
+#if defined(_WIN32)
             HMODULE library_ = nullptr;
+#else
+            void* library_ = nullptr;
+#endif
             std::uint32_t apiVersion_ = VK_API_VERSION_1_1;
             VkInstance instance_ = VK_NULL_HANDLE;
             VkDebugUtilsMessengerEXT messenger_ = VK_NULL_HANDLE;

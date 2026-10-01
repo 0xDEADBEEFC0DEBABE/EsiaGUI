@@ -10,7 +10,7 @@
   <img src="docs/images/control-center-closeup.jpg" width="32%" alt="Control Center: glass toggles and the media card">
 </p>
 <p align="center"><sub>The showcase on Windows 11 with Direct3D 11: every panel open, dark and light theme, 2808 x 2100 pixels
-at UI scale 1.5. The background is the system's wallpaper.</sub></p>
+at UI scale 1.5 (<code>showcase --spread --size 1872x1400 --scale 1.5</code>). The background is the system's wallpaper.</sub></p>
 
 A liquid-glass (iOS 26 style) UI toolkit for games and tools, in C++20: its own UI core, widgets, renderer and render
 hardware interface (RHI), with backends for Direct3D 9 to 12, OpenGL / OpenGL ES, Vulkan and Metal. It replaces WGT UI,
@@ -29,13 +29,13 @@ the Dear ImGui based `wgt.dll`; WGT's last version is tag `wgt-1.1-final`, in th
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
 | Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with fallback chains for every major script, color emoji from bitmap strikes (sbix, CBDT), grayscale antialiasing |
 | Backends (`src/esia/rhi/<name>`) | DirectX (Direct3D 9 / 10 / 11 / 12, in `rhi/directx`), OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal |
-| Platform | a Win32 layer as a library (`src/esia/platform/win32`, [PLATFORM_WIN32.md](docs/PLATFORM_WIN32.md)); the examples' own AppKit (macOS) and UIKit (iOS) frames |
+| Platform | a Win32 layer as a library (`src/esia/platform/win32`, [PLATFORM_WIN32.md](docs/PLATFORM_WIN32.md)); the examples' own frames on AppKit (macOS), UIKit (iOS) and X11 (Linux) |
 | Examples | `showcase` (WGT's demo on Esia) and `glass_window` (a smoke test of the whole path) |
 
 | Backend | CMake option | Systems | Verified on |
 | --- | --- | --- | --- |
 | DirectX: Direct3D 11, 12, 10, 9 | `ESIA_BACKEND_DIRECTX` | Windows | Windows 11, NVIDIA RTX 4080 SUPER, debug layers (D3D12 GPU-based validation); Wine |
-| OpenGL, OpenGL ES | `ESIA_BACKEND_OPENGL` | Windows, Linux | NVIDIA (WGL), Mesa llvmpipe (EGL) |
+| OpenGL, OpenGL ES | `ESIA_BACKEND_OPENGL` | Windows, Linux | NVIDIA (WGL), Mesa llvmpipe (EGL), VMware SVGA3D (EGL on X11) |
 | Vulkan | `ESIA_BACKEND_VULKAN` | Windows, Linux | NVIDIA and Mesa lavapipe, Khronos validation layer |
 | Metal | `ESIA_BACKEND_METAL` | macOS, iOS | MacBook Pro (M3 Pro, macOS 27), GitHub's arm64 runner (macOS 15), iPhone 18 Pro Max (A20 Pro, iOS 27); Metal API and shader validation |
 
@@ -46,7 +46,7 @@ the API's validation counted); details and numbers in [REWRITE_STATUS.md](docs/R
 | System | Library and tests | Example window |
 | --- | --- | --- |
 | Windows 10 / 11 | yes | yes: DirectX, OpenGL, Vulkan |
-| Linux | yes | not yet |
+| Linux | yes | yes: OpenGL, Vulkan (X11, XWayland on Wayland) |
 | macOS 11+ | yes | yes: Metal |
 | iOS 16+ | yes | yes: Metal |
 
@@ -105,13 +105,13 @@ These options work on every system with an example window; each system's section
 
 | Option | Meaning |
 | --- | --- |
-| `--api name` | the backend, where more than one is built: see [Windows](#windows) |
+| `--api name` | the backend, where more than one is built: see [Windows](#windows) and [Linux](#linux) |
 | `--size WxH`, `--scale s` | client area in UI units, and pixels per UI unit (default: the monitor's); `--size 1512x945 --scale 2` is 3024 x 1890 pixels |
 | `--vsync on \| off` | off: no frame cap |
 | `--frames N`, `--screenshot out.png`, `--fixed-dt s` | quit after N frames, write the last one, advance the UI clock by `s` per frame (deterministic captures) |
 | `--debug` | the API's validation layer; the message count is printed at exit |
 | `--font file` | font files instead of the system's (the first is the main one) |
-| showcase: `--open list`, `--open-all`, `--light`, `--look theme \| clear \| frosted`, `--tab n`, `--page id` | panels to open (`settings,effects,control,components,languages,telemetry,plugin`), theme, glass look, the Components tab, the Settings page |
+| showcase: `--open list`, `--open-all`, `--spread`, `--light`, `--look theme \| clear \| frosted`, `--tab n`, `--page id` | panels to open (`settings,effects,control,components,languages,telemetry,plugin`), every panel side by side (in a window of 1872 x 1400 UI units), theme, glass look, the Components tab, the Settings page |
 
 ## Windows
 
@@ -149,26 +149,43 @@ Tools" prompt): `cmake --preset windows-clang-cl`, `cmake --build --preset windo
 
 ## Linux
 
-**Build.** clang, lld, Ninja and CMake; EGL for OpenGL, the Vulkan headers for Vulkan (Ubuntu 24.04):
+<p align="center"><img src="docs/images/showcase-ubuntu.jpg" width="80%" alt="The showcase on Ubuntu 24.04 over Ubuntu's wallpaper, with the desktop's symbolic icons"></p>
+<p align="center"><sub>The showcase on Ubuntu 24.04 (GNOME, XWayland), OpenGL.</sub></p>
+
+**Build.** clang, lld, Ninja and CMake; X11 for the examples' window, EGL for OpenGL, the Vulkan headers for Vulkan
+(Ubuntu 24.04):
 
 ```
-sudo apt install clang lld ninja-build cmake libfreetype-dev libharfbuzz-dev libegl-dev libvulkan-dev
+sudo apt install clang lld ninja-build cmake libfreetype-dev libharfbuzz-dev libx11-dev libegl-dev libvulkan-dev libjpeg-dev
 cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
+The examples are `build/linux-clang/bin/showcase` and `glass_window` (`linux-clang-release` for an optimized build).
+
 **Things to know on Linux**
 
-* **No example window yet:** Linux builds the library, its tests and the conformance suite. OpenGL runs through EGL
-  without a window system (Mesa's llvmpipe, or the GPU's driver), Vulkan without a surface (lavapipe or the GPU's
-  driver), so the tests run on headless machines and in CI.
-* **Vulkan** is built when `vulkan/vulkan.h` is found (`libvulkan-dev`, or the Vulkan SDK); `--debug` and the tests use
-  the Khronos validation layer when it is installed (`vulkan-validationlayers`).
+* **The window** is an X11 window (`examples/glass_window/app_linux.cpp`); on a Wayland desktop (Ubuntu's and Fedora's
+  default) it runs through XWayland. `--api opengl` (the default: EGL on the window) or `--api vulkan`
+  (`VK_KHR_xlib_surface`). The UI scale follows the desktop's scaling through `Xft.dpi`, or `--scale`.
+* **Input.** Mouse, wheel, keyboard and the clipboard (`CLIPBOARD`). Text comes through the input method (IBus, Fcitx
+  over XIM): what it commits arrives, but the composition is not shown inline yet.
+* **Icons.** esia::ui's icons are drawn from the desktop's symbolic icon theme (Adwaita, else Yaru), rasterized by
+  librsvg, which every GNOME desktop has; it is loaded at run time, so nothing is needed to build. Without it the icons
+  are left out.
 * **Fonts.** The text system finds fonts through fontconfig when it is installed at configure time
   (`libfontconfig-dev`; `-DESIA_TEXT_FONTCONFIG=OFF` to not use it), otherwise by scanning the standard font
   directories. The UI font is Noto Sans (else DejaVu Sans), with Noto Sans CJK, WenQuanYi Zen Hei or Droid Sans
   Fallback for Chinese, Japanese and Korean: install `fonts-noto-core fonts-noto-cjk` for every script. The Linux
   fallback chain has no emoji font yet.
+* **Wallpaper.** The showcase draws Ubuntu's default wallpaper, else GNOME's (`/usr/share/backgrounds`); JPEG ones
+  need `libjpeg-dev` at build time.
+* **Headless.** The tests need no window system: OpenGL runs through EGL without one (Mesa's llvmpipe, or the GPU's
+  driver), Vulkan without a surface (lavapipe or the GPU's driver), so they run on servers and in CI. `--debug` and the
+  tests use the Khronos validation layer when it is installed (`vulkan-validationlayers`).
+* **Virtual machines.** In VMware, OpenGL needs 3D acceleration and virtual hardware 13 or later: SVGA3D then offers
+  OpenGL 4.3 core; with older hardware versions it offers 2.1 and the OpenGL host refuses it. VMware has no Vulkan
+  driver: `--api vulkan` runs on lavapipe, on the CPU.
 * **Custom HLSL effects** need Direct3D: on Linux those shapes draw with the built-in shader.
 
 ## macOS
@@ -261,8 +278,8 @@ the commit for `main` and delete the branch.
 
 ## Roadmap
 
-1. Platform layers: Cocoa as a library (the examples' AppKit frame is the start), then X11 / Wayland (an example window
-   on Linux) and SDL.
+1. Platform layers: Cocoa and X11 as libraries (the examples' AppKit and X11 frames are the start), then Wayland, SDL,
+   and inline IME composition on Linux.
 2. Text: the bidi algorithm, variable-font instances (SF's weights), COLR color glyphs.
 3. Performance: fewer render-pass breaks per backdrop capture on tile-based GPUs; FX feature variants on Vulkan and
    OpenGL (the specialization constant is already in the shader library).
