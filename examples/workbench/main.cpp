@@ -1,7 +1,8 @@
 // workbench - a tool's layout on Esia's data widgets: a dock space holding an outline (a tree), an inspector (number,
 // vector and color fields), a table of 100 000 assets (sorted, filtered, selected), a script editor and a scene view.
 // Drag a tab out of its panel to float it, drag a floating panel over the dock space to dock it again; the lines
-// between the panels resize them.
+// between the panels resize them. On a phone the six panels are tabs of two panels, one above the other (side by side
+// in landscape), in the display's safe area.
 //
 //   workbench [--float <panel>] [--show <panel>] [--light] [--rows N]       and glass_window's options (../glass_window/app.hpp)
 #include "app.hpp"
@@ -16,6 +17,7 @@
 #include <memory>
 #include <numeric>
 #include <random>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -68,6 +70,7 @@ namespace
         std::vector<int> selection;       // rows of `view`
         std::string filter, shownFilter = "\x01";
         ui::TableSort sort;
+        bool narrowTable = false;          // a phone's: no type column (the name's icon shows the type)
 
         std::string script;
         std::string notes = "Panels dock into this space.\nDrag a tab out to float its panel.";
@@ -164,7 +167,7 @@ namespace
                     view.push_back(i);
             if (sort.column >= 0)
             {
-                const int col = sort.column;
+                const int col = narrowTable && sort.column > 0 ? sort.column + 1 : sort.column;   // the asset's field
                 const bool asc = sort.ascending;
                 std::stable_sort(view.begin(), view.end(), [&](int a, int b) {
                     const Asset& x = assets[(std::size_t)(asc ? a : b)];
@@ -225,23 +228,48 @@ namespace
 
         float AvailableHeight() const { return ctx->ContentRegionAvail().y / ui::S(1.0f); }
 
+        // A phone: the desktop's columns would leave each panel a sliver
+        bool Compact() const
+        {
+            const Rect safe = ctx->SafeArea();
+            return safe.Width() < ui::S(900) || safe.Height() < ui::S(600);
+        }
+
         void Frame()
         {
             ++frame;
             ui->NewFrame();
             Background();
-            const Vec2 d = ctx->DisplaySize();
+            const Rect safe = ctx->SafeArea();   // clear of a phone's camera housing and home indicator
             const float m = ui::S(12);
-            ui::DockSpace("workbench", Rect(m, m, d.x - m, d.y - m));
+            ui::DockSpace("workbench", Rect(safe.min.x + m, safe.min.y + m, safe.max.x - m, safe.max.y - m));
             if (!laidOut)
             {
-                ui::DockWindow("Scene", "workbench");
-                ui::DockWindow("Outline", "workbench", ui::DockSide::Left, 0.21f, "Scene");
-                ui::DockWindow("Inspector", "workbench", ui::DockSide::Right, 0.27f, "Scene");
-                ui::DockWindow("Assets", "workbench", ui::DockSide::Bottom, 0.36f, "Scene");
-                ui::DockWindow("Script", "workbench", ui::DockSide::Center, 0.5f, "Assets");
-                ui::DockWindow("Notes", "workbench", ui::DockSide::Center, 0.5f, "Assets");
-                ui::FocusDockedWindow(showPanel.empty() ? "Assets" : showPanel);
+                if (Compact())
+                {
+                    // two panels of three tabs, full width: the view, the outline and the inspector; the data
+                    const bool portrait = safe.Height() > safe.Width();
+                    ui::DockWindow("Scene", "workbench");
+                    ui::DockWindow("Outline", "workbench", ui::DockSide::Center, 0.5f, "Scene");
+                    ui::DockWindow("Inspector", "workbench", ui::DockSide::Center, 0.5f, "Scene");
+                    ui::DockWindow("Assets", "workbench", portrait ? ui::DockSide::Bottom : ui::DockSide::Right, 0.5f, "Scene");
+                    ui::DockWindow("Script", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::DockWindow("Notes", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::FocusDockedWindow("Scene");
+                    ui::FocusDockedWindow("Assets");
+                }
+                else
+                {
+                    ui::DockWindow("Scene", "workbench");
+                    ui::DockWindow("Outline", "workbench", ui::DockSide::Left, 0.21f, "Scene");
+                    ui::DockWindow("Inspector", "workbench", ui::DockSide::Right, 0.27f, "Scene");
+                    ui::DockWindow("Assets", "workbench", ui::DockSide::Bottom, 0.36f, "Scene");
+                    ui::DockWindow("Script", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::DockWindow("Notes", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::FocusDockedWindow("Assets");
+                }
+                if (!showPanel.empty())
+                    ui::FocusDockedWindow(showPanel);
                 if (!floatPanel.empty())
                     ui::UndockWindow(floatPanel);
                 laidOut = true;
@@ -280,12 +308,15 @@ namespace
                 p.FillRect(Rect(area.min.x + ui::S(6), y - 0.5f, area.max.x - ui::S(6), y + 0.5f), Color::White(0.05f));
             }
             const float unit = std::min(area.Width(), area.Height()) * 0.12f;
+            const auto centerOf = [&](const Object& o) {
+                return Vec2(area.Center().x + o.pos[0] * area.Width() * 0.45f, area.Center().y + o.pos[1] * area.Height() * 0.45f);
+            };
             for (int i = 0; i < (int)objects.size(); ++i)
             {
                 Object& o = objects[(std::size_t)i];
                 if (!o.shape || !o.visible)
                     continue;
-                const Vec2 c(area.Center().x + o.pos[0] * area.Width() * 0.45f, area.Center().y + o.pos[1] * area.Height() * 0.45f);
+                const Vec2 c = centerOf(o);
                 const Vec2 sz(unit * o.scale[0], unit * o.scale[1]);
                 const Rect r = Rect::FromCenter(c, sz);
                 const ui::Interaction it = ui::InteractRect(ctx->GetId(o.name + "##shape" + std::to_string(i)), r);
@@ -298,9 +329,18 @@ namespace
                 if (i == selected)
                     p.Rect(r.Expanded(ui::S(4)), Style().Radius(std::min(sz.x, sz.y) * 0.3f + ui::S(4)).Stroke(ui::S(2), ui::AccentColor()));
                 p.PopScale();
+                // the label: no wider than the room to the nearest shape on its row (a narrow view squeezes them)
+                float half = r.Width() * 0.5f + ui::S(30);
+                for (const Object& other : objects)
+                    if (&other != &o && other.shape && other.visible)
+                    {
+                        const Vec2 oc = centerOf(other);
+                        if (std::fabs(oc.y + unit * other.scale[1] * 0.5f - r.max.y) < ui::S(16))
+                            half = std::min(half, std::fabs(oc.x - c.x) * 0.5f - ui::S(2));
+                    }
                 const text::FontRef f = ui::Current()->Font(ui::TextStyle::Caption1);
-                p.TextBox(Rect(r.min.x - ui::S(30), r.max.y + ui::S(4), r.max.x + ui::S(30), r.max.y + ui::S(20)), Vec2(0.5f, 0), f,
-                          Color::White(0.85f), o.name, text::TextFlags_Ellipsis);
+                p.TextBox(Rect(c.x - half, r.max.y + ui::S(4), c.x + half, r.max.y + ui::S(20)), Vec2(0.5f, 0), f, Color::White(0.85f), o.name,
+                          text::TextFlags_Ellipsis);
             }
             ui::EndWindow();
         }
@@ -356,8 +396,11 @@ namespace
             wo.flags = ui::WindowFlags_NoScroll;
             if (!ui::BeginWindow("Assets", &openAssets, wo))
                 return;
+            // a narrow panel (a phone): a shorter filter field, and no type column - the name's icon shows the type
+            const float avail = ctx->ContentRegionAvail().x / ui::S(1.0f);
+            narrowTable = avail < 560.0f;
             ui::BeginHStack("bar");
-            ui::TextField("filter", &filter, "Filter assets", {.width = 320, .icon = icon::Search});
+            ui::TextField("filter", &filter, "Filter assets", {.width = std::clamp(avail - 150.0f, 140.0f, 320.0f), .icon = icon::Search});
             ui::FlexSpacer();
             char count[48];
             std::snprintf(count, sizeof(count), "%zu of %zu", view.size(), assets.size());
@@ -369,7 +412,9 @@ namespace
             to.flags = ui::TableFlags_Sortable | ui::TableFlags_Resizable | ui::TableFlags_Selectable | ui::TableFlags_Striped;
             to.height = std::max(80.0f, AvailableHeight() - 8.0f);
             to.selection = &selection;
-            if (ui::BeginTable("assets", {{"Name"}, {"Type", 120}, {"Size", 100, 0, ui::Align::End}, {"Modified", 120, 0, ui::Align::End}}, to))
+            static const ui::TableColumn kColumns[] = {{"Name"}, {"Type", 120}, {"Size", 100, 0, ui::Align::End}, {"Modified", 120, 0, ui::Align::End}};
+            static const ui::TableColumn kNarrow[] = {{"Name"}, {"Size", 84, 0, ui::Align::End}, {"Modified", 116, 0, ui::Align::End}};
+            if (ui::BeginTable("assets", narrowTable ? std::span<const ui::TableColumn>(kNarrow) : std::span<const ui::TableColumn>(kColumns), to))
             {
                 sort = ui::TableSortSpec();
                 if (sort.changed)
@@ -380,7 +425,8 @@ namespace
                     const Asset& a = assets[(std::size_t)view[(std::size_t)r]];
                     ui::TableRow(r);
                     ui::TableCellIcon(kTypeIcons[a.type], a.name);
-                    ui::TableCell(kTypes[a.type], ui::Current()->GetTheme().colors.secondaryLabel);
+                    if (!narrowTable)
+                        ui::TableCell(kTypes[a.type], ui::Current()->GetTheme().colors.secondaryLabel);
                     char buf[32];
                     if (a.size >= 1024)
                         std::snprintf(buf, sizeof(buf), "%.1f MB", a.size / 1024.0);

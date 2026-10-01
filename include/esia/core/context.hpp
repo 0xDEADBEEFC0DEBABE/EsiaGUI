@@ -139,6 +139,9 @@ namespace esia
         Vec2 displaySize{1280, 720};        // UI units
         Vec2 framebufferScale{1, 1};        // render-target pixels per UI unit
         double time = 0.0;                  // seconds, monotonic
+        // UI units: the part of the display the system draws nothing over - on phones not under the camera housing,
+        // the rounded corners or the home indicator. Empty = the whole display (desktops).
+        Rect safeArea;
     };
 
     // A monitor of the platform (Context::SetMonitors): windows take the scale of the monitor under their center.
@@ -320,6 +323,8 @@ namespace esia
         const LayoutMetrics& Metrics() const { return desc_.layout; }
         LayoutMetrics& Metrics() { return desc_.layout; }
         Vec2 DisplaySize() const { return params_.displaySize; }
+        // FrameParams::safeArea, clamped to the display; the whole display when the platform gave none.
+        Rect SafeArea() const;
         Vec2 FramebufferScale() const { return params_.framebufferScale; }
         void SetMonitors(std::vector<Monitor> monitors) { monitors_ = std::move(monitors); }
         // Physical pixels per UI unit of the current window (its monitor's): widget metrics and pixel snapping.
