@@ -197,6 +197,10 @@ README_TAIL = """
 
 It is generated from `main` ({source}) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.
+
+## License
+
+MIT: [LICENSE](LICENSE).
 """
 
 
