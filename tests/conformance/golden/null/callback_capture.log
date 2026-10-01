@@ -83,13 +83,13 @@ fx buffer #11
 constants draw: 0 0 0 0 | 3 0 0 0
 draw instanced 4 x 1
 end pass
-copy #1 -> #2 at 0,0 [0,0 320x240]
+copy #1 -> #2 at 0,0 [0,0 320x160]
 pass #3 dont-care pyramid
 pipeline #14
 constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0 0 | 0 0 0 0
 scissor [0,0 160x120]
 constants pass: 0.003125 0.00416667 0 0 | 0.0015625 0.00208333 0.998438 0.997917
-texture t0 #2
+texture t0 #1
 draw 3 from 0
 end pass
 pass #4 dont-care pyramid

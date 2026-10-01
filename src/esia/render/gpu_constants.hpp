@@ -82,6 +82,14 @@ namespace esia::render
         return o;
     }
 
+    // The region copied for level 0: whole 32-pixel blocks around `r` (level 0 is read where it is, no pyramid margin).
+    inline PxRect AlignCopyRegion(const PxRect& r, int width, int height)
+    {
+        const float a = 32.0f;
+        return {std::max(0.0f, std::floor(r.x0 / a) * a), std::max(0.0f, std::floor(r.y0 / a) * a), std::min((float)width, std::ceil(r.x1 / a) * a),
+                std::min((float)height, std::ceil(r.y1 / a) * a)};
+    }
+
     // One downsample step of a region-limited pyramid build.
     struct PyramidStep
     {

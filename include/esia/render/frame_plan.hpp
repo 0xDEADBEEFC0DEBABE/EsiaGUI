@@ -71,8 +71,12 @@ namespace esia::render
                                      // LayerEnd: bloom radius (px)
         bool readsLevel0 = false;    // glass batch: something reads the full-resolution backdrop (clear glass, a frost
                                      // under 4 px, user effects) - frosted glass only reads blurred levels
+        PxRect level0Region;         // glass batch: where it reads level 0 (the regions of those instances)
         bool captureLevel0 = true;   // glass batch with a capture: that capture must provide level 0 (else the renderer
                                      // builds the pyramid straight from the render target when it can: no copy)
+        PxRect captureLevel0Region;  // glass batch with a capture: the part of it copied for level 0 (the level-0
+                                     // regions of the batches it serves; a frosted card around a clear control
+                                     // is not copied)
         float fade[4] = {0, 0, 0, 0}; // Draw / FxBatch: edge fade (top y, bottom y, top width, bottom width; px)
         PxRect captureRegion;        // glass batch: capture the backdrop over this region first (empty = reuse)
         int captureLevels = 0;       // pyramid levels that capture must build

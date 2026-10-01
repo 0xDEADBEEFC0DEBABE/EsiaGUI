@@ -5,6 +5,7 @@
 #include "esia/render/renderer.hpp"
 #include "esia/rhi/null_device.hpp"
 #include "esia_test.hpp"
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -169,6 +170,32 @@ ESIA_TEST(Renderer, ClearGlassUnsampleableAndMsaaTargetsAreCopied)
         ESIA_CHECK(NoErrors(s.dev));
         ESIA_CHECK(r.Stats().directCaptures == 0 && Lines(s.dev, "copy #1 -> ") == 1);
     }
+}
+
+ESIA_TEST(Renderer, OnlyTheClearGlassRegionIsCopied)
+{
+    // a frosted card and a clear control beside it share one capture: the pyramid comes straight from the target
+    // and only the control's region is copied for level 0
+    Setup s;
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
+    p.Rect(Rect(20, 20, 250, 280), Style().Radius(24).Glass(Glass(12)));
+    p.Circle(Vec2(330, 150), 16, Style().Glass(Glass(0)));
+    Renderer r(s.dev);
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev));
+    ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().directCaptures == 0);
+    ESIA_CHECK(Lines(s.dev, "copy #1 -> ") == 1 && Lines(s.dev, "texture t0 #1") >= 1);   // the first downsample reads the target
+    int copied = 0;
+    for (const std::string& l : s.dev.Log())
+        if (l.rfind("copy #1 -> ", 0) == 0)
+        {
+            int x = 0, y = 0, w = 0, h = 0;
+            ESIA_CHECK(std::sscanf(l.c_str() + l.find('['), "[%d,%d %dx%d]", &x, &y, &w, &h) == 4);
+            copied = w * h;
+        }
+    ESIA_CHECK(copied > 0 && copied < 400 * 300 / 4);   // the control's neighbourhood, not the card
 }
 
 ESIA_TEST(Renderer, SrgbTargetsCopyRawAndEncodeTheirOutput)

@@ -640,21 +640,29 @@ namespace esia::render
             }
         }
 
-        void CaptureBackdrop(const PxRect& wanted, int count, bool needsLevel0)
+        // `level0`: the part of the capture that glass reads at full resolution (clear glass, user effects), empty
+        // when every batch it serves is frosted.
+        void CaptureBackdrop(const PxRect& wanted, int count, const PxRect& level0)
         {
             const PxRect region = AlignCaptureRegion(wanted, W, H);
             if (region.Empty())
                 return;
             ProfileRun(RunCapture);
             EndPass();
-            // Glass that only reads blurred levels (frost) needs no full-resolution copy: the first downsample reads
-            // the render target directly - the same values, a copy's bandwidth saved. A target that cannot be copied
-            // is read directly always; level 1 then stands in for level 0 (BindBackdrop), so it is always built.
-            const bool direct = canRead && (!needsLevel0 || !canCopy);
-            if (direct)
+            // A target that can be read builds the pyramid straight from itself - the same values as from a copy,
+            // without the copy's bandwidth - and only level 0 is copied, only where glass reads it: a frosted window
+            // with one clear control copies the control's region, not the window's. A target that cannot be copied
+            // is read directly always; level 1 then stands in for level 0 (BindBackdrop), so it is always built. One
+            // that cannot be read (multisampled, not sampleable) is copied whole and the pyramid built from the copy.
+            if (canRead)
             {
+                const PxRect want0 = level0.Intersect(region);
+                const PxRect r0 = canCopy && !want0.Empty() ? AlignCopyRegion(want0, W, H) : PxRect{};
+                if (!r0.Empty())
+                    dev.CopyTexture(copy, (int)r0.x0, (int)r0.y0, target, rhi::IRect{(int)r0.x0, (int)r0.y0, (int)r0.x1, (int)r0.y1});
+                else
+                    ++stats.directCaptures;
                 BuildPyramid(target, region, canCopy ? count : std::max(count, 1));
-                ++stats.directCaptures;
             }
             else
             {
@@ -733,7 +741,7 @@ namespace esia::render
             {
                 if (captures < budget)
                 {
-                    CaptureBackdrop(op.captureRegion, op.captureLevels, op.captureLevel0);
+                    CaptureBackdrop(op.captureRegion, op.captureLevels, op.captureLevel0 ? op.captureLevel0Region : PxRect{});
                     ++captures;
                 }
                 else

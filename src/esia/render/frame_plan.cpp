@@ -216,7 +216,7 @@ namespace esia::render
                         const bool glassShape = (in.flags[0] & fx::kGlass) && !(in.flags[0] & fx::kCustom);
                         const PxRect core = glassShape ? PxRect{} : shapeR.Expand(InstanceCoreExtent(in) * map.scale.x).Intersect(full).Intersect(clip);
                         const PxRect gShape = glassShape ? shapeR.Intersect(clip) : PxRect{};
-                        PxRect gRegion, gCore;
+                        PxRect gRegion, gCore, g0;
                         // user effects may sample any blur level: -1 = build the whole pyramid. Glass reads its frost, the
                         // blurred surroundings its rim reflects and, with legibility, a wide neighbourhood (the exposure
                         // reads exactly one level: the smallest radius whose LevelsForBlur builds it)
@@ -237,6 +237,9 @@ namespace esia::render
                             const float coreMargin = (isGlass ? in.glass[0] : 40.0f) * map.scale.x + 4.0f;
                             gRegion = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(margin);
                             gCore = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(coreMargin);
+                            // level 0 is read inside the shape only (refraction and the loupe pull inwards, dispersion
+                            // stays within the pull), plus a bilinear footprint; a user effect may read anywhere
+                            g0 = isGlass && !(in.flags[0] & fx::kCustom) ? shapeR.Expand(2.0f).Intersect(clip) : gRegion;
                             anyGlass = true;
                         }
 
@@ -260,6 +263,8 @@ namespace esia::render
                                 o.glassCore = o.glass ? o.glassCore.Union(gCore) : gCore;
                                 o.blurPx = !o.glass ? blurPx : ((o.blurPx < 0.0f || blurPx < 0.0f) ? -1.0f : std::max(o.blurPx, blurPx));
                                 o.readsLevel0 = o.readsLevel0 || reads0;
+                                if (reads0)
+                                    o.level0Region = o.level0Region.Union(g0);
                                 o.glass = true;
                             }
                         }
@@ -281,6 +286,7 @@ namespace esia::render
                             o.glassCore = gCore;
                             o.blurPx = glass ? blurPx : 0.0f;
                             o.readsLevel0 = glass && reads0;
+                            o.level0Region = o.readsLevel0 ? g0 : PxRect{};
                             ops.push_back(o);
                             k = (int)ops.size() - 1;
                         }
@@ -480,7 +486,7 @@ namespace esia::render
         bool valid = false;
         PxRect validRegion;
         int validLevels = 0;
-        bool validLevel0 = false;
+        PxRect validLevel0;   // where the last capture copied level 0
         Drawn drawn;   // since the last capture
         int depth = 0;
         const int n = (int)ops.size();
@@ -503,12 +509,12 @@ namespace esia::render
                 if (op.glass)
                 {
                     const int levels = LevelsOf(op);
-                    if (!(valid && validRegion.Contains(op.glassRegion) && validLevels >= levels && (validLevel0 || !op.readsLevel0) &&
-                          !drawn.Hides(op)))
+                    if (!(valid && validRegion.Contains(op.glassRegion) && validLevels >= levels &&
+                          (!op.readsLevel0 || validLevel0.Contains(op.level0Region)) && !drawn.Hides(op)))
                     {
                         PxRect region = op.glassRegion;
                         int lv = levels;
-                        bool l0 = op.readsLevel0;
+                        PxRect l0 = op.level0Region;
                         float areaSum = Area(region);
                         Drawn ahead;
                         ahead.Add(op);
@@ -539,14 +545,15 @@ namespace esia::render
                                 region = u;
                                 areaSum = sum;
                                 lv = std::max(lv, LevelsOf(q));
-                                l0 = l0 || q.readsLevel0;
+                                l0 = l0.Union(q.level0Region);
                             }
                             if (d == 0 && (q.type == RenderOp::Draw || q.type == RenderOp::FxBatch || q.type == RenderOp::Callback))
                                 ahead.Add(q);
                         }
                         op.captureRegion = region;
                         op.captureLevels = lv;
-                        op.captureLevel0 = l0;
+                        op.captureLevel0 = !l0.Empty();
+                        op.captureLevel0Region = l0;
                         valid = true;
                         validRegion = region;
                         validLevels = lv;
