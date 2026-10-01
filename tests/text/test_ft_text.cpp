@@ -8,35 +8,24 @@
 #include <cstdio>
 #include "font_test_util.hpp"
 #include "ft_test_util.hpp"
-#if defined(__APPLE__)
-#include <CoreText/CoreText.h>
-#endif
 
 using namespace esia;
 using namespace esia::texttest;
+
+#if defined(__APPLE__)
+namespace esia::texttest
+{
+    // Core Text's own advance of `text` in the font `postScriptName` at `size` (coretext_util.cpp); -1 when the font
+    // lacks one of its characters.
+    float CoreTextAdvance(const char* postScriptName, float size, const std::u16string& text);
+}
+#endif
 
 namespace
 {
     // DroidSans has 2048 design units per em: at this size one design unit is 0.01 UI units
     constexpr float kUnitSize = 20.48f;
 
-#if defined(__APPLE__)
-    // Core Text's own advance of `text` in the font `postScriptName` at `size` (the sum over its characters, one glyph
-    // each); -1 when the font lacks one of them.
-    float CoreTextAdvance(const char* postScriptName, float size, const std::u16string& text)
-    {
-        CFStringRef name = CFStringCreateWithCString(nullptr, postScriptName, kCFStringEncodingUTF8);
-        CTFontRef font = CTFontCreateWithName(name, (CGFloat)size, nullptr);
-        CFRelease(name);
-        std::vector<UniChar> chars(text.begin(), text.end());
-        std::vector<CGGlyph> glyphs(chars.size());
-        float advance = -1.0f;
-        if (CTFontGetGlyphsForCharacters(font, chars.data(), glyphs.data(), (CFIndex)chars.size()))
-            advance = (float)CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal, glyphs.data(), nullptr, (CFIndex)glyphs.size());
-        CFRelease(font);
-        return advance;
-    }
-#endif
 
     struct Fixture
     {
