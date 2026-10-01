@@ -150,6 +150,18 @@ namespace esia
 
     void Painter::Image(TextureId tex, const esia::Rect& r, float radius, Color tint, Vec2 uv0, Vec2 uv1)
     {
+        // Square corners on whole physical pixels, no mask, no scale: a textured quad covers the same pixels as the SDF
+        // shape (its edge pixels are fully in or out) without running the FX shader over the area. A full-screen
+        // wallpaper is most of a frame's FX cost otherwise (Metal, M3 Pro: 1 ms of 5 at 3024 x 1890).
+        const float px = Pixel();
+        const auto onGrid = [px](float v) { return std::fabs(v * px - std::round(v * px)) < 1e-3f; };
+        if (radius <= 0.0f && maskDepth_ == 0 && scaleDepth_ == 0 && onGrid(r.min.x) && onGrid(r.min.y) && onGrid(r.max.x) && onGrid(r.max.y))
+        {
+            tint.a *= alpha_;
+            if (tint.a > 0.0f && !r.Empty())
+                dl_->AddImage(tex, r, uv0, uv1, tint.ToRgba8());
+            return;
+        }
         Style s;
         s.Radius(radius).Fill(tint).Image(tex, uv0, uv1);
         Rect(r, s);

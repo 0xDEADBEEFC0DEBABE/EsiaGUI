@@ -208,6 +208,30 @@ ESIA_TEST(Painter, CheapPrimitives)
     ESIA_CHECK(p.SnapToPixel(10.3f) == 10.5f);
 }
 
+ESIA_TEST(Painter, SquareImagesOnThePixelGridAreQuads)
+{
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.pixelScale = 2.0f;
+    Painter p(dl, env);
+    p.SetAlpha(0.5f);
+    p.Image(7, Rect(0, 0, 100, 50.5f), 0, Color::White(), Vec2(0.25f, 0), Vec2(0.75f, 1));   // whole pixels at 2x: a quad
+    ESIA_CHECK(dl.FxInstances().empty() && dl.Vertices().size() == 4);
+    ESIA_CHECK(dl.Commands().back().texture == 7 && dl.Vertices()[0].uv == Vec2(0.25f, 0) && dl.Vertices()[2].uv == Vec2(0.75f, 1));
+    ESIA_CHECK((dl.Vertices()[0].color >> 24) == 128);   // the painter's alpha
+    // rounded, between pixels, masked or scaled: the SDF shape (anti-aliased edges)
+    p.Image(7, Rect(0, 0, 100, 50), 4);
+    p.Image(7, Rect(0, 0, 100, 50.25f), 0);
+    p.PushMask(Rect(0, 0, 60, 60), 8);
+    p.Image(7, Rect(0, 0, 100, 50), 0);
+    p.PopMask();
+    p.PushScale(Vec2(50, 25), 0.9f);
+    p.Image(7, Rect(0, 0, 100, 50), 0);
+    p.PopScale();
+    ESIA_CHECK(dl.FxInstances().size() == 4 && dl.Vertices().size() == 4);
+    ESIA_CHECK(dl.FxInstances()[0].flags[0] & fx::kImage);
+}
+
 ESIA_TEST(Painter, PolylineAndArea)
 {
     DrawList dl = MakeList();
