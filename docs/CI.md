@@ -123,6 +123,9 @@ from a clean checkout.
   not run.
 * **The mingw-w64 build** only compiles and links; the shipped Windows ABI is MSVC's (the Windows jobs).
 * **iOS** is not built.
+* **Android** is not built: there is no Android job (the NDK and SDK would be a large download per run). It is checked
+  locally: `cmake --preset android` builds the library and the APKs; the tests and the conformance suite run on an
+  emulator or a phone through `adb` (README, section Android).
 
 ## 3. Reproducing a job locally
 

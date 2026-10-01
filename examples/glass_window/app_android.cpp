@@ -3,7 +3,8 @@
 // VK_KHR_android_surface (host_vulkan.cpp).
 //
 // The example's main runs as glass_main (CMake renames it); its options come from the launch intent's "args" extra:
-//   adb shell am start -n org.esia.showcase/android.app.NativeActivity -e args "--api vulkan --open-all"
+//   adb shell "am start -n org.esia.showcase/android.app.NativeActivity -e args '--api vulkan --open-all'"
+// (one string: the device's shell would split the options)
 // stdout and stderr go to the log (adb logcat -s esia), a --screenshot to the app's files directory
 // (adb exec-out run-as org.esia.showcase cat files/shot.png > shot.png). The window can go (the app in the background)
 // and come back: the device, the UI and its textures stay, only the surface is made again. The icons are Material Icons

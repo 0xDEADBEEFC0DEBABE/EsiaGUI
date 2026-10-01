@@ -75,6 +75,7 @@ thread). Changes:
 | Click counts | `MouseClickCount(b)`: 1, 2, 3 ... for consecutive clicks within `doubleClickTime` and `doubleClickDistance` (a text editor selects words on 2, lines on 3). `MouseDoubleClicked(b)` is "clicked with a count of 2" |
 | Bounds | a `MouseButton` / `Key` outside the enum is ignored by `Apply` and reads as up / zero |
 | UTF-8 | `Text` events decode with `base/utf8.hpp` (`DecodeUtf8`): malformed input becomes U+FFFD. `AppendUtf8` / `AppendUtf32` are gone; `EncodeUtf8(std::string&, char32_t)` lives in `base/utf8.hpp` |
+| Touch | `InputEvent::Button(b, down, true)` marks a press as a finger's (a touch screen's first finger is the left button); `MouseTouch(b)` reads it until the next press. `InputConfig::touchSlop` (8 units) and `touchDelay` (0.15 s) tell a tap, a rest and a drag apart (section 5). The Android platform layer, the iOS frame and the Win32 layer (touch-screen mouse messages) mark their touches |
 
 ## 4. Items: registration, hit testing, behavior
 
@@ -156,6 +157,21 @@ Escape before its buttons ask for them; a popup's Escape is only used when nobod
 **Tab navigation runs last.** Tab / Shift+Tab are handled in `EndFrame`, after every widget had its chance to claim
 the key, over this frame's focusable items (`ItemFlags_Focusable`, not disabled) in submission order. It does nothing
 while an item is active.
+
+**Touch: a press that may yet be a scroll.** On a phone a finger that lands on a row and moves along the list
+scrolls it; the row never presses. `ButtonBehavior` does this for a press marked as a finger's:
+
+* an item that presses on release is held as usual, and `Context::ActiveIdYieldsToScroll()` is true while it is;
+* an item that acts on the press (`ButtonFlags_PressOnClick`, `PressOnDoubleClick`, `Repeat`: sliders, segmented
+  controls, fields, steppers) does not get the press yet: it is hovered, not held, and yields too. It gets the press
+  (held, pressed, keyboard focus) when the finger lifts - a tap: held for that frame, where the finger was - rests for
+  `touchDelay`, or moves past `touchSlop` across; past it along, it gets it a frame later, when no scroll area took
+  the touch.
+
+A scroll area that can scroll (the widget layer's `ScrollEnd`) takes a yielding touch over once the finger has moved
+past the slop along its axis more than across: it makes its drag the active id, and the item lets go without
+pressing. Areas end after their items, and an inner area that scrolls takes the touch first. Mouse presses never
+yield: a mouse drag from a button keeps the button.
 
 **Pending input.** `Context::InputPending()` and `PlatformRequests::inputPending` are true when events were left in
 the queue for the next frame (a click and its release in one frame): an event-driven host must run another frame
@@ -281,6 +297,12 @@ direction, else outward to its parents and the window; Shift+wheel scrolls horiz
 physical pixels, ending on the pixel nearest the target; the glide steps in `NewFrame`, before the hit test; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
 banding and the scroll indicator stay in the widget layer (WGT's `ScrollAreaEnd`), on `ActiveId` and
 `SetScrollY`.
+
+Every area starts its layout on a whole physical pixel (`SnapScroll`, after `SetNextScroll` and the clamp to the
+range), whatever set the offset: a glide, a drag, a request, the clamp itself. Layout positions snap to pixels
+(section 6), so an offset between pixels would change what the content measures, and with it the range that clamps
+the offset; a drag held past the end, which asks for the end every frame, made the content jump a pixel every few
+frames.
 
 ## 9. Popups and tooltips
 
