@@ -104,6 +104,9 @@ float4 WgtEffect(WgtFx fx)
         {"telemetry", "Telemetry", icon::Diagnostic, 0x30D158, {430, 460}, {470, 120}, false},
         {"plugin", "Plugin: Hello", icon::Code, 0x5E5CE6, {360, 380}, {-1, -1}, false},
     };
+    // --spread: every panel open, side by side, none over another or under the island and the dock, in a window of
+    // 1872 x 1400 UI units (the README's picture)
+    const Vec2 kSpread[PanelCount] = {{40, 140}, {454, 140}, {40, 864}, {948, 140}, {1402, 140}, {474, 824}, {1437, 924}};
 
     float S(float v) { return ui::S(v); }
     Rect Bottom(const Rect& r, float h) { return Rect(r.min.x, r.max.y - h, r.max.x, r.max.y); }
@@ -135,6 +138,7 @@ float4 WgtEffect(WgtFx fx)
         float styledSlider = 0.6f;
         int styledSegment = 1;
         bool openMenu = false;
+        bool spread = false;   // --spread: panels at kSpread
         std::string openPage;
 
         // settings
@@ -1089,7 +1093,7 @@ float4 WgtEffect(WgtFx fx)
                 const PanelInfo& pi = kPanels[i];
                 ui::WindowOptions wo;
                 wo.size = pi.size;
-                wo.pos = pi.pos;
+                wo.pos = spread ? kSpread[i] : pi.pos;
                 if (compact)
                     FitCompact(wo);
                 wo.icon = pi.icon;
@@ -1142,6 +1146,12 @@ int main(int argc, char** argv)
             for (bool& b : d.open)
                 b = true;
             return true;
+        }
+        if (o == "--spread")
+        {
+            for (bool& b : d.open)
+                b = true;
+            return d.spread = true;
         }
         if (o == "--menu")
             return d.openMenu = true;
