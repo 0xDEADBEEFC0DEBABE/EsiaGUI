@@ -100,6 +100,12 @@ Vulkan; COLR color emoji; scrolling by touch from any item.
   `glGetError` errors beyond the debug callback's are counted; the OpenGL tests expect the caps of the extensions a
   device has, Vulkan's older-API test no longer needs dynamic rendering.
 * `SymbolTextSystem` (macOS, iOS, Linux frames) forwards `CaretStops`: fields there stopped at every code point.
+* **The safe area on Android** (after the core's `FrameParams::safeArea`, made for the iPhone): the platform layer
+  reads the window's insets - `WindowInsets.Type.systemBars() | displayCutout()` (API 30), else the system window
+  insets and the cutout's safe insets - every 30 frames and when the window or the configuration changes, and passes
+  them on (`FrameInfo::safeLeft` ...). The island sits around the camera there as on an iPhone, the panels below it,
+  the dock above the gesture bar. The showcase's wallpaper on Android is the building machine's, packed into the APK
+  and decoded by `BitmapFactory` (`glass::Wallpaper`), else Android's built-in one (`WallpaperManager`).
 * **Masks and scales reach `FillRect`**: a square `Painter::FillRect` was indexed geometry, which `PushMask` and
   `PushScale` do not reach, so the color picker's checkerboards and bar ends kept square corners outside their
   capsules, and a number field's fill outside its rounded well. Under a mask or a scale it is an SDF instance now.
@@ -117,7 +123,8 @@ Vulkan; COLR color emoji; scrolling by touch from any item.
   `workbench` and `showcase` on Direct3D 11 and 12; the color picker zoomed at UI scales 1 and 1.5 before and after.
   The touch tests and the still-at-the-end test fail with their fixes taken out.
 * The README's pictures were taken again with these changes: Windows (Direct3D 11), Ubuntu (OpenGL), the Android
-  emulator (OpenGL ES) and the workbench.
+  emulator (OpenGL ES; as the iOS ones, one screenshot per screen taken on the device: the island around the camera,
+  the panels below it, the building PC's wallpaper) and the workbench.
 * Ubuntu 24.04 in VMware, clang 18, Debug with `ESIA_WERROR=ON`: ctest 19 / 19; `showcase` and `workbench` on the X11
   layer.
 * Android 15 emulator (x86_64, the host's RTX 4080 SUPER through the emulator's OpenGL ES translator), NDK r27:
