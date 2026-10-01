@@ -185,9 +185,17 @@ namespace glass
         TextField(ctx, ctx.GetId("field"), bb);
         if (text_)
         {
+#if defined(__APPLE__)
+            p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Enter prints the text to the console, Cmd+C / Cmd+V copy / paste,");
+#else
             p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Enter prints the text to the console, Ctrl+C / Ctrl+V copy / paste,");
+#endif
             ctx.ItemSize(Vec2(0, 16));
+#if defined(__APPLE__)
+            p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Esc leaves the field. \xE4\xB8\xAD\xE6\x96\x87\xE8\xBE\x93\xE5\x85\xA5: Pinyin - Simplified");
+#else
             p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Esc leaves the field. \xE4\xB8\xAD\xE6\x96\x87\xE8\xBE\x93\xE5\x85\xA5: Microsoft Pinyin");
+#endif
             ctx.ItemSize(Vec2(0, 16));
         }
         ctx.End();
@@ -208,7 +216,12 @@ namespace glass
             for (char32_t c : in.Text())
                 EncodeUtf8(field_, c);
             // shortcuts read the modifiers of their own press (KeyMods): a Ctrl released in the same frame counts
-            auto shortcut = [&](Key k) { return in.KeyPressed(k, false) && (in.KeyMods(k) & Mod_Ctrl) != 0; };
+#if defined(__APPLE__)
+            constexpr std::uint32_t kShortcutMod = Mod_Super;   // Cmd+C, Cmd+V
+#else
+            constexpr std::uint32_t kShortcutMod = Mod_Ctrl;
+#endif
+            auto shortcut = [&](Key k) { return in.KeyPressed(k, false) && (in.KeyMods(k) & kShortcutMod) != 0; };
             // while the IME composes, its keys are its own (they arrive as VK_PROCESSKEY and never get here)
             if (comp.empty())
             {
