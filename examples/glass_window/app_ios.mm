@@ -7,7 +7,8 @@
 //
 // Touch: the first finger is the mouse - down is the left button, lifted it leaves (nothing stays hovered). A touch the
 // system takes over (a two-finger scroll, a system gesture) cancels the press as a focus loss does, so it is no click.
-// esia::ui scrolls a drag on a scroll area's empty space; two fingers scroll anywhere (the wheel). Text: while the UI
+// The press is marked as a finger's (InputEvent::touch): esia::ui scrolls a drag along a scroll area from anywhere, a
+// row or a slider included, without pressing them; two fingers scroll anywhere (the wheel). Text: while the UI
 // wants text input, a hidden text field has the keyboard: what the keyboard commits goes to the UI as text, an input
 // method's composition (pinyin, kana ...) as InputState::Composition, Backspace on the empty field and Return as keys.
 // The field holds nothing but the composition. The keys of a hardware keyboard (UIPress: HID usages) go to the UI
@@ -399,7 +400,7 @@ namespace glass
         return;
     finger_ = touches.anyObject;
     [self queue:esia::InputEvent::MouseMove([self unitsOf:[finger_ locationInView:self]])];
-    [self queue:esia::InputEvent::Button(esia::MouseButton::Left, true)];
+    [self queue:esia::InputEvent::Button(esia::MouseButton::Left, true, true)];
 }
 
 - (void)touchesMoved:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event
@@ -415,7 +416,7 @@ namespace glass
     if (!finger_ || ![touches containsObject:finger_])
         return;
     [self queue:esia::InputEvent::MouseMove([self unitsOf:[finger_ locationInView:self]])];
-    [self queue:esia::InputEvent::Button(esia::MouseButton::Left, false)];
+    [self queue:esia::InputEvent::Button(esia::MouseButton::Left, false, true)];
     [self queue:esia::InputEvent::MouseLeave()];
     finger_ = nil;
 }
