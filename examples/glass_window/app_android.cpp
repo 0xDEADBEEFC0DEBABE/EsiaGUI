@@ -21,12 +21,14 @@
 #include "icons_material.hpp"
 #endif
 #include <android/asset_manager.h>
+#include <android/bitmap.h>
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include <jni.h>
 #include <unistd.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -266,6 +268,159 @@ namespace glass
                 wait = false;
             }
         }
+    }
+
+    namespace
+    {
+        // The Java calls of Wallpaper(): every result checked, nothing called with an exception pending.
+        struct Java
+        {
+            JNIEnv* env;
+            bool Failed() const { return env->ExceptionCheck() == JNI_TRUE; }
+
+            // An APK asset decoded by BitmapFactory (JPEG, PNG, HEIF ...); null when there is no such asset.
+            jobject DecodeAsset(const char* name)
+            {
+                AAsset* asset = AAssetManager_open(g_app->activity->assetManager, name, AASSET_MODE_BUFFER);
+                if (!asset)
+                    return nullptr;
+                const jsize size = (jsize)AAsset_getLength(asset);
+                jbyteArray bytes = env->NewByteArray(size);
+                if (bytes && !Failed())
+                    env->SetByteArrayRegion(bytes, 0, size, static_cast<const jbyte*>(AAsset_getBuffer(asset)));
+                AAsset_close(asset);
+                jclass factory = Failed() || !bytes ? nullptr : env->FindClass("android/graphics/BitmapFactory");
+                jmethodID decode = factory && !Failed() ? env->GetStaticMethodID(factory, "decodeByteArray", "([BII)Landroid/graphics/Bitmap;") : nullptr;
+                jobject bmp = decode && !Failed() ? env->CallStaticObjectMethod(factory, decode, bytes, (jint)0, size) : nullptr;
+                return Failed() ? nullptr : bmp;
+            }
+
+            // WallpaperManager.getBuiltInDrawable() drawn into a bitmap of its own size.
+            jobject BuiltIn()
+            {
+                jclass wmClass = env->FindClass("android/app/WallpaperManager");
+                jmethodID getInstance = wmClass && !Failed() ? env->GetStaticMethodID(wmClass, "getInstance", "(Landroid/content/Context;)Landroid/app/WallpaperManager;") : nullptr;
+                jmethodID builtIn = getInstance && !Failed() ? env->GetMethodID(wmClass, "getBuiltInDrawable", "()Landroid/graphics/drawable/Drawable;") : nullptr;
+                jobject wm = builtIn && !Failed() ? env->CallStaticObjectMethod(wmClass, getInstance, g_app->activity->clazz) : nullptr;
+                jobject drawable = wm && !Failed() ? env->CallObjectMethod(wm, builtIn) : nullptr;
+                if (Failed() || !drawable)
+                    return nullptr;
+                jclass dClass = env->GetObjectClass(drawable);
+                const jint w = env->CallIntMethod(drawable, env->GetMethodID(dClass, "getIntrinsicWidth", "()I"));
+                const jint h = Failed() ? 0 : env->CallIntMethod(drawable, env->GetMethodID(dClass, "getIntrinsicHeight", "()I"));
+                jobject bmp = Failed() || w <= 0 || h <= 0 ? nullptr : NewBitmap(w, h);
+                jclass canvasClass = bmp ? env->FindClass("android/graphics/Canvas") : nullptr;
+                jmethodID canvasCtor = canvasClass && !Failed() ? env->GetMethodID(canvasClass, "<init>", "(Landroid/graphics/Bitmap;)V") : nullptr;
+                jobject canvas = canvasCtor && !Failed() ? env->NewObject(canvasClass, canvasCtor, bmp) : nullptr;
+                if (Failed() || !canvas)
+                    return nullptr;
+                env->CallVoidMethod(drawable, env->GetMethodID(dClass, "setBounds", "(IIII)V"), (jint)0, (jint)0, w, h);
+                if (!Failed())
+                    env->CallVoidMethod(drawable, env->GetMethodID(dClass, "draw", "(Landroid/graphics/Canvas;)V"), canvas);
+                return Failed() ? nullptr : bmp;
+            }
+
+            jobject Argb8888()
+            {
+                jclass cfg = env->FindClass("android/graphics/Bitmap$Config");
+                jfieldID f = cfg && !Failed() ? env->GetStaticFieldID(cfg, "ARGB_8888", "Landroid/graphics/Bitmap$Config;") : nullptr;
+                return f && !Failed() ? env->GetStaticObjectField(cfg, f) : nullptr;
+            }
+
+            jobject NewBitmap(jint w, jint h)
+            {
+                jclass bmpClass = env->FindClass("android/graphics/Bitmap");
+                jmethodID create = bmpClass && !Failed() ? env->GetStaticMethodID(bmpClass, "createBitmap", "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;") : nullptr;
+                jobject cfg = create && !Failed() ? Argb8888() : nullptr;
+                return cfg ? env->CallStaticObjectMethod(bmpClass, create, w, h, cfg) : nullptr;
+            }
+
+            // `bmp` at most `maxSide` on its longer side, in ARGB_8888 (a wide-gamut decode may be F16), as straight
+            // RGBA8.
+            bool Read(jobject bmp, int maxSide, int& width, int& height, std::vector<std::uint8_t>& rgba)
+            {
+                AndroidBitmapInfo info{};
+                if (Failed() || !bmp || AndroidBitmap_getInfo(env, bmp, &info) != ANDROID_BITMAP_RESULT_SUCCESS || !info.width || !info.height)
+                    return false;
+                jclass bmpClass = env->GetObjectClass(bmp);
+                const float k = maxSide > 0 ? std::min(1.0f, (float)maxSide / (float)std::max(info.width, info.height)) : 1.0f;
+                if (k < 1.0f)
+                {
+                    jmethodID scaled = env->GetStaticMethodID(bmpClass, "createScaledBitmap", "(Landroid/graphics/Bitmap;IIZ)Landroid/graphics/Bitmap;");
+                    bmp = scaled && !Failed() ? env->CallStaticObjectMethod(bmpClass, scaled, bmp, (jint)std::lround((float)info.width * k),
+                                                                            (jint)std::lround((float)info.height * k), JNI_TRUE)
+                                              : nullptr;
+                    if (Failed() || !bmp || AndroidBitmap_getInfo(env, bmp, &info) != ANDROID_BITMAP_RESULT_SUCCESS)
+                        return false;
+                }
+                if (info.format != ANDROID_BITMAP_FORMAT_RGBA_8888)
+                {
+                    jmethodID copy = env->GetMethodID(bmpClass, "copy", "(Landroid/graphics/Bitmap$Config;Z)Landroid/graphics/Bitmap;");
+                    jobject cfg = copy && !Failed() ? Argb8888() : nullptr;
+                    bmp = cfg ? env->CallObjectMethod(bmp, copy, cfg, JNI_FALSE) : nullptr;
+                    if (Failed() || !bmp || AndroidBitmap_getInfo(env, bmp, &info) != ANDROID_BITMAP_RESULT_SUCCESS ||
+                        info.format != ANDROID_BITMAP_FORMAT_RGBA_8888)
+                        return false;
+                }
+                void* pixels = nullptr;
+                if (AndroidBitmap_lockPixels(env, bmp, &pixels) != ANDROID_BITMAP_RESULT_SUCCESS)
+                    return false;
+                rgba.resize((std::size_t)info.width * info.height * 4);
+                for (std::uint32_t y = 0; y < info.height; ++y)
+                {
+                    const std::uint8_t* src = static_cast<const std::uint8_t*>(pixels) + (std::size_t)y * info.stride;
+                    std::uint8_t* dst = rgba.data() + (std::size_t)y * info.width * 4;
+                    for (std::uint32_t x = 0; x < info.width; ++x, src += 4, dst += 4)
+                    {
+                        // premultiplied in the bitmap, straight in the texture
+                        const unsigned a = src[3];
+                        for (int c = 0; c < 3; ++c)
+                            dst[c] = a == 255 || a == 0 ? src[c] : (std::uint8_t)std::min(255u, (src[c] * 255u + a / 2) / a);
+                        dst[3] = (std::uint8_t)a;
+                    }
+                }
+                AndroidBitmap_unlockPixels(env, bmp);
+                width = (int)info.width;
+                height = (int)info.height;
+                return true;
+            }
+        };
+    }
+
+    bool Wallpaper(int maxSide, int& width, int& height, std::vector<std::uint8_t>& rgba)
+    {
+        if (!g_app)
+            return false;
+        JavaVM* vm = g_app->activity->vm;
+        JNIEnv* env = nullptr;
+        bool attached = false;
+        if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_EDETACHED)
+        {
+            if (vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
+                return false;
+            attached = true;
+        }
+        Java java{env};
+        bool ok = false;
+        for (const char* asset : {"wallpaper.jpg", "wallpaper.png", "wallpaper.heic"})
+        {
+            env->PushLocalFrame(32);
+            ok = java.Read(java.DecodeAsset(asset), maxSide, width, height, rgba);
+            env->ExceptionClear();
+            env->PopLocalFrame(nullptr);
+            if (ok)
+                break;
+        }
+        if (!ok)
+        {
+            env->PushLocalFrame(32);
+            ok = java.Read(java.BuiltIn(), maxSide, width, height, rgba);
+            env->ExceptionClear();
+            env->PopLocalFrame(nullptr);
+        }
+        if (attached)
+            vm->DetachCurrentThread();
+        return ok;
     }
 
     int RunApp(int argc, char** argv, App& app)

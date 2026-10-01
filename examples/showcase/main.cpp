@@ -1210,8 +1210,10 @@ int main(int argc, char** argv)
         // the wallpaper WGT's demo used, scaled down to 2560 on its longer side
         showcase::ImageFile wall;
         // (on macOS one of the system's: WGT's is a Windows file; on iOS the app bundle's, from the Mac that built it; on
-        // Linux Ubuntu's, else GNOME's)
-#if defined(__APPLE__) && TARGET_OS_IPHONE
+        // Linux Ubuntu's, else GNOME's; on Android the APK's, from the machine that built it, else the system's built-in one)
+#if defined(__ANDROID__)
+        glass::Wallpaper(2560, wall.width, wall.height, wall.rgba);
+#elif defined(__APPLE__) && TARGET_OS_IPHONE
         for (const wchar_t* path : {L"wallpaper.jpg"})
 #elif defined(__APPLE__)
         for (const wchar_t* path : {L"/System/Library/Desktop Pictures/Sonoma.heic", L"/System/Library/Desktop Pictures/Mac Blue.heic"})
@@ -1220,8 +1222,10 @@ int main(int argc, char** argv)
 #else
         for (const wchar_t* path : {L"/usr/share/backgrounds/warty-final-ubuntu.png", L"/usr/share/backgrounds/gnome/adwaita-l.jpg"})
 #endif
+#if !defined(__ANDROID__)
             if (showcase::LoadImageFile(path, wall, 2560))
                 break;
+#endif
         if (!wall.rgba.empty())
         {
             d.wallpaper = ctx.Textures().Create({esia::TextureFormat::RGBA8, wall.width, wall.height}, wall.rgba.data());
