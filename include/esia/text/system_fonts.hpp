@@ -45,7 +45,7 @@ namespace esia::text
         FontStyle style = FontStyle::Upright;
     };
 
-    // The platform's user-interface font: SF on macOS, Segoe UI on Windows, Noto Sans or else DejaVu Sans on Linux.
+    // The platform's user-interface font: SF on macOS, Segoe UI on Windows, Noto Sans or else DejaVu Sans on Linux, Roboto on Android.
     inline constexpr std::string_view kSystemUiFamily = "system-ui";
 
     // The installed face of `family` closest to `weight` (100 - 900; 400 regular, 700 bold) and `style`, or nothing
@@ -69,7 +69,11 @@ namespace esia::text
     //   iOS      the same with PingFang SC / TC / HK for Hiragino Sans GB and Heiti SC / TC, which iOS does not
     //            have (kCoreTextFontScheme: iOS has no other font with all of Simplified Chinese)
     //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Devanagari, Noto Sans Thai,
-    //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback
+    //            Noto Sans Arabic, Noto Naskh Arabic, Noto Sans Hebrew and the Noto Sans of Armenian, Georgian, Bengali,
+    //            Tamil, Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Sinhala, Khmer, Lao, Myanmar and Ethiopic,
+    //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback, Noto Color Emoji,
+    //            Noto Color Emoji Flags
+    //   Android  Roboto, then the Linux chain
     // Simplified Chinese comes before the other CJK fonts: characters the four share (Han unification) take its forms,
     // except after kana or Hangul in the same paragraph. The FreeType text system gives kana and Hangul to the first
     // fallback whose OS/2 code pages name Japanese or Korean (Yu Gothic UI, Malgun Gothic), not to the first that
