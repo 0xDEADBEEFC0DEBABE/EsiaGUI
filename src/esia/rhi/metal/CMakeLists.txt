@@ -35,7 +35,16 @@ if(APPLE)
         message(FATAL_ERROR "The Metal backend needs CMAKE_OSX_DEPLOYMENT_TARGET ${_esia_metal_min} or later")
     endif()
     add_library(esia_rhi_metal STATIC metal_device.mm)
-    set_source_files_properties(metal_device.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    set(_esia_metal_objc_options -fobjc-arc)
+    # clang 23 calls class methods through objc_msgSendClass$<sel>$<class> stubs, which ld64.lld 23 cannot
+    # synthesize (undefined symbols at link time); plain objc_msgSend$<sel> stubs link with both linkers
+    include(CheckCompilerFlag)
+    check_compiler_flag(OBJCXX -fno-objc-msgsend-class-selector-stubs ESIA_OBJC_NO_CLASS_STUBS)
+    if(ESIA_OBJC_NO_CLASS_STUBS)
+        list(APPEND _esia_metal_objc_options -fno-objc-msgsend-class-selector-stubs)
+    endif()
+    set(ESIA_METAL_OBJC_OPTIONS ${_esia_metal_objc_options} CACHE INTERNAL "Objective-C++ options of the Metal backend's sources")
+    set_source_files_properties(metal_device.mm PROPERTIES COMPILE_OPTIONS "${_esia_metal_objc_options}")
     # Executables that link the backend keep C++ as their linker language (CXX outranks OBJCXX), so the
     # Objective-C runtime (objc_msgSend, the ARC entry points) is linked explicitly: Foundation does not re-export it
     target_link_libraries(esia_rhi_metal PUBLIC esia_rhi_metal_core PRIVATE esia_shaders "-framework Metal" "-framework Foundation" objc)

@@ -79,7 +79,11 @@ namespace esia::rhi::metal
                 s.minFilter = s.magFilter = MTLSamplerMinMagFilterNearest;
                 point_ = [device_ newSamplerStateWithDescriptor:s];
 
+                // MTLGPUFamilyMac2 is deprecated in macOS 27 (no Intel Macs there) but still what Intel Macs report before it
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
                 caps_.maxTextureSize = ([device_ supportsFamily:MTLGPUFamilyApple3] || [device_ supportsFamily:MTLGPUFamilyMac2]) ? 16384 : 8192;
+#pragma clang diagnostic pop
                 if (@available(macOS 11.0, iOS 14.0, *))
                 {
                     // the core writes ~0 for "no sample" and reads ~0 as "not sampled"
