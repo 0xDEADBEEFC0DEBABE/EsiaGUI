@@ -17,7 +17,8 @@ the core, and what of WGT is ported so far.
 * [9. Custom widgets and animation](#9-custom-widgets-and-animation)
 * [10. The island, notifications and the dock](#10-the-island-notifications-and-the-dock)
 * [11. The showcase: WGT's demo](#11-the-showcase-wgts-demo)
-* [12. Status: what of WGT is ported](#12-status-what-of-wgt-is-ported)
+* [12. Data widgets: numbers, colors, tables, trees, the editor, docking](#12-data-widgets-numbers-colors-tables-trees-the-editor-docking)
+* [13. Status: what of WGT is ported](#13-status-what-of-wgt-is-ported)
 
 ## 1. Setting up
 
@@ -219,7 +220,14 @@ around it, and the light stops short of its neighbors:
     the mouse and can be dragged. It runs in a lane in the window's right padding (also for a page or scroll area
     flush with the window's content), else over the content at the right edge;
   * a drag on empty space scrolls instead of moving the window; the header, and content that cannot scroll, still
-    move it (the core moves a window only when no widget took the click).
+    move it (the core moves a window only when no widget took the click);
+  * a finger scrolls from anywhere, as on a phone (presses marked `InputEvent::touch`: Android, iOS, Windows touch
+    screens). From a row or a button, the content follows once the finger has moved 8 units along the area
+    (`InputConfig::touchSlop`), and the row does not press. A control that acts on the press (a slider, a segmented
+    control, a field, a stepper's repeat) does not get a finger's press until it is not a scroll: the finger lifts,
+    rests for 0.15 s, or moves across. A swipe over a list of sliders scrolls it; a sideways drag moves the slider.
+    The mouse keeps the desktop's behavior ([UI_CORE.md](UI_CORE.md) section 5);
+  * held at an end, the content stays still: the offset the layout starts at lands on whole pixels.
 
 ## 6. Lists: sections and rows
 
@@ -427,7 +435,73 @@ What still differs, and why:
 * At 1.5: a few buttons sit a pixel apart horizontally.
 * Texts reworded for Esia (the Telemetry note, the Settings footer, the version).
 
-## 12. Status: what of WGT is ported
+## 12. Data widgets: numbers, colors, tables, trees, the editor, docking
+
+What tools need beyond WGT's set, in the same glass style. The `workbench` example puts all of them in one dock space
+(an outline, a scene, an inspector, a table of 100 000 assets, a script editor):
+
+```
+workbench                                  # the docked layout
+workbench --float Inspector --show Script  # one window floating, the editor's tab in front
+workbench --rows 1000000 --light           # a million rows, light theme
+```
+
+```cpp
+ui::NumberField("speed", &speed, {.min = 0, .max = 10, .step = 0.1, .format = "%.1f m/s"});
+ui::VectorField("position", pos, 3);
+ui::ColorPicker("tint", &tint, {.swatches = kSwatches});
+ui::TextEditor("script", &source, {.size = {0, 240}, .lineNumbers = true, .monospace = true, .tabInput = true});
+
+if (ui::BeginTable("assets", {{"Name"}, {"Size", 90, 0, ui::Align::End}},
+                   {.flags = ui::TableFlags_Sortable | ui::TableFlags_Selectable, .height = 300, .selection = &selected})) {
+    if (ui::TableSortSpec().changed) Sort(assets, ui::TableSortSpec());
+    const ui::TableRange rows = ui::TableVisible((int)assets.size());
+    for (int i = rows.first; i < rows.last; ++i) {
+        ui::TableRow(i);
+        ui::TableCellIcon(assets[i].icon, assets[i].name);
+        ui::TableCell(assets[i].size);
+    }
+    ui::EndTable();
+}
+
+if (ui::TreeNode("Characters", {.icon = icons::People})) {
+    ui::TreeNode("Player", {.flags = ui::TreeFlags_Leaf | (sel ? ui::TreeFlags_Selected : 0)});
+    ui::TreePop();
+}
+
+ui::DockSpace("main");                                   // every frame, before the windows
+if (first) {
+    ui::DockWindow("Scene", "main");
+    ui::DockWindow("Outline", "main", ui::DockSide::Left, 0.22f);
+    ui::DockWindow("Assets", "main", ui::DockSide::Bottom, 0.35f, "Scene");
+}
+```
+
+* **`NumberField`** (`float`, `double`, `int`): drag it sideways to scrub the value (Shift: a tenth of the speed);
+  click it to type, also an expression (`2*(3+4)`); Enter or a click elsewhere takes it, Escape keeps the old value,
+  Up / Down step. With both limits finite the field fills in proportion to the value; `buttons` adds - and +, `label`
+  a short label inside. **`VectorField`** puts 2 - 4 of them side by side, labeled X Y Z W in red, green, blue and
+  gray.
+* **`ColorPicker`** is iOS's: a saturation / brightness spectrum over a hue bar, an opacity bar, the hex value
+  (`#RRGGBB`, `#RRGGBBAA`) and swatches. **`ColorWell`** is the round well that opens it in a glass popover.
+* **Tables** submit only the rows in view (`TableVisible`): a million rows cost what the visible ones cost. Headers
+  sort (`TableSortSpec`: the application sorts its data when `changed`), the lines between them resize, rows select
+  (click, Ctrl adds, Shift extends), stripes and column lines are flags. A cell holds text (`TableCell`), an icon and
+  text, or any widget after `TableNextColumn`. Row offsets are kept in doubles, so the last of a million rows lands on
+  its pixel.
+* **Trees** (`TreeNode` / `TreePop`): an arrow that turns as the node opens, an icon, the label and a detail on the
+  right; children slide open and closed under it with a guide line. `TreeFlags_OpenOnArrow` keeps clicks on the row
+  for selecting; `SetNextTreeNodeOpen` expands or reveals.
+* **`TextEditor`** is the multi-line field: the text field's editing (graphemes, selection, undo, the clipboard, IME
+  composition) over paragraphs, wrapped at the width or scrolled sideways, Up / Down by visual line, a line-number
+  gutter, the monospace font, Tab as a character. Only the lines in view are laid out, so long files stay cheap.
+* **Docking.** `DockSpace` is an area windows dock into. A window dragged by its header over it shows glass targets -
+  the middle of a node (its tabs) or an edge (beside it) - and docks there when let go; a tab dragged out of its node
+  floats the window again, still under the pointer. The splitters between nodes resize them. Docked windows fill their
+  node under a glass tab bar, stay behind floating windows, and are ordinary `BeginWindow` code. `SaveDockLayout` /
+  `LoadDockLayout` keep the layout as text with the application's settings.
+
+## 13. Status: what of WGT is ported
 
 Ported, in the order the parts depend on each other:
 
@@ -459,8 +533,11 @@ Two WGT bugs were fixed on the way:
 * A stack inside a flow took the full width. It is now as wide as its content unless it has something to fill with
   (section 8).
 
-Not ported: color emoji (the text system draws outlines), and WGT's plugin loading (the plugin panel is drawn by the
-showcase itself).
+Not ported: WGT's plugin loading (the plugin panel is drawn by the showcase itself). Color emoji, which WGT had from
+DirectWrite, come from the FreeType text system now: bitmap strikes and COLR fonts (Segoe UI Emoji, Noto Color
+Emoji, Apple Color Emoji).
+
+Beyond WGT: the data widgets of section 12, and scrolling by touch from anywhere (section 5).
 
 **Tests** (`tests/ui/test_ui.cpp`, `esia_ui_tests`) run without a GPU, on a `Context` driven frame by frame:
 
@@ -481,7 +558,13 @@ showcase itself).
 * popups: a picker's menu opens and takes a choice; the click that closes a menu does not reach the widget under
   it; a menu item closes its menu; a tooltip waits half a second, goes when the mouse leaves and waits again;
 * scrolling: the content follows a drag and glides on after it; the indicator dragged to the bottom takes the
-  content to its end; content past the display fades at the display's edge;
+  content to its end; content past the display fades at the display's edge; a finger's swipe from a row, and from a
+  control that acts on the press, scrolls without pressing it, a tap still presses and a sideways drag stays the
+  control's; a drag held past the end at a phone's density keeps the content on the same pixel;
+* the data widgets (`tests/ui/test_data_widgets.cpp`): a number field scrubbed, typed as an expression and stepped; a
+  table sorted, its rows selected with Ctrl and Shift, only the rows in view asked for; tree nodes opened by their arrow and
+  their children submitted while they slide; the editor's lines, newlines and paste; the color picker's hex field;
+  dock layouts saved and loaded, a window dragged into a dock space, a tab dragged out;
 * the line chart: the room it takes, none when it draws into a rect;
 * glow halos: a glowing child gets room for its glow in a stack;
 * the island and the dock: a notification and an activity from another thread open the island; a dock tile click

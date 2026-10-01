@@ -31,7 +31,7 @@ every message to `HandleMessage`: a game). One `Platform` per window.
 | Win32 | Core | Notes |
 | --- | --- | --- |
 | `WM_MOUSEMOVE` | `MouseMove(px / scale)` | UI units = client pixels / scale, converted on the window thread with the scale of the moment; unchanged positions are not queued |
-| `WM_[LRMX]BUTTONDOWN/DBLCLK/UP` | the button's position, then `Button` | `SetCapture` on the first button down, `ReleaseCapture` after the last up; a release without a press in the window is dropped; the core detects double clicks itself |
+| `WM_[LRMX]BUTTONDOWN/DBLCLK/UP` | the button's position, then `Button` | `SetCapture` on the first button down, `ReleaseCapture` after the last up; a release without a press in the window is dropped; the core detects double clicks itself. A press a touch screen made (`GetMessageExtraInfo` carries `MI_WP_SIGNATURE` with the touch bit) is marked `InputEvent::touch`: scroll areas may take its drag over |
 | `WM_CAPTURECHANGED` | `Button(up)` for held buttons | only when the lost capture was the platform's (a dialog took it); a host's own capture is the host's |
 | `WM_MOUSELEAVE` (`TrackMouseEvent`) | `MouseMove(-1, -1)` | held back while captured; after the release, the platform checks whether the cursor is outside |
 | `WM_MOUSEWHEEL` / `WM_MOUSEHWHEEL` | `Wheel(0, delta / 120)` / `Wheel(-delta / 120, 0)` | fractional notches (touchpads); x > 0 scrolls toward the left, like y > 0 toward the top (the core's `UpdateScroll`) |
