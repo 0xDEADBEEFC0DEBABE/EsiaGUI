@@ -255,7 +255,10 @@ namespace esia::rhi::opengl
     {
         const bool error = type == GL_DEBUG_TYPE_ERROR;
         if (error)
+        {
             ++errors_;
+            ++callbackErrors_;
+        }
         if (error || severity == GL_DEBUG_SEVERITY_HIGH || severity == GL_DEBUG_SEVERITY_MEDIUM)
             std::fprintf(stderr, "esia %s: GL %s: %s\n", Name(), error ? "error" : "warning", message);
     }
@@ -264,13 +267,19 @@ namespace esia::rhi::opengl
     {
         if (!desc_.debug)
             return;
-        // with KHR_debug the callback has reported (and counted) every error already
+        // with KHR_debug the callback has reported (and counted) the errors already; what glGetError holds beyond those
+        // is counted here: a driver can list KHR_debug and never call back (Android's emulator)
         for (GLenum e = gl_.GetError(); e != GL_NO_ERROR; e = gl_.GetError())
-            if (!debugOutput_)
+        {
+            if (debugOutput_ && callbackErrors_ > 0)
             {
-                ++errors_;
-                std::fprintf(stderr, "esia %s: GL error 0x%04X (%s)\n", Name(), e, where);
+                --callbackErrors_;
+                continue;
             }
+            ++errors_;
+            std::fprintf(stderr, "esia %s: GL error 0x%04X (%s)\n", Name(), e, where);
+        }
+        callbackErrors_ = 0;
     }
 
     void GlDevice::Label(GLenum type, GLuint id, const char* name)

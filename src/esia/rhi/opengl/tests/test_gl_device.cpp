@@ -49,6 +49,17 @@ namespace
         return gl;
     }
 
+    // An extension of the current context (what the driver offers: llvmpipe has them all, Android's drivers not)
+    bool HasExtension(const GlApi& gl, const char* name)
+    {
+        GLint count = 0;
+        gl.GetIntegerv(GL_NUM_EXTENSIONS, &count);
+        for (GLint i = 0; i < count; ++i)
+            if (const GLubyte* e = gl.GetStringi(GL_EXTENSIONS, (GLuint)i); e && std::strcmp(reinterpret_cast<const char*>(e), name) == 0)
+                return true;
+        return false;
+    }
+
     std::vector<std::uint8_t> Read(rhi::Device& dev, rhi::Texture t, const rhi::IRect& r)
     {
         std::vector<std::uint8_t> px;
@@ -129,6 +140,10 @@ ESIA_TEST(GlDevice, DebugOutputCountsErrors)
         const GlApi gl = LoadGl();
         std::printf("  %s: the GL_INVALID_ENUM reported next is deliberate\n", ApiName(es));
         gl.Enable(0xFFFF);
+        // the device's next call checks glGetError: it counts the error then if the debug callback did not (a driver
+        // may list KHR_debug and never call back)
+        std::vector<std::uint8_t> px;
+        ESIA_CHECK(h.device->ReadPixels(h.target, {0, 0, 1, 1}, px));
         ESIA_CHECK(ErrorCount(*h.device) == 1);
         while (gl.GetError() != GL_NO_ERROR) {}
     }
@@ -149,12 +164,14 @@ ESIA_TEST(GlDevice, Caps)
             ESIA_CHECK(c.framebufferOriginBottomLeft && !c.clipSpaceYDown && !c.halfPixelOffset);
             ESIA_CHECK(c.readback && c.sampleRenderTarget && !c.runtimeEffects && !c.fxFeatureVariants);
             ESIA_CHECK(c.maxFxDataWidth >= 24 && c.maxFxDataWidth <= c.maxTextureSize);
-            // GL 3.3 has these in core; GLES 3.0 only through extensions (llvmpipe has them all)
-            ESIA_CHECK(c.floatRenderTargets == (!es || !coreOnly));
-            ESIA_CHECK(c.timestampQueries == (!es || !coreOnly));
+            // GL 3.3 has these in core; GLES 3.0 only through extensions, when the driver has them
+            const GlApi gl = LoadGl();
+            const bool extra = !coreOnly;
+            ESIA_CHECK(c.floatRenderTargets == (!es || (extra && (HasExtension(gl, "GL_EXT_color_buffer_float") || HasExtension(gl, "GL_EXT_color_buffer_half_float")))));
+            ESIA_CHECK(c.timestampQueries == (!es || (extra && HasExtension(gl, "GL_EXT_disjoint_timer_query"))));
             // an sRGB target is sampled raw only with EXT_texture_sRGB_decode
             const bool sampled = (h.device->GetTextureDesc(h.target).usage & rhi::TextureUsage_Sampled) != 0;
-            ESIA_CHECK(sampled == !coreOnly);
+            ESIA_CHECK(sampled == (extra && HasExtension(gl, "GL_EXT_texture_sRGB_decode")));
         }
 }
 

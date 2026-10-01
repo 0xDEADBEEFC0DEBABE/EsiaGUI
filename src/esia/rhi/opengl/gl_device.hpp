@@ -207,6 +207,7 @@ namespace esia::rhi::opengl
         bool disjointQuery_ = false;       // GL_GPU_DISJOINT_EXT can be read (GLES timer queries)
         int maxSamples_ = 1;
         std::uint32_t errors_ = 0;
+        std::uint32_t callbackErrors_ = 0;   // errors the KHR_debug callback reported since the last CheckErrors
 
         std::uint32_t next_ = 1;
         std::unordered_map<std::uint32_t, Tex> textures_;

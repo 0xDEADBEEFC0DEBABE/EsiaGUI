@@ -36,7 +36,7 @@ namespace esia::rhi::opengl
         constexpr EGLint EGL_NONE = 0x3038, EGL_SURFACE_TYPE = 0x3033, EGL_PBUFFER_BIT = 0x0001, EGL_RENDERABLE_TYPE = 0x3040,
                          EGL_OPENGL_BIT = 0x0008, EGL_OPENGL_ES3_BIT = 0x0040, EGL_WIDTH = 0x3057, EGL_HEIGHT = 0x3056,
                          EGL_CONTEXT_MAJOR_VERSION = 0x3098, EGL_CONTEXT_MINOR_VERSION = 0x30FB, EGL_CONTEXT_OPENGL_PROFILE_MASK = 0x30FD,
-                         EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT = 0x0001, EGL_CONTEXT_OPENGL_DEBUG = 0x31B0, EGL_TRUE = 1,
+                         EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT = 0x0001,
                          EGL_EXTENSIONS = 0x3055, EGL_PLATFORM_SURFACELESS_MESA = 0x31DD;
         constexpr EGLenum EGL_OPENGL_API = 0x30A2, EGL_OPENGL_ES_API = 0x30A0;
 
@@ -177,10 +177,13 @@ namespace esia::rhi::opengl
 #else
             constexpr bool kDebugContext = true;   // full KHR_debug output in debug builds
 #endif
-            const EGLint debug = kDebugContext ? EGL_TRUE : 0;
+            // EGL_KHR_create_context's names, which EGL 1.4 displays (Android's) take as well as 1.5 ones; the debug flag
+            // only when it is wanted (an EGL 1.4 driver refuses the 1.5 attribute EGL_CONTEXT_OPENGL_DEBUG outright)
+            constexpr EGLint kContextFlags = 0x30FC, kDebugBit = 0x0001;   // EGL_CONTEXT_FLAGS_KHR, EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR
+            const EGLint debugKey = kDebugContext ? kContextFlags : EGL_NONE;
             const EGLint glAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK,
-                                        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_CONTEXT_OPENGL_DEBUG, debug, EGL_NONE};
-            const EGLint esAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0, EGL_CONTEXT_OPENGL_DEBUG, debug, EGL_NONE};
+                                        EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, debugKey, kDebugBit, EGL_NONE};
+            const EGLint esAttribs[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 0, debugKey, kDebugBit, EGL_NONE};
             EGLContext context = egl.CreateContext(egl.display, config, nullptr, es ? esAttribs : glAttribs);
             if (!context)
             {
