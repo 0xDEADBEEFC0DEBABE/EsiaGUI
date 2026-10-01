@@ -422,7 +422,7 @@ A platform layer turns native events into `InputEvent`s and applies `PlatformReq
 | text and IME | `TextEvent` (committed UTF-8), `Composition` (string + caret) | `wantTextInput`, `imeRect` (candidate window at the caret) |
 | clipboard | - | `ContextDesc::getClipboard / setClipboard` |
 | DPI, display size, render scale | `FrameParams::displaySize / framebufferScale` + the widget layer's metrics scale | - |
-| a phone's camera housing, rounded corners, home indicator | `FrameParams::safeArea`, `Context::SafeArea()`: dock spaces and the island keep clear of them | - |
+| a phone's camera housing, rounded corners, home indicator | `FrameParams::safeArea`, `Context::SafeArea()`: dock spaces and the island keep clear of them (iOS: the view's safe area insets; Android: the window's insets - system bars and the display cutout) | - |
 
 Implementations: Win32 first (WGT's `HandleWin32Message` logic, including window-thread / render-thread splits and
 IME); X11 (`esia_platform_x11`: XIM text, the `CLIPBOARD` selection, `Xft.dpi`) and Android (`esia_platform_android`:

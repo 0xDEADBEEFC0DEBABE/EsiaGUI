@@ -25,6 +25,7 @@
 #pragma once
 #include "esia/core/context.hpp"
 #include "esia/text/text.hpp"
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -69,6 +70,14 @@ namespace glass
     };
 
     int RunApp(int argc, char** argv, App& app);
+
+#if defined(__ANDROID__)
+    // Android: a wallpaper as straight-alpha RGBA8, at most `maxSide` pixels on its longer side - the APK's own
+    // (assets/wallpaper.jpg, .png or .heic: the building machine's, as iOS's app bundle has the Mac's), else the system's
+    // built-in one (WallpaperManager.getBuiltInDrawable: an app may not read the user's without a permission). False
+    // when there is none. On the frame's thread, after RunApp started.
+    bool Wallpaper(int maxSide, int& width, int& height, std::vector<std::uint8_t>& rgba);
+#endif
 
     // macOS, iOS and Linux: a font path the frame's text system draws with the system's symbols - SF Symbols, the
     // desktop's icon theme - for the code points of esia/ui/icons.hpp (UiDesc::iconFontFile; Windows' icon fonts do not
