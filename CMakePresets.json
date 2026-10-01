@@ -44,6 +44,34 @@
       }
     },
     {
+      "name": "ios",
+      "displayName": "Esia - iOS (arm64), Xcode's clang (Release): the examples as signed app bundles",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/ios",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/apple-ios.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ESIA_BACKEND_METAL": "ON",
+        "ESIA_TEXT_DEPS": "bundled",
+        "BUILD_TESTING": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ios-simulator",
+      "displayName": "Esia - iOS Simulator (arm64), Xcode's clang (Release)",
+      "inherits": "ios",
+      "binaryDir": "${sourceDir}/build/ios-simulator",
+      "cacheVariables": {
+        "ESIA_IOS_PLATFORM": "iphonesimulator",
+        "ESIA_IOS_CODESIGN": "OFF"
+      }
+    },
+    {
       "name": "windows-clang-cl",
       "displayName": "Esia - Windows, clang-cl + lld-link (Debug)",
       "inherits": "esia-base",
@@ -99,6 +127,8 @@
     { "name": "linux-clang", "configurePreset": "linux-clang" },
     { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
     { "name": "macos-clang", "configurePreset": "macos-clang" },
+    { "name": "ios", "configurePreset": "ios" },
+    { "name": "ios-simulator", "configurePreset": "ios-simulator" },
     { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl" },
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc", "configuration": "Debug" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc", "configuration": "Release" },

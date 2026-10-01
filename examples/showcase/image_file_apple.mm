@@ -1,4 +1,5 @@
-// showcase - image files (the wallpaper) through ImageIO on macOS, as straight-alpha RGBA8 (image_file.hpp).
+// showcase - image files (the wallpaper) through ImageIO on macOS and iOS, as straight-alpha RGBA8 (image_file.hpp). A
+// relative path that is no file from the working directory is looked up in the app bundle's resources (iOS).
 #include "image_file.hpp"
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
@@ -14,6 +15,9 @@ namespace showcase
             NSString* p = [[NSString alloc] initWithBytes:path.data() length:path.size() * sizeof(wchar_t) encoding:NSUTF32LittleEndianStringEncoding];
             if (!p)
                 return false;
+            if (!p.absolutePath && ![NSFileManager.defaultManager fileExistsAtPath:p])
+                if (NSString* inBundle = [NSBundle.mainBundle pathForResource:p ofType:nil])
+                    p = inBundle;
             CGImageSourceRef src = CGImageSourceCreateWithURL((__bridge CFURLRef)[NSURL fileURLWithPath:p], nullptr);
             if (!src)
                 return false;

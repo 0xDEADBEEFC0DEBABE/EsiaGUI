@@ -73,6 +73,13 @@ jobs:
           ctest --preset macos-clang --timeout 1200
           --output-junit ctest-junit.xml --test-output-size-passed 65536 --test-output-size-failed 262144
 
+      - name: Build for iOS
+        # the iOS frame and the library with Xcode's clang and the iPhoneOS SDK (unsigned: no provisioning profile here)
+        if: ${{ matrix.deployment == '' }}
+        run: |
+          cmake --preset ios -DESIA_WERROR=ON
+          cmake --build --preset ios 2>&1 | tee logs/build-ios.txt; exit "${PIPESTATUS[0]}"
+
       - name: Report
         if: ${{ !cancelled() }}
         # OpenGL / GLES skip on macOS (the backend's headless devices are EGL and WGL; macOS has neither)

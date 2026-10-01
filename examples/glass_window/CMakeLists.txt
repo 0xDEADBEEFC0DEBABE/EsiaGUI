@@ -1,26 +1,70 @@
 # glass_window: Esia in a real window - the Win32 platform layer with every window-capable backend built into this
 # tree (--api picks one), liquid glass through Painter, and the core's windows. A smoke test of the whole path, not the
 # demo (docs/PLATFORM_WIN32.md).
-# macOS: the frame on AppKit and the Metal backend (app_macos.mm) instead of the Win32 layer and its hosts
+# macOS / iOS: the frame on AppKit or UIKit and the Metal backend (app_macos.mm, app_ios.mm on app_apple.mm) instead of
+# the Win32 layer and its hosts. On iOS the examples are app bundles (glass_ios_app), signed after the link when the Mac
+# has a provisioning profile for them (tools/ios/codesign.py).
+if(IOS)
+    set(ESIA_IOS_BUNDLE_PREFIX "org.esia" CACHE STRING "iOS: the examples' bundle identifiers are <prefix>.<example>")
+    set(ESIA_IOS_PROVISIONING_PROFILE "" CACHE FILEPATH "iOS: the profile the examples are signed with (default: the best one Xcode has)")
+    option(ESIA_IOS_CODESIGN "iOS: sign the examples' app bundles after the link" ON)
+endif()
+
+# glass_ios_app(<target> <display name> <identifier> [RESOURCES files...]): on iOS the target becomes an app bundle
+# (Info-ios.plist.in, <prefix>.<identifier>) with the files at its top level, signed last; elsewhere nothing.
+function(glass_ios_app target name identifier)
+    if(NOT IOS)
+        return()
+    endif()
+    cmake_parse_arguments(PARSE_ARGV 3 arg "" "" "RESOURCES")
+    set_target_properties(${target} PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Info-ios.plist.in
+        MACOSX_BUNDLE_BUNDLE_NAME "${name}"
+        MACOSX_BUNDLE_GUI_IDENTIFIER ${ESIA_IOS_BUNDLE_PREFIX}.${identifier}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
+    foreach(_file ${arg_RESOURCES})
+        add_custom_command(TARGET ${target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_file} $<TARGET_BUNDLE_DIR:${target}>/ VERBATIM)
+    endforeach()
+    if(ESIA_IOS_CODESIGN)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        set(_profile)
+        if(ESIA_IOS_PROVISIONING_PROFILE)
+            set(_profile --profile ${ESIA_IOS_PROVISIONING_PROFILE})
+        endif()
+        add_custom_command(TARGET ${target} POST_BUILD
+                           COMMAND ${Python3_EXECUTABLE} ${ESIA_ROOT}/tools/ios/codesign.py $<TARGET_BUNDLE_DIR:${target}> ${_profile} VERBATIM)
+    endif()
+endfunction()
+
 if(APPLE)
     if(NOT TARGET esia_rhi_metal)
-        message(STATUS "glass_window: needs the Metal backend on macOS (ESIA_BACKEND_METAL) - not built")
+        message(STATUS "glass_window: needs the Metal backend on macOS / iOS (ESIA_BACKEND_METAL) - not built")
         return()
     endif()
     enable_language(OBJCXX)
-    add_library(glass_app STATIC app_macos.mm ${ESIA_ROOT}/tests/support/image.cpp)
-    set_source_files_properties(app_macos.mm PROPERTIES COMPILE_OPTIONS "${ESIA_METAL_OBJC_OPTIONS}")
+    if(IOS)
+        set(_frame app_ios.mm)
+        set(_frameworks "-framework UIKit" "-framework MetalKit" "-framework QuartzCore" "-framework CoreGraphics")
+    else()
+        set(_frame app_macos.mm)
+        set(_frameworks "-framework AppKit" "-framework Carbon" "-framework MetalKit" "-framework QuartzCore")
+    endif()
+    add_library(glass_app STATIC ${_frame} app_apple.mm app_apple.hpp ${ESIA_ROOT}/tests/support/image.cpp)
+    set_source_files_properties(${_frame} app_apple.mm PROPERTIES COMPILE_OPTIONS "${ESIA_METAL_OBJC_OPTIONS}")
     target_include_directories(glass_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/support)
-    target_link_libraries(glass_app PUBLIC esia::render esia_rhi_metal "-framework AppKit" "-framework Carbon" "-framework MetalKit" "-framework QuartzCore" objc)
+    target_link_libraries(glass_app PUBLIC esia::render esia_rhi_metal ${_frameworks} objc)
     if(TARGET esia_text_ft)
         target_link_libraries(glass_app PUBLIC esia_text_ft)
         target_compile_definitions(glass_app PRIVATE GLASS_TEXT)
     endif()
     esia_target_defaults(glass_app)
-    message(STATUS "glass_window: macOS, Metal")
+    message(STATUS "glass_window: ${CMAKE_SYSTEM_NAME}, Metal")
     add_executable(glass_window main.cpp scene.cpp)
     target_link_libraries(glass_window PRIVATE glass_app)
     esia_target_defaults(glass_window)
+    glass_ios_app(glass_window "Esia Glass" glass-window)
     return()
 endif()
 

@@ -15,6 +15,8 @@
 //   --tab n         the Components panel's tab
 //   --page id       the Settings page shown first (accent, perf)
 //   --menu          the Components panel opens its menu (checks the popups)
+// On a display smaller than the desktop layout (a phone) one panel shows at a time, as large as fits over the status bar
+// (then centered over the dock); the dock switches panels as between apps.
 // The app options (API, size, scale, frames, screenshot ...) are glass_window's (../glass_window/app.hpp).
 #include "app.hpp"
 #include "esia/render/painter.hpp"
@@ -34,6 +36,9 @@
 #include <string>
 #include <thread>
 #include <vector>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace ui = esia::ui;
 namespace icon = esia::ui::icons;
@@ -956,6 +961,36 @@ float4 WgtEffect(WgtFx fx)
         }
 
         // ---------------------------------------------------- the desktop
+        // A display smaller than the desktop layout: a phone (in either orientation), not a laptop's window.
+        bool Compact() const
+        {
+            const Vec2 d = ctx->DisplaySize();
+            return d.x < S(720) || d.y < S(600);
+        }
+
+        // UI units: the part of the display the system draws nothing over
+        Rect Safe() const
+        {
+            const Vec2 d = ctx->DisplaySize();
+            return info.safeArea.Width() > 0.0f ? info.safeArea : Rect(0, 0, d.x, d.y);
+        }
+
+        // The status bar's top on a compact display: over the dock (ui::Dock: 46 tiles, 11 padding, 16 from the
+        // bottom). Not at the top, where the island opens.
+        float CompactStatusTop() const { return ctx->DisplaySize().y - S(46 + 22 + 16) - S(10) - S(30); }
+
+        // A panel on a compact display: centered in the safe area, over the status bar, as large as fits.
+        void FitCompact(ui::WindowOptions& wo) const
+        {
+            const Rect safe = Safe();
+            const float m = S(10);
+            const float top = safe.min.y + m;
+            const float bottom = CompactStatusTop() - m;
+            const Vec2 size(std::min(S(wo.size.x), safe.Width() - 2.0f * m), std::min(S(wo.size.y), bottom - top));
+            wo.size = size / S(1);
+            wo.pos = Vec2(safe.Center().x - size.x * 0.5f, top) / S(1);
+        }
+
         void Background()
         {
             const Vec2 d = ctx->DisplaySize();
@@ -1004,16 +1039,24 @@ float4 WgtEffect(WgtFx fx)
             const ui::Theme& t = ui->GetTheme();
             const esia::render::RenderStats* s = info.stats;
             char buf[256];
-            std::snprintf(buf, sizeof(buf), "%s  \xC2\xB7  %s  |  %.0f fps  |  UI: CPU %.2f ms  GPU %.2f ms  |  %d draws  |  %d shapes  |  %d glass passes", info.api,
-                          info.adapter.c_str(), info.fps, info.cpuMs, s && s->gpu.valid ? s->gpu.totalMs : 0.0f, s ? s->drawCalls : 0, s ? s->fxInstances : 0,
-                          s ? s->backdropCaptures : 0);
+            const bool compact = Compact();
+            if (compact)
+                std::snprintf(buf, sizeof(buf), "%.0f fps  |  CPU %.2f ms  GPU %.2f ms  |  %d glass passes", info.fps, info.cpuMs,
+                              s && s->gpu.valid ? s->gpu.totalMs : 0.0f, s ? s->backdropCaptures : 0);
+            else
+                std::snprintf(buf, sizeof(buf), "%s  \xC2\xB7  %s  |  %.0f fps  |  UI: CPU %.2f ms  GPU %.2f ms  |  %d draws  |  %d shapes  |  %d glass passes", info.api,
+                              info.adapter.c_str(), info.fps, info.cpuMs, s && s->gpu.valid ? s->gpu.totalMs : 0.0f, s ? s->drawCalls : 0, s ? s->fxInstances : 0,
+                              s ? s->backdropCaptures : 0);
             esia::PainterEnv env;
             env.pixelScale = ctx->FramebufferScale().x;
             env.text = ui->Text();
             esia::Painter p(ctx->BackgroundDrawList(), env);
             const esia::text::FontRef f = ui->Font(ui::TextStyle::Footnote);
             const Vec2 ts = p.MeasureText(f, buf);
-            const Rect r = Rect::FromSize(Vec2(S(14), ctx->DisplaySize().y - S(44)), Vec2(ts.x + S(28), S(30)));
+            // bottom left; on a compact display the dock is there: centered over it
+            const float w = ts.x + S(28);
+            const Vec2 at = compact ? Vec2(std::floor(Safe().Center().x - w * 0.5f), CompactStatusTop()) : Vec2(S(14), ctx->DisplaySize().y - S(44));
+            const Rect r = Rect::FromSize(at, Vec2(w, S(30)));
             Style hs = Style().Glass(ui::LookMaterial(t.materials.bar));
             if (ui::CurrentGlassLook() == ui::GlassLook::Theme)
                 hs.Fill(t.colors.windowSurface.Fade(0.5f));
@@ -1026,6 +1069,17 @@ float4 WgtEffect(WgtFx fx)
             if (++frameCount == openLaterFrame && openLater >= 0)
                 open[openLater] = true;
             ui->NewFrame();
+            const bool compact = Compact();
+            if (compact && frameCount == 1)
+            {
+                // one panel at a time: the first of those asked for
+                int kept = -1;
+                for (int i = 0; i < PanelCount; ++i)
+                    if (open[i] && kept >= 0)
+                        open[i] = false;
+                    else if (open[i])
+                        kept = i;
+            }
             Background();
             StatusBar();
             for (int i = 0; i < PanelCount; ++i)
@@ -1036,6 +1090,8 @@ float4 WgtEffect(WgtFx fx)
                 ui::WindowOptions wo;
                 wo.size = pi.size;
                 wo.pos = pi.pos;
+                if (compact)
+                    FitCompact(wo);
                 wo.icon = pi.icon;
                 if (i == Settings)
                     wo.flags = ui::WindowFlags_NoScroll;   // the navigation pages scroll
@@ -1057,7 +1113,11 @@ float4 WgtEffect(WgtFx fx)
             ui::DockItem items[PanelCount];
             for (int i = 0; i < PanelCount; ++i)
                 items[i] = {kPanels[i].title, kPanels[i].icon, Color::Hex(kPanels[i].color), &open[i]};
-            ui::Dock(items);
+            const int clicked = ui::Dock(items);
+            if (compact && clicked >= 0 && open[clicked])   // the panel opened replaces the one before
+                for (int i = 0; i < PanelCount; ++i)
+                    if (i != clicked)
+                        open[i] = false;
             ui->EndFrame();
         }
     };
@@ -1141,8 +1201,10 @@ int main(int argc, char** argv)
         d.ui = std::make_unique<ui::Ui>(ctx, desc);
         // the wallpaper WGT's demo used, scaled down to 2560 on its longer side
         showcase::ImageFile wall;
-        // (on macOS one of the system's: WGT's is a Windows file)
-#if defined(__APPLE__)
+        // (on macOS one of the system's: WGT's is a Windows file; on iOS the app bundle's, from the Mac that built it)
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        for (const wchar_t* path : {L"wallpaper.jpg"})
+#elif defined(__APPLE__)
         for (const wchar_t* path : {L"/System/Library/Desktop Pictures/Sonoma.heic", L"/System/Library/Desktop Pictures/Mac Blue.heic"})
 #else
         for (const wchar_t* path : {L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg", L"C:\\Windows\\Web\\4K\\Wallpaper\\Windows\\img0_1920x1200.jpg"})

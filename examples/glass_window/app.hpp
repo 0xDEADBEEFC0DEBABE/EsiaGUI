@@ -44,6 +44,9 @@ namespace glass
         float fps = 0.0f;
         float cpuMs = 0.0f;          // the last frame's UI build (App::frame), milliseconds
         const esia::render::RenderStats* stats = nullptr;   // the last frame the renderer drew
+        // UI units: the part of the display the system draws nothing over (iOS: not under the sensor housing or the
+        // home indicator); empty = the whole display
+        esia::Rect safeArea;
     };
 
     struct App
