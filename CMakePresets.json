@@ -1,0 +1,149 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "esia-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "linux-clang",
+      "displayName": "Esia - Linux, clang + lld (Debug)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/linux-clang",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-linux.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "displayName": "Esia - Linux, clang + lld (Release)",
+      "inherits": "linux-clang",
+      "binaryDir": "${sourceDir}/build/linux-clang-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-clang-cl",
+      "displayName": "Esia - Windows, clang-cl + lld-link (Debug)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/windows-clang-cl",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl-windows.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Esia - Windows, MSVC (Visual Studio 2022)",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/windows-msvc",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-cross",
+      "displayName": "Esia - Windows x64 from Linux, clang-cl + lld-link + xwin (Debug)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/windows-cross",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-cl-xwin.cmake",
+      "cacheVariables": {
+        "BUILD_TESTING": "OFF"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-mingw-cross",
+      "displayName": "Esia - Windows x64 from Linux, clang + ld.lld + mingw-w64 (compile / link check when xwin is unavailable)",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/windows-mingw-cross",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/clang-mingw.cmake",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-clang",
+      "configurePreset": "linux-clang"
+    },
+    {
+      "name": "linux-clang-release",
+      "configurePreset": "linux-clang-release"
+    },
+    {
+      "name": "windows-clang-cl",
+      "configurePreset": "windows-clang-cl"
+    },
+    {
+      "name": "windows-msvc-debug",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-cross",
+      "configurePreset": "windows-cross"
+    },
+    {
+      "name": "windows-mingw-cross",
+      "configurePreset": "windows-mingw-cross"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-clang",
+      "configurePreset": "linux-clang",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "configurePreset": "linux-clang-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-clang-cl",
+      "configurePreset": "windows-clang-cl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
