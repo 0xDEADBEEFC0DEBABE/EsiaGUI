@@ -1134,11 +1134,19 @@ int main(int argc, char** argv)
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
         desc.glassLook = look;
+#if defined(__APPLE__)
+        desc.iconFontFile = glass::kSystemSymbolsFont;   // SF Symbols for the icons
+#endif
         d.glassLook = (int)look;
         d.ui = std::make_unique<ui::Ui>(ctx, desc);
         // the wallpaper WGT's demo used, scaled down to 2560 on its longer side
         showcase::ImageFile wall;
+        // (on macOS one of the system's: WGT's is a Windows file)
+#if defined(__APPLE__)
+        for (const wchar_t* path : {L"/System/Library/Desktop Pictures/Sonoma.heic", L"/System/Library/Desktop Pictures/Mac Blue.heic"})
+#else
         for (const wchar_t* path : {L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg", L"C:\\Windows\\Web\\4K\\Wallpaper\\Windows\\img0_1920x1200.jpg"})
+#endif
             if (showcase::LoadImageFile(path, wall, 2560))
                 break;
         if (!wall.rgba.empty())

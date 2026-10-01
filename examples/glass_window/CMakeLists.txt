@@ -1,6 +1,29 @@
 # glass_window: Esia in a real window - the Win32 platform layer with every window-capable backend built into this
 # tree (--api picks one), liquid glass through Painter, and the core's windows. A smoke test of the whole path, not the
 # demo (docs/PLATFORM_WIN32.md).
+# macOS: the frame on AppKit and the Metal backend (app_macos.mm) instead of the Win32 layer and its hosts
+if(APPLE)
+    if(NOT TARGET esia_rhi_metal)
+        message(STATUS "glass_window: needs the Metal backend on macOS (ESIA_BACKEND_METAL) - not built")
+        return()
+    endif()
+    enable_language(OBJCXX)
+    add_library(glass_app STATIC app_macos.mm ${ESIA_ROOT}/tests/support/image.cpp)
+    set_source_files_properties(app_macos.mm PROPERTIES COMPILE_OPTIONS "${ESIA_METAL_OBJC_OPTIONS}")
+    target_include_directories(glass_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${ESIA_ROOT}/tests/support)
+    target_link_libraries(glass_app PUBLIC esia::render esia_rhi_metal "-framework AppKit" "-framework Carbon" "-framework MetalKit" "-framework QuartzCore" objc)
+    if(TARGET esia_text_ft)
+        target_link_libraries(glass_app PUBLIC esia_text_ft)
+        target_compile_definitions(glass_app PRIVATE GLASS_TEXT)
+    endif()
+    esia_target_defaults(glass_app)
+    message(STATUS "glass_window: macOS, Metal")
+    add_executable(glass_window main.cpp scene.cpp)
+    target_link_libraries(glass_window PRIVATE glass_app)
+    esia_target_defaults(glass_window)
+    return()
+endif()
+
 if(NOT TARGET esia_platform_win32)
     message(STATUS "glass_window: needs the Win32 platform layer (ESIA_PLATFORM_WIN32) - not built")
     return()
