@@ -46,6 +46,9 @@ if(TARGET esia_text_ft)
     esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp text/test_platform_face.cpp)
     target_link_libraries(esia_text_ft_tests PRIVATE esia_text_ft esia_testkit esia::harfbuzz)
     target_include_directories(esia_text_ft_tests PRIVATE ${ESIA_ROOT}/src/esia/text/ft)   # platform_face.hpp
+    if(APPLE)
+        target_link_libraries(esia_text_ft_tests PRIVATE "-framework CoreText" "-framework CoreFoundation")   # Core Text's own widths
+    endif()
     target_compile_definitions(esia_text_ft_tests PRIVATE
         ESIA_TEST_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts"
         ESIA_TEXT_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/text/golden"

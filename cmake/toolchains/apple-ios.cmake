@@ -1,5 +1,5 @@
 # iOS on Apple silicon iPhones and iPads (arm64), with Xcode's clang and the iPhoneOS SDK. The examples become
-# app bundles, signed after the link when the Mac has a provisioning profile for them (tools/ios/codesign.sh).
+# app bundles, signed after the link when the Mac has a provisioning profile for them (tools/ios/codesign.py).
 #
 #   cmake --preset ios && cmake --build --preset ios
 #   xcrun devicectl device install app --device <name or UDID> build/ios/bin/showcase.app

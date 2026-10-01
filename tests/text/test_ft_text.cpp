@@ -4,9 +4,13 @@
 // composited on the CPU from the pages the registry received, against a golden image.
 #include "esia/text/freetype.hpp"
 #include "esia/text/system_fonts.hpp"
+#include <cmath>
 #include <cstdio>
 #include "font_test_util.hpp"
 #include "ft_test_util.hpp"
+#if defined(__APPLE__)
+#include <CoreText/CoreText.h>
+#endif
 
 using namespace esia;
 using namespace esia::texttest;
@@ -15,6 +19,24 @@ namespace
 {
     // DroidSans has 2048 design units per em: at this size one design unit is 0.01 UI units
     constexpr float kUnitSize = 20.48f;
+
+#if defined(__APPLE__)
+    // Core Text's own advance of `text` in the font `postScriptName` at `size` (the sum over its characters, one glyph
+    // each); -1 when the font lacks one of them.
+    float CoreTextAdvance(const char* postScriptName, float size, const std::u16string& text)
+    {
+        CFStringRef name = CFStringCreateWithCString(nullptr, postScriptName, kCFStringEncodingUTF8);
+        CTFontRef font = CTFontCreateWithName(name, (CGFloat)size, nullptr);
+        CFRelease(name);
+        std::vector<UniChar> chars(text.begin(), text.end());
+        std::vector<CGGlyph> glyphs(chars.size());
+        float advance = -1.0f;
+        if (CTFontGetGlyphsForCharacters(font, chars.data(), glyphs.data(), (CFIndex)chars.size()))
+            advance = (float)CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal, glyphs.data(), nullptr, (CFIndex)glyphs.size());
+        CFRelease(font);
+        return advance;
+    }
+#endif
 
     struct Fixture
     {
@@ -352,7 +374,16 @@ ESIA_TEST(FreeType, SystemFontsCoreTextDraws)
     ESIA_CHECK(q.size() == 4);
     for (const Quad& g : q)
         ESIA_CHECK(g.r.Width() > 16.0f && g.r.Width() < 36.0f && g.r.Height() > 16.0f && g.r.Height() < 40.0f);
-    ESIA_CHECK_NEAR(f.ts->Measure({pingfang, 32.0f}, kText).size.x, 128.0f, 0.5f);   // full width: an em each
+    // as wide as Core Text lays it out (an em each where PingFang is full width): the advances come from the tables
+    // Core Text hands out, which differ between macOS versions (macOS 15's PingFang is not macOS 27's)
+#if defined(__APPLE__)
+    const float measured = f.ts->Measure({pingfang, 32.0f}, kText).size.x;
+    const float coreText = CoreTextAdvance("PingFangSC-Regular", 32.0f, u"\u4E13\u4E1A\u4E1C\u4E1D");
+    if (!(std::fabs(measured - coreText) <= 0.5f))
+        std::printf("  PingFang SC at 32 px: %.2f px wide, Core Text %.2f px\n", (double)measured, (double)coreText);
+    ESIA_CHECK(coreText > 0.0f);
+    ESIA_CHECK_NEAR(measured, coreText, 0.5f);
+#endif
 }
 
 ESIA_TEST(FreeType, CachesLayoutsAndGlyphs)
