@@ -32,6 +32,9 @@ namespace esia::rhi::metal
     {
         // GPU times per category (RenderStats::gpu) where the GPU samples timestamps at encoder boundaries.
         bool timestamps = true;
+        // FX feature variants (Caps::fxFeatureVariants): -1 = when the Fx MSL declares the feature mask as a function
+        // constant (MslDeclaresFxFeatures), 0 / 1 = off / on whatever the MSL (tests)
+        int fxFeatureVariants = -1;
         // Called for every RHI contract violation or Metal failure the backend detects (also kept in Errors()).
         std::function<void(const std::string&)> onError;
     };
@@ -59,6 +62,7 @@ namespace esia::rhi::metal
         void UpdateBuffer(Buffer buf, const void* data, std::size_t size) override;
         void DestroyBuffer(Buffer buf) override;
         Pipeline CreatePipeline(const PipelineDesc& desc) override;
+        PipelineStatus GetPipelineStatus(Pipeline p) const override;
         void DestroyPipeline(Pipeline p) override;
 
         bool BeginFrame(const FrameDesc& desc) override;

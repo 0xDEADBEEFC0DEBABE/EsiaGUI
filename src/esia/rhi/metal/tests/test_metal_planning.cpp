@@ -52,6 +52,30 @@ ESIA_TEST(MetalPlanning, PipelineKeys)
     ESIA_CHECK(!MakePipelineKey(d, k, why));
 }
 
+ESIA_TEST(MetalPlanning, FxFeatureVariants)
+{
+    // the feature mask is part of an Fx key only: variants of one program are separate pipeline states
+    PipelineDesc d;
+    d.program = ShaderProgram::Fx;
+    d.layout = VertexLayout::None;
+    d.topology = Topology::TriangleStrip;
+    d.blend = BlendMode::Premultiplied;
+    PipelineKey full, a, b;
+    std::string why;
+    ESIA_CHECK(MakePipelineKey(d, full, why));
+    d.fxFeatures = 0x21;
+    ESIA_CHECK(MakePipelineKey(d, a, why) && a.fxFeatures == 0x21 && !(a == full));
+    d.fxFeatures = 0x25;
+    ESIA_CHECK(MakePipelineKey(d, b, why) && !(a == b) && PipelineKeyHash{}(a) != PipelineKeyHash{}(b));
+    d.program = ShaderProgram::TextGray;
+    d.layout = VertexLayout::UiVertex;
+    d.topology = Topology::TriangleList;
+    ESIA_CHECK(MakePipelineKey(d, a, why) && a.fxFeatures == 0);
+    // what SPIRV-Cross writes for [[vk::constant_id(0)]] in MSL
+    ESIA_CHECK(MslDeclaresFxFeatures("constant uint kEsiaFxFeatures_tmp [[function_constant(0)]];\n"));
+    ESIA_CHECK(!MslDeclaresFxFeatures("constant uint x [[function_constant(1)]];") && !MslDeclaresFxFeatures("") && !MslDeclaresFxFeatures(nullptr));
+}
+
 ESIA_TEST(MetalPlanning, BlitLayouts)
 {
     const BufferImageLayout a = LayoutOf(Format::R8_UNORM, 3, 5);

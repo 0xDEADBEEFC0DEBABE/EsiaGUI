@@ -272,6 +272,8 @@ namespace esia::rhi::metal::test
         p.desc.vertexSource = p.desc.fragmentSource = nullptr;
         psos_.push_back(std::move(p));
         ++shared_->stats.pipelines;
+        if (d.fxFeatures != 0)
+            ++shared_->stats.variantPipelines;
         return (std::uint32_t)psos_.size();
     }
 

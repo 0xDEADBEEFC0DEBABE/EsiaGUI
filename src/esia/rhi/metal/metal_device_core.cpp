@@ -45,7 +45,13 @@ namespace esia::rhi::metal
         caps_.timestampQueries = g.timestamps && options_.timestamps;
         caps_.readback = true;
         caps_.runtimeEffects = false;
-        caps_.fxFeatureVariants = false;
+        // Variants where the shader library's Fx MSL has the feature mask as function constant 0: one MSL, specialized
+        // by Metal's compiler per batch mask; compiled in the background where the Gpu can (the renderer draws with a
+        // ready superset or the full shader meanwhile)
+        const shaders::ShaderBlob* fxPs = shaders::Find(shaders::Format::Msl, ShaderProgram::Fx, shaders::Stage::Pixel);
+        caps_.fxFeatureVariants = options_.fxFeatureVariants < 0 ? (fxPs && MslDeclaresFxFeatures(reinterpret_cast<const char*>(fxPs->data)))
+                                                                 : options_.fxFeatureVariants != 0;
+        caps_.asyncPipelines = caps_.fxFeatureVariants && g.asyncPipelines;
         caps_.maxTextureSize = g.maxTextureSize;
         caps_.maxFxDataWidth = g.maxTextureSize;     // unused: FxStorage::Buffer
     }
@@ -475,8 +481,9 @@ namespace esia::rhi::metal
             g.pixelFormat = PixelFormatOf(desc.targetFormat);
             g.samples = desc.samples;
             g.blend = BlendStateOf(desc.blend);
+            g.fxFeatures = key.fxFeatures;
             std::string error;
-            pso = gpu_->CreatePipeline(g, error);
+            pso = desc.background && caps_.asyncPipelines ? gpu_->CreatePipelineAsync(g, error) : gpu_->CreatePipeline(g, error);
             if (!pso)
             {
                 Error(std::string("pipeline ") + ShaderProgramName(desc.program) + ": " + error);
@@ -487,6 +494,18 @@ namespace esia::rhi::metal
         const Pipeline p{next_++};
         pipelines_[p.id] = PipelineRec{key, pso, desc.topology};
         return p;
+    }
+
+    PipelineStatus MetalDevice::GetPipelineStatus(Pipeline p) const
+    {
+        auto it = pipelines_.find(p.id);
+        if (it == pipelines_.end())
+            return PipelineStatus::Failed;
+        std::string error;
+        const PipelineStatus s = gpu_->PipelineStatusOf(it->second.pso, error);
+        if (!error.empty())   // an asynchronous compile failed (reported once)
+            const_cast<MetalDevice*>(this)->Error(std::string("pipeline ") + ShaderProgramName(it->second.key.program) + ": " + error);
+        return s;
     }
 
     void MetalDevice::DestroyPipeline(Pipeline p)
@@ -618,6 +637,12 @@ namespace esia::rhi::metal
         const TextureRec* target = FindTexture(passTarget_);
         if (target && (it->second.key.format != target->desc.format || it->second.key.samples != target->desc.samples))
             Error("SetPipeline: the pipeline was built for another target format or sample count");
+        std::string error;
+        if (gpu_->PipelineStatusOf(it->second.pso, error) != PipelineStatus::Ready)
+        {
+            Error("SetPipeline: the pipeline is not ready (a background compile is pending or failed)");
+            return;
+        }
         pipeline_ = p.id;
         pipelineDirty_ = true;
     }

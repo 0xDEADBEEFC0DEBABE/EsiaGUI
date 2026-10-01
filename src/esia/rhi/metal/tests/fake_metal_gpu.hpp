@@ -40,7 +40,7 @@ namespace esia::rhi::metal::test
         struct Stats
         {
             int commandBuffers = 0, renderPasses = 0, blitPasses = 0, resolves = 0, draws = 0, copies = 0, uploads = 0, readbacks = 0, views = 0;
-            int pipelines = 0, liveTextures = 0, liveBuffers = 0;
+            int pipelines = 0, variantPipelines = 0, liveTextures = 0, liveBuffers = 0;
         };
         // The state the fake shares with the test after the device took ownership of it.
         struct Shared

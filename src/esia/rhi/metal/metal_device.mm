@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <unordered_map>
 
 // The raw values metal_tables.hpp uses on every host must be Apple's (compared as integers: they are different enum
@@ -64,11 +65,143 @@ namespace esia::rhi::metal
         MTLOrigin Origin(int x, int y) { return MTLOriginMake((NSUInteger)x, (NSUInteger)y, 0); }
         MTLSize Size(const IRect& r) { return MTLSizeMake((NSUInteger)r.Width(), (NSUInteger)r.Height(), 1); }
 
+        // Compiles the shader library's MSL into libraries (once per blob) and pipeline states, from any thread: the
+        // render thread and the background compiles (Metal's device and libraries are thread-safe, the map is not).
+        class Compiler
+        {
+        public:
+            explicit Compiler(id<MTLDevice> device) : device_(device) {}
+
+            id<MTLRenderPipelineState> Pipeline(const GpuPipelineDesc& d, std::string& error)
+            {
+                @autoreleasepool
+                {
+                    id<MTLFunction> vs = Function(d.vertexSource, d.fxFeatures, error);
+                    id<MTLFunction> fs = vs ? Function(d.fragmentSource, d.fxFeatures, error) : nil;
+                    if (!vs || !fs)
+                        return nil;
+                    MTLRenderPipelineDescriptor* pd = [MTLRenderPipelineDescriptor new];
+                    pd.label = [NSString stringWithUTF8String:ShaderProgramName(d.program)];
+                    pd.vertexFunction = vs;
+                    pd.fragmentFunction = fs;
+                    pd.rasterSampleCount = (NSUInteger)d.samples;
+                    MTLRenderPipelineColorAttachmentDescriptor* c = pd.colorAttachments[0];
+                    c.pixelFormat = (MTLPixelFormat)d.pixelFormat;
+                    c.writeMask = MTLColorWriteMaskAll;
+                    c.blendingEnabled = d.blend.enabled;
+                    c.sourceRGBBlendFactor = (MTLBlendFactor)d.blend.rgbSrc;
+                    c.destinationRGBBlendFactor = (MTLBlendFactor)d.blend.rgbDst;
+                    c.rgbBlendOperation = (MTLBlendOperation)d.blend.rgbOp;
+                    c.sourceAlphaBlendFactor = (MTLBlendFactor)d.blend.alphaSrc;
+                    c.destinationAlphaBlendFactor = (MTLBlendFactor)d.blend.alphaDst;
+                    c.alphaBlendOperation = (MTLBlendOperation)d.blend.alphaOp;
+                    if (d.uiVertexLayout)
+                    {
+                        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+                        for (NSUInteger i = 0; i < 3; ++i)
+                        {
+                            vd.attributes[i].format = (MTLVertexFormat)kUiVertexAttributes[i].format;
+                            vd.attributes[i].offset = kUiVertexAttributes[i].offset;
+                            vd.attributes[i].bufferIndex = binding::kVertexBuffer;
+                        }
+                        vd.layouts[binding::kVertexBuffer].stride = kUiVertexStride;
+                        vd.layouts[binding::kVertexBuffer].stepFunction = MTLVertexStepFunctionPerVertex;
+                        vd.layouts[binding::kVertexBuffer].stepRate = 1;
+                        pd.vertexDescriptor = vd;
+                    }
+                    NSError* err = nil;
+                    id<MTLRenderPipelineState> pso = [device_ newRenderPipelineStateWithDescriptor:pd error:&err];
+                    if (!pso)
+                        error = err ? err.localizedDescription.UTF8String : "newRenderPipelineStateWithDescriptor failed";
+                    return pso;
+                }
+            }
+
+        private:
+            // One library per MSL blob (the shader library's text lives for the program's lifetime): the fragment
+            // and vertex stages of several programs share sources.
+            id<MTLLibrary> Library(const char* source, std::string& error)
+            {
+                std::lock_guard lock(mutex_);
+                id<MTLLibrary> lib = libraries_[source];
+                if (lib)
+                    return lib;
+                MTLCompileOptions* o = [MTLCompileOptions new];
+                o.languageVersion = MTLLanguageVersion2_0;
+                // IEEE semantics like the other backends' compilers (the image goldens come from them)
+#if (defined(__MAC_15_0) && __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_15_0) || (defined(__IPHONE_18_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_18_0)
+                if (@available(macOS 15.0, iOS 18.0, *))
+                    o.mathMode = MTLMathModeSafe;
+                else
+#endif
+                {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                    o.fastMathEnabled = NO;
+#pragma clang diagnostic pop
+                }
+                NSError* err = nil;
+                lib = [device_ newLibraryWithSource:[NSString stringWithUTF8String:source] options:o error:&err];
+                if (!lib)
+                    error = err ? err.localizedDescription.UTF8String : "newLibraryWithSource failed";
+                else
+                    libraries_[source] = lib;
+                return lib;
+            }
+
+            // esia_main; specialized to `fxFeatures` (0 = every feature) where the MSL declares the FX feature mask as
+            // function constant 0: Metal's compiler then drops the code of the features the mask leaves out
+            id<MTLFunction> Function(const char* source, std::uint32_t fxFeatures, std::string& error)
+            {
+                id<MTLLibrary> lib = Library(source, error);
+                if (!lib)
+                    return nil;
+                id<MTLFunction> f = nil;
+                if (MslDeclaresFxFeatures(source))
+                {
+                    const std::uint32_t mask = fxFeatures ? fxFeatures : 0xFFFFFFFFu;
+                    MTLFunctionConstantValues* cv = [MTLFunctionConstantValues new];
+                    [cv setConstantValue:&mask type:MTLDataTypeUInt atIndex:0];
+                    NSError* err = nil;
+                    f = [lib newFunctionWithName:@"esia_main" constantValues:cv error:&err];
+                    if (!f)
+                        error = err ? err.localizedDescription.UTF8String : "specializing esia_main failed";
+                    return f;
+                }
+                f = [lib newFunctionWithName:@"esia_main"];
+                if (!f)
+                    error = "no esia_main in the MSL";
+                return f;
+            }
+
+            id<MTLDevice> device_;
+            std::mutex mutex_;
+            std::unordered_map<const char*, id<MTLLibrary>> libraries_;
+        };
+
+        // Pipeline states by id, shared with the background compiles (which may finish after the Gpu is gone).
+        struct PipelineTable
+        {
+            std::mutex mutex;
+            std::uint32_t next = 1;
+            std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> ready;
+            std::unordered_map<std::uint32_t, bool> pending;         // id -> released while it compiled
+            std::unordered_map<std::uint32_t, std::string> failed;   // id -> error, until reported
+
+            std::uint32_t Add(id<MTLRenderPipelineState> pso)
+            {
+                std::lock_guard lock(mutex);
+                const std::uint32_t pid = next++;
+                ready[pid] = pso;
+                return pid;
+            }
+        };
+
         class MetalGpu final : public Gpu
         {
         public:
             MetalGpu(id<MTLDevice> device, id<MTLCommandQueue> queue, std::function<void(const std::string&)> log)
-                : device_(device), queue_(queue ? queue : [device newCommandQueue]), log_(std::move(log))
+                : device_(device), queue_(queue ? queue : [device newCommandQueue]), log_(std::move(log)), compiler_(std::make_shared<Compiler>(device))
             {
                 // s0 / s1 of the binding model: linear and point, clamped, no mips (every texture has one level)
                 MTLSamplerDescriptor* s = [MTLSamplerDescriptor new];
@@ -94,6 +227,7 @@ namespace esia::rhi::metal
                                 timestampSet_ = set;
                 }
                 caps_.timestamps = timestampSet_ != nil;
+                caps_.asyncPipelines = true;
             }
 
             GpuCaps Caps() const override { return caps_; }
@@ -165,53 +299,64 @@ namespace esia::rhi::metal
 
             std::uint32_t CreatePipeline(const GpuPipelineDesc& d, std::string& error) override
             {
-                @autoreleasepool
-                {
-                    id<MTLFunction> vs = Function(d.vertexSource, error);
-                    id<MTLFunction> fs = vs ? Function(d.fragmentSource, error) : nil;
-                    if (!vs || !fs)
-                        return 0;
-                    MTLRenderPipelineDescriptor* pd = [MTLRenderPipelineDescriptor new];
-                    pd.label = [NSString stringWithUTF8String:ShaderProgramName(d.program)];
-                    pd.vertexFunction = vs;
-                    pd.fragmentFunction = fs;
-                    pd.rasterSampleCount = (NSUInteger)d.samples;
-                    MTLRenderPipelineColorAttachmentDescriptor* c = pd.colorAttachments[0];
-                    c.pixelFormat = (MTLPixelFormat)d.pixelFormat;
-                    c.writeMask = MTLColorWriteMaskAll;
-                    c.blendingEnabled = d.blend.enabled;
-                    c.sourceRGBBlendFactor = (MTLBlendFactor)d.blend.rgbSrc;
-                    c.destinationRGBBlendFactor = (MTLBlendFactor)d.blend.rgbDst;
-                    c.rgbBlendOperation = (MTLBlendOperation)d.blend.rgbOp;
-                    c.sourceAlphaBlendFactor = (MTLBlendFactor)d.blend.alphaSrc;
-                    c.destinationAlphaBlendFactor = (MTLBlendFactor)d.blend.alphaDst;
-                    c.alphaBlendOperation = (MTLBlendOperation)d.blend.alphaOp;
-                    if (d.uiVertexLayout)
-                    {
-                        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
-                        for (NSUInteger i = 0; i < 3; ++i)
-                        {
-                            vd.attributes[i].format = (MTLVertexFormat)kUiVertexAttributes[i].format;
-                            vd.attributes[i].offset = kUiVertexAttributes[i].offset;
-                            vd.attributes[i].bufferIndex = binding::kVertexBuffer;
-                        }
-                        vd.layouts[binding::kVertexBuffer].stride = kUiVertexStride;
-                        vd.layouts[binding::kVertexBuffer].stepFunction = MTLVertexStepFunctionPerVertex;
-                        vd.layouts[binding::kVertexBuffer].stepRate = 1;
-                        pd.vertexDescriptor = vd;
-                    }
-                    NSError* err = nil;
-                    id<MTLRenderPipelineState> pso = [device_ newRenderPipelineStateWithDescriptor:pd error:&err];
-                    if (!pso)
-                    {
-                        error = err ? err.localizedDescription.UTF8String : "newRenderPipelineStateWithDescriptor failed";
-                        return 0;
-                    }
-                    return Keep(psos_, pso);
-                }
+                id<MTLRenderPipelineState> pso = compiler_->Pipeline(d, error);
+                return pso ? pipelines_->Add(pso) : 0;
             }
 
-            void ReleasePipeline(std::uint32_t pipeline) override { psos_.erase(pipeline); }
+            // On a background queue: the id is valid at once, Pending until the pipeline state exists
+            std::uint32_t CreatePipelineAsync(const GpuPipelineDesc& d, std::string& error) override
+            {
+                (void)error;
+                std::shared_ptr<PipelineTable> table = pipelines_;
+                std::shared_ptr<Compiler> compiler = compiler_;
+                std::uint32_t pid = 0;
+                {
+                    std::lock_guard lock(table->mutex);
+                    pid = table->next++;
+                    table->pending[pid] = false;
+                }
+                const GpuPipelineDesc desc = d;   // the MSL it names is the shader library's: it lives on
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                    std::string why;
+                    id<MTLRenderPipelineState> pso = compiler->Pipeline(desc, why);
+                    std::lock_guard lock(table->mutex);
+                    const bool released = table->pending[pid];
+                    table->pending.erase(pid);
+                    if (released)
+                        return;
+                    if (pso)
+                        table->ready[pid] = pso;
+                    else
+                        table->failed[pid] = why.empty() ? "compile failed" : why;
+                });
+                return pid;
+            }
+
+            PipelineStatus PipelineStatusOf(std::uint32_t pipeline, std::string& error) override
+            {
+                std::lock_guard lock(pipelines_->mutex);
+                if (pipelines_->ready.count(pipeline))
+                    return PipelineStatus::Ready;
+                if (pipelines_->pending.count(pipeline))
+                    return PipelineStatus::Pending;
+                auto f = pipelines_->failed.find(pipeline);
+                if (f != pipelines_->failed.end() && !f->second.empty())
+                {
+                    error = f->second;
+                    f->second.clear();   // reported once
+                }
+                return PipelineStatus::Failed;
+            }
+
+            void ReleasePipeline(std::uint32_t pipeline) override
+            {
+                std::lock_guard lock(pipelines_->mutex);
+                auto p = pipelines_->pending.find(pipeline);
+                if (p != pipelines_->pending.end())
+                    p->second = true;   // dropped when its compile finishes
+                pipelines_->ready.erase(pipeline);
+                pipelines_->failed.erase(pipeline);
+            }
 
             // ---- command buffers
             bool BeginCommandBuffer(void* native, std::uint64_t serial, const std::shared_ptr<FrameTracker>& tracker) override
@@ -324,7 +469,17 @@ namespace esia::rhi::metal
             void* NativeRenderEncoder() override { return (__bridge void*)render_; }
 
             // ---- render encoder
-            void SetPipeline(std::uint32_t pipeline) override { [render_ setRenderPipelineState:psos_[pipeline]]; }
+            void SetPipeline(std::uint32_t pipeline) override
+            {
+                id<MTLRenderPipelineState> pso = nil;
+                {
+                    std::lock_guard lock(pipelines_->mutex);
+                    auto it = pipelines_->ready.find(pipeline);
+                    pso = it != pipelines_->ready.end() ? it->second : nil;
+                }
+                if (pso)
+                    [render_ setRenderPipelineState:pso];
+            }
 
             void SetViewport(int width, int height) override
             {
@@ -493,42 +648,6 @@ namespace esia::rhi::metal
                 return it != counters_.end() ? it->second : nil;
             }
 
-            // One library per MSL blob (the shader library's text lives for the program's lifetime): the fragment
-            // and vertex stages of several programs share sources.
-            id<MTLFunction> Function(const char* source, std::string& error)
-            {
-                id<MTLLibrary> lib = libraries_[source];
-                if (!lib)
-                {
-                    MTLCompileOptions* o = [MTLCompileOptions new];
-                    o.languageVersion = MTLLanguageVersion2_0;
-                    // IEEE semantics like the other backends' compilers (the image goldens come from them)
-#if (defined(__MAC_15_0) && __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_15_0) || (defined(__IPHONE_18_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_18_0)
-                    if (@available(macOS 15.0, iOS 18.0, *))
-                        o.mathMode = MTLMathModeSafe;
-                    else
-#endif
-                    {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                        o.fastMathEnabled = NO;
-#pragma clang diagnostic pop
-                    }
-                    NSError* err = nil;
-                    lib = [device_ newLibraryWithSource:[NSString stringWithUTF8String:source] options:o error:&err];
-                    if (!lib)
-                    {
-                        error = err ? err.localizedDescription.UTF8String : "newLibraryWithSource failed";
-                        return nil;
-                    }
-                    libraries_[source] = lib;
-                }
-                id<MTLFunction> f = [lib newFunctionWithName:@"esia_main"];
-                if (!f)
-                    error = "no esia_main in the MSL";
-                return f;
-            }
-
             // forget command buffers that finished (WaitForFrame then has nothing to wait for)
             void Prune()
             {
@@ -545,9 +664,9 @@ namespace esia::rhi::metal
             std::uint32_t next_ = 1;
             std::unordered_map<std::uint32_t, id<MTLTexture>> textures_;
             std::unordered_map<std::uint32_t, id<MTLBuffer>> buffers_;
-            std::unordered_map<std::uint32_t, id<MTLRenderPipelineState>> psos_;
             std::unordered_map<std::uint32_t, id<MTLCounterSampleBuffer>> counters_;
-            std::unordered_map<const char*, id<MTLLibrary>> libraries_;
+            std::shared_ptr<Compiler> compiler_;
+            std::shared_ptr<PipelineTable> pipelines_ = std::make_shared<PipelineTable>();
             std::map<std::uint64_t, id<MTLCommandBuffer>> inflight_;
             id<MTLCommandBuffer> cb_;
             bool own_ = false;

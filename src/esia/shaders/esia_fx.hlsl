@@ -12,8 +12,16 @@
 // Feature bits (esia::fx::Feature), as plain literals: shader models without integer shifts fold them too.
 // ESIA_FX_FEATURES compiles a variant for a subset of them (rhi::Caps::fxFeatureVariants): a feature outside the
 // mask is a constant false and its code is gone - how Direct3D 9 fits the shader into SM3's instruction slots.
+// The SPIR-V build makes the mask specialization constant 0 instead, so one generated shader serves every variant:
+// a backend specializes it when it builds a pipeline - Metal does, through SPIRV-Cross's function constant 0 - and
+// it keeps every feature where nothing does (GL could set SPIRV_CROSS_CONSTANT_ID_0, Vulkan VkSpecializationInfo).
 #ifndef ESIA_FX_FEATURES
+#ifdef ESIA_SPIRV
+[[vk::constant_id(0)]] const uint kEsiaFxFeatures = 0xFFFFFFFFu;
+#define ESIA_FX_FEATURES kEsiaFxFeatures
+#else
 #define ESIA_FX_FEATURES 0xFFFFFFFFu
+#endif
 #endif
 #define FX_HAS(feat, flag) ESIA_HAS(feat, (flag) & ESIA_FX_FEATURES)
 #define F_FILL         1u

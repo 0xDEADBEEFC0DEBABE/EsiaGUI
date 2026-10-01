@@ -3,6 +3,7 @@
 // fake's CPU copies, host textures, host command buffers, timestamps.
 // UNVERIFIED: needs macOS - passes on Linux and under Wine against the fake Gpu, never against Metal.
 #include "esia/render/renderer.hpp"
+#include "esia/render/shader_library.hpp"
 #include "esia/rhi/null_device.hpp"
 #include "esia_test.hpp"
 #include "fake_metal_gpu.hpp"
@@ -119,6 +120,9 @@ ESIA_TEST(MetalDevice, NullGoldensWithMetalCaps)
     o.caps.timestamps = false;
     Rig r = MakeRig(hd, o);
     Caps caps = r.dev->GetCaps();
+    // FX variants (where the MSL has the feature mask as a function constant) are a caps choice the goldens were
+    // recorded without; MetalDevice.FxFeatureVariants covers them
+    caps.fxFeatureVariants = caps.asyncPipelines = false;
     r.dev->DestroyTexture(r.target);
     for (const conformance::Scene& scene : conformance::Scenes())
     {
@@ -145,6 +149,36 @@ ESIA_TEST(MetalDevice, NullGoldensWithMetalCaps)
         ESIA_CHECK(same);
     }
     ESIA_CHECK(Clean(r, "caps"));
+}
+
+// With FX variants the renderer asks for one Fx pipeline per batch feature mask and the device builds each with its
+// mask as function constant 0 (compiled here: the fake has no background compiles). Without the constant in the MSL
+// the device offers no variants.
+ESIA_TEST(MetalDevice, FxFeatureVariants)
+{
+    const conformance::Scene* scene = conformance::FindScene("shapes");
+    ESIA_CHECK(scene != nullptr);
+    if (!scene)
+        return;
+    {
+        DeviceOptions d;
+        d.fxFeatureVariants = 1;
+        Rig r = MakeRig(conformance::HeadlessDescOf(*scene), FakeMetalGpu::Options(), d);
+        ESIA_CHECK(r.dev->GetCaps().fxFeatureVariants && !r.dev->GetCaps().asyncPipelines);
+        conformance::SceneFrame frame;
+        conformance::BuildScene(*scene, frame);
+        render::Renderer renderer(*r.dev);
+        ESIA_CHECK(renderer.Render(frame.data, &frame.textures, r.target, conformance::RenderParamsOf(*scene)));
+        ESIA_CHECK(r.fake->stats.variantPipelines > 0 && renderer.Stats().fxFallbacks == 0 && renderer.Stats().fxPendingVariants == 0);
+        r.dev->DestroyTexture(r.target);
+        ESIA_CHECK(Clean(r, "variants"));
+    }
+    {
+        Rig r = MakeRig(HeadlessDesc{});
+        const shaders::ShaderBlob* ps = shaders::Find(shaders::Format::Msl, ShaderProgram::Fx, shaders::Stage::Pixel);
+        ESIA_CHECK(ps && r.dev->GetCaps().fxFeatureVariants == MslDeclaresFxFeatures(reinterpret_cast<const char*>(ps->data)));
+        r.dev->DestroyTexture(r.target);
+    }
 }
 
 ESIA_TEST(MetalDevice, UploadsAndReadback)

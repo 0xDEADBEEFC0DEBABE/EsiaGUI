@@ -49,6 +49,9 @@ namespace esia::rhi::metal
         std::uint32_t pixelFormat = mtl::PixelFormatInvalid;
         int samples = 1;
         BlendState blend;
+        // Programs whose MSL declares the FX feature mask as function constant 0 (MslDeclaresFxFeatures): the value
+        // it is specialized to, 0 = every feature. Ignored by the other programs.
+        std::uint32_t fxFeatures = 0;
     };
 
     struct RenderPassDesc
@@ -68,6 +71,7 @@ namespace esia::rhi::metal
     {
         int maxTextureSize = 8192;
         bool timestamps = false;                // stage-boundary timestamp sampling (MTLCommonCounterSetTimestamp)
+        bool asyncPipelines = false;            // CreatePipelineAsync compiles off the calling thread
     };
 
     class Gpu
@@ -88,6 +92,16 @@ namespace esia::rhi::metal
         virtual void ReleaseBuffer(std::uint32_t buffer) = 0;
         // newLibraryWithSource (MSL 2.0) + newRenderPipelineStateWithDescriptor; 0 and `error` on failure
         virtual std::uint32_t CreatePipeline(const GpuPipelineDesc& desc, std::string& error) = 0;
+        // The same off the calling thread (GpuCaps::asyncPipelines): an id at once, PipelineStatusOf says when it can
+        // be bound. Without the cap it compiles here (a failure: PipelineStatus::Failed, its error in `error`).
+        virtual std::uint32_t CreatePipelineAsync(const GpuPipelineDesc& desc, std::string& error) { return CreatePipeline(desc, error); }
+        // Ready for pipelines CreatePipeline made; Pending while an asynchronous one compiles, then Ready or Failed
+        // (with its error in `error`, reported once). 0 (a failed synchronous compile) is Failed.
+        virtual PipelineStatus PipelineStatusOf(std::uint32_t pipeline, std::string& error)
+        {
+            (void)error;
+            return pipeline ? PipelineStatus::Ready : PipelineStatus::Failed;
+        }
         virtual void ReleasePipeline(std::uint32_t pipeline) = 0;
 
         // ---- command buffers: one per device frame (the host's, or the backend's own) and per readback

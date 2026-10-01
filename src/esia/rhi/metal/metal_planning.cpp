@@ -17,7 +17,7 @@ namespace esia::rhi::metal
     std::size_t PipelineKeyHash::operator()(const PipelineKey& k) const
     {
         // the packed key is unique; spread it so the low bits of a power-of-two bucket count see every field
-        return (std::size_t)((std::uint64_t)PackPipelineKey(k) * 0x9E3779B97F4A7C15ull >> 16);
+        return (std::size_t)(((std::uint64_t)PackPipelineKey(k) ^ ((std::uint64_t)k.fxFeatures << 32)) * 0x9E3779B97F4A7C15ull >> 16);
     }
 
     bool ProgramUsesVertices(ShaderProgram p)
@@ -53,13 +53,16 @@ namespace esia::rhi::metal
             why = "sample count";
             return false;
         }
-        // fxFeatures is 0 without Caps::fxFeatureVariants; the full shader is a superset of any variant anyway
+        // fxFeatures is 0 without Caps::fxFeatureVariants (and for other programs): the full shader
         key.program = d.program;
         key.blend = d.blend;
         key.format = d.targetFormat;
         key.samples = (std::uint8_t)d.samples;
+        key.fxFeatures = d.program == ShaderProgram::Fx ? d.fxFeatures : 0u;
         return true;
     }
+
+    bool MslDeclaresFxFeatures(const char* msl) { return msl && std::strstr(msl, "[[function_constant(0)]]") != nullptr; }
 
     // ------------------------------------------------------------------ uploads and readback
     BufferImageLayout LayoutOf(Format format, int width, int height)

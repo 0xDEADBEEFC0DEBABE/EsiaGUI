@@ -21,6 +21,7 @@ namespace esia::rhi::metal
         BlendMode blend = BlendMode::Straight;
         Format format = Format::RGBA8_UNORM;
         std::uint8_t samples = 1;
+        std::uint32_t fxFeatures = 0;   // Fx with Caps::fxFeatureVariants: the feature mask (0 = every feature)
         bool operator==(const PipelineKey&) const = default;
     };
 
@@ -37,6 +38,11 @@ namespace esia::rhi::metal
     // the RHI says to return an invalid pipeline: user effects (no runtime HLSL on Metal), a layout that does not fit
     // the program, a format that is not a render target here.
     bool MakePipelineKey(const PipelineDesc& desc, PipelineKey& key, std::string& why);
+
+    // MSL that declares the FX feature mask as function constant 0 - what SPIRV-Cross makes of esia_fx.hlsl's
+    // [[vk::constant_id(0)]] specialization constant: its functions are specialized per feature mask
+    // (MTLFunctionConstantValues), and the backend offers Caps::fxFeatureVariants.
+    bool MslDeclaresFxFeatures(const char* msl);
 
     // ------------------------------------------------------------------ uploads and readback
     // Blits between buffers and textures: offsets and row pitches aligned to 256 bytes. Apple documents multiples
