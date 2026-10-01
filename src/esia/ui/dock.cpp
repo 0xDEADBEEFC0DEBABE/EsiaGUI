@@ -326,7 +326,7 @@ namespace esia::ui
         const Palette& pc = C();
         const InputState& in = c.Input();
         if (rect.Width() <= 0.0f || rect.Height() <= 0.0f)
-            rect = Rect(Vec2(0, 0), c.DisplaySize());
+            rect = c.SafeArea();
         DockSpaceData& d = Space(id);
         Registry& reg = Reg();
         d.frame = c.FrameCount();

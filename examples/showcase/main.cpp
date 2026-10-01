@@ -974,22 +974,19 @@ float4 WgtEffect(WgtFx fx)
         }
 
         // UI units: the part of the display the system draws nothing over
-        Rect Safe() const
-        {
-            const Vec2 d = ctx->DisplaySize();
-            return info.safeArea.Width() > 0.0f ? info.safeArea : Rect(0, 0, d.x, d.y);
-        }
+        Rect Safe() const { return ctx->SafeArea(); }
 
         // The status bar's top on a compact display: over the dock (ui::Dock: 46 tiles, 11 padding, 16 from the
         // bottom). Not at the top, where the island opens.
         float CompactStatusTop() const { return ctx->DisplaySize().y - S(46 + 22 + 16) - S(10) - S(30); }
 
-        // A panel on a compact display: centered in the safe area, over the status bar, as large as fits.
+        // A panel on a compact display: centered in the safe area, over the status bar, as large as fits; below the
+        // island's pill (10 from the top, 38 high), which a phone on its side has over the panel otherwise.
         void FitCompact(ui::WindowOptions& wo) const
         {
             const Rect safe = Safe();
             const float m = S(10);
-            const float top = safe.min.y + m;
+            const float top = std::max(safe.min.y + m, S(10 + 38) + m);
             const float bottom = CompactStatusTop() - m;
             const Vec2 size(std::min(S(wo.size.x), safe.Width() - 2.0f * m), std::min(S(wo.size.y), bottom - top));
             wo.size = size / S(1);
