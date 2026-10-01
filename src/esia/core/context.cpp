@@ -794,4 +794,14 @@ namespace esia
     }
 
     void Context::EndTooltip() { End(); }
+
+    Rect Context::SafeArea() const
+    {
+        const Rect display(Vec2(0, 0), params_.displaySize);
+        const Rect& s = params_.safeArea;
+        if (s.Width() <= 0.0f || s.Height() <= 0.0f)
+            return display;
+        const Rect clamped(std::max(s.min.x, display.min.x), std::max(s.min.y, display.min.y), std::min(s.max.x, display.max.x), std::min(s.max.y, display.max.y));
+        return clamped.Width() > 0.0f && clamped.Height() > 0.0f ? clamped : display;
+    }
 }

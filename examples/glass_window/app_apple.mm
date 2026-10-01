@@ -286,15 +286,14 @@ namespace glass::apple
         fp.displaySize = esia::Vec2((float)width / scale, (float)height / scale);
         fp.framebufferScale = esia::Vec2(scale, scale);
         fp.time = opt_.fixedDt > 0.0 ? (frame_ + 1) * opt_.fixedDt : now;
+        fp.safeArea = safeArea;
         ctx_->NewFrame(fp);
         if (text_ && app_.loadFonts)
             text_->NewFrame({scale});
         const Clock::time_point uiStart = Clock::now();
         if (app_.frame)
         {
-            SceneInfo info{"Metal", adapter_, width, height, scale, fps_, cpuMs_, &renderer_->Stats()};
-            info.safeArea = safeArea;
-            app_.frame(*ctx_, info);
+            app_.frame(*ctx_, {"Metal", adapter_, width, height, scale, fps_, cpuMs_, &renderer_->Stats()});
         }
         ctx_->EndFrame();
         cpuMs_ = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();

@@ -353,13 +353,17 @@ The simulator needs no signing: `cmake --preset ios-simulator && cmake --build -
   a slider included, which then do not press), a sideways drag moves a slider; two fingers scroll anywhere. The
   keyboard comes up for text fields with the system's input methods (pinyin and the like compose inline); a hardware
   keyboard works.
-* **Layout.** On a phone the showcase shows one panel at a time, as large as fits; the dock switches between them.
+* **Layout.** The examples keep to the safe area the frame passes on (`FrameParams::safeArea`: clear of the camera
+  housing and the home indicator), and lay themselves out for a phone: the showcase shows one panel at a time, as large
+  as fits, and the dock switches between them; the workbench docks its six panels as tabs of two (one above the other,
+  side by side in landscape), with the asset table's type column left out; glass_window stacks its windows. The island
+  grows out of the Dynamic Island: a notification's card shows below the camera, the resident pill only its icon and
+  progress beside it.
 * **Fonts and wallpaper.** As on macOS; the system's emoji (`emjc` strikes) go through Core Text, and the wallpaper is
   one of the building Mac's, copied into the app.
 * **Performance.** On an iPhone 18 Pro Max (1320 x 2868 pixels) the showcase keeps the display's 120 Hz with about 6 ms
   of GPU time per frame.
-* **Limitations.** As on macOS; and on iPhones with a Dynamic Island, the island's notification card opens around the
-  camera housing, which covers the middle of its first line (the UI does not know the safe area yet).
+* **Limitations.** As on macOS.
 
 ## Android
 
