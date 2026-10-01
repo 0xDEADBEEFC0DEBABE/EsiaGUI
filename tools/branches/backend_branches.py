@@ -175,7 +175,9 @@ def git(*args, env=None, input=None):
 
 
 def blob(text):
-    return git('hash-object', '-w', '--stdin', input=text)
+    # bytes, not text: on Windows a text pipe would write CRLF line ends, and the branch would differ from CI's
+    return subprocess.run(['git', 'hash-object', '-w', '--stdin'], check=True, capture_output=True,
+                          input=text.encode('utf-8')).stdout.decode().strip()
 
 
 def presets(source, keep):
