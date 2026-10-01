@@ -372,8 +372,13 @@ The simulator needs no signing: `cmake --preset ios-simulator && cmake --build -
 
 ## Android
 
-<p align="center"><img src="docs/images/showcase-android.jpg" width="80%" alt="Three screens of the showcase on Android: Settings, the Control Center and the Languages panel with color emoji and flags"></p>
-<p align="center"><sub>The showcase on the Android 15 emulator, OpenGL ES: Settings, Control Center, Languages.</sub></p>
+<p align="center">
+  <img src="docs/images/android-settings.jpg" width="30%" alt="The showcase's Settings panel on Android, under the island around the camera, the dock above the gesture bar">
+  <img src="docs/images/android-control-center.jpg" width="30%" alt="The Control Center on Android: glass toggles, the media card, sliders and the Focus module">
+  <img src="docs/images/android-languages.jpg" width="30%" alt="The Languages panel on Android: Chinese, Japanese, Korean, Arabic, Hebrew, Hindi, Thai, Russian, Greek, Vietnamese, color emoji and flags">
+</p>
+<p align="center"><sub>The showcase on the Android 15 emulator (a 1080 x 2400 phone), OpenGL ES: Settings, Control Center,
+Languages, screenshots taken on the device; the wallpaper is the building PC's.</sub></p>
 
 **Build** (from Windows, Linux or macOS). The Android NDK and SDK (a platform, build-tools and platform-tools; Android
 Studio's SDK manager installs them), a JDK for the APK signing tools, CMake and Ninja:
@@ -400,11 +405,16 @@ behind Android's `NativeActivity`, packed and signed with a debug key by `tools/
   slider included, which then do not press), a sideways drag moves a slider; two fingers scroll anywhere. UI units are
   dp: the scale is the screen's density. The soft keyboard comes up for text fields; the clipboard is Android's.
 * **Layout.** As on an iPhone, the showcase shows one panel at a time, as large as fits; the dock switches between them.
+  The safe area is the window's insets (the camera's cutout, the system bars, the gesture bar): the island sits around
+  the camera, the panels start below it, the dock stays above the gesture bar.
 * **The app's lifetime.** Sent to the background, the app drops its window surface and keeps its device, textures and
   UI; brought back, it carries on where it was.
 * **Fonts and icons.** Roboto, then a Noto font per script, Noto Color Emoji (a COLR font) and its flags font. Android
   has no icon font for apps: the examples bring Google's Material Icons (Outlined, Apache License 2.0), downloaded when
   configuring (`ESIA_ANDROID_ICON_FONT` names a local copy for offline builds) and packed into each APK.
+* **Wallpaper.** An app may not read the user's wallpaper without a permission, so the showcase brings one, as its iOS
+  app bundle does: one of the building machine's (Windows', the Mac's or Ubuntu's; `ESIA_ANDROID_WALLPAPER` names
+  another) is packed into the APK and decoded by Android. Without one it draws Android's built-in wallpaper.
 * **Validation.** The Vulkan validation layer is not in the NDK, and `tools/android/package.py` does not pack it:
   `--debug` on Vulkan says it is missing (Android's loader would find Khronos' `libVkLayer_khronos_validation.so`
   among the APK's libraries). OpenGL ES debug output works where the driver has `KHR_debug`.
