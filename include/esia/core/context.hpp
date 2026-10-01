@@ -389,6 +389,11 @@ namespace esia
         void ClearActiveId() { SetActiveId(0); }
         // The active item must call this every frame it is submitted without ItemAdd, or it is deactivated.
         void KeepAliveId(Id id);
+        // The active item is a finger's press that has not acted yet: a button that presses on release, or an item
+        // that acts on the press (a slider, a field) while ButtonBehavior holds the press back from it. A scroll area
+        // the finger then drags along may take the touch over (SetActiveId to its own drag); the item lets go without
+        // pressing, as the content of a phone's scroll views does. Mouse presses stay the item's.
+        bool ActiveIdYieldsToScroll() const { return activeId_ != 0 && activeYields_; }
         Id KeyboardFocusId() const { return focusId_; }
         void SetKeyboardFocusId(Id id);
         // The item with keyboard focus edits text this frame: the platform shows the IME at `caret`. (The text
@@ -514,6 +519,7 @@ namespace esia
         void AdvanceCursor(Window::Frame& f, const Rect& r, float baseline);
         float Snap(float v) const;
         void BeginScroll(Window::ScrollState& s, bool smooth);
+        void SnapScroll(Window::ScrollState& s, float scale) const;
         void EndScroll(Window::ScrollState& s, bool smooth);
         void RequestScroll(int axis, float value);
 
@@ -549,6 +555,9 @@ namespace esia
         Id activeId_ = 0;
         bool activeAlive_ = false, activeSetThisFrame_ = false;
         bool activeByMouse_ = false;       // ButtonBehavior activated it with a mouse button (activeButton_)
+        bool activeYields_ = false;        // ... by a finger, not yet the item's for good: ActiveIdYieldsToScroll
+        bool activeDeferred_ = false;      // ... and acting on the press: held back from the item (ButtonBehavior)
+        bool activeSlopSeen_ = false;      // the held-back finger moved past the slop (a scroll area could take it)
         MouseButton activeButton_ = MouseButton::Left;
         Id focusId_ = 0;
         bool focusAlive_ = false, focusClaimed_ = false, textInputRequested_ = false;

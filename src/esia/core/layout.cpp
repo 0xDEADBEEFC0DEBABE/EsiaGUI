@@ -307,6 +307,7 @@ namespace esia
         {
             BeginScroll(cs.scroll, smooth);
             ApplyNextScroll(cs.scroll, true);
+            SnapScroll(cs.scroll, Scale());
         }
         else
         {
@@ -404,6 +405,16 @@ namespace esia
             s.target = Vec2(Clamp(s.target.x, 0.0f, s.max.x), Clamp(s.target.y, 0.0f, s.max.y));
         else
             s.target = s.scroll;
+    }
+
+    void Context::SnapScroll(Window::ScrollState& s, float scale) const
+    {
+        // The offset the layout starts at lands on a physical pixel, as a glide's does (StepSmoothScrolls). Layout
+        // positions snap to pixels (Snap), so between pixels the offset would change what the content measures, and
+        // with it the range that clamps the offset: a drag held at the end of an area (each frame's offset the end)
+        // shook the content by a pixel every few frames.
+        const float pixel = 1.0f / std::max(scale, 1e-3f);
+        s.scroll = Vec2(std::round(s.scroll.x / pixel) * pixel, std::round(s.scroll.y / pixel) * pixel);
     }
 
     void Context::StepSmoothScrolls()

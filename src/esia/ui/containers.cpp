@@ -134,6 +134,22 @@ namespace esia::ui
                 s.velocity = 0.0f;
                 c.SetActiveId(dragId);
             }
+            // a finger that pressed an item in the area (a row, a button) and then moves along it scrolls instead, past
+            // a slop and more along than across: the item lets go without pressing (Context::ActiveIdYieldsToScroll).
+            // An inner area that scrolls has taken the touch already (it ends first).
+            const Vec2 pressPos = in.MouseClickedPos(MouseButton::Left);
+            if (!s.dragging && scrolls && c.ActiveIdYieldsToScroll() && in.MouseDown(MouseButton::Left) && view.Contains(pressPos))
+            {
+                const Vec2 d = in.MousePos() - pressPos;
+                if (std::fabs(d.y) > in.config.touchSlop && std::fabs(d.y) > std::fabs(d.x))
+                {
+                    s.dragging = true;
+                    s.startMouse = s.lastMouse = in.MousePos().y;
+                    s.startScroll = scroll;
+                    s.velocity = 0.0f;
+                    c.SetActiveId(dragId);
+                }
+            }
             if (s.dragging)
             {
                 if (c.ActiveId() == dragId && in.MouseDown(MouseButton::Left))

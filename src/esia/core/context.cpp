@@ -410,6 +410,7 @@ namespace esia
 
             BeginScroll(w->scroll_, false);
             ApplyNextScroll(w->scroll_, true);
+            SnapScroll(w->scroll_, w->scale_);
             w->drawList_.Reset(w->rect_);
             // items are visible and hoverable inside the content rect only; decorations draw with a wider clip
             w->drawList_.PushClipRect(w->ContentRect());
