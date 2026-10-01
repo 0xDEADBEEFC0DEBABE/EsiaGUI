@@ -6,7 +6,9 @@
 // The scene paints every pixel (its wallpaper is opaque), so no host clears its target.
 #pragma once
 #include "esia/rhi/rhi.hpp"
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -14,6 +16,17 @@
 
 namespace glass
 {
+    // The window a host presents to: a Win32 window, or on Linux an X11 window (app_linux.cpp).
+    struct NativeWindow
+    {
+#if defined(_WIN32)
+        HWND hwnd = nullptr;
+#else
+        void* display = nullptr;    // Display*
+        unsigned long window = 0;   // Window
+#endif
+    };
+
     struct HostOptions
     {
         bool vsync = true;
@@ -27,7 +40,7 @@ namespace glass
         virtual const char* Name() const = 0;
         const std::string& Adapter() const { return adapter_; }   // the GPU, when the API names it
         // `width` x `height`: the client area in pixels.
-        virtual bool Init(HWND hwnd, int width, int height, const HostOptions& options, std::string& error) = 0;
+        virtual bool Init(const NativeWindow& window, int width, int height, const HostOptions& options, std::string& error) = 0;
         virtual esia::rhi::Device& Device() = 0;
         // The window's client area changed size (pixels, never 0).
         virtual void Resize(int width, int height) = 0;
