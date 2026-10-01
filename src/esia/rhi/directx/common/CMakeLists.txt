@@ -1,8 +1,8 @@
-# What the Direct3D 9 / 10 / 11 / 12 backends share (built when any ESIA_BACKEND_D3D* is ON): the host
+# What the Direct3D 9 / 10 / 11 / 12 backends share (ESIA_BACKEND_DIRECTX): the host
 # integration types (include/esia/rhi/d3d_common.hpp), a COM pointer, logging, the DXGI format tables, readback
 # conversion, GPU timestamp accounting and runtime HLSL compilation (D3DCompile, loaded from d3dcompiler_47.dll).
 if(NOT WIN32)
-    message(FATAL_ERROR "The Direct3D backends (ESIA_BACKEND_D3D9/10/11/12) build for Windows only: use windows-clang-cl, "
+    message(FATAL_ERROR "The DirectX backends (ESIA_BACKEND_DIRECTX) build for Windows only: use windows-clang-cl, "
                         "windows-cross, windows-mingw-cross or the MSVC presets")
 endif()
 

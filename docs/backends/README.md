@@ -26,11 +26,12 @@ files under its own directory and changes nothing else.
 | `esia-opengl` | `src/esia/rhi/opengl/` (OpenGL 3.3 core and OpenGL ES 3.0 in one target, two registered backends `opengl` and `gles`) | `ESIA_BACKEND_OPENGL` |
 | `esia-vulkan` | `src/esia/rhi/vulkan/` | `ESIA_BACKEND_VULKAN` |
 | `esia-metal` | `src/esia/rhi/metal/` (Objective-C++ `.mm` allowed) | `ESIA_BACKEND_METAL` |
-| `esia-directx` | `src/esia/rhi/d3d_common/` (shared: DXGI format tables, `D3DCompile` glue with the include handler, capture / resolve helpers, the SM3 prelude if shared), `src/esia/rhi/d3d9/`, `src/esia/rhi/d3d10/`, `src/esia/rhi/d3d11/`, `src/esia/rhi/d3d12/` | `ESIA_BACKEND_D3D9`, `ESIA_BACKEND_D3D10`, `ESIA_BACKEND_D3D11`, `ESIA_BACKEND_D3D12` |
+| `esia-directx` | `src/esia/rhi/directx/common/` (shared: DXGI format tables, `D3DCompile` glue with the include handler, capture / resolve helpers, the SM3 prelude if shared), `src/esia/rhi/directx/d3d9/`, `src/esia/rhi/directx/d3d10/`, `src/esia/rhi/directx/d3d11/`, `src/esia/rhi/directx/d3d12/` | `ESIA_BACKEND_DIRECTX` (`ESIA_BACKEND_D3D9` / `D3D10` / `D3D11` / `D3D12`, advanced, leave out single versions) |
 
-The options already exist (`src/esia/CMakeLists.txt`, all `OFF` by default). Turning one on adds
-`src/esia/rhi/<name>/CMakeLists.txt`; any `ESIA_BACKEND_D3D*` also adds `src/esia/rhi/d3d_common/CMakeLists.txt`
-when it exists (before the four). Inside a backend directory:
+The options exist in `src/esia/CMakeLists.txt`, on by default where the platform has the API (Windows: DirectX and
+OpenGL, Vulkan with its headers; Apple: Metal; elsewhere: OpenGL, Vulkan with its headers). An option adds
+`src/esia/rhi/<name>/CMakeLists.txt`; `ESIA_BACKEND_DIRECTX` adds `src/esia/rhi/directx/CMakeLists.txt`, which adds
+`common/` and each Direct3D version left on. Inside a backend directory:
 
 ```
 src/esia/rhi/<name>/
@@ -284,7 +285,7 @@ and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature 
   constants for Draw), one SRV table t0-t7, two static samplers.
 * User effects: compile `esia_fx.hlsl` with `ESIA_CUSTOM_EFFECT=1`, the include handler returning the user's
   source for `esia_user_effect.hlsli` (it must define `float4 WgtEffect(WgtFx fx)`).
-* **The SM3 prelude** (D3D9): `src/esia/rhi/d3d9/esia_sm3_prelude.hlsli`. fxc / `D3DCompile` cannot `#include` a
+* **The SM3 prelude** (D3D9): `src/esia/rhi/directx/d3d9/esia_sm3_prelude.hlsli`. fxc / `D3DCompile` cannot `#include` a
   macro (X1500), so either prepend it to the source (what the D3D9 backend does), or define `ESIA_SHADER_PRELUDE` and
   serve it as `esia_shader_prelude.hlsli` (through `/I` or the include handler): `esia_common.hlsli` then includes
   it first (`build_shaders.py --fxc` does this). It must `#define uint float` (X3548: the shared sources keep flags

@@ -2,7 +2,9 @@
 
 GitHub Actions runs three workflows (`.github/workflows`), one per host OS, on every push to `main` and every pull
 request into it that changes more than documentation, and on any branch by hand (section 5: the minutes are
-metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches (section 5). Every job
+metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches (section 5); a fifth,
+`Platform branches`, commits `main` minus what each platform does not build to the branches `windows`, `apple` and
+`linux` after every push to `main` (`tools/branches/platform_branches.py`, seconds on Linux). Every job
 builds with `-DESIA_WERROR=ON`, runs `ctest`, writes a table of every test and every conformance scene to the job's
 summary (`.github/scripts/ctest_report.py`) and uploads the conformance images, the diff images of failures, the
 CTest JUnit file and the test logs as an artifact named after the job (kept 14 days).
@@ -256,7 +258,7 @@ a single column: x = 133, y = 42 - 111 (62 pixels), where the glow layer holds p
 (up to 225, 96, 142 over the golden's 18, 47, 57) - with and without the debug layer, single frame and after poison
 frames, in every run (its mean moves by a few thousandths between runs: WARP12 is not bit-exact run to run here).
 D3D10 and D3D11 on the same WARP render the scene within 1, and D3D12 on an RTX 4080 passes
-(`src/esia/rhi/d3d_common/STATUS.md`), so it is WARP12 together with the D3D12 backend's glow path (region clears,
+(`src/esia/rhi/directx/common/STATUS.md`), so it is WARP12 together with the D3D12 backend's glow path (region clears,
 bloom pyramid), not a tolerance question: the tolerances are unchanged, the scene is recorded as a known failure and
 left to the D3D12 backend. `logs/`, the diff image and the rendered image are in the job's artifact (and as base64 in
 the Diagnostics step's log).

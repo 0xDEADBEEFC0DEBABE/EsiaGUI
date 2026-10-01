@@ -94,7 +94,7 @@ foreach(_api d3d9 d3d10 d3d11 d3d12 opengl vulkan)
     endif()
 endforeach()
 if(NOT _defs)
-    message(STATUS "glass_window: no window-capable backend is built (ESIA_BACKEND_D3D9 / D3D10 / D3D11 / D3D12 / OPENGL / "
+    message(STATUS "glass_window: no window-capable backend is built (ESIA_BACKEND_DIRECTX / OPENGL / "
                    "VULKAN) - not built")
     return()
 endif()

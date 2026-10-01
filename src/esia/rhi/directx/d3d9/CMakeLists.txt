@@ -1,4 +1,4 @@
-# Direct3D 9 backend (ESIA_BACKEND_D3D9): the rhi::Device on a host's IDirect3DDevice9(Ex) with shader model 3, and a
+# Direct3D 9 backend (ESIA_BACKEND_DIRECTX, ESIA_BACKEND_D3D9): the rhi::Device on a host's IDirect3DDevice9(Ex) with shader model 3, and a
 # headless device for the conformance suite (esia_conformance --backend d3d9). esia_sm3_prelude.hlsli (the SM3
 # portability hooks, also read by tools/shaders/build_shaders.py) is embedded for runtime compilation.
 set(_prelude ${CMAKE_CURRENT_SOURCE_DIR}/esia_sm3_prelude.hlsli)

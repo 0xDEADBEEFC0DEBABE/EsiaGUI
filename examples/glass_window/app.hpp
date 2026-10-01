@@ -1,10 +1,12 @@
 // glass_window - the frame the examples run in: options, the window thread, the render thread with its device,
 // Context, text system and frame loop, screenshots. An example gives what it draws per frame (App).
 //
-//   <example>.exe [--api d3d9|d3d10|d3d11|d3d12|opengl|vulkan] [--size 1280x800] [--scale 1.5] [--vsync on|off]
+//   <example>.exe [--api directx|d3d11|d3d12|d3d10|d3d9|opengl|vulkan] [--size 1280x800] [--scale 1.5] [--vsync on|off]
 //                 [--debug] [--fixed-dt 0.016667] [--frames N] [--screenshot out.png] [--font file.ttf]...
 //                 <the example's own>
 //
+//   --api           the backend; directx (the default where it is built) starts the first Direct3D version that works
+//                   on this machine: 11, 12, 10, 9
 //   --size          client area in UI units (pixels at 100 % scale; the window grows with the monitor's scale)
 //   --scale s       pixels per UI unit instead of the monitor's (the client area is size x s pixels, which may be
 //                   larger than the screen): captures at a given scale on any monitor. --size takes fractions, so a

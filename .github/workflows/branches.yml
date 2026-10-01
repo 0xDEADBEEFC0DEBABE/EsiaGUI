@@ -1,0 +1,32 @@
+# Platform branches: after every push to main, windows, apple and linux get a commit with main minus what their
+# platform does not build (tools/branches/platform_branches.py), so a user clones the platform's branch and builds it
+# without choosing backends. Only appended to, never rewritten; a few seconds on a Linux runner.
+name: Platform branches
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: platform-branches   # one at a time, in push order: each commit goes on top of the last
+  cancel-in-progress: false
+
+jobs:
+  branches:
+    name: windows, apple, linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the branches' last commits, to build on
+      # a push with GITHUB_TOKEN starts no workflow run: the branches run no CI of their own (main's covers them)
+      - name: Regenerate the branches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python3 tools/branches/platform_branches.py --source HEAD --push

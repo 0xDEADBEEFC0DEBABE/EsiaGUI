@@ -43,7 +43,7 @@ Direct3D debug layers**: that is the local session's job (section 7).
 | `fxFeatureVariants` | yes (required) | no | no | no |
 | Debug messages | failed calls only (no info queue on Windows 10 / 11) | `ID3D10InfoQueue` | `ID3D11InfoQueue` | `ID3D12InfoQueue` |
 
-Shared (`src/esia/rhi/d3d_common`): a COM pointer, logging (`d3d::DebugDesc`: a log callback and the
+Shared (`src/esia/rhi/directx/common`): a COM pointer, logging (`d3d::DebugDesc`: a log callback and the
 debug-layer switch), handle tables, the DXGI format tables (8-bit RGBA / BGRA stored typeless so a format and
 its `RawFormat` share bits), readback conversion to RGBA8, timestamp accounting, and runtime HLSL compilation:
 `D3DCompile` loaded from `d3dcompiler_47.dll` at runtime (a missing DLL is a SKIP, not a failed start), an
@@ -350,11 +350,11 @@ Expected: every scene PASS. On a failure, look at `out\<backend>\<scene>.png` an
 ## 8. Files
 
 ```
-src/esia/rhi/d3d_common/  CMakeLists.txt, include/esia/rhi/d3d_common.hpp (host types), d3d_util.hpp/.cpp,
+src/esia/rhi/directx/common/  CMakeLists.txt, include/esia/rhi/d3d_common.hpp (host types), d3d_util.hpp/.cpp,
                           d3d_shader.hpp/.cpp, tests/test_d3d_shaders.cpp, tests/test_d3d_devices.cpp, STATUS.md
-src/esia/rhi/d3d9/        CMakeLists.txt, include/esia/rhi/d3d9.hpp, d3d9_device.cpp, esia_sm3_prelude.hlsli,
+src/esia/rhi/directx/d3d9/        CMakeLists.txt, include/esia/rhi/d3d9.hpp, d3d9_device.cpp, esia_sm3_prelude.hlsli,
                           tests/test_d3d9.cpp
-src/esia/rhi/d3d10/       CMakeLists.txt, include/esia/rhi/d3d10.hpp, d3d10_device.cpp, tests/test_d3d10_host.cpp
-src/esia/rhi/d3d11/       CMakeLists.txt, include/esia/rhi/d3d11.hpp, d3d11_device.cpp, tests/test_d3d11_host.cpp
-src/esia/rhi/d3d12/       CMakeLists.txt, include/esia/rhi/d3d12.hpp, d3d12_device.cpp, tests/test_d3d12_host.cpp
+src/esia/rhi/directx/d3d10/       CMakeLists.txt, include/esia/rhi/d3d10.hpp, d3d10_device.cpp, tests/test_d3d10_host.cpp
+src/esia/rhi/directx/d3d11/       CMakeLists.txt, include/esia/rhi/d3d11.hpp, d3d11_device.cpp, tests/test_d3d11_host.cpp
+src/esia/rhi/directx/d3d12/       CMakeLists.txt, include/esia/rhi/d3d12.hpp, d3d12_device.cpp, tests/test_d3d12_host.cpp
 ```

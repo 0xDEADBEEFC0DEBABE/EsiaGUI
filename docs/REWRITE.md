@@ -96,7 +96,7 @@ strategy, how the public API migrates, and the phases. What exists today is summ
 | `esia_render` | `include/esia/render`, `src/esia/render` | core, rhi | `Painter` (+ `Style`, `Paint`, `GlassMaterial`, `PainterEnv`), `FramePlan`, `Renderer` | done |
 | `esia_rhi` | `include/esia/rhi`, `src/esia/rhi` | - | `rhi::Device` interface, caps, formats, backend registry, null device | done |
 | `esia_shaders` | `src/esia/shaders` | rhi | HLSL sources + generated SPIR-V / GLSL / ESSL / MSL (+ DXBC / DXIL once built on Windows), lookup table | done |
-| `esia_rhi_<api>` | `src/esia/rhi/<api>` | rhi, shaders | one backend each; the DirectX branch shares `src/esia/rhi/d3d_common` | backend sessions |
+| `esia_rhi_<api>` | `src/esia/rhi/<api>` | rhi, shaders | one backend each; the DirectX branch shares `src/esia/rhi/directx/common` | backend sessions |
 | `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no right-to-left paragraphs or color glyphs yet) |
 | `esia_ui` | `include/esia/ui`, `src/esia/ui` | core, render, text | port of `src/ui` (controls, lists, windows, navigation, overlay, selection, text edit, auto layout), `Theme`, `ItemStyle`, `anim` | phase 3 |
 | `esia_platform_<os>` | `src/esia/platform/<os>` | core | window, input / IME translation, clipboard, DPI, cursor, frame pacing | phase 4 |

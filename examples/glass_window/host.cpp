@@ -33,19 +33,33 @@ namespace glass
         };
     }
 
+    std::vector<std::string> DirectXApis()
+    {
+        std::vector<std::string> v;
+        for (const Api& a : kApis)   // listed in the order "directx" tries them
+            if (std::string(a.name).starts_with("d3d"))
+                v.push_back(a.name);
+        return v;
+    }
+
     std::unique_ptr<Host> CreateHost(const std::string& api)
     {
+        if (api == "directx")   // the first version, until Init says otherwise (RunApp tries the next ones)
+        {
+            const std::vector<std::string> versions = DirectXApis();
+            return versions.empty() ? nullptr : CreateHost(versions[0]);
+        }
         for (const Api& a : kApis)
             if (api == a.name)
                 return a.create();
         return nullptr;
     }
 
-    const char* DefaultApi() { return kApis[0].name; }
+    const char* DefaultApi() { return DirectXApis().empty() ? kApis[0].name : "directx"; }
 
     std::string BuiltApis()
     {
-        std::string s;
+        std::string s = DirectXApis().empty() ? "" : "directx";
         for (const Api& a : kApis)
             s += (s.empty() ? "" : ", ") + std::string(a.name);
         return s;

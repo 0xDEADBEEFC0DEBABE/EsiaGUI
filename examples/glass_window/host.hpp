@@ -61,9 +61,12 @@ namespace glass
 
     // Null when the API was not built into the example (ESIA_BACKEND_<API>).
     std::unique_ptr<Host> CreateHost(const std::string& api);
-    // The --api names built in, e.g. "d3d11, opengl, vulkan"; the default is the first.
+    // The --api names built in, e.g. "directx, d3d11, d3d12, d3d10, d3d9, opengl"; the default is the first.
     std::string BuiltApis();
     const char* DefaultApi();
+    // "directx" stands for the Direct3D versions built in, in the order it tries them: 11 (every GPU of the last
+    // fifteen years, the most used), 12, 10, 9 (the oldest GPUs). Empty without DirectX.
+    std::vector<std::string> DirectXApis();
 
     std::unique_ptr<Host> CreateHostD3D9();
     std::unique_ptr<Host> CreateHostD3D10();

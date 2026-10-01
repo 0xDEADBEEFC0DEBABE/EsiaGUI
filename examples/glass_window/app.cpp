@@ -75,14 +75,23 @@ namespace glass
         // The render thread: device, context, frame loop. Returns the exit code.
         int Render(App& app, pw::Platform& platform, const Options& opt)
         {
-            std::unique_ptr<Host> host = CreateHost(opt.api);
             pw::FrameInfo fi = platform.Frame();
             std::string error;
-            if (!host->Init(static_cast<HWND>(platform.Hwnd()), fi.width, fi.height, {opt.vsync, opt.debug}, error))
+            // --api directx: the Direct3D versions in turn (11, 12, 10, 9) until one starts on this machine
+            const std::vector<std::string> apis = opt.api == "directx" ? DirectXApis() : std::vector<std::string>{opt.api};
+            std::unique_ptr<Host> host;
+            for (const std::string& api : apis)
             {
-                std::fprintf(stderr, "%s: %s: %s\n", app.name, opt.api.c_str(), error.c_str());
-                return 1;
+                std::unique_ptr<Host> h = CreateHost(api);
+                if (h && h->Init(static_cast<HWND>(platform.Hwnd()), fi.width, fi.height, {opt.vsync, opt.debug}, error))
+                {
+                    host = std::move(h);
+                    break;
+                }
+                std::fprintf(stderr, "%s: %s: %s\n", app.name, api.c_str(), error.c_str());
             }
+            if (!host)
+                return 1;
             std::printf("%s: %s on %s, %d x %d px, scale %.2f\n", app.name, host->Name(), host->Adapter().c_str(), fi.width, fi.height, fi.scale);
             std::fflush(stdout);
 
@@ -264,8 +273,8 @@ namespace glass
 #endif
         pw::Platform platform;
         std::string error;
-        const std::unique_ptr<Host> probe = CreateHost(opt.api);
-        if (!pw::CreateAppWindow(platform, {"Esia " + std::string(app.name) + " - " + probe->Name(), (int)std::lround(opt.width), (int)std::lround(opt.height)}, &error))
+        const std::string apiName = opt.api == "directx" ? std::string("DirectX") : std::string(CreateHost(opt.api)->Name());
+        if (!pw::CreateAppWindow(platform, {"Esia " + std::string(app.name) + " - " + apiName, (int)std::lround(opt.width), (int)std::lround(opt.height)}, &error))
         {
             std::fprintf(stderr, "%s: %s\n", app.name, error.c_str());
             return 1;

@@ -25,7 +25,7 @@ Run this script after changing a shader; the generated files must be committed w
 fxc and DXC are Microsoft's: fxc.exe / d3dcompiler_47.dll come with the Windows SDK (Windows only; under Wine with
 Microsoft's DLL), DXC also ships for Linux. Wine's own d3dcompiler_47 (vkd3d-shader, Ubuntu 24.04) compiles the UI
 and post shaders but not esia_fx.hlsl, so it is not an option. dxbc_sm3 is built when an SM3 prelude exists
-(--sm3-prelude, default src/esia/rhi/d3d9/esia_sm3_prelude.hlsli, see esia_common.hlsli).
+(--sm3-prelude, default src/esia/rhi/directx/d3d9/esia_sm3_prelude.hlsli, see esia_common.hlsli).
 
 Formats a run cannot produce keep their previously generated file (the script never deletes a format because a
 tool is missing). Requirements: glslangValidator, spirv-val, spirv-cross (Ubuntu: glslang-tools spirv-tools
@@ -254,7 +254,7 @@ def main():
     ap.add_argument('--spirv-cross', help='spirv-cross command')
     ap.add_argument('--fxc', help='fxc command (e.g. "fxc.exe" or "wine /path/fxc.exe"): adds dxbc_sm5 / dxbc_sm4')
     ap.add_argument('--dxc', help='dxc command: adds dxil')
-    ap.add_argument('--sm3-prelude', default=os.path.join(ROOT, 'src', 'esia', 'rhi', 'd3d9', 'esia_sm3_prelude.hlsli'),
+    ap.add_argument('--sm3-prelude', default=os.path.join(ROOT, 'src', 'esia', 'rhi', 'directx', 'd3d9', 'esia_sm3_prelude.hlsli'),
                     help='SM3 prelude of the Direct3D 9 backend: with --fxc, adds dxbc_sm3 when the file exists')
     ap.add_argument('--define', action='append', default=[], metavar='NAME=VALUE',
                     help='an extra macro for every compiler, e.g. ESIA_FX_FETCH_ALL=1 (A / B builds)')

@@ -1,4 +1,4 @@
-# Direct3D 10 backend (ESIA_BACKEND_D3D10): the rhi::Device on a host's ID3D10Device (10.0 / 10.1, shader model 4),
+# Direct3D 10 backend (ESIA_BACKEND_DIRECTX, ESIA_BACKEND_D3D10): the rhi::Device on a host's ID3D10Device (10.0 / 10.1, shader model 4),
 # and a headless device for the conformance suite (esia_conformance --backend d3d10).
 add_library(esia_rhi_d3d10 STATIC d3d10_device.cpp)
 target_include_directories(esia_rhi_d3d10 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

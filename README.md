@@ -12,13 +12,13 @@ hardware interface (RHI). It replaces WGT UI, the Dear ImGui based `wgt.dll`; WG
 | Widgets (`src/esia/ui`, `esia::ui`) | WGT's liquid-glass widgets on the core ([UI_WIDGETS.md](docs/UI_WIDGETS.md)): themes, per-widget styles, springs, auto layout, controls, lists, navigation, popups, text fields, charts, the island |
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
 | Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with fallback chains for every major script, color emoji from bitmap strikes (sbix, CBDT); on Apple systems the fonts FreeType cannot read (PingFang's `hvgl` glyphs, iOS' `emjc` emoji) through Core Text; grayscale antialiasing |
-| Backends (`src/esia/rhi/<name>`) | Direct3D 9 / 10 / 11 / 12, OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal |
+| Backends (`src/esia/rhi/<name>`) | DirectX (Direct3D 9 / 10 / 11 / 12, in `rhi/directx`), OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal |
 | Platform | Win32 layer (`src/esia/platform/win32`, [PLATFORM_WIN32.md](docs/PLATFORM_WIN32.md)); the examples' frame is AppKit + Metal on macOS and UIKit + Metal on iOS (`examples/glass_window/app_macos.mm`, `app_ios.mm`, `app_apple.mm`) |
 | Examples | `showcase` (WGT's demo on Esia) and `glass_window` (a smoke test of the whole path), on Windows, macOS and iOS |
 
 | Backend | CMake option | Verified on |
 | --- | --- | --- |
-| Direct3D 11, 12, 10, 9 | `ESIA_BACKEND_D3D11` / `D3D12` / `D3D10` / `D3D9` | Windows 11, NVIDIA RTX 4080 SUPER, debug layers (D3D12 GPU-based validation); Wine |
+| DirectX: Direct3D 11, 12, 10, 9 | `ESIA_BACKEND_DIRECTX` | Windows 11, NVIDIA RTX 4080 SUPER, debug layers (D3D12 GPU-based validation); Wine |
 | OpenGL, OpenGL ES | `ESIA_BACKEND_OPENGL` | NVIDIA (WGL), Mesa llvmpipe (EGL) |
 | Vulkan | `ESIA_BACKEND_VULKAN` | NVIDIA and Mesa lavapipe, Khronos validation layer |
 | Metal | `ESIA_BACKEND_METAL` | MacBook Pro, Apple M3 Pro, macOS 27 (Metal API and shader validation); macOS 15 on GitHub's arm64 runner; iPhone 18 Pro Max (A20 Pro), iOS 27 |
@@ -26,18 +26,40 @@ hardware interface (RHI). It replaces WGT UI, the Dear ImGui based `wgt.dll`; WG
 Every backend passes the conformance suite (17 scenes against golden images, single frame and across frames, with
 the API's validation counted); details and numbers in `docs/REWRITE_STATUS.md` and each backend's `STATUS.md`.
 
+## Getting it
+
+Clone the branch of your platform: it holds what that platform builds and nothing else, and its README has the two
+commands that build it.
+
+| Branch | For | Backends |
+| --- | --- | --- |
+| `windows` | Windows (Visual Studio 2022, or LLVM) | DirectX (Direct3D 11, 12, 10 or 9: the first that works), OpenGL, Vulkan |
+| `apple` | macOS and iOS | Metal |
+| `linux` | Linux (no example frame yet) | OpenGL, Vulkan |
+
+```
+git clone -b windows https://github.com/0xDEADBEEFC0DEBABE/EsiaGUI.git
+```
+
+They are made from `main` after every push to it (`tools/branches/platform_branches.py`, the `Platform branches`
+workflow): do not commit to them. `main` has every platform, the development history and the documents; it builds the
+same way.
+
 ## Building
 
-Clone `main` and build: the backends of your platform are on by default, nothing to choose first.
+Clone `main` (or a platform branch) and build: the backends of your platform are on by default, nothing to choose
+first.
 
 | Platform | Backends built by default |
 | --- | --- |
-| Windows | Direct3D 9, 10, 11, 12 and OpenGL; Vulkan too when the Vulkan SDK is installed (`VULKAN_SDK`) |
+| Windows | DirectX (Direct3D 9, 10, 11, 12) and OpenGL; Vulkan too when the Vulkan SDK is installed (`VULKAN_SDK`) |
 | Linux | OpenGL; Vulkan too when the Vulkan headers are installed |
 | macOS, iOS | Metal |
 
-Configuring prints the list (`-- Esia backends: ...`). `-DESIA_BACKEND_<NAME>=ON` or `OFF` adds or drops one (`D3D9`,
-`D3D10`, `D3D11`, `D3D12`, `OPENGL`, `VULKAN`, `METAL`). The examples run on the first one built; `--api` picks another.
+Configuring prints the list (`-- Esia backends: ...`). `-DESIA_BACKEND_<NAME>=ON` or `OFF` adds or drops one
+(`DIRECTX`, `OPENGL`, `VULKAN`, `METAL`); with DirectX on, the advanced `ESIA_BACKEND_D3D9` / `D3D10` / `D3D11` / `D3D12`
+leave out single Direct3D versions. On Windows the examples start DirectX: the first Direct3D version that works on
+the machine (11, then 12, 10, 9); `--api` picks a backend or a version.
 `-DESIA_WERROR=ON` turns warnings into errors (every preset builds without warnings).
 
 **Windows**, with Visual Studio 2022 and nothing else (or open the folder in Visual Studio: it lists the presets):
@@ -71,7 +93,8 @@ cmake --build --preset macos-clang && ctest --preset macos-clang
 Metal's API and shader validation (CI does).
 
 Every preset puts the examples in `build/<preset>/bin` (`showcase`, `glass_window`; with Visual Studio in
-`build/windows-msvc/bin/Release`).
+`build/windows-msvc/bin/Release`). Visual Studio's build fails on paths over 260 characters: keep the clone's path
+under about 140 characters (`C:\Users\<you>\source\repos\EsiaGUI` is fine), or enable long paths in Windows.
 
 **iOS** (iPhones and iPads, iOS 16 or later; on a Mac with Xcode). The examples become app bundles, signed after the
 link with a provisioning profile Xcode has for them (`tools/ios/codesign.py`: sign in to Xcode with your Apple ID; a
@@ -106,7 +129,7 @@ glass_window                               # the smoke test: glass, the core's w
 
 | Option | Meaning |
 | --- | --- |
-| `--api d3d11 \| d3d12 \| d3d10 \| d3d9 \| opengl \| vulkan` | Windows: the backend (the first one built by default); macOS: Metal only |
+| `--api directx \| d3d11 \| d3d12 \| d3d10 \| d3d9 \| opengl \| vulkan` | Windows: the backend; `directx` (the default) starts the first Direct3D version that works, 11, 12, 10, 9; macOS: Metal only |
 | `--size WxH`, `--scale s` | client area in UI units, and pixels per UI unit (default: the monitor's); `--size 1512x945 --scale 2` is 3024 x 1890 pixels |
 | `--vsync on \| off` | off: no frame cap. On macOS a window cannot present faster than the display, so frames render into offscreen targets as fast as they can and the newest is presented each refresh |
 | `--stats` | macOS: once a second the frame rate, UI / encode / wait times, the GPU time of the frame's command buffer, passes, backdrop captures, frames shown and dropped |

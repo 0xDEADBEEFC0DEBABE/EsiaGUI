@@ -176,13 +176,14 @@ function(esia_register_backend name target)
 endfunction()
 esia_register_backend(null esia_rhi)
 
-# One option and one directory per backend. The DirectX backends share code in rhi/d3d_common (built when any
-# ESIA_BACKEND_D3D* is ON). By default every backend of the target platform is on, so a checkout builds as it is:
-#   Windows       Direct3D 9 / 10 / 11 / 12, OpenGL, and Vulkan when its headers are found (the Vulkan SDK: VULKAN_SDK)
+# One option and one directory per backend; DirectX is one family, rhi/directx: Direct3D 9, 10, 11 and 12 and the code
+# they share (common/). By default every backend of the target platform is on, so a checkout builds as it is:
+#   Windows       DirectX, OpenGL, and Vulkan when its headers are found (the Vulkan SDK: VULKAN_SDK)
 #   macOS, iOS    Metal
 #   elsewhere     OpenGL, and Vulkan when its headers are found (Linux: the distribution's Vulkan headers package)
-# -DESIA_BACKEND_<NAME>=ON / OFF overrides any of them.
-set(ESIA_KNOWN_BACKENDS opengl vulkan metal d3d9 d3d10 d3d11 d3d12)
+# -DESIA_BACKEND_<NAME>=ON / OFF overrides any of them (DIRECTX, OPENGL, VULKAN, METAL). With DirectX on, the advanced
+# ESIA_BACKEND_D3D9 / D3D10 / D3D11 / D3D12 (on) leave out single versions.
+set(ESIA_KNOWN_BACKENDS directx opengl vulkan metal)
 foreach(_b ${ESIA_KNOWN_BACKENDS})
     set(_esia_default_${_b} OFF)
 endforeach()
@@ -195,20 +196,18 @@ else()
         set(_esia_default_vulkan ON)
     endif()
     if(WIN32)
-        foreach(_b d3d9 d3d10 d3d11 d3d12)
-            set(_esia_default_${_b} ON)
-        endforeach()
+        set(_esia_default_directx ON)
     endif()
 endif()
-foreach(_b ${ESIA_KNOWN_BACKENDS})
-    string(TOUPPER ${_b} _B)
-    option(ESIA_BACKEND_${_B} "Build the ${_b} RHI backend (src/esia/rhi/${_b})" ${_esia_default_${_b}})
+option(ESIA_BACKEND_DIRECTX "Build the DirectX RHI backends: Direct3D 9, 10, 11 and 12 (src/esia/rhi/directx)" ${_esia_default_directx})
+option(ESIA_BACKEND_OPENGL "Build the OpenGL / OpenGL ES RHI backend (src/esia/rhi/opengl)" ${_esia_default_opengl})
+option(ESIA_BACKEND_VULKAN "Build the Vulkan RHI backend (src/esia/rhi/vulkan)" ${_esia_default_vulkan})
+option(ESIA_BACKEND_METAL "Build the Metal RHI backend (src/esia/rhi/metal)" ${_esia_default_metal})
+foreach(_v 9 10 11 12)
+    cmake_dependent_option(ESIA_BACKEND_D3D${_v} "With ESIA_BACKEND_DIRECTX: build Direct3D ${_v} (src/esia/rhi/directx/d3d${_v})" ON
+                           "ESIA_BACKEND_DIRECTX" OFF)
+    mark_as_advanced(ESIA_BACKEND_D3D${_v})
 endforeach()
-if(ESIA_BACKEND_D3D9 OR ESIA_BACKEND_D3D10 OR ESIA_BACKEND_D3D11 OR ESIA_BACKEND_D3D12)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/rhi/d3d_common/CMakeLists.txt)
-        add_subdirectory(rhi/d3d_common)
-    endif()
-endif()
 foreach(_b ${ESIA_KNOWN_BACKENDS})
     string(TOUPPER ${_b} _B)
     if(ESIA_BACKEND_${_B})
