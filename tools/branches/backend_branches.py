@@ -3,8 +3,8 @@
 branch of the graphics API they use and builds it without choosing anything:
 
     git clone -b directx https://github.com/<owner>/EsiaGUI.git     # Windows: Direct3D 11, 12, 10 or 9, the first that works
-    git clone -b opengl  ...                                         # Windows (WGL), Linux (EGL)
-    git clone -b vulkan  ...                                         # Windows, Linux (the Vulkan SDK / headers)
+    git clone -b opengl  ...                                         # Windows (WGL), Linux, Android (EGL)
+    git clone -b vulkan  ...                                         # Windows, Linux, Android (the Vulkan headers)
     git clone -b metal   ...                                         # macOS, iOS
 
 Each branch has the core, the renderer, the widgets, its backend, the example frames of the systems that backend runs
@@ -27,7 +27,7 @@ import tempfile
 
 BACKENDS = ['src/esia/rhi/directx', 'src/esia/rhi/opengl', 'src/esia/rhi/vulkan', 'src/esia/rhi/metal']
 # The example hosts of each API (glass_window builds the ones whose backend is there): OpenGL has one per system (WGL,
-# EGL on X11), the Vulkan host serves both.
+# EGL on X11 and Android), the Vulkan host serves all three.
 HOSTS = {
     'directx': ['examples/glass_window/host_d3d9.cpp', 'examples/glass_window/host_d3d10.cpp',
                 'examples/glass_window/host_d3d11.cpp', 'examples/glass_window/host_d3d12.cpp',
@@ -50,6 +50,10 @@ LINUX = ['src/esia/text/system_fonts_unix.cpp', 'cmake/toolchains/clang-linux.cm
          'include/esia/platform/x11.hpp', 'examples/glass_window/app_linux.cpp',
          'examples/glass_window/icons_linux.cpp', 'examples/glass_window/icons_linux.hpp',
          'examples/showcase/image_file_linux.cpp']
+# What only Android builds (with OpenGL ES or Vulkan: the opengl and vulkan branches).
+ANDROID = ['src/esia/platform/android', 'include/esia/platform/android.hpp', 'examples/glass_window/app_android.cpp',
+           'examples/glass_window/icon_font_text.hpp', 'examples/glass_window/icons_material.cpp',
+           'examples/glass_window/icons_material.hpp', 'tools/android']
 # Every branch: no CI of its own (main's covers it), no screenshots of other APIs.
 COMMON_DROP = ['.github', 'examples/glass_window/wine_screenshots']
 
@@ -62,11 +66,11 @@ def drop(branch):
     backend = 'src/esia/rhi/' + branch
     paths = [b for b in BACKENDS if b != backend]
     if branch == 'directx':
-        return paths + others('directx', HOSTS) + APPLE + LINUX + SYMBOLS
+        return paths + others('directx', HOSTS) + APPLE + LINUX + ANDROID + SYMBOLS
     if branch in ('opengl', 'vulkan'):
         return paths + others(branch, HOSTS) + APPLE
     if branch == 'metal':
-        return paths + [p for h in HOSTS.values() for p in h] + HOST_COMMON + WINDOWS + LINUX
+        return paths + [p for h in HOSTS.values() for p in h] + HOST_COMMON + WINDOWS + LINUX + ANDROID
     raise ValueError(branch)
 
 
@@ -76,8 +80,8 @@ WINDOWS_PRESETS = ['windows-msvc', 'windows-clang-cl', 'windows-cross', 'windows
 LINUX_PRESETS = ['linux-clang', 'linux-clang-release']
 PRESETS = {
     'directx': WINDOWS_PRESETS,
-    'opengl': WINDOWS_PRESETS + LINUX_PRESETS,
-    'vulkan': WINDOWS_PRESETS + LINUX_PRESETS,
+    'opengl': WINDOWS_PRESETS + LINUX_PRESETS + ['android'],
+    'vulkan': WINDOWS_PRESETS + LINUX_PRESETS + ['android'],
     'metal': ['macos-clang', 'ios', 'ios-simulator'],
 }
 
@@ -104,6 +108,19 @@ cmake --build --preset linux-clang && ctest --preset linux-clang
 The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
 the desktop's icon theme for the icons, Ubuntu's wallpaper.
 """
+ANDROID_BUILD = """The Android NDK and SDK (a platform, build-tools and platform-tools; a JDK for the APK signing tools), CMake and
+Ninja:
+
+```
+export ANDROID_NDK_HOME=<the NDK> ANDROID_HOME=<the SDK>
+cmake --preset android
+cmake --build --preset android
+adb install build/android/apk/showcase.apk
+```
+
+The examples become APKs in `build/android/apk`, for arm64 phones (`-DANDROID_ABI=x86_64` for the emulator). Their
+icons are Google's Material Icons, downloaded when configuring.
+"""
 README = {
     'directx': """# Esia for DirectX
 
@@ -118,27 +135,33 @@ examples start the first version that works on the machine - 11, then 12, 10, 9 
     'opengl': """# Esia for OpenGL
 
 A liquid-glass UI toolkit for games and tools (C++20). This branch is `main` with the OpenGL backend alone: OpenGL 3.3
-core and OpenGL ES 3.0, on Windows (WGL) and Linux (EGL).
+core and OpenGL ES 3.0, on Windows (WGL), Linux and Android (EGL).
 
 ## Build on Windows
 
 """ + WINDOWS_BUILD + """
 ## Build on Linux
 
-""" + LINUX_BUILD.format(extra=' libegl-dev'),
+""" + LINUX_BUILD.format(extra=' libegl-dev') + """
+## Build for Android
+
+""" + ANDROID_BUILD,
     'vulkan': """# Esia for Vulkan
 
 A liquid-glass UI toolkit for games and tools (C++20). This branch is `main` with the Vulkan backend alone (Vulkan 1.1
-and later), on Windows and Linux. It needs the Vulkan headers: on Windows the LunarG Vulkan SDK
-(https://vulkan.lunarg.com; its installer sets `VULKAN_SDK`), on Linux the distribution's package. Without them
-configuring says so and builds no backend.
+and later), on Windows, Linux and Android. It needs the Vulkan headers: on Windows the LunarG Vulkan SDK
+(https://vulkan.lunarg.com; its installer sets `VULKAN_SDK`), on Linux the distribution's package; the Android NDK has
+them. Without them configuring says so and builds no backend.
 
 ## Build on Windows
 
 """ + WINDOWS_BUILD + """
 ## Build on Linux
 
-""" + LINUX_BUILD.format(extra=' libvulkan-dev'),
+""" + LINUX_BUILD.format(extra=' libvulkan-dev') + """
+## Build for Android
+
+""" + ANDROID_BUILD,
     'metal': """# Esia for Metal
 
 A liquid-glass UI toolkit for games and tools (C++20). This branch is `main` with the Metal backend alone, on macOS and

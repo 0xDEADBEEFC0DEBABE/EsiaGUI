@@ -71,6 +71,20 @@
       }
     },
     {
+      "name": "android",
+      "displayName": "Esia - Android (arm64-v8a, API 28), the NDK's clang (Release): the examples as APKs",
+      "inherits": "esia-base",
+      "binaryDir": "${sourceDir}/build/android",
+      "toolchainFile": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-28",
+        "ESIA_TEXT_DEPS": "bundled",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
       "name": "windows-clang-cl",
       "displayName": "Esia - Windows, clang-cl + lld-link (Debug)",
       "inherits": "esia-base",
@@ -128,6 +142,7 @@
     { "name": "macos-clang", "configurePreset": "macos-clang" },
     { "name": "ios", "configurePreset": "ios" },
     { "name": "ios-simulator", "configurePreset": "ios-simulator" },
+    { "name": "android", "configurePreset": "android" },
     { "name": "windows-clang-cl", "configurePreset": "windows-clang-cl" },
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc", "configuration": "Debug" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc", "configuration": "Release" },

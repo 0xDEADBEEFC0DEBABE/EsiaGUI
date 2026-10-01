@@ -168,6 +168,10 @@ cmake_dependent_option(ESIA_PLATFORM_X11 "Build the X11 platform layer (src/esia
 if(ESIA_PLATFORM_X11 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/platform/x11/CMakeLists.txt)
     add_subdirectory(platform/x11)
 endif()
+cmake_dependent_option(ESIA_PLATFORM_ANDROID "Build the Android platform layer (src/esia/platform/android)" ON "ANDROID" OFF)
+if(ESIA_PLATFORM_ANDROID AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/platform/android/CMakeLists.txt)
+    add_subdirectory(platform/android)
+endif()
 
 # ------------------------------------------------------------------ RHI + backends
 add_library(esia_rhi STATIC
