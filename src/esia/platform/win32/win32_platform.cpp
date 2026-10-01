@@ -207,7 +207,10 @@ namespace esia::platform::win32
                 capturedMouse = true;
             }
             buttonsDown |= bit;
-            Queue(InputEvent::Button(b, true));
+            // a touch screen's finger arrives as the left button, signed in the message's extra info (MI_WP_SIGNATURE
+            // with the touch bit): scroll areas may take its drag over
+            const std::uint32_t extra = (std::uint32_t)(std::uintptr_t)::GetMessageExtraInfo();
+            Queue(InputEvent::Button(b, true, (extra & 0xFFFFFF80u) == 0xFF515780u));
             return;
         }
         if (!(buttonsDown & bit))   // pressed elsewhere, released over the window: not the UI's click

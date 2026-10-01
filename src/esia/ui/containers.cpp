@@ -134,6 +134,22 @@ namespace esia::ui
                 s.velocity = 0.0f;
                 c.SetActiveId(dragId);
             }
+            // a finger that pressed an item in the area (a row, a button) and then moves along it scrolls instead, past
+            // a slop and more along than across: the item lets go without pressing (Context::ActiveIdYieldsToScroll).
+            // An inner area that scrolls has taken the touch already (it ends first).
+            const Vec2 pressPos = in.MouseClickedPos(MouseButton::Left);
+            if (!s.dragging && scrolls && c.ActiveIdYieldsToScroll() && in.MouseDown(MouseButton::Left) && view.Contains(pressPos))
+            {
+                const Vec2 d = in.MousePos() - pressPos;
+                if (std::fabs(d.y) > in.config.touchSlop && std::fabs(d.y) > std::fabs(d.x))
+                {
+                    s.dragging = true;
+                    s.startMouse = s.lastMouse = in.MousePos().y;
+                    s.startScroll = scroll;
+                    s.velocity = 0.0f;
+                    c.SetActiveId(dragId);
+                }
+            }
             if (s.dragging)
             {
                 if (c.ActiveId() == dragId && in.MouseDown(MouseButton::Left))
@@ -286,6 +302,24 @@ namespace esia::ui
         WindowState& st = c.State<WindowState>(id);
         const bool stylePushed = TakeNextStyle();   // the window and everything in it, until EndWindow
 
+        // docked (dock.cpp): it fills its node when its tab is the active one, and is not drawn otherwise
+        DockPlacement dock;
+        const bool docked = DockedPlacement(title, open && !(o.flags & WindowFlags_NoClose), o.icon, dock);
+        if (docked)
+        {
+            if (dock.closeRequested && open)
+                *open = false;
+            if (!dock.shown || (open && !*open))
+            {
+                if (stylePushed)
+                    PopStyle();
+                return false;
+            }
+            st.closing = false;
+            st.seen = true;
+            AnimSet(Salt(id, 0x77), 1.0f);
+        }
+
         const bool wantOpen = (open ? *open : true) && !st.closing;
         const Id visId = Salt(id, 0x77);
         const bool firstShow = !st.seen && wantOpen;
@@ -306,8 +340,23 @@ namespace esia::ui
             return false;
         }
 
-        c.SetNextWindowSize(o.size * t.metrics.scale, Cond::FirstUse);
-        if (o.pos.x >= 0.0f)
+        if (docked)
+        {
+            c.SetNextWindowPos(dock.rect.min, Cond::Always);
+            c.SetNextWindowSize(dock.rect.Size(), Cond::Always);
+        }
+        else if (dock.pendingMove)
+        {
+            // just pulled out of a dock node by its tab: its own size, under the mouse
+            c.SetNextWindowSize(o.size * t.metrics.scale, Cond::Always);
+            c.SetNextWindowPos(c.Input().MousePos() - dock.grab, Cond::Always);
+        }
+        else
+            c.SetNextWindowSize(o.size * t.metrics.scale, Cond::FirstUse);
+        if (docked || dock.pendingMove)
+        {
+        }
+        else if (o.pos.x >= 0.0f)
             c.SetNextWindowPos(o.pos * t.metrics.scale, Cond::FirstUse);
         else
         {
@@ -326,6 +375,13 @@ namespace esia::ui
             wo.flags |= esia::WindowFlags_NoInputs;
         wo.padding = Vec2(0, 0);
         wo.minSize = Vec2(Sc(220), Sc(160));
+        if (docked)
+        {
+            // behind the floating windows, where its node puts it
+            wo.flags |= esia::WindowFlags_NoMove | esia::WindowFlags_NoResize;
+            wo.layer = WindowLayer::Background;
+            wo.minSize = Vec2(1, 1);
+        }
         if (!c.Begin(title, wo))
         {
             c.End();
@@ -334,6 +390,8 @@ namespace esia::ui
             return false;
         }
         Window* w = c.CurrentWindow();
+        if (dock.pendingMove)
+            c.StartWindowMove(w, dock.grab);
         const Rect wr = w->GetRect();
         const float alpha = Saturate(vis);
         PushStyle(ItemStyle().Opacity(alpha));   // everything the window draws fades with it
@@ -342,8 +400,9 @@ namespace esia::ui
         e.kind = Entry::Kind::Window;
         e.id = id;
         e.stylePushed = stylePushed;
-        e.windowFlags = o.flags;
-        const float radius = ItemRadius(Sc(t.metrics.windowRadius));
+        e.windowFlags = o.flags | (docked ? (WindowFlags_NoResize | WindowFlags_NoShadow) : 0u);
+        const std::uint32_t flags = e.windowFlags;
+        const float radius = docked ? ItemRadius(Sc(18)) : ItemRadius(Sc(t.metrics.windowRadius));
 
         // ---------------------------------------------------------- surface
         const bool focused = c.FocusedWindow() == w;
@@ -352,7 +411,7 @@ namespace esia::ui
             Painter bg = GetPainter();
             Style ws;
             ws.Radius(radius);
-            if (!(o.flags & WindowFlags_NoShadow))
+            if (!(flags & WindowFlags_NoShadow))
                 ws.Shadow(pc.shadow.Fade(0.9f + 0.5f * focusT), Sc(34 + 14 * focusT), Vec2(0, Sc(14 + 6 * focusT)));
             if ((o.flags & WindowFlags_Solid) && !LookClear())
                 ws.Fill(FillOr(t.dark ? Color::Hex(0x1C1C1E) : Color::Hex(0xF2F2F7))).Stroke(1.0f, pc.separator.Fade(0.6f));
@@ -375,7 +434,9 @@ namespace esia::ui
 
         // ----------------------------------------------------------- header
         float headerH = 0.0f;
-        if (!(o.flags & WindowFlags_NoHeader))
+        if (docked)
+            headerH = DockTabBar(title, Rect(wr.min.x, wr.min.y, wr.max.x, wr.min.y + Sc(44)));   // its node's tabs
+        else if (!(o.flags & WindowFlags_NoHeader))
         {
             headerH = Sc(t.metrics.headerHeight) + (!o.subtitle.empty() ? Sc(12) : 0.0f);
             const float pad = Sc(t.metrics.padding + 4);

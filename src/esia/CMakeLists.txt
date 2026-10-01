@@ -123,7 +123,7 @@ endif()
 if(ESIA_TEXT_FREETYPE)
     include(${ESIA_ROOT}/cmake/EsiaTextDeps.cmake)
     # platform_face: system fonts FreeType cannot draw, through the platform (Apple: Core Text)
-    add_library(esia_text_ft STATIC text/ft/ft_text_system.cpp text/ft/platform_face.cpp)
+    add_library(esia_text_ft STATIC text/ft/ft_text_system.cpp text/ft/colr.cpp text/ft/platform_face.cpp text/ft/png.cpp)
     target_link_libraries(esia_text_ft PUBLIC esia_text PRIVATE esia::freetype esia::harfbuzz)
     if(APPLE)
         target_link_libraries(esia_text_ft PRIVATE "-framework CoreText" "-framework CoreGraphics" "-framework CoreFoundation")
@@ -146,6 +146,11 @@ add_library(esia_ui STATIC
     ui/lists.cpp
     ui/navigation.cpp
     ui/text_field.cpp
+    ui/number.cpp
+    ui/color.cpp
+    ui/table.cpp
+    ui/text_editor.cpp
+    ui/dock.cpp
     ui/popups.cpp
     ui/charts.cpp
     ui/overlays.cpp)
@@ -158,6 +163,14 @@ add_library(esia::ui ALIAS esia_ui)
 cmake_dependent_option(ESIA_PLATFORM_WIN32 "Build the Win32 platform layer (src/esia/platform/win32)" ON "WIN32" OFF)
 if(ESIA_PLATFORM_WIN32)
     add_subdirectory(platform/win32)
+endif()
+cmake_dependent_option(ESIA_PLATFORM_X11 "Build the X11 platform layer (src/esia/platform/x11)" ON "UNIX AND NOT APPLE AND NOT ANDROID" OFF)
+if(ESIA_PLATFORM_X11 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/platform/x11/CMakeLists.txt)
+    add_subdirectory(platform/x11)
+endif()
+cmake_dependent_option(ESIA_PLATFORM_ANDROID "Build the Android platform layer (src/esia/platform/android)" ON "ANDROID" OFF)
+if(ESIA_PLATFORM_ANDROID AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/platform/android/CMakeLists.txt)
+    add_subdirectory(platform/android)
 endif()
 
 # ------------------------------------------------------------------ RHI + backends
