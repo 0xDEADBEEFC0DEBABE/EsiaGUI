@@ -24,7 +24,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 include(CTest)   # before src/esia: backends register their own tests (esia_add_test)
 add_subdirectory(src/esia)
 option(ESIA_BUILD_EXAMPLES "Build the examples (examples/)" ${PROJECT_IS_TOP_LEVEL})
-if(ESIA_BUILD_EXAMPLES AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples)   # the linux branch has none
+if(ESIA_BUILD_EXAMPLES AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     add_subdirectory(examples/glass_window)
     add_subdirectory(examples/showcase)
 endif()

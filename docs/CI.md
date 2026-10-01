@@ -3,8 +3,8 @@
 GitHub Actions runs three workflows (`.github/workflows`), one per host OS, on every push to `main` and every pull
 request into it that changes more than documentation, and on any branch by hand (section 5: the minutes are
 metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches (section 5); a fifth,
-`Platform branches`, commits `main` minus what each platform does not build to the branches `windows`, `apple` and
-`linux` after every push to `main` (`tools/branches/platform_branches.py`, seconds on Linux). Every job
+`Backend branches`, commits `main` with one backend each to the branches `directx`, `opengl`, `vulkan` and `metal`
+after every push to `main` (`tools/branches/backend_branches.py`, seconds on Linux). Every job
 builds with `-DESIA_WERROR=ON`, runs `ctest`, writes a table of every test and every conformance scene to the job's
 summary (`.github/scripts/ctest_report.py`) and uploads the conformance images, the diff images of failures, the
 CTest JUnit file and the test logs as an artifact named after the job (kept 14 days).

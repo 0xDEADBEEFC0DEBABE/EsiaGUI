@@ -28,26 +28,28 @@ the API's validation counted); details and numbers in `docs/REWRITE_STATUS.md` a
 
 ## Getting it
 
-Clone the branch of your platform: it holds what that platform builds and nothing else, and its README has the two
-commands that build it.
+Clone the branch of your graphics API: it holds that backend and what builds it on every system it runs on (the
+example frames, the tests, the presets), and its README has the commands.
 
-| Branch | For | Backends |
+| Branch | Backend | Systems |
 | --- | --- | --- |
-| `windows` | Windows (Visual Studio 2022, or LLVM) | DirectX (Direct3D 11, 12, 10 or 9: the first that works), OpenGL, Vulkan |
-| `apple` | macOS and iOS | Metal |
-| `linux` | Linux (no example frame yet) | OpenGL, Vulkan |
+| `directx` | Direct3D 11, 12, 10, 9 (the first that works on the machine, or `--api d3d12` ...) | Windows |
+| `opengl` | OpenGL 3.3 / OpenGL ES 3.0 | Windows, Linux |
+| `vulkan` | Vulkan 1.1+ (the Vulkan SDK / headers) | Windows, Linux |
+| `metal` | Metal | macOS, iOS |
 
 ```
-git clone -b windows https://github.com/0xDEADBEEFC0DEBABE/EsiaGUI.git
+git clone -b directx https://github.com/0xDEADBEEFC0DEBABE/EsiaGUI.git
 ```
 
-They are made from `main` after every push to it (`tools/branches/platform_branches.py`, the `Platform branches`
-workflow): do not commit to them. `main` has every platform, the development history and the documents; it builds the
+Linux has no example window yet: there the `opengl` and `vulkan` branches build the library and run its tests. The
+branches are made from `main` after every push to it (`tools/branches/backend_branches.py`, the `Backend branches`
+workflow): do not commit to them. `main` has every backend, the development history and the documents; it builds the
 same way.
 
 ## Building
 
-Clone `main` (or a platform branch) and build: the backends of your platform are on by default, nothing to choose
+Clone `main` (or a backend branch) and build: the backends of your platform are on by default, nothing to choose
 first.
 
 | Platform | Backends built by default |
