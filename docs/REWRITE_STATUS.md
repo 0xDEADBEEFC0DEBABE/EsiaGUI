@@ -36,6 +36,9 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md).
 and live activities, the dock, and WGT's demo ported panel for panel as the `showcase`, compared with WGT's
 screenshots.
 
+**Examples on Linux** (2026-10-02): `showcase` and `glass_window` run on an X11 window, with OpenGL and Vulkan.
+
+* [Examples on Linux](#examples-on-linux)
 * [Widget layer, second part](#widget-layer-second-part-featui-overlays)
 * [Widget layer, first part](#widget-layer-first-part-featui-foundation)
 * [UI core v2](#ui-core-v2)
@@ -50,6 +53,41 @@ screenshots.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Examples on Linux
+
+### What changed
+
+* `examples/glass_window/app_linux.cpp`: the examples' frame on X11 (XWayland on a Wayland desktop). Events and frames
+  on one thread; mouse, wheel, keys by keysym with the server's key repeat, text through XIM (committed text only),
+  focus, cursors, the `CLIPBOARD` selection, the UI scale from `Xft.dpi`.
+* Hosts: `host_opengl_egl.cpp` (an EGL window surface, OpenGL 3.3 core, the config of the window's visual);
+  `host_vulkan.cpp` also on Linux (`libvulkan.so.1`, `VK_KHR_xlib_surface` declared by hand: `vulkan_xlib.h` would bring
+  Xlib's macros). `Host::Init` takes a `NativeWindow` (an `HWND`, or an X11 display and window).
+* Icons: `symbol_text.hpp` is the Apple frame's symbol text system, moved out of `app_apple.mm` with the rasterizer as
+  a parameter; on Linux `icons_linux.cpp` draws esia::ui's icons from the symbolic icon theme (Adwaita, else Yaru)
+  through librsvg and cairo loaded at run time.
+* `showcase`: PNG (the test kit's decoder) and JPEG (libjpeg, when found) wallpapers, Ubuntu's or GNOME's;
+  `--spread` lays every panel out side by side (the README's picture).
+* Text: an ellipsis no longer cuts a label whose box is exactly its measured width: `(x + w) - x` could come out a
+  fraction of a pixel short ("Dark Mo..." on Linux).
+* CI's Linux job installs `libx11-dev` and `libjpeg-dev`, so it builds the frame.
+
+### Verified (2026-10-02)
+
+* Ubuntu 24.04 (GNOME on Wayland, XWayland) in VMware Workstation 17, virtual hardware 21: `showcase` and
+  `glass_window` on OpenGL (SVGA3D, OpenGL 4.3 core, the host's RTX 4080 SUPER; about 150 - 290 fps at 1280 x 800 to
+  1600 x 1000) and on Vulkan (lavapipe, validation layer: 0 messages); `--debug` on OpenGL: 0 counted messages (Mesa
+  prints one compiler warning about an uninitialized temporary in the generated GLSL). `linux-clang` with
+  `ESIA_WERROR=ON` and `linux-clang-release`: ctest 19 / 19.
+* Windows (MSVC, RTX 4080 SUPER), after the host interface change: ctest 33 / 33; `showcase --debug` on Direct3D 11,
+  12, 10, 9Ex, OpenGL and Vulkan: 0 messages each.
+
+### Not verified
+
+* A Linux machine with a GPU driver (Mesa radeonsi / iris, NVIDIA's), other desktops (KDE, Xfce), a scaled (HiDPI)
+  display, an input method's composition.
+* `app_apple.mm` after the move of the symbol text system: compiled by the macOS job of CI only.
 
 ## Widget layer, second part (`feat/ui-overlays`)
 

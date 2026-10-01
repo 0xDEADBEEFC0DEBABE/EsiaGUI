@@ -73,7 +73,8 @@ namespace glass
 
     int RunApp(int argc, char** argv, App& app);
 
-    // macOS: a font path the frame's text system draws with SF Symbols, for the code points of esia/ui/icons.hpp
-    // (UiDesc::iconFontFile; Windows' icon fonts do not exist there). Elsewhere a path that does not load.
+    // macOS, iOS and Linux: a font path the frame's text system draws with the system's symbols - SF Symbols, the
+    // desktop's icon theme - for the code points of esia/ui/icons.hpp (UiDesc::iconFontFile; Windows' icon fonts do not
+    // exist there; symbol_text.hpp). On Windows a path that does not load.
     inline constexpr const char* kSystemSymbolsFont = "glass:sf-symbols";
 }
