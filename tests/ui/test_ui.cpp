@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace
         ui::Ui ui{ctx, {}};
         double t = 1.0;
         Vec2 display{800, 600};
+        Vec2 scale{1, 1};   // physical pixels per UI unit
 
         explicit UiHarness(const ContextDesc& desc = {}) : ctx(desc) {}
 
@@ -26,7 +28,7 @@ namespace
         void Frame(F&& body, double dt = 1.0 / 60.0)
         {
             t += dt;
-            ctx.NewFrame({display, {1, 1}, t});
+            ctx.NewFrame({display, scale, t});
             ui.NewFrame();
             ctx.SetNextWindowPos({0, 0}, Cond::FirstUse);
             ctx.SetNextWindowSize({600, 400}, Cond::FirstUse);
@@ -712,6 +714,148 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
     frame();
     ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
+}
+
+// A finger that presses a row and then moves along the area scrolls it, past a slop, and the row does not press; a
+// tap still presses, a sideways move does not scroll, and the mouse keeps the row (it drags only empty space).
+ESIA_TEST(UiScroll, TouchDragFromARowScrolls)
+{
+    UiHarness h;
+    float scroll = 0.0f;
+    int presses = 0;
+    bool held = false;
+    auto frame = [&] {
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 200});
+            for (int i = 0; i < 20; ++i)
+            {
+                const ui::Interaction it = ui::Interact(("row" + std::to_string(i)).c_str(), {600, 50});
+                presses += it.pressed;
+                held = held || it.held;
+            }
+            scroll = h.ctx.Scroll().y;
+            ui::EndScrollArea();
+        });
+    };
+    const auto gesture = [&](bool touch, Vec2 from, Vec2 step, int steps) {
+        presses = 0;
+        h.ctx.QueueInput(InputEvent::MouseMove(from));
+        frame();
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true, touch));
+        frame();
+        for (int i = 1; i <= steps; ++i)
+        {
+            h.ctx.QueueInput(InputEvent::MouseMove(from + step * (float)i));
+            held = false;
+            frame();
+        }
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false, touch));
+        frame();
+    };
+    frame();
+    frame();
+
+    // up by 10 a frame from a row: the first move passes the slop and hands the touch to the area, which follows the
+    // rest (90); the row lets go and does not press
+    gesture(true, {300, 160}, {0, -10}, 10);
+    ESIA_CHECK(presses == 0);
+    ESIA_CHECK(!held);
+    ESIA_CHECK(scroll > 85.0f && scroll < 130.0f);   // then gliding on
+    for (int i = 0; i < 90; ++i)
+        frame();
+    const float rested = scroll;
+
+    // a tap presses; a slight wobble under the slop too
+    gesture(true, {300, 100}, {0, 0}, 0);
+    ESIA_CHECK(presses == 1);
+    gesture(true, {300, 100}, {1, -1.5f}, 4);
+    ESIA_CHECK(presses == 1 && std::fabs(scroll - rested) < 0.5f);
+    // sideways: no scroll (the row keeps the touch: released over it, it presses)
+    gesture(true, {200, 100}, {10, 0}, 8);
+    ESIA_CHECK(std::fabs(scroll - rested) < 0.5f);
+    // the mouse: the row stays held, nothing scrolls, released over another row it does not press
+    gesture(false, {300, 160}, {0, -10}, 10);
+    ESIA_CHECK(presses == 0 && std::fabs(scroll - rested) < 0.5f);
+}
+
+// The same from an item that acts on the press (a slider, a segmented control): the finger's press is held back
+// from it, so a swipe along the area scrolls and the item never acts; across, the item gets it (a slider drags).
+ESIA_TEST(UiScroll, TouchDragFromAPressOnClickItemScrolls)
+{
+    UiHarness h;
+    float scroll = 0.0f;
+    int presses = 0;
+    auto frame = [&] {
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 200});
+            for (int i = 0; i < 20; ++i)
+                presses += ui::Interact(("slider" + std::to_string(i)).c_str(), {600, 50}, ui::InteractFlags_PressOnClick).pressed;
+            scroll = h.ctx.Scroll().y;
+            ui::EndScrollArea();
+        });
+    };
+    const auto swipe = [&](Vec2 from, Vec2 step, int steps) {
+        presses = 0;
+        h.ctx.QueueInput(InputEvent::MouseMove(from));
+        frame();
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true, true));
+        frame();
+        for (int i = 1; i <= steps; ++i)
+        {
+            h.ctx.QueueInput(InputEvent::MouseMove(from + step * (float)i));
+            frame();
+        }
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false, true));
+        frame();
+    };
+    frame();
+    frame();
+    swipe({300, 160}, {0, -10}, 10);
+    ESIA_CHECK(presses == 0);
+    ESIA_CHECK(scroll > 85.0f && scroll < 130.0f);
+    for (int i = 0; i < 90; ++i)
+        frame();
+    const float rested = scroll;
+    swipe({200, 100}, {10, 0}, 8);
+    ESIA_CHECK(presses == 1 && std::fabs(scroll - rested) < 0.5f);
+}
+
+// The offset the layout starts at lands on whole pixels: dragging on past the end at a fractional scale (content
+// whose measured size depends on where between pixels it starts) keeps the content still instead of shaking it.
+ESIA_TEST(UiScroll, DragPastTheEndStaysStill)
+{
+    UiHarness h;
+    h.scale = {2.625f, 2.625f};   // a phone's density
+    std::vector<float> offsets;
+    auto frame = [&] {
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 200});
+            for (int i = 0; i < 30; ++i)
+                Box(("b" + std::to_string(i)).c_str(), {600, 33.37f});
+            offsets.push_back(h.ctx.Scroll().y);
+            ui::EndScrollArea();
+        });
+    };
+    frame();
+    frame();
+    // a finger's drag from a row, up to the end and on
+    h.ctx.QueueInput(InputEvent::MouseMove({300, 190}));
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true, true));
+    frame();
+    for (int i = 1; i <= 120; ++i)
+    {
+        h.ctx.QueueInput(InputEvent::MouseMove({300, 190 - 15.0f * (float)i}));
+        frame();
+    }
+    const float last = offsets.back();
+    const float pixel = 1.0f / 2.625f;
+    ESIA_CHECK(last > 700.0f);
+    for (std::size_t i = offsets.size() - 40; i < offsets.size(); ++i)
+        ESIA_CHECK(offsets[i] == last);
+    ESIA_CHECK(std::fabs(last / pixel - std::round(last / pixel)) < 1e-3f);   // on a pixel
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false, true));
+    frame();
 }
 
 ESIA_TEST(UiScroll, ContentFadesAtTheDisplaysEdge)

@@ -5,10 +5,14 @@
 // glyphs and marks where a line may break, BreakLines() fills lines greedily, PlaceLine() positions a line's glyphs
 // in visual order. Draw() snaps every glyph to the physical pixel grid and takes its bitmap from the atlas,
 // rasterizing it from the FreeType outline the first time. A system font FreeType cannot draw (Apple: PingFang, through
-// Core Text) is a face of the platform's: HarfBuzz on its tables, the platform's outlines (platform_face.hpp).
+// Core Text) is a face of the platform's: HarfBuzz on its tables, the platform's outlines (platform_face.hpp). Color
+// glyphs: bitmap strikes (sbix, CBDT) scaled, COLR layers and paints (Segoe UI Emoji, Android's Noto Color Emoji)
+// painted from their outlines (colr.hpp).
 #include "esia/text/freetype.hpp"
 #include "esia/text/system_fonts.hpp"
+#include "colr.hpp"
 #include "platform_face.hpp"
+#include "png.hpp"
 #include "esia/base/hash.hpp"
 #include "esia/base/utf8.hpp"
 #include "esia/core/draw_list.hpp"
@@ -18,6 +22,7 @@
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
+#include <hb-ot.h>
 #include <hb.h>
 
 #include <algorithm>
@@ -113,6 +118,7 @@ namespace esia::text
             std::unique_ptr<detail::PlatformFace> colorPlatform;
             bool colorPlatformTried = false;
             bool colorStrikes = false;   // color bitmap strikes (sbix, CBDT: emoji): drawn from those, not outlines
+            bool colorLayers = false;    // COLR color glyphs (vector emoji): painted from their layers (colr.hpp)
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
             float ascent = 0.0f, descent = 0.0f, gap = 0.0f;   // design units, descent positive
@@ -541,13 +547,15 @@ namespace esia::text
                 face->colorStrikes = FT_HAS_COLOR(face->ft) && FT_HAS_FIXED_SIZES(face->ft);
                 if (!FT_IS_SCALABLE(face->ft) && !face->colorStrikes)
                     return 0;   // monochrome bitmap fonts: nothing to rasterize
+                face->colorLayers = !face->colorStrikes && detail::HasColrGlyphs(face->ft);
                 hb_blob_t* blob = face->file ? hb_blob_reference(face->file->blob)
                                              : hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
                 hb_face_t* hbFace = hb_face_create(blob, (unsigned)faceIndex);
                 hb_blob_destroy(blob);
                 face->hb = hb_font_create(hbFace);
                 hb_face_destroy(hbFace);
-                face->upem = (float)std::max<FT_UShort>(face->ft->units_per_EM, 1);
+                // FreeType leaves units_per_EM 0 for fonts without outlines (CBDT emoji): HarfBuzz reads it from head
+                face->upem = (float)(face->ft->units_per_EM ? face->ft->units_per_EM : std::max(hb_face_get_upem(hb_font_get_face(face->hb)), 1u));
                 hb_font_set_scale(face->hb, (int)face->upem, (int)face->upem);   // shaping in design units
                 hb_font_extents_t extents{};
                 hb_font_get_h_extents(face->hb, &extents);
@@ -1110,6 +1118,9 @@ namespace esia::text
                 const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (q << 2) | (std::uint64_t)(phase & 3);
                 if (faces_[face]->colorStrikes)
                     return ColorGlyph(face, glyph, emPixels);
+                if (faces_[face]->colorLayers)
+                    if (const GlyphSlot* s = ColrGlyph(face, glyph, key, phase))
+                        return s;
                 if (const GlyphSlot* s = atlas_.Find(key))
                     return s;
                 Face& f = *faces_[face];
@@ -1132,6 +1143,26 @@ namespace esia::text
                     bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
                 const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
                 return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
+            }
+
+            // A COLR color glyph (a vector emoji) under the gray glyph's `key` (size and phase), painted on first use; null
+            // when `glyph` has no colors (the font's digits, its space): an outline like any other.
+            const GlyphSlot* ColrGlyph(std::uint16_t face, std::uint16_t glyph, std::uint64_t key, int phase)
+            {
+                if (const GlyphSlot* s = colorAtlas_.Find(key))
+                    return s;
+                FT_Face ft = faces_[face]->ft;
+                if (!detail::IsColrGlyph(ft, glyph))
+                    return nullptr;
+                Rect ink;
+                const float emPixels = (float)((key >> 2) & 0x7FFFFFF) / 16.0f;
+                if (!detail::DrawColrGlyph(ft, glyph, emPixels, 0.25f * (float)phase, bitmap_, ink))
+                {
+                    bitmap_ = GlyphBitmap{0, 0, 0, 0, {}, 4};   // larger than the painter takes: cached as empty
+                    ink = Rect();
+                }
+                const GlyphSlot* s = colorAtlas_.Add(key, bitmap_, ink);
+                return s ? s : colorAtlas_.Add(key, GlyphBitmap{0, 0, 0, 0, {}, 4}, Rect());   // larger than a page: empty
             }
 
             // A color glyph (emoji) at `emPixels`: the bitmap of the nearest strike at or above that size (the largest
@@ -1170,6 +1201,8 @@ namespace esia::text
                     bitmap_.top = -(int)std::floor((float)ft->glyph->bitmap_top * k + 0.5f);
                     ink = Rect((float)bitmap_.left, (float)bitmap_.top, (float)(bitmap_.left + bitmap_.width), (float)(bitmap_.top + bitmap_.height));
                 }
+                else if (strike >= 0 && PngGlyph(*faces_[face], glyph, emPixels))
+                    ink = Rect((float)bitmap_.left, (float)bitmap_.top, (float)(bitmap_.left + bitmap_.width), (float)(bitmap_.top + bitmap_.height));
                 else if (Face& f = *faces_[face]; strike >= 0)
                 {
                     // a strike FreeType cannot decode (iOS' Apple Color Emoji: emjc, not PNG): the platform draws the
@@ -1187,6 +1220,35 @@ namespace esia::text
                 }
                 const GlyphSlot* s = colorAtlas_.Add(key, bitmap_, ink);
                 return s ? s : colorAtlas_.Add(key, GlyphBitmap{0, 0, 0, 0, {}, 4}, Rect());   // larger than a page: empty
+            }
+
+            // A color bitmap glyph whose PNG FreeType cannot decode (built without libpng, as Esia's bundled FreeType is):
+            // the largest strike's image from HarfBuzz, decoded by Esia, placed by its extents (design units: the
+            // HarfBuzz font's scale), scaled to `emPixels` into bitmap_.
+            bool PngGlyph(const Face& f, std::uint16_t glyph, float emPixels)
+            {
+                hb_blob_t* blob = hb_ot_color_glyph_reference_png(f.hb, glyph);
+                unsigned length = 0;
+                const char* data = hb_blob_get_data(blob, &length);
+                int w = 0, h = 0;
+                std::vector<std::uint8_t> pixels;
+                const bool decoded = length > 0 && detail::DecodePng(reinterpret_cast<const std::uint8_t*>(data), length, w, h, pixels);
+                hb_blob_destroy(blob);
+                hb_glyph_extents_t ext{};
+                if (!decoded || !hb_font_get_glyph_extents(f.hb, glyph, &ext) || ext.width <= 0)
+                    return false;
+                for (std::size_t i = 0; i < pixels.size(); i += 4)   // straight RGBA -> premultiplied BGRA
+                {
+                    const unsigned a = pixels[i + 3], r = pixels[i];
+                    pixels[i] = (std::uint8_t)((pixels[i + 2] * a + 127) / 255);
+                    pixels[i + 1] = (std::uint8_t)((pixels[i + 1] * a + 127) / 255);
+                    pixels[i + 2] = (std::uint8_t)((r * a + 127) / 255);
+                }
+                const float px = emPixels / f.upem;
+                ScaleBgra(pixels.data(), w, h, w * 4, (float)ext.width * px / (float)w, bitmap_);
+                bitmap_.left = (int)std::floor((float)ext.x_bearing * px + 0.5f);
+                bitmap_.top = -(int)std::floor((float)ext.y_bearing * px + 0.5f);
+                return true;
             }
 
             // Premultiplied BGRA (FreeType's color bitmaps) -> straight RGBA8, scaled by `k`: each target pixel the area

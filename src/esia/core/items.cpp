@@ -191,6 +191,12 @@ namespace esia
                 activeByMouse_ = true;
                 clickedNow = true;
                 r.clicks = input_.MouseClickCount(mb);
+                // a finger's press may yet be a scroll (ActiveIdYieldsToScroll): an item that acts on the press gets
+                // it once it is not (below)
+                activeYields_ = input_.MouseTouch(mb);
+                activeDeferred_ = activeYields_ && ((flags & (ButtonFlags_PressOnClick | ButtonFlags_PressOnDoubleClick)) || repeat);
+                if (activeDeferred_)
+                    break;
                 if (flags & ButtonFlags_FocusOnClick)
                     SetKeyboardFocusId(id);
                 if ((flags & ButtonFlags_PressOnClick) || repeat)
@@ -205,6 +211,37 @@ namespace esia
         // "release" presses or deactivates it
         if (activeId_ == id && id != 0 && !activeByMouse_)
             activeAlive_ = true;
+        else if (activeId_ == id && id != 0 && activeDeferred_)
+        {
+            // A finger's press on an item that acts on the press (a slider, a segmented control, a field, a repeat
+            // button), held back while it may be a scroll: the item gets it when the finger lifts (a tap), rests
+            // (touchDelay), or moves past the slop across - or along, a frame after a scroll area could have taken
+            // it (the areas end after their items). Until then the item is hovered, not held.
+            activeAlive_ = true;
+            const bool down = input_.MouseDown(activeButton_);
+            const Vec2 d = input_.MousePos() - input_.MouseClickedPos(activeButton_);
+            const bool past = std::max(std::fabs(d.x), std::fabs(d.y)) > input_.config.touchSlop;
+            const bool give = !down || (!past && input_.MouseDownDuration(activeButton_) >= input_.config.touchDelay) ||
+                              (past && (std::fabs(d.x) >= std::fabs(d.y) || activeSlopSeen_));
+            activeSlopSeen_ = activeSlopSeen_ || past;
+            if (give)
+            {
+                activeDeferred_ = activeYields_ = false;
+                r.clicks = input_.MouseClickCount(activeButton_);
+                if (!(down || (r.hovered && !input_.MouseCanceled(activeButton_))))
+                    ClearActiveId();   // lifted elsewhere, or by focus loss: nothing
+                else
+                {
+                    // the press lands now (lifted: for this frame, held where the tap was)
+                    if (flags & ButtonFlags_FocusOnClick)
+                        SetKeyboardFocusId(id);
+                    r.pressed = (flags & ButtonFlags_PressOnClick) || repeat || ((flags & ButtonFlags_PressOnDoubleClick) && r.clicks == 2);
+                    r.held = true;
+                    if (!down)
+                        ClearActiveId();
+                }
+            }
+        }
         else if (activeId_ == id && id != 0)
         {
             activeAlive_ = true;
@@ -283,6 +320,7 @@ namespace esia
     {
         activeId_ = id;
         activeByMouse_ = false;
+        activeYields_ = activeDeferred_ = activeSlopSeen_ = false;
         activeSetThisFrame_ = id != 0;
         activeAlive_ = id != 0;
     }

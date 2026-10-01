@@ -72,6 +72,11 @@ namespace glass
                 return esia::Vec2(font.size, font.size);
             return inner_->Draw(dl, font, pos, color, text, wrapWidth, flags, scale);
         }
+        // the inner system's stops (FreeType: grapheme clusters, right-to-left runs), not the default per code point
+        void CaretStops(esia::text::FontRef font, std::string_view text, std::vector<esia::text::CaretStop>& out) override
+        {
+            inner_->CaretStops(font, text, out);
+        }
         void DrawGlyph(esia::DrawList& dl, esia::text::FontRef font, char32_t codepoint, esia::Vec2 center, esia::Color color) override
         {
             if (font.id != kSymbols)

@@ -110,6 +110,78 @@ ESIA_TEST(Context, ContentRegionAvailIgnoresScroll)
 }
 
 // bug 4: a repeat button presses on the click, repeats after the delay, and not on the release
+// A finger on an item that acts on the press (a slider, a segmented control, a field) may yet be a scroll: the item
+// gets the press when the finger lifts (in that frame, held), rests, or moves across - along only a frame after a
+// scroll area could have taken it. Until then it is held back, and yields to a scroll (ActiveIdYieldsToScroll). A
+// button pressing on release yields too; the mouse acts at once and never yields.
+ESIA_TEST(Context, TouchPressWaitsUntilItIsNoScroll)
+{
+    struct Run
+    {
+        int presses = 0, heldFrames = 0;
+        bool yielded = false;
+    };
+    const auto gesture = [](std::uint32_t flags, bool touch, Vec2 step, int moves, double rest, bool lift) {
+        Harness h;
+        Run run;
+        const auto frame = [&](double dt = 1.0 / 60.0) {
+            const ButtonResult r = [&] {
+                h.Frame(dt);
+                h.Win("W", {10, 10}, {200, 200});
+                const ButtonResult b = h.Button("btn", Rect(20, 20, 120, 60), flags);
+                h.ctx.End();
+                h.End();
+                return b;
+            }();
+            run.presses += r.pressed;
+            run.heldFrames += r.held;
+            run.yielded = run.yielded || h.ctx.ActiveIdYieldsToScroll();
+        };
+        h.Move({60, 40});
+        frame();
+        frame();
+        touch ? h.TouchDown() : h.Down();
+        frame();
+        for (int i = 1; i <= moves; ++i)
+        {
+            h.Move(Vec2(60, 40) + step * (float)i);
+            frame();
+        }
+        if (rest > 0.0)
+            frame(rest);
+        if (lift)
+        {
+            touch ? h.TouchUp() : h.Up();
+            frame();
+        }
+        frame();
+        return run;
+    };
+    const std::uint32_t onPress = ButtonFlags_PressOnClick;
+
+    // a tap: pressed once, in the frame the finger lifts, held in that frame
+    Run tap = gesture(onPress, true, {0, 0}, 0, 0.0, true);
+    ESIA_CHECK(tap.presses == 1 && tap.heldFrames == 1 && tap.yielded);
+    // resting: the item gets it while the finger is down
+    Run rest = gesture(onPress, true, {0, 0}, 0, 0.2, false);
+    ESIA_CHECK(rest.presses == 1 && rest.heldFrames >= 2);
+    // across, past the slop: at once
+    Run across = gesture(onPress, true, {4, 0}, 3, 0.0, false);
+    ESIA_CHECK(across.presses == 1 && across.heldFrames >= 1);
+    // along, nothing taking it: a frame later
+    Run along = gesture(onPress, true, {0, 4}, 3, 0.0, false);
+    ESIA_CHECK(along.presses == 1 && along.heldFrames == 1);
+    // under the slop and short: still waiting
+    Run wobble = gesture(onPress, true, {1, 1}, 4, 0.0, false);
+    ESIA_CHECK(wobble.presses == 0 && wobble.heldFrames == 0 && wobble.yielded);
+    // the mouse: at once, never yielding
+    Run mouse = gesture(onPress, false, {0, 4}, 3, 0.0, false);
+    ESIA_CHECK(mouse.presses == 1 && mouse.heldFrames == 5 && !mouse.yielded);
+    // a button pressing on release: held from the touch, yielding, pressed when lifted over it
+    Run button = gesture(0, true, {0, 0}, 0, 0.0, true);
+    ESIA_CHECK(button.presses == 1 && button.heldFrames == 1 && button.yielded);
+}
+
 ESIA_TEST(Context, RepeatButton)
 {
     Harness h;
