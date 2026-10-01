@@ -63,3 +63,14 @@ typedef struct
 @interface NSArray<ObjectType> : NSObject <NSFastEnumeration>
 @property (readonly) NSUInteger count;
 @end
+
+// libdispatch (Foundation imports it): dispatch objects are Objective-C objects under ARC
+@protocol OS_dispatch_queue <NSObject>
+@end
+typedef NSObject<OS_dispatch_queue>* dispatch_queue_t;
+typedef void (^dispatch_block_t)(void);
+#if !defined(__APPLE__)   // <sys/qos.h> declares it on Apple platforms (when the check runs on a Mac)
+#define QOS_CLASS_USER_INITIATED 0x19
+#endif
+dispatch_queue_t dispatch_get_global_queue(intptr_t identifier, uintptr_t flags);
+void dispatch_async(dispatch_queue_t queue, dispatch_block_t block);

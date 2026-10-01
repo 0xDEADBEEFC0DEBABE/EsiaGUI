@@ -150,6 +150,13 @@ namespace metal
         vec4 sample(sampler, float2) const { return vec4{}; }
         vec4 sample(sampler, float2, level) const { return vec4{}; }
     };
+    // function constants (SPIRV-Cross's form of a specialization constant: `constant T x [[function_constant(i)]]`,
+    // then `is_function_constant_defined(x) ? x : default`): never defined here
+    template <class T>
+    bool is_function_constant_defined(const T&)
+    {
+        return false;
+    }
 }
 
 // SPIRV-Cross's array wrapper (check_msl.cmake removes its definition from the shader: its address-space overloads

@@ -43,6 +43,7 @@ typedef NS_ENUM(NSUInteger, MTLCommandBufferStatus){
 typedef NS_ENUM(NSUInteger, MTLLanguageVersion){MTLLanguageVersion2_0 = (2 << 16)};
 typedef NS_ENUM(NSInteger, MTLGPUFamily){MTLGPUFamilyApple3 = 1003, MTLGPUFamilyMac2 = 2002};
 typedef NS_ENUM(NSUInteger, MTLCounterSamplingPoint){MTLCounterSamplingPointAtStageBoundary = 0};
+typedef NS_ENUM(NSUInteger, MTLDataType){MTLDataTypeUInt = 33};
 
 typedef struct { NSUInteger x, y, z; } MTLOrigin;
 typedef struct { NSUInteger width, height, depth; } MTLSize;
@@ -80,8 +81,12 @@ extern NSString* const MTLCommonCounterSetTimestamp;
 @end
 @protocol MTLFunction <NSObject>
 @end
+@interface MTLFunctionConstantValues : NSObject
+- (void)setConstantValue:(const void*)value type:(MTLDataType)type atIndex:(NSUInteger)index;
+@end
 @protocol MTLLibrary <NSObject>
 - (id<MTLFunction>)newFunctionWithName:(NSString*)name;
+- (id<MTLFunction>)newFunctionWithName:(NSString*)name constantValues:(MTLFunctionConstantValues*)constantValues error:(NSError**)error;
 @end
 @protocol MTLRenderPipelineState <NSObject>
 @end
