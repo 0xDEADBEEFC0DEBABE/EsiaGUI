@@ -51,7 +51,6 @@
       "toolchainFile": "${sourceDir}/cmake/toolchains/apple-ios.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ESIA_BACKEND_METAL": "ON",
         "ESIA_TEXT_DEPS": "bundled",
         "BUILD_TESTING": "OFF"
       },

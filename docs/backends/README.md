@@ -461,17 +461,17 @@ Presets (`CMakePresets.json`), toolchains in `cmake/toolchains`:
 ```bash
 # Linux (tests)
 cmake --preset linux-clang && cmake --build --preset linux-clang && ctest --preset linux-clang
-cmake --preset linux-clang -DESIA_BACKEND_OPENGL=ON        # a backend: its option on any preset
+cmake --preset linux-clang -DESIA_BACKEND_VULKAN=OFF       # the platform's backends are on by default; drop or add one
 
 # Windows from Linux with the Microsoft SDK (xwin; needs download.visualstudio.microsoft.com)
 cargo install xwin --locked
 xwin --accept-license --arch x86_64 splat --output ~/.xwin   # crt/ and sdk/ with lower-case symlinks
-cmake --preset windows-cross -DXWIN_DIR=$HOME/.xwin -DESIA_BACKEND_D3D11=ON
+cmake --preset windows-cross -DXWIN_DIR=$HOME/.xwin       # Direct3D 9 - 12 and OpenGL by default (a Windows target)
 cmake --build --preset windows-cross
 
 # Windows from Linux without network access to Microsoft (mingw-w64: D3D9-12 headers and import libraries)
 sudo apt-get install g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev
-cmake --preset windows-mingw-cross -DESIA_BACKEND_D3D11=ON
+cmake --preset windows-mingw-cross
 cmake --build --preset windows-mingw-cross
 wine build/windows-mingw-cross/bin/esia_core_tests.exe      # optional: apt-get install wine64
 ```

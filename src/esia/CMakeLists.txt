@@ -176,12 +176,33 @@ function(esia_register_backend name target)
 endfunction()
 esia_register_backend(null esia_rhi)
 
-# One option and one directory per backend. The DirectX branch shares code between its four backends in
-# rhi/d3d_common (built when any ESIA_BACKEND_D3D* is ON).
+# One option and one directory per backend. The DirectX backends share code in rhi/d3d_common (built when any
+# ESIA_BACKEND_D3D* is ON). By default every backend of the target platform is on, so a checkout builds as it is:
+#   Windows       Direct3D 9 / 10 / 11 / 12, OpenGL, and Vulkan when its headers are found (the Vulkan SDK: VULKAN_SDK)
+#   macOS, iOS    Metal
+#   elsewhere     OpenGL, and Vulkan when its headers are found (Linux: the distribution's Vulkan headers package)
+# -DESIA_BACKEND_<NAME>=ON / OFF overrides any of them.
 set(ESIA_KNOWN_BACKENDS opengl vulkan metal d3d9 d3d10 d3d11 d3d12)
 foreach(_b ${ESIA_KNOWN_BACKENDS})
+    set(_esia_default_${_b} OFF)
+endforeach()
+if(APPLE)
+    set(_esia_default_metal ON)
+else()
+    set(_esia_default_opengl ON)
+    find_path(ESIA_VULKAN_INCLUDE_DIR vulkan/vulkan.h HINTS $ENV{VULKAN_SDK}/include $ENV{VULKAN_SDK}/Include)
+    if(ESIA_VULKAN_INCLUDE_DIR)
+        set(_esia_default_vulkan ON)
+    endif()
+    if(WIN32)
+        foreach(_b d3d9 d3d10 d3d11 d3d12)
+            set(_esia_default_${_b} ON)
+        endforeach()
+    endif()
+endif()
+foreach(_b ${ESIA_KNOWN_BACKENDS})
     string(TOUPPER ${_b} _B)
-    option(ESIA_BACKEND_${_B} "Build the ${_b} RHI backend (src/esia/rhi/${_b})" OFF)
+    option(ESIA_BACKEND_${_B} "Build the ${_b} RHI backend (src/esia/rhi/${_b})" ${_esia_default_${_b}})
 endforeach()
 if(ESIA_BACKEND_D3D9 OR ESIA_BACKEND_D3D10 OR ESIA_BACKEND_D3D11 OR ESIA_BACKEND_D3D12)
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/rhi/d3d_common/CMakeLists.txt)
@@ -225,7 +246,12 @@ add_library(esia_backends STATIC ${_gen})
 target_link_libraries(esia_backends PUBLIC esia_rhi ${_esia_backend_targets})
 esia_target_defaults(esia_backends)
 add_library(esia::backends ALIAS esia_backends)
-message(STATUS "Esia backends: ${_esia_backends}")
+list(REMOVE_ITEM _esia_backends null)   # always there: the device without a GPU
+list(JOIN _esia_backends ", " _esia_list)
+message(STATUS "Esia backends: ${_esia_list} (-DESIA_BACKEND_<NAME>=ON / OFF to change)")
+if(NOT APPLE AND NOT ESIA_BACKEND_VULKAN AND NOT ESIA_VULKAN_INCLUDE_DIR)
+    message(STATUS "Esia: no Vulkan backend - vulkan/vulkan.h not found (install the Vulkan SDK and set VULKAN_SDK, or the Vulkan headers)")
+endif()
 
 # ------------------------------------------------------------------ shader library
 # src/esia/shaders/generated holds every backend format, produced by tools/shaders/build_shaders.py and checked

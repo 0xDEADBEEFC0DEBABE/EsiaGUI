@@ -5,9 +5,10 @@ project(Esia VERSION 0.1.0 LANGUAGES CXX)
 # Esia - a liquid-glass (iOS 26 style) UI toolkit for games and tools: its own UI core, renderer and render hardware
 # interface with backends for Direct3D 9 / 10 / 11 / 12, OpenGL / OpenGL ES, Vulkan and Metal (docs/REWRITE.md).
 #
-#   cmake --preset windows-clang-cl -DESIA_BACKEND_D3D11=ON     (see CMakePresets.json and docs/backends/README.md)
-#   cmake --build --preset windows-clang-cl
-#   ctest --preset windows-clang-cl
+#   cmake --preset windows-msvc                 (or windows-clang-cl, linux-clang, macos-clang, ios: CMakePresets.json)
+#   cmake --build --preset windows-msvc-release
+#
+# Every backend of the platform is built by default (src/esia/CMakeLists.txt: ESIA_BACKEND_<NAME>).
 #
 # It replaces WGT UI (the Dear ImGui based wgt.dll), whose last version is tag wgt-1.1-final.
 # ------------------------------------------------------------------------------

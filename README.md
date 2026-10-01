@@ -28,25 +28,33 @@ the API's validation counted); details and numbers in `docs/REWRITE_STATUS.md` a
 
 ## Building
 
-The toolchain is LLVM (clang / clang-cl with lld); MSVC works too. `-DESIA_WERROR=ON` turns warnings into errors
-(every preset builds without warnings).
+Clone `main` and build: the backends of your platform are on by default, nothing to choose first.
 
-**Windows**, from an "x64 Native Tools" prompt with LLVM on PATH (Vulkan: set `VULKAN_SDK`):
+| Platform | Backends built by default |
+| --- | --- |
+| Windows | Direct3D 9, 10, 11, 12 and OpenGL; Vulkan too when the Vulkan SDK is installed (`VULKAN_SDK`) |
+| Linux | OpenGL; Vulkan too when the Vulkan headers are installed |
+| macOS, iOS | Metal |
 
-```
-cmake --preset windows-clang-cl -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_OPENGL=ON
-cmake --build --preset windows-clang-cl
-ctest --preset windows-clang-cl
-```
+Configuring prints the list (`-- Esia backends: ...`). `-DESIA_BACKEND_<NAME>=ON` or `OFF` adds or drops one (`D3D9`,
+`D3D10`, `D3D11`, `D3D12`, `OPENGL`, `VULKAN`, `METAL`). The examples run on the first one built; `--api` picks another.
+`-DESIA_WERROR=ON` turns warnings into errors (every preset builds without warnings).
 
-With MSVC (Visual Studio 2022): `cmake --preset windows-msvc -DESIA_BACKEND_D3D11=ON` and
-`cmake --build --preset windows-msvc-release`. The Windows backends can be cross-compiled from Linux with
-`windows-mingw-cross` (or `windows-cross` with xwin).
-
-**Linux** (clang + lld):
+**Windows**, with Visual Studio 2022 and nothing else (or open the folder in Visual Studio: it lists the presets):
 
 ```
-cmake --preset linux-clang -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON
+cmake --preset windows-msvc
+cmake --build --preset windows-msvc-release
+```
+
+With LLVM (clang-cl and lld on PATH, from an "x64 Native Tools" prompt): `cmake --preset windows-clang-cl`,
+`cmake --build --preset windows-clang-cl`, `ctest --preset windows-clang-cl`. The Windows backends can be
+cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xwin).
+
+**Linux** (clang + lld; `libvulkan-dev` or the Vulkan SDK for Vulkan):
+
+```
+cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
@@ -55,12 +63,15 @@ cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 brew install llvm lld ninja cmake freetype harfbuzz
 xcodebuild -downloadComponent MetalToolchain     # only if `xcrun metal` says the Metal toolchain is missing
-cmake --preset macos-clang -DESIA_BACKEND_METAL=ON
+cmake --preset macos-clang
 cmake --build --preset macos-clang && ctest --preset macos-clang
 ```
 
 `ctest` runs the Metal conformance suite on the Mac's GPU; set `MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1` for
-Metal's API and shader validation (CI does). The examples land in `build/macos-clang/bin`.
+Metal's API and shader validation (CI does).
+
+Every preset puts the examples in `build/<preset>/bin` (`showcase`, `glass_window`; with Visual Studio in
+`build/windows-msvc/bin/Release`).
 
 **iOS** (iPhones and iPads, iOS 16 or later; on a Mac with Xcode). The examples become app bundles, signed after the
 link with a provisioning profile Xcode has for them (`tools/ios/codesign.py`: sign in to Xcode with your Apple ID; a
