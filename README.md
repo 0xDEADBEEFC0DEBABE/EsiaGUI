@@ -2,7 +2,7 @@
 
 A liquid-glass (iOS 26 style) UI toolkit for games and tools, in C++20, with its own UI core, renderer and render
 hardware interface (RHI). It replaces WGT UI, the Dear ImGui based `wgt.dll`; WGT's last version is tag
-`wgt-1.1-final` (branch `archive/wgt`), and screenshots of it are on branch `reference/wgt-1.1`.
+`wgt-1.1-final`, in this repository's history. `main` is the only branch.
 
 ## Status
 
@@ -81,7 +81,8 @@ The simulator needs no signing: `cmake --preset ios-simulator && cmake --build -
 **Shader library.** `src/esia/shaders/generated` (SPIR-V, GLSL, ESSL, MSL) is generated from the HLSL in
 `src/esia/shaders` by `tools/shaders/build_shaders.py`, with the glslang and SPIRV-Cross of Ubuntu 24.04 (CI checks the
 files byte for byte). Without those packages, push the shader change to a branch named `shaders/<anything>`: the
-`Shaders` workflow regenerates the library and commits it to that branch ([CI.md](docs/CI.md), section 5).
+`Shaders` workflow regenerates the library and commits it to that branch ([CI.md](docs/CI.md), section 5). Take the
+generated files into the commit for `main` and delete the branch.
 
 ## Running the examples
 

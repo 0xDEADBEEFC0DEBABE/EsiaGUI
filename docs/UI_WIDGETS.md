@@ -397,7 +397,8 @@ showcase.exe --api d3d11 --size 1600x1000 --scale 1 --open languages --fixed-dt 
   `--screenshot` and `--debug`. `--scale s` renders at s pixels per UI unit whatever the monitor, and `--size` takes
   fractions: `--size 1066.6667x666.6667 --scale 1.5` is 1600 x 1000 pixels at UI scale 1.5.
 
-**Compared with WGT's screenshots.** Branch `reference/wgt-1.1` holds WGT's captures of each panel, dark and light,
+**Compared with WGT's screenshots.** Branch `reference/wgt-1.1` held WGT's captures (deleted on 2026-10-02; the
+numbers below were measured against them) of each panel, dark and light,
 at UI scale 1 and 1.5 (1600 x 1000 pixels each, the same clock). The showcase takes the same captures and each
 panel's window is compared pixel by pixel, the island masked (its timing differs). Mean difference per pixel
 (0 - 255), dark / light:

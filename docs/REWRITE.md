@@ -2,8 +2,8 @@
 
 > **WGT is gone from this tree.** Esia replaced it: WGT's sources (`src/render`, `src/backends`, `src/ui`,
 > `src/text`, `src/shaders`, `src/core`, `include/wgt`, the demo, the modified Dear ImGui) are in tag
-> `wgt-1.1-final` (branch `archive/wgt`), and screenshots of its demo on branch `reference/wgt-1.1`. Where this
-> document cites a WGT file, read it there. With WGT gone, the `wgt::` compatibility layer of phase 5 is dropped:
+> `wgt-1.1-final`, in `main`'s history (the branches `archive/wgt` and `reference/wgt-1.1`, with screenshots of its
+> demo, were deleted on 2026-10-02). Where this document cites a WGT file, read it there. With WGT gone, the `wgt::` compatibility layer of phase 5 is dropped:
 > Esia's widgets get their own API.
 
 WGT ("WGT UI", `wgt.dll`) renders everything you see itself - the SDF Painter, the FX pipeline with liquid glass,
