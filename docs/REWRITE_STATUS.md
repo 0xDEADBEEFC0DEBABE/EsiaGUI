@@ -38,6 +38,11 @@ screenshots.
 
 **Examples on Linux** (2026-10-02): `showcase` and `glass_window` run on an X11 window, with OpenGL and Vulkan.
 
+**Data widgets, Android, color glyphs, touch** (2026-10-02): number, vector and color fields, tables, trees, a
+multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
+Vulkan; COLR color emoji; scrolling by touch from any item.
+
+* [Data widgets, Android, color glyphs, touch](#data-widgets-android-color-glyphs-touch)
 * [Examples on Linux](#examples-on-linux)
 * [Widget layer, second part](#widget-layer-second-part-featui-overlays)
 * [Widget layer, first part](#widget-layer-first-part-featui-foundation)
@@ -53,6 +58,74 @@ screenshots.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Data widgets, Android, color glyphs, touch
+
+### What changed
+
+* **Data widgets** (`src/esia/ui/number.cpp`, `color.cpp`, `table.cpp`, `text_editor.cpp`, `dock.cpp`;
+  [UI_WIDGETS.md](UI_WIDGETS.md) section 12): `NumberField` (scrub, type an expression, step), `VectorField`,
+  `ColorPicker` and `ColorWell`, tables (only the rows in view submitted; sort, resize, select), `TreeNode`,
+  `TextEditor` (paragraph layout cached by content, wrapping, line numbers), and docking (a node tree per dock space,
+  docked windows behind floating ones under a glass tab bar, drag a header in, drag a tab out, splitters, the layout
+  as text). The core gained `Context::StartWindowMove` (a tab dragged out keeps moving as a window) and
+  `MovingWindow`. `examples/workbench` puts them in one dock space.
+* **X11 as a library**: `esia_platform_x11` (`src/esia/platform/x11`, `include/esia/platform/x11.hpp`), taken out
+  of the examples' frame, which now uses it.
+* **Android**: `esia_platform_android` (`src/esia/platform/android`): a NativeActivity's touches (the first finger is
+  the mouse, two fingers scroll), keys with the text they type (`KeyEvent.getUnicodeChar` through JNI), the soft
+  keyboard while a field edits, the clipboard (`ClipboardManager`), the density as the UI scale. The examples' frame
+  (`app_android.cpp`) runs the example's `main` as `glass_main` and keeps the device when the window goes (the app in
+  the background). Hosts: `host_opengl_egl.cpp` with OpenGL ES 3.0, `host_vulkan.cpp` with `VK_KHR_android_surface`.
+  `glass_add_app` builds each example as a shared library and an APK (`tools/android/package.py`: aapt2, zipalign,
+  apksigner, no Gradle) with Material Icons Outlined for the icons (`icons_material.cpp`, `icon_font_text.hpp`; the
+  font is downloaded at configure time, SHA-256 checked). Preset `android`; the `opengl` and `vulkan` branches carry it.
+* **Color glyphs**: COLR fonts painted (`src/esia/text/ft/colr.cpp`: version 0 layers; version 1 paints with glyph
+  clips, solid, linear, radial and sweep gradients, transforms and every composite mode). Windows' Segoe UI Emoji and
+  Android's Noto Color Emoji are COLR version 1 and were drawn as outlines. PNG strikes FreeType cannot decode (the
+  bundled FreeType has no libpng) are read by `png.cpp` (every color type and depth, palettes with tRNS) from
+  HarfBuzz. Fonts without outlines take their units per em from `head` (FreeType reports 0: CBDT emoji were laid
+  out in whole ems).
+* **Fallback chain** on Linux and Android: the Noto fonts of Arabic, Hebrew, Armenian, Georgian, Bengali, Tamil,
+  Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Sinhala, Khmer, Lao, Myanmar and Ethiopic, and Noto Color Emoji
+  Flags (Android drew tofu for all of them).
+* **Touch** ([UI_CORE.md](UI_CORE.md) section 5): presses marked as a finger's (`InputEvent::touch`) may become a
+  scroll. A button pressing on release yields to a scroll area dragged along past `touchSlop`; an item acting on the
+  press does not get a finger's press until it lifts, rests or moves across. The Win32 layer marks touch-screen
+  mouse messages.
+* **Scrolling**: layout offsets land on whole pixels (`Context::SnapScroll`). A drag held past the end of an area
+  shook its content by a pixel every few frames: the offset between pixels changed the measured content and so the
+  range that clamped it.
+* **OpenGL ES devices**: the headless EGL context asks for debug output through `EGL_KHR_create_context` (EGL 1.4),
+  `glGetError` errors beyond the debug callback's are counted; the OpenGL tests expect the caps of the extensions a
+  device has, Vulkan's older-API test no longer needs dynamic rendering.
+* `SymbolTextSystem` (macOS, iOS, Linux frames) forwards `CaretStops`: fields there stopped at every code point.
+
+### Verified (2026-10-02)
+
+* Windows 11, RTX 4080 SUPER, MSVC 19.44: `esia_core_tests` 99 / 99, `esia_ui_tests` 37 / 37, `esia_text_ft_tests`
+  31 / 31 (Segoe UI Emoji's rocket: 262 colors in its RGBA page). `workbench` and `showcase` on Direct3D 11 and 12.
+  The touch tests and the still-at-the-end test fail with their fixes taken out.
+* Ubuntu 24.04 in VMware, clang 18, Debug with `ESIA_WERROR=ON`: ctest 19 / 19; `showcase` and `workbench` on the X11
+  layer.
+* Android 15 emulator (x86_64, the host's RTX 4080 SUPER through the emulator's OpenGL ES translator), NDK r27:
+  * the library's tests and the conformance suite on OpenGL ES and Vulkan, single frame and 3 frames: 17 / 17 each;
+  * `showcase`, `workbench` and `glass_window` as APKs on OpenGL ES (about 60 fps) and Vulkan (60 fps, 1.5 ms of GPU
+    time); the app sent to the background and back twice keeps its device;
+  * the Languages panel in every script, emoji and flags in color, Roboto as the UI font, Material icons;
+  * touch: a swipe from a row or a segmented control scrolls without pressing, a tap selects, a sideways drag moves a
+    slider; a drag held at the end recorded at 30 fps for 4 s: the content moves 0 pixels (before: a pixel every
+    fourth frame).
+* `cmake --preset android` (arm64-v8a) configures and builds the three APKs.
+
+### Not verified
+
+* A real Android phone (only the emulator ran), arm64 devices' GPUs (Adreno, Mali), Android versions before 15.
+* Input methods that compose (pinyin and the like) on Android: a NativeActivity gets key events only, so composed
+  text does not arrive.
+* The Vulkan validation layer on Android: it is not in the NDK and not packed into the APKs.
+* Touch on a Windows touch screen (the marking of its mouse messages is untested).
+* macOS and iOS after these changes: CI only.
 
 ## Examples on Linux
 
@@ -130,7 +203,7 @@ Branch from `main` at `7a2f6e2`, written by the local session. The widgets and t
 ## Widget layer, first part (`feat/ui-foundation`)
 
 Branch from `main` at `e43ea9f`, written by the local session. What is ported, how it maps onto the core and what
-is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 12.
+is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 13.
 
 | Part | Files |
 | --- | --- |
@@ -755,7 +828,7 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
    run Metal on a Mac.
 3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
    batches, DXBC generated and checked in.
-4. **Phase 2, text**: the bidi algorithm, color glyphs, a caret / grapheme query, per-language fallback and fallback
+4. **Phase 2, text**: the bidi algorithm, a caret / grapheme query, per-language fallback and fallback
    fonts loaded on demand; DirectWrite and Core Text behind the interface, feeding the shared rasterizer. The Windows
    and macOS runs of the "Text on every platform" test plans come first.
 5. **Phases 3 - 4**: widgets on the core (Esia's own API: WGT and its `wgt::` compatibility layer are dropped),
