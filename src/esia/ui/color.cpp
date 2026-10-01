@@ -73,22 +73,65 @@ namespace esia::ui
             return false;
         }
 
+        // The spectrum as one texture: 2 x 2 texels (white, the hue / black, black) whose bilinear filtering is exactly
+        // the saturation / brightness plane, so the spectrum is one shape with one anti-aliased edge. (Three gradients
+        // stacked on the same rounded rect blended each edge pixel three times: a fringe around it.) Made on first use,
+        // rewritten when the hue changes, destroyed with the picker's state.
+        struct SpectrumTexture
+        {
+            TextureRegistry* registry = nullptr;
+            TextureId id = 0;
+            float hue = -1.0f;
+            SpectrumTexture() = default;
+            SpectrumTexture(const SpectrumTexture&) = delete;
+            SpectrumTexture& operator=(const SpectrumTexture&) = delete;
+            ~SpectrumTexture()
+            {
+                if (registry && id)
+                    registry->Destroy(id);
+            }
+            TextureId For(TextureRegistry& textures, float h)
+            {
+                if (!id)
+                {
+                    registry = &textures;
+                    id = textures.Create(TextureInfo{TextureFormat::RGBA8, 2, 2});
+                }
+                if (id && h != hue)
+                {
+                    const std::uint32_t texels[4] = {Color::White().ToRgba8(), Color::Hsv(h, 1.0f, 1.0f).ToRgba8(), Color::Black().ToRgba8(),
+                                                     Color::Black().ToRgba8()};
+                    textures.Update(id, 0, 0, 2, 2, texels);
+                    hue = h;
+                }
+                return id;
+            }
+        };
+
         struct PickerState
         {
             Hsv hsv;
             Color last = Color(-1, -1, -1, -1);   // the color the hsv belongs to (a change from outside re-reads it)
             std::string hex;
             bool hexEditing = false;
+            SpectrumTexture spectrum;
         };
 
-        // A checkerboard under translucent colors.
+        // What lies under a translucent color (a checkerboard) is masked one physical pixel inside the shape's edge:
+        // the color on top then draws the edge alone. Two layers anti-aliased along the same edge let the lower one
+        // show through as a light rim.
+        float OnePixel() { return 1.0f / std::max(Ctx().Scale(), 1e-3f); }
+
+        // A checkerboard under translucent colors. The cells' edges lie on physical pixels: between pixels each cell's
+        // anti-aliased edge blended into its neighbours as a faint seam (the mask still smooths the outline).
         void Checker(Painter& p, const Rect& r, float cell)
         {
             p.FillRect(r, Color::White());
             const int nx = (int)std::ceil(r.Width() / cell), ny = (int)std::ceil(r.Height() / cell);
+            const auto edge = [&](float from, float to, int i) { return i <= 0 ? from : p.SnapToPixel(std::min(from + (float)i * cell, to)); };
             for (int y = 0; y < ny; ++y)
                 for (int x = (y & 1); x < nx; x += 2)
-                    p.FillRect(Rect(r.min.x + x * cell, r.min.y + y * cell, std::min(r.min.x + (x + 1) * cell, r.max.x), std::min(r.min.y + (y + 1) * cell, r.max.y)),
+                    p.FillRect(Rect(edge(r.min.x, r.max.x, x), edge(r.min.y, r.max.y, y), edge(r.min.x, r.max.x, x + 1), edge(r.min.y, r.max.y, y + 1)),
                                Color::Hex(0xC8C8C8));
         }
 
@@ -170,9 +213,9 @@ namespace esia::ui
                 h.v = 1.0f - Saturate((in.MousePos().y - spec.min.y) / spec.Height());
                 commit();
             }
-            p.Rect(spec, Style().Radius(sr).Fill(Color::Hsv(h.h, 1.0f, 1.0f)));
-            p.Rect(spec, Style().Radius(sr).Fill(Paint::Linear(Color::White(), Color::White(0.0f), 0.0f)));
-            p.Rect(spec, Style().Radius(sr).Fill(Paint::Linear(Color::Black(0.0f), Color::Black(), 90.0f)).Stroke(1.0f, pc.separator));
+            // texel centers at a quarter and three quarters: the corners' colors at the corners. No outline here, on the
+            // bars or on the swatch (iOS's picker has none): a 1-unit stroke read as a light rim on dark backgrounds.
+            p.Image(st.spectrum.For(c.Textures(), h.h), spec, sr, Color::White(), Vec2(0.25f, 0.25f), Vec2(0.75f, 0.75f));
             const float sPress = LiquidPulse(Salt(id, 1), si.held, si.pressed);
             Handle(p, Vec2(spec.min.x + h.s * spec.Width(), spec.min.y + (1.0f - h.v) * spec.Height()), Sc(11), Color::Hsv(h.h, h.s, h.v), sPress);
             if (si.hovered || si.held)
@@ -192,17 +235,17 @@ namespace esia::ui
             p.PushMask(hue, barH * 0.5f);
             for (int i = 0; i < 6; ++i)
             {
-                const float x0 = hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f;
-                const float x1 = hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f;
+                // the segments meet on physical pixels: no overlap, no seam
+                const float x0 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f);
+                const float x1 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f);
                 // the ends keep their pure color under the capsule's round caps
                 if (i == 0)
-                    p.FillRect(Rect(hue.min.x, hue.min.y, x0 + 0.5f, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
-                p.Rect(Rect(x0, hue.min.y, x1 + 0.5f, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
+                    p.FillRect(Rect(hue.min.x, hue.min.y, x0, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
+                p.Rect(Rect(x0, hue.min.y, x1, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
                 if (i == 5)
                     p.FillRect(Rect(x1, hue.min.y, hue.max.x, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
             }
             p.PopMask();
-            p.Capsule(hue, Style().Stroke(1.0f, pc.separator));
             Handle(p, Vec2(hue.min.x + inset + h.h * (hue.Width() - inset * 2.0f), hue.Center().y), Sc(10), Color::Hsv(h.h, 1, 1),
                    LiquidPulse(Salt(id, 2), hi.held, hi.pressed));
             y = hue.max.y + gap * 0.75f;
@@ -217,14 +260,16 @@ namespace esia::ui
                     color->a = Saturate((in.MousePos().x - bar.min.x - inset) / std::max(bar.Width() - inset * 2.0f, 1.0f));
                     commit();
                 }
-                p.PushMask(bar, barH * 0.5f);
+                const float px = OnePixel();
+                p.PushMask(bar.Expanded(-px), barH * 0.5f - px);
                 Checker(p, bar, Sc(6));
-                const Color opaque = Color::Hsv(h.h, h.s, h.v);
-                p.FillRect(Rect(bar.min.x, bar.min.y, bar.min.x + inset, bar.max.y), opaque.WithAlpha(0.0f));
-                p.Rect(Rect(bar.min.x + inset, bar.min.y, bar.max.x - inset, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
-                p.FillRect(Rect(bar.max.x - inset - 0.5f, bar.min.y, bar.max.x, bar.max.y), opaque);
                 p.PopMask();
-                p.Capsule(bar, Style().Stroke(1.0f, pc.separator));
+                p.PushMask(bar, barH * 0.5f);
+                const Color opaque = Color::Hsv(h.h, h.s, h.v);
+                const float g0 = p.SnapToPixel(bar.min.x + inset), g1 = p.SnapToPixel(bar.max.x - inset);   // clear left of g0
+                p.Rect(Rect(g0, bar.min.y, g1, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
+                p.FillRect(Rect(g1, bar.min.y, bar.max.x, bar.max.y), opaque);
+                p.PopMask();
                 Handle(p, Vec2(bar.min.x + inset + color->a * (bar.Width() - inset * 2.0f), bar.Center().y), Sc(10), opaque,
                        LiquidPulse(Salt(id, 3), ai.held, ai.pressed));
                 y = bar.max.y + gap * 0.75f;
@@ -234,11 +279,13 @@ namespace esia::ui
             const float rowH = Sc(34);
             const Rect swatch = Rect::FromSize(Vec2(area.min.x, y), Vec2(Sc(54), rowH));
             {
-                p.PushMask(swatch, Sc(9));
+                const float px = OnePixel();
+                p.PushMask(swatch.Expanded(-px), Sc(9) - px);
                 Checker(p, swatch, Sc(6));
+                p.PopMask();
+                p.PushMask(swatch, Sc(9));
                 p.FillRect(swatch, *color);
                 p.PopMask();
-                p.Rect(swatch, Style().Radius(Sc(9)).Stroke(1.0f, pc.separator));
             }
             if (o.hex)
             {
@@ -329,8 +376,9 @@ namespace esia::ui
         const float inner = d * 0.5f - ringW - Sc(2);
         if (color->a < 0.999f)
         {
-            const Rect ir = Rect::FromCenter(cc, Vec2(inner * 2, inner * 2));
-            p.PushMask(ir, inner);
+            const float px = OnePixel();
+            const Rect ir = Rect::FromCenter(cc, Vec2(inner * 2 - px * 2, inner * 2 - px * 2));
+            p.PushMask(ir, inner - px);
             Checker(p, ir, Sc(4));
             p.PopMask();
         }

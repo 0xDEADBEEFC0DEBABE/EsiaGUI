@@ -97,7 +97,7 @@ strategy, how the public API migrates, and the phases. What exists today is summ
 | `esia_rhi` | `include/esia/rhi`, `src/esia/rhi` | - | `rhi::Device` interface, caps, formats, backend registry, null device | done |
 | `esia_shaders` | `src/esia/shaders` | rhi | HLSL sources + generated SPIR-V / GLSL / ESSL / MSL (+ DXBC / DXIL once built on Windows), lookup table | done |
 | `esia_rhi_<api>` | `src/esia/rhi/<api>` | rhi, shaders | one backend each; the DirectX branch shares `src/esia/rhi/directx/common` | backend sessions |
-| `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no right-to-left paragraphs or color glyphs yet) |
+| `esia_text`, `esia_text_ft` | `include/esia/text`, `src/esia/text` | core; FreeType + HarfBuzz for `esia_text_ft` | `text::TextSystem` interface, WGT's analytic glyph rasterizer, the glyph atlas; the FreeType + HarfBuzz text system | done (no right-to-left paragraphs yet) |
 | `esia_ui` | `include/esia/ui`, `src/esia/ui` | core, render, text | port of `src/ui` (controls, lists, windows, navigation, overlay, selection, text edit, auto layout), `Theme`, `ItemStyle`, `anim` | phase 3 |
 | `esia_platform_<os>` | `src/esia/platform/<os>` | core | window, input / IME translation, clipboard, DPI, cursor, frame pacing | phase 4 |
 | `wgt` (compat) | `src/compat` | everything | the `wgt::` API on Esia, so existing hosts recompile | phase 5 |
@@ -385,13 +385,17 @@ Implementations:
   Windows too. Right-to-left words in left-to-right text are laid out right to left, and the white space and
   punctuation around them stay where they were typed (a small part of UAX #9: neutrals between two right-to-left
   characters are right to left, elsewhere left to right; digits are left to right). Not yet: the rest of the bidi
-  algorithm (right-to-left paragraphs, whose runs would be reordered - fribidi / ICU), color glyphs.
+  algorithm (right-to-left paragraphs, whose runs would be reordered - fribidi / ICU). Color glyphs: bitmap strikes
+  (sbix, CBDT; their PNGs decoded by Esia when FreeType has no libpng) are scaled, COLR fonts (version 0 layers and
+  version 1 paints: gradients, transforms, composite modes - Segoe UI Emoji, Android's Noto Color Emoji) are painted
+  from their outlines by `colr.cpp`.
 * **System fonts** (`include/esia/text/system_fonts.hpp`, in `esia_text`; done): `FindSystemFont(family, weight,
   style)` locates an installed face (file path + face index) - DirectWrite's system font collection on Windows, Core
   Text descriptors on macOS, fontconfig or the standard font directories on Linux - and each platform has a default
   fallback chain covering Latin, Chinese (Simplified first, then Traditional), Japanese, Korean and symbols, loaded
   into any `TextSystem` with `AddFallbackFonts`. The lookup only finds files: the text system reads and rasterizes
-  them. Color emoji fonts are left out (outlines only).
+  them. The chains end with the system's color emoji font (Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji); on
+  Linux and Android a Noto font per script fills in what the UI font lacks.
 * **DirectWrite** (Windows): WGT's `src/text` (system font collection, per-character fallback, COLR emoji, the
   analytic rasterizer, the user's text parameters) moved behind the interface, without its ClearType-style
   sub-pixel filtering.
@@ -414,14 +418,17 @@ A platform layer turns native events into `InputEvent`s and applies `PlatformReq
 | Concern | Input to the core | Output from the core |
 | --- | --- | --- |
 | mouse, wheel, keys, modifiers, focus | `InputEvent::MouseMove / Button / Wheel / KeyEvent / FocusEvent` | `wantCaptureMouse / Keyboard`, cursor shape |
+| touch | the first finger as the left button, marked `InputEvent::touch` (scroll areas may take its drag over) | - |
 | text and IME | `TextEvent` (committed UTF-8), `Composition` (string + caret) | `wantTextInput`, `imeRect` (candidate window at the caret) |
 | clipboard | - | `ContextDesc::getClipboard / setClipboard` |
 | DPI, display size, render scale | `FrameParams::displaySize / framebufferScale` + the widget layer's metrics scale | - |
 
 Implementations: Win32 first (WGT's `HandleWin32Message` logic, including window-thread / render-thread splits and
-IME), then Cocoa, X11 / Wayland (through SDL3 or directly), and an "engine" adapter for hosts that already own a
-window and an input system. Hosts may also feed events themselves (automated UI tests do: WGT's input injection
-maps to `QueueInput`).
+IME); X11 (`esia_platform_x11`: XIM text, the `CLIPBOARD` selection, `Xft.dpi`) and Android (`esia_platform_android`:
+a NativeActivity's touches, keys and soft keyboard, the clipboard through JNI, dp as UI units) followed. Still to come:
+Cocoa and UIKit as libraries (the examples' frames do their work today), Wayland (through SDL3 or directly), and an
+"engine" adapter for hosts that already own a window and an input system. Hosts may also feed events themselves
+(automated UI tests do: WGT's input injection maps to `QueueInput`).
 
 ## 11. Threading
 
