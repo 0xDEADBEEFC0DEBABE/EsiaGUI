@@ -4,8 +4,11 @@
 // font and a script for every code point and cuts runs, Shape() runs HarfBuzz per run, BuildClusters() groups the
 // glyphs and marks where a line may break, BreakLines() fills lines greedily, PlaceLine() positions a line's glyphs
 // in visual order. Draw() snaps every glyph to the physical pixel grid and takes its bitmap from the atlas,
-// rasterizing it from the FreeType outline the first time.
+// rasterizing it from the FreeType outline the first time. A system font FreeType cannot draw (Apple: PingFang, through
+// Core Text) is a face of the platform's: HarfBuzz on its tables, the platform's outlines (platform_face.hpp).
 #include "esia/text/freetype.hpp"
+#include "esia/text/system_fonts.hpp"
+#include "platform_face.hpp"
 #include "esia/base/hash.hpp"
 #include "esia/base/utf8.hpp"
 #include "esia/core/draw_list.hpp"
@@ -105,6 +108,10 @@ namespace esia::text
             // touches a few pages.
             std::shared_ptr<const MappedFile> file;
             FT_Face ft = nullptr;
+            std::unique_ptr<detail::PlatformFace> platform;   // instead of `ft`: outlines from the platform
+            // a color font's color glyphs FreeType cannot decode: drawn by the platform (opened on first need)
+            std::unique_ptr<detail::PlatformFace> colorPlatform;
+            bool colorPlatformTried = false;
             bool colorStrikes = false;   // color bitmap strikes (sbix, CBDT: emoji): drawn from those, not outlines
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
@@ -271,6 +278,8 @@ namespace esia::text
             {
                 if (!path)
                     return 0;
+                if (std::unique_ptr<detail::PlatformFace> platform = detail::OpenPlatformFace(path))
+                    return AddPlatformFace(std::move(platform));
                 // the faces of a collection (the CJK fonts of a system's fallback chain: 20 MB and more) share one copy
                 std::weak_ptr<const MappedFile>& cached = files_[path];
                 std::shared_ptr<const MappedFile> blob = cached.lock();
@@ -556,6 +565,44 @@ namespace esia::text
                     face->codePages = (std::uint32_t)os2->ulCodePageRange1;
                 faces_.push_back(std::move(face));
                 return (FontId)faces_.size();
+            }
+
+            // A font the platform draws: HarfBuzz reads its tables through the platform, metrics as for a file.
+            FontId AddPlatformFace(std::unique_ptr<detail::PlatformFace> platform)
+            {
+                if (faces_.size() >= kNoGlyph)
+                    return 0;
+                auto face = std::make_unique<Face>();
+                hb_face_t* hbFace = platform->CreateHbFace();
+                face->upem = (float)std::max(hb_face_get_upem(hbFace), 1u);
+                face->codePages = CodePages(hbFace);
+                face->hb = hb_font_create(hbFace);
+                hb_face_destroy(hbFace);
+                if (hb_face_get_glyph_count(hb_font_get_face(face->hb)) == 0)
+                    return 0;
+                platform->SetVariations(face->hb);
+                face->platform = std::move(platform);
+                hb_font_set_scale(face->hb, (int)face->upem, (int)face->upem);
+                hb_font_extents_t extents{};
+                hb_font_get_h_extents(face->hb, &extents);
+                face->ascent = (float)extents.ascender;
+                face->descent = (float)-extents.descender;
+                face->gap = (float)extents.line_gap;
+                faces_.push_back(std::move(face));
+                return (FontId)faces_.size();
+            }
+
+            // OS/2 ulCodePageRange1 (version 1 and later), from HarfBuzz's copy of the table
+            static std::uint32_t CodePages(hb_face_t* face)
+            {
+                hb_blob_t* os2 = hb_face_reference_table(face, HB_TAG('O', 'S', '/', '2'));
+                unsigned length = 0;
+                const auto* d = reinterpret_cast<const std::uint8_t*>(hb_blob_get_data(os2, &length));
+                std::uint32_t pages = 0;
+                if (d && length >= 82 && ((d[0] << 8) | d[1]) >= 1)
+                    pages = ((std::uint32_t)d[78] << 24) | ((std::uint32_t)d[79] << 16) | ((std::uint32_t)d[80] << 8) | (std::uint32_t)d[81];
+                hb_blob_destroy(os2);
+                return pages;
             }
 
             bool IsMark(char32_t c) const
@@ -1065,7 +1112,9 @@ namespace esia::text
                 Face& f = *faces_[face];
                 outline_.Clear();
                 // design units, no hinting, no embedded bitmaps (color strikes: ColorGlyph)
-                if (FT_Load_Glyph(f.ft, glyph, FT_LOAD_NO_SCALE) == 0 && f.ft->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
+                if (f.platform)
+                    f.platform->GlyphOutline(glyph, ((float)q / 16.0f) / f.upem, outline_);
+                else if (FT_Load_Glyph(f.ft, glyph, FT_LOAD_NO_SCALE) == 0 && f.ft->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
                 {
                     FT_Outline_Funcs funcs{};
                     funcs.move_to = &SinkMoveTo;
@@ -1117,6 +1166,21 @@ namespace esia::text
                     bitmap_.left = (int)std::floor((float)ft->glyph->bitmap_left * k + 0.5f);
                     bitmap_.top = -(int)std::floor((float)ft->glyph->bitmap_top * k + 0.5f);
                     ink = Rect((float)bitmap_.left, (float)bitmap_.top, (float)(bitmap_.left + bitmap_.width), (float)(bitmap_.top + bitmap_.height));
+                }
+                else if (Face& f = *faces_[face]; strike >= 0)
+                {
+                    // a strike FreeType cannot decode (iOS' Apple Color Emoji: emjc, not PNG): the platform draws the
+                    // glyph, the same font found by its PostScript name
+                    if (!f.colorPlatformTried)
+                    {
+                        f.colorPlatformTried = true;
+                        if (const char* ps = FT_Get_Postscript_Name(ft))
+                            f.colorPlatform = detail::OpenPlatformFace(std::string(kCoreTextFontScheme) + ps);
+                    }
+                    if (f.colorPlatform && f.colorPlatform->ColorGlyph(glyph, emPixels, bitmap_))
+                        ink = Rect((float)bitmap_.left, (float)bitmap_.top, (float)(bitmap_.left + bitmap_.width), (float)(bitmap_.top + bitmap_.height));
+                    else
+                        bitmap_ = GlyphBitmap{0, 0, 0, 0, {}, 4};
                 }
                 const GlyphSlot* s = colorAtlas_.Add(key, bitmap_, ink);
                 return s ? s : colorAtlas_.Add(key, GlyphBitmap{0, 0, 0, 0, {}, 4}, Rect());   // larger than a page: empty

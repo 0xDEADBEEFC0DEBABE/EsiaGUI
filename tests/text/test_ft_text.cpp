@@ -315,6 +315,46 @@ ESIA_TEST(FreeType, ColorEmojiFromBitmapStrikes)
     ESIA_CHECK(q[1].r.Width() > 20.0f && q[1].r.Width() < 44.0f && q[1].r.min.y < q[0].r.max.y && q[1].r.max.y > q[0].r.min.y);
 }
 
+ESIA_TEST(FreeType, SystemFontsCoreTextDraws)
+{
+    Fixture f;
+    ESIA_CHECK(f.ts->AddFontFile("coretext:EsiaNoSuchFont-Regular") == 0);   // Core Text substitutes another: not taken
+    // Apple: a font through Core Text (kCoreTextFontScheme) lays out and draws as its file through FreeType
+    const std::optional<text::SystemFont> neue = text::FindSystemFont("Helvetica Neue");
+    const text::FontId viaCoreText = f.ts->AddFontFile((std::string(text::kCoreTextFontScheme) + "HelveticaNeue").c_str());
+    if (!neue || !viaCoreText)
+    {
+        std::printf("  skipped: no Core Text\n");
+        return;
+    }
+    const text::FontId viaFile = text::AddSystemFont(*f.ts, *neue);
+    ESIA_CHECK(viaFile != 0);
+    const char* kLatin = "Liquid glass, 0123 & AVWay";
+    ESIA_CHECK(f.ts->Measure({viaCoreText, 24.0f}, kLatin).size == f.ts->Measure({viaFile, 24.0f}, kLatin).size);
+    DrawList a = NewList(), b = NewList();
+    f.ts->Draw(a, {viaCoreText, 24.0f}, Vec2(10.25f, 10), Color::Black(), kLatin);
+    f.ts->Draw(b, {viaFile, 24.0f}, Vec2(10.25f, 10), Color::Black(), kLatin);
+    const std::vector<Quad> qa = Quads(a), qb = Quads(b);
+    ESIA_CHECK(qa.size() == qb.size() && qa.size() > 15);
+    for (std::size_t i = 0; i < std::min(qa.size(), qb.size()); ++i)
+        ESIA_CHECK(qa[i].r.min == qb[i].r.min && qa[i].r.max == qb[i].r.max);
+
+    // PingFang: on iOS (and in macOS' system UI copy) its glyphs are in Apple's hvgl format, which FreeType cannot read
+    const text::FontId pingfang = f.ts->AddFontFile((std::string(text::kCoreTextFontScheme) + "PingFangSC-Regular").c_str());
+    if (!pingfang)
+        return;
+    f.ts->AddFallback(pingfang);
+    // simplified forms the Japanese and Korean fonts lack (iOS: PingFang is the only font with them)
+    const char* kText = "\xE4\xB8\x93\xE4\xB8\x9A\xE4\xB8\x9C\xE4\xB8\x9D";   // zhuan ye dong si
+    DrawList dl = NewList();
+    f.ts->Draw(dl, {f.droid, 32.0f}, Vec2(10, 10), Color::Black(), kText);
+    const std::vector<Quad> q = Quads(dl);
+    ESIA_CHECK(q.size() == 4);
+    for (const Quad& g : q)
+        ESIA_CHECK(g.r.Width() > 16.0f && g.r.Width() < 36.0f && g.r.Height() > 16.0f && g.r.Height() < 40.0f);
+    ESIA_CHECK_NEAR(f.ts->Measure({pingfang, 32.0f}, kText).size.x, 128.0f, 0.5f);   // full width: an em each
+}
+
 ESIA_TEST(FreeType, CachesLayoutsAndGlyphs)
 {
     Fixture f;

@@ -28,10 +28,15 @@ namespace esia::text
         Italic,   // oblique faces count as italic
     };
 
+    // Apple: the path of a system font only Core Text can draw - "coretext:<PostScript name>". The system UI's own
+    // fonts (PingFang, the only one with all of Chinese on iOS) have their glyphs in Apple's hvgl format, which FreeType
+    // cannot read, in a file of the system's private frameworks; the FreeType text system draws them through Core Text.
+    inline constexpr std::string_view kCoreTextFontScheme = "coretext:";
+
     // One face of a font file on disk.
     struct SystemFont
     {
-        std::string path;        // UTF-8
+        std::string path;        // UTF-8 (Apple: or kCoreTextFontScheme and a PostScript name)
         int faceIndex = 0;       // face in a collection (.ttc / .otc); 0 for a single font
         std::string family;      // the family name the face reports (English when it has one)
         // The face as stored in the file, which is what a text system loads: never a simulated bold / oblique, and a
@@ -60,7 +65,9 @@ namespace esia::text
     //            Mukta Mahee, Tamil Sangam MN, Noto Sans Kannada, Malayalam Sangam MN, Noto Sans Oriya, Sinhala
     //            Sangam MN, Thonburi, Lao Sangam MN, Khmer Sangam MN, Noto Sans Myanmar, Noto Sans Armenian,
     //            Apple Color Emoji, Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
-    //            which is not installed for the process)
+    //            only Core Text draws it, and macOS has ordinary files for Chinese)
+    //   iOS      the same with PingFang SC / TC / HK for Hiragino Sans GB and Heiti SC / TC, which iOS does not
+    //            have (kCoreTextFontScheme: iOS has no other font with all of Simplified Chinese)
     //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Devanagari, Noto Sans Thai,
     //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback
     // Simplified Chinese comes before the other CJK fonts: characters the four share (Han unification) take its forms,

@@ -2,7 +2,9 @@
 // their file URLs. Core Text does not say which face of a collection a descriptor is (PingFang.ttc holds PingFang SC,
 // TC, HK ...): the face whose PostScript name matches the descriptor's is looked up in the file.
 #include "font_file.hpp"
+#include "esia/text/system_fonts.hpp"
 #include <CoreText/CoreText.h>
+#include <TargetConditionals.h>
 #include <algorithm>
 #include <climits>
 
@@ -16,8 +18,14 @@ namespace esia::text::detail
         // (SF Arabic, SF Hebrew ... are the UI's private faces, like PingFang): what Segoe UI, Nirmala UI and
         // Leelawadee UI are in the Windows chain. Then Apple Color Emoji (color bitmap strikes, 200 MB: the text
         // system maps its fonts, it does not read them), before Apple Symbols so that emoji keep their color.
+        // iOS has neither Hiragino Sans GB nor Heiti: its Chinese is PingFang's alone (the other CJK fonts lack a third
+        // of GB 2312's characters), drawn through Core Text (kCoreTextFontScheme).
         constexpr std::string_view kChain[] = {
+#if TARGET_OS_IPHONE
+            kSystemUiFamily, "Helvetica Neue", "PingFang SC", "PingFang TC", "PingFang HK", "Hiragino Sans", "Apple SD Gothic Neo",
+#else
             kSystemUiFamily, "Helvetica Neue", "Hiragino Sans GB", "Heiti SC", "Heiti TC", "Hiragino Sans", "Apple SD Gothic Neo",
+#endif
             "Geeza Pro",              // Arabic
             "Arial Hebrew",           // Hebrew
             "Kohinoor Devanagari",    // Devanagari (Hindi, Marathi, Nepali)
@@ -115,10 +123,17 @@ namespace esia::text::detail
             out.weight = traits.weight;
             out.style = traits.italic ? FontStyle::Italic : FontStyle::Upright;
             // Core Text also lists the system UI's private fonts (PingFang in PrivateFrameworks/FontServices.framework/
-            // Resources/Reserved since macOS 12). They are no fonts of the process: FreeType cannot load PingFangUI.ttc
-            // (CI, macOS 15), and a file the process cannot read is no font of it either.
+            // Resources/Reserved since macOS 12, CorePrivate on iOS): their glyphs are in Apple's hvgl format, which
+            // FreeType cannot load (CI, macOS 15), and the process need not be able to read the file. Core Text draws
+            // them: a path for it, by PostScript name (each named instance is a face of its own there).
             if (out.path.find("/PrivateFrameworks/") != std::string::npos)
-                return std::nullopt;
+            {
+                if (ps.empty())
+                    return std::nullopt;
+                out.path = std::string(kCoreTextFontScheme) + ps;
+                out.faceIndex = 0;
+                return out;
+            }
             const std::vector<FontFaceInfo> faces = ReadFontFaces(PathFromUtf8(out.path));
             if (faces.empty())
                 return std::nullopt;
