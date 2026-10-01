@@ -193,8 +193,10 @@ namespace glass
             ctx.ItemSize(Vec2(0, 16));
 #if defined(__APPLE__)
             p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Esc leaves the field. \xE4\xB8\xAD\xE6\x96\x87\xE8\xBE\x93\xE5\x85\xA5: Pinyin - Simplified");
-#else
+#elif defined(_WIN32)
             p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Esc leaves the field. \xE4\xB8\xAD\xE6\x96\x87\xE8\xBE\x93\xE5\x85\xA5: Microsoft Pinyin");
+#else
+            p.Text(ctx.CursorPos(), {font_, kSmall}, Color::White(0.65f), "Esc leaves the field. \xE4\xB8\xAD\xE6\x96\x87\xE8\xBE\x93\xE5\x85\xA5: IBus / Fcitx (XIM)");
 #endif
             ctx.ItemSize(Vec2(0, 16));
         }

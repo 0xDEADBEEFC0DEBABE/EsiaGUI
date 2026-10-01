@@ -19,17 +19,18 @@ fails on paths over 260.
 
 ## Build on Linux
 
-clang, lld, Ninja and CMake (Ubuntu: `sudo apt install clang lld ninja-build cmake libfreetype-dev
-libharfbuzz-dev libegl-dev`):
+clang, lld, Ninja and CMake, and X11 for the examples (Ubuntu: `sudo apt install clang lld ninja-build cmake
+libfreetype-dev libharfbuzz-dev libx11-dev libjpeg-dev libegl-dev`):
 
 ```
 cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
-There is no example window on Linux yet: the library, its tests and the conformance suite.
+The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
+the desktop's icon theme for the icons, Ubuntu's wallpaper.
 
 ## About this branch
 
-It is generated from `main` (0738484) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (82fb3aa) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.

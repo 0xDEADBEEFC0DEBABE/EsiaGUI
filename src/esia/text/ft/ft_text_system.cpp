@@ -1040,7 +1040,10 @@ namespace esia::text
                     if (!clusters_[c].space)
                         ink = w;
                 }
-                if (ink <= maxWidth)
+                // a box exactly as wide as the measured text arrives through a rectangle ((x + w) - x): float rounding
+                // can take a fraction of a pixel off, which must not cost the text its last letters
+                constexpr float kSlack = 1.0f / 64.0f;
+                if (ink <= maxWidth + kSlack)
                     return;
                 const float avail = maxWidth - ShapeEllipsis(primary, size);
                 std::uint32_t k = line.c0;

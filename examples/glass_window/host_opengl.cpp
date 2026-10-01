@@ -36,8 +36,9 @@ namespace glass
 
             const char* Name() const override { return "OpenGL"; }
 
-            bool Init(HWND hwnd, int width, int height, const HostOptions& o, std::string& error) override
+            bool Init(const NativeWindow& window, int width, int height, const HostOptions& o, std::string& error) override
             {
+                const HWND hwnd = window.hwnd;
                 vsync_ = o.vsync;
                 dc_ = ::GetDC(hwnd);   // CS_OWNDC: the window's one device context, valid on any thread
                 PIXELFORMATDESCRIPTOR pfd = {};
