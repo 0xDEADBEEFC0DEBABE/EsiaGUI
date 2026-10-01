@@ -81,8 +81,14 @@ viewports), the smallest integration and GPU cost, or a platform Esia does not r
   <img src="docs/images/workbench-floating.jpg" width="49%"
        alt="The workbench with the inspector dragged out as a floating glass window over the docked panels, the script editor in front">
 </p>
-<p align="center"><sub>The workbench on Windows 11 with Direct3D 11 at UI scale 1.5: docked, and with the inspector
-floating over the dock space and the script editor's tab in front.</sub></p>
+<p align="center">
+  <img src="docs/images/inspector-dark.jpg" width="24%"
+       alt="The inspector in the dark theme: vector fields for position, rotation and scale, an opacity field, a stepper, a switch, the color picker's spectrum, hue and opacity bars, the hex value and swatches">
+  <img src="docs/images/inspector-light.jpg" width="24%" alt="The same inspector in the light theme">
+</p>
+<p align="center"><sub>The workbench on Windows 11 with Direct3D 11 at UI scale 1.5: docked; with the inspector
+floating over the dock space and the script editor's tab in front; the inspector's number, vector and color fields in
+the dark and the light theme (<code>workbench --size 1280x800 --scale 1.5 [--float Inspector --show Script] [--light]</code>).</sub></p>
 
 The data widgets, in the same glass style as the rest (`esia::ui`, [UI_WIDGETS.md](docs/UI_WIDGETS.md) section 12):
 
@@ -256,8 +262,9 @@ The examples are `build/linux-clang/bin/showcase` and `glass_window` (`linux-cla
 **Things to know on Linux**
 
 * **The window** is an X11 window (the X11 platform layer `esia_platform_x11`, used by
-  `examples/glass_window/app_linux.cpp`); on a Wayland desktop (Ubuntu's and Fedora's default) it runs through XWayland. `--api opengl` (the default: EGL on the window) or `--api vulkan`
-  (`VK_KHR_xlib_surface`). The UI scale follows the desktop's scaling through `Xft.dpi`, or `--scale`.
+  `examples/glass_window/app_linux.cpp`); on a Wayland desktop (Ubuntu's and Fedora's default) it runs through
+  XWayland. `--api opengl` (the default: EGL on the window) or `--api vulkan` (`VK_KHR_xlib_surface`). The UI scale
+  follows the desktop's scaling through `Xft.dpi`, or `--scale`.
 * **Input.** Mouse, wheel, keyboard and the clipboard (`CLIPBOARD`). Text comes through the input method (IBus, Fcitx
   over XIM): what it commits arrives, but the composition is not shown inline yet.
 * **Icons.** esia::ui's icons are drawn from the desktop's symbolic icon theme (Adwaita, else Yaru), rasterized by
@@ -336,8 +343,9 @@ The simulator needs no signing: `cmake --preset ios-simulator && cmake --build -
 * **Options** are launch arguments (`devicectl device process launch ... org.esia.showcase --vsync off`). The app takes
   the whole screen; `--scale` defaults to the screen's (UI units are points).
 * **Input.** The first finger is the mouse: a tap clicks, a drag along a scroll area scrolls it from anywhere (a row or
-  a slider included, which then do not press), a sideways drag moves a slider; two fingers scroll anywhere. The keyboard comes up for text fields with the system's input methods (pinyin and the like compose
-  inline); a hardware keyboard works.
+  a slider included, which then do not press), a sideways drag moves a slider; two fingers scroll anywhere. The
+  keyboard comes up for text fields with the system's input methods (pinyin and the like compose inline); a hardware
+  keyboard works.
 * **Layout.** On a phone the showcase shows one panel at a time, as large as fits; the dock switches between them.
 * **Fonts and wallpaper.** As on macOS; the system's emoji (`emjc` strikes) go through Core Text, and the wallpaper is
   one of the building Mac's, copied into the app.

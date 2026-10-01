@@ -427,8 +427,8 @@ Implementations: Win32 first (WGT's `HandleWin32Message` logic, including window
 IME); X11 (`esia_platform_x11`: XIM text, the `CLIPBOARD` selection, `Xft.dpi`) and Android (`esia_platform_android`:
 a NativeActivity's touches, keys and soft keyboard, the clipboard through JNI, dp as UI units) followed. Still to come:
 Cocoa and UIKit as libraries (the examples' frames do their work today), Wayland (through SDL3 or directly), and an
-"engine" adapter for hosts that already own a window and an input system. Hosts may also feed events themselves (automated UI tests do: WGT's input injection
-maps to `QueueInput`).
+"engine" adapter for hosts that already own a window and an input system. Hosts may also feed events themselves
+(automated UI tests do: WGT's input injection maps to `QueueInput`).
 
 ## 11. Threading
 

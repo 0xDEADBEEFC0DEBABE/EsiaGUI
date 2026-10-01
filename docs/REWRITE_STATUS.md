@@ -100,12 +100,24 @@ Vulkan; COLR color emoji; scrolling by touch from any item.
   `glGetError` errors beyond the debug callback's are counted; the OpenGL tests expect the caps of the extensions a
   device has, Vulkan's older-API test no longer needs dynamic rendering.
 * `SymbolTextSystem` (macOS, iOS, Linux frames) forwards `CaretStops`: fields there stopped at every code point.
+* **Masks and scales reach `FillRect`**: a square `Painter::FillRect` was indexed geometry, which `PushMask` and
+  `PushScale` do not reach, so the color picker's checkerboards and bar ends kept square corners outside their
+  capsules, and a number field's fill outside its rounded well. Under a mask or a scale it is an SDF instance now.
+* **The color picker's edges**: shapes stacked on one rounded edge each anti-aliased it, and the lower ones showed as
+  a rim. The spectrum is one textured shape (a 2 x 2 texture - white, the hue; black, black - whose bilinear filtering
+  is exactly the saturation / brightness plane, kept in the picker's state); the checkerboards are masked a physical
+  pixel inside the edge the color draws, their cells and the hue bar's segments meet on whole pixels, and the
+  spectrum, the bars and the swatch have no outline (it read as a light ring on dark backgrounds).
 
 ### Verified (2026-10-02)
 
 * Windows 11, RTX 4080 SUPER, MSVC 19.44: `esia_core_tests` 99 / 99, `esia_ui_tests` 37 / 37, `esia_text_ft_tests`
-  31 / 31 (Segoe UI Emoji's rocket: 262 colors in its RGBA page). `workbench` and `showcase` on Direct3D 11 and 12.
+  31 / 31 (Segoe UI Emoji's rocket: 262 colors in its RGBA page), `esia_render_tests` 48 / 48; after the `FillRect`
+  change the conformance suite on Direct3D 11, Direct3D 12, OpenGL and Vulkan: 17 / 17 each, goldens unchanged.
+  `workbench` and `showcase` on Direct3D 11 and 12; the color picker zoomed at UI scales 1 and 1.5 before and after.
   The touch tests and the still-at-the-end test fail with their fixes taken out.
+* The README's pictures were taken again with these changes: Windows (Direct3D 11), Ubuntu (OpenGL), the Android
+  emulator (OpenGL ES) and the workbench.
 * Ubuntu 24.04 in VMware, clang 18, Debug with `ESIA_WERROR=ON`: ctest 19 / 19; `showcase` and `workbench` on the X11
   layer.
 * Android 15 emulator (x86_64, the host's RTX 4080 SUPER through the emulator's OpenGL ES translator), NDK r27:
@@ -729,9 +741,10 @@ CTest properties (`esia-vulkan` request 2, optional).
 4. **Glass over the capture budget** reuses the last capture: the pyramid levels are now loaded rather than
    undefined, and the backdrop copy holds the previous frames' content outside this frame's captures (stale but
    defined).
-5. **Text.** No Unicode bidi algorithm, no color glyphs (so no color emoji), no caret / grapheme query yet; glyphs are
-   rasterized before the clip test; one fallback chain for every language (Han unification, "Text on every
-   platform"). (The text tests' fonts moved to `tests/fonts` when WGT was removed.)
+5. **Text.** No Unicode bidi algorithm (right-to-left paragraphs); glyphs are rasterized before the clip test; one
+   fallback chain for every language (Han unification, "Text on every platform"). Color glyphs (bitmap strikes and
+   COLR fonts) and caret stops by grapheme cluster (`TextSystem::CaretStops`) exist since 2026-10-02. (The text tests'
+   fonts moved to `tests/fonts` when WGT was removed.)
 6. **Zero-filled uploads.** `TextureRegistry::Create(info, nullptr)` queues a zero-filled CPU copy of the whole
    texture until the renderer consumes it (4 MB for a 2048 x 2048 glyph page).
 7. **No device-loss protocol.** After a lost device (D3D TDR, a lost GL context) images must be supplied again by
@@ -821,15 +834,17 @@ rasterizer, atlas - `09f4b27` FreeType + HarfBuzz - `331bddc` the null goldens t
 
 ## 9. Next
 
-1. **Backends**: merge `esia-core` into each backend branch and delete the dual-source code (section 0, "Backend
-   follow-ups"); then merge the backends (OpenGL first), each passing `--strict` and `--frames 3` with
-   `ValidationErrors` implemented.
-2. **Measure** Esia against WGT's legacy D3D11 backend on the same UI (needs the widget port or a scene in WGT's API);
-   run Metal on a Mac.
-3. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
+The backends are merged into `main` and the widgets are ported (WGT and its `wgt::` compatibility layer were dropped;
+tag `wgt-1.1-final`). What comes next:
+
+1. **Platform layers**: Cocoa and UIKit as libraries (the examples' frames do their work today), Wayland, inline IME
+   composition on Linux and on Android (a GameActivity, or an input connection of its own: a NativeActivity gets key
+   events only).
+2. **Text**: the bidi algorithm (right-to-left paragraphs), variable-font instances (SF's weights), per-language
+   fallback and fallback fonts loaded on demand.
+3. **Android on devices**: arm64 phones (Adreno, Mali), Android versions before 15, the Vulkan validation layer in
+   debug APKs.
+4. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
    batches, DXBC generated and checked in.
-4. **Phase 2, text**: the bidi algorithm, a caret / grapheme query, per-language fallback and fallback
-   fonts loaded on demand; DirectWrite and Core Text behind the interface, feeding the shared rasterizer. The Windows
-   and macOS runs of the "Text on every platform" test plans come first.
-5. **Phases 3 - 4**: widgets on the core (Esia's own API: WGT and its `wgt::` compatibility layer are dropped),
-   platform layers and services. WGT itself was removed from the tree (tag `wgt-1.1-final`).
+5. **Packaging** (`find_package(esia)`) and an API reference; a measurement against WGT's legacy D3D11 backend on the
+   same UI.
