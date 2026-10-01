@@ -164,6 +164,10 @@ cmake_dependent_option(ESIA_PLATFORM_WIN32 "Build the Win32 platform layer (src/
 if(ESIA_PLATFORM_WIN32)
     add_subdirectory(platform/win32)
 endif()
+cmake_dependent_option(ESIA_PLATFORM_X11 "Build the X11 platform layer (src/esia/platform/x11)" ON "UNIX AND NOT APPLE AND NOT ANDROID" OFF)
+if(ESIA_PLATFORM_X11 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/platform/x11/CMakeLists.txt)
+    add_subdirectory(platform/x11)
+endif()
 
 # ------------------------------------------------------------------ RHI + backends
 add_library(esia_rhi STATIC

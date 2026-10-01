@@ -46,7 +46,8 @@ APPLE = ['src/esia/text/system_fonts_apple.cpp', 'examples/glass_window/Info-ios
 WINDOWS = ['src/esia/platform/win32', 'include/esia/platform', 'src/esia/text/system_fonts_windows.cpp',
            'examples/glass_window/app.cpp', 'examples/showcase/image_file.cpp', 'cmake/toolchains/clang-cl-windows.cmake',
            'cmake/toolchains/clang-cl-xwin.cmake', 'cmake/toolchains/clang-mingw.cmake']
-LINUX = ['src/esia/text/system_fonts_unix.cpp', 'cmake/toolchains/clang-linux.cmake', 'examples/glass_window/app_linux.cpp',
+LINUX = ['src/esia/text/system_fonts_unix.cpp', 'cmake/toolchains/clang-linux.cmake', 'src/esia/platform/x11',
+         'include/esia/platform/x11.hpp', 'examples/glass_window/app_linux.cpp',
          'examples/glass_window/icons_linux.cpp', 'examples/glass_window/icons_linux.hpp',
          'examples/showcase/image_file_linux.cpp']
 # Every branch: no CI of its own (main's covers it), no screenshots of other APIs.
