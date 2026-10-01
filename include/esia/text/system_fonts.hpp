@@ -55,7 +55,10 @@ namespace esia::text
     //   Windows  Segoe UI, Microsoft YaHei, Microsoft JhengHei, Yu Gothic UI, Malgun Gothic, Nirmala UI, Leelawadee UI,
     //            Ebrima, Gadugi, Myanmar Text, Javanese Text, Segoe UI Historic, Segoe UI Symbol, Segoe UI Emoji
     //   macOS    system-ui (SF), Helvetica Neue, Hiragino Sans GB, Heiti SC, Heiti TC, Hiragino Sans,
-    //            Apple SD Gothic Neo, Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
+    //            Apple SD Gothic Neo, Geeza Pro, Arial Hebrew, Kohinoor Devanagari / Bangla / Gujarati / Telugu,
+    //            Mukta Mahee, Tamil Sangam MN, Noto Sans Kannada, Malayalam Sangam MN, Noto Sans Oriya, Sinhala
+    //            Sangam MN, Thonburi, Lao Sangam MN, Khmer Sangam MN, Noto Sans Myanmar, Noto Sans Armenian,
+    //            Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
     //            which is not installed for the process)
     //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Devanagari, Noto Sans Thai,
     //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback

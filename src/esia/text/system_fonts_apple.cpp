@@ -12,9 +12,28 @@ namespace esia::text::detail
     {
         // No PingFang: since macOS 12 it is the system UI's private font (below), which FreeType cannot load. Chinese
         // comes from Hiragino Sans GB (Simplified) and Heiti SC / TC (STHeiti), ordinary files in /System/Library/Fonts
-        // on every macOS version.
+        // on every macOS version. The scripts SF does not cover come from the public fonts macOS installs for them
+        // (SF Arabic, SF Hebrew ... are the UI's private faces, like PingFang): what Segoe UI, Nirmala UI and
+        // Leelawadee UI are in the Windows chain. Small files: FreeType reads each one whole.
         constexpr std::string_view kChain[] = {
             kSystemUiFamily, "Helvetica Neue", "Hiragino Sans GB", "Heiti SC", "Heiti TC", "Hiragino Sans", "Apple SD Gothic Neo",
+            "Geeza Pro",              // Arabic
+            "Arial Hebrew",           // Hebrew
+            "Kohinoor Devanagari",    // Devanagari (Hindi, Marathi, Nepali)
+            "Kohinoor Bangla",        // Bengali
+            "Kohinoor Gujarati",      // Gujarati
+            "Kohinoor Telugu",        // Telugu
+            "Mukta Mahee",            // Gurmukhi
+            "Tamil Sangam MN",        // Tamil
+            "Noto Sans Kannada",      // Kannada
+            "Malayalam Sangam MN",    // Malayalam
+            "Noto Sans Oriya",        // Odia
+            "Sinhala Sangam MN",      // Sinhala
+            "Thonburi",               // Thai
+            "Lao Sangam MN",          // Lao
+            "Khmer Sangam MN",        // Khmer
+            "Noto Sans Myanmar",      // Myanmar
+            "Noto Sans Armenian",     // Armenian
             "Apple Symbols",
         };
 
