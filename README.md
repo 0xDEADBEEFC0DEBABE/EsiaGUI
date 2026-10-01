@@ -20,7 +20,8 @@ macOS, iOS and Android. It replaces WGT UI, the Dear ImGui based `wgt.dll`; WGT'
 * [Esia and Dear ImGui](#esia-and-dear-imgui) · [Widgets for tools](#widgets-for-tools-the-workbench) ·
   [Status](#status) · [Getting it](#getting-it) · [Building](#building) · [Running the examples](#running-the-examples)
 * Per system: [Windows](#windows) · [Linux](#linux) · [macOS](#macos) · [iOS](#ios) · [Android](#android)
-* [Changing the shaders](#changing-the-shaders) · [Documents](#documents) · [Roadmap](#roadmap) · [Third-party](#third-party)
+* [Changing the shaders](#changing-the-shaders) · [Documents](#documents) · [Roadmap](#roadmap) · [Third-party](#third-party) ·
+  [License](#license)
 
 ## Esia and Dear ImGui
 
@@ -456,3 +457,7 @@ The text tests use DroidSans (Apache License 2.0), Karla and a subset of Noto Sa
 system or are downloaded and built from source at configure time: `ESIA_TEXT_DEPS=auto|bundled|system`. The Android
 examples download Google's Material Icons (Outlined, Apache License 2.0) for their icons at configure time and pack the
 font into their APKs.
+
+## License
+
+Esia is under the MIT License: [LICENSE](LICENSE). The third-party fonts and libraries above keep their own licenses.
