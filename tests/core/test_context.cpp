@@ -386,3 +386,22 @@ ESIA_TEST(Context, ClipboardCallbacks)
     ctx.SetClipboardText("hello");
     ESIA_CHECK(ctx.GetClipboardText() == "hello");
 }
+
+ESIA_TEST(Context, SafeAreaIsTheDisplayUnlessGiven)
+{
+    Context ctx;
+    ctx.NewFrame({Vec2(440, 956), Vec2(3, 3), 1.0});
+    ESIA_CHECK(ctx.SafeArea().min == Vec2(0, 0) && ctx.SafeArea().max == Vec2(440, 956));   // a desktop's: all of it
+    ctx.EndFrame();
+    // a phone held upright: under the camera housing, above the home indicator
+    ctx.NewFrame({Vec2(440, 956), Vec2(3, 3), 2.0, Rect(0, 62, 440, 922)});
+    ESIA_CHECK(ctx.SafeArea().min == Vec2(0, 62) && ctx.SafeArea().max == Vec2(440, 922));
+    ctx.EndFrame();
+    // never past the display; a degenerate one is the whole display
+    ctx.NewFrame({Vec2(440, 956), Vec2(3, 3), 3.0, Rect(-10, 62, 500, 990)});
+    ESIA_CHECK(ctx.SafeArea().min == Vec2(0, 62) && ctx.SafeArea().max == Vec2(440, 956));
+    ctx.EndFrame();
+    ctx.NewFrame({Vec2(440, 956), Vec2(3, 3), 4.0, Rect(0, 900, 440, 100)});
+    ESIA_CHECK(ctx.SafeArea().min == Vec2(0, 0) && ctx.SafeArea().max == Vec2(440, 956));
+    ctx.EndFrame();
+}

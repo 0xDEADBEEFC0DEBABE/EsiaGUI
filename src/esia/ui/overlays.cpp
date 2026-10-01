@@ -96,7 +96,9 @@ namespace esia::ui
     // full effect - a black body clearing into a lens drop that magnifies what lies below, with a flowing streak of
     // light where black turns into glass. Then it settles into a plain Dynamic Island pill (icon, title, time left)
     // until the notification ends. Live activities live in the plain pill; a newly started one gets the same short
-    // arrival.
+    // arrival. On a display with a camera housing at the top (its safe area starts well below the island: a phone's
+    // Dynamic Island or notch) the island grows out of the housing as the system's does: the card's content goes
+    // below it, and the pill shows only what fits beside the camera - the icon and the time left, no title.
     void Ui::Notify(const Notification& n)
     {
         std::lock_guard lock(impl_->islandMutex);
@@ -163,12 +165,16 @@ namespace esia::ui
         if (shown)
             m.animating = true;   // the time left, the streak
 
+        const float safeTop = c.SafeArea().min.y;
+        const bool housing = safeTop > Sc(30);
+        const float below = housing ? std::max(0.0f, safeTop - Sc(20)) : 0.0f;   // the card's content starts under it
+
         const text::FontRef tf = Font(FontWeight::Semibold, 15.0f);
         const text::FontRef mf = Font(FontWeight::Regular, 13.5f);
         const text::FontRef cf = Font(FontWeight::Semibold, 13.0f);
         const std::string_view label = notif ? std::string_view(rt.item.title) : (activity ? std::string_view(acts[0].title) : std::string_view());
         // the pill's width (resident) and the card's (arrival): each content shows once the shape fits it
-        const float pillW = shown ? Clamp(MeasureText(cf, label).x + Sc(notif ? 100.0f : 112.0f), Sc(210), Sc(430)) : Sc(126);
+        const float pillW = !shown ? Sc(126) : housing ? Sc(210) : Clamp(MeasureText(cf, label).x + Sc(notif ? 100.0f : 112.0f), Sc(210), Sc(430));
         float cardW = Sc(126);
         if (notif)
             cardW = Clamp(std::max(MeasureText(tf, rt.item.title).x, MeasureText(mf, rt.item.message).x) + Sc(116), Sc(320), Sc(540));
@@ -177,7 +183,7 @@ namespace esia::ui
         float body = Sc(34), drop = 0.0f, width = Sc(126);
         if (burst)
         {
-            body = notif ? Sc(68) : Sc(50);
+            body = (notif ? Sc(68) : Sc(50)) + below;
             width = cardW;
             drop = notif ? Sc(46) : Sc(40);   // the clear lens below: room for the full light
         }
@@ -193,6 +199,7 @@ namespace esia::ui
         const float glow = Saturate(Anim(id, 6, burst ? 1.0f : 0.0f, burst ? t.motion.standard : t.motion.fast, 0.0f));   // the streak
         const float big = Saturate(Anim(id, 7, burst && notif ? 1.0f : 0.0f, kMorph, 0.0f));   // the card's content vs the pill's
         const float alpha = Anim(id, 3, shown ? 1.0f : 0.0f, shown ? t.motion.standard : t.motion.fast, 0.0f);
+        const float under = std::max(Anim(id, 8, burst ? below : 0.0f, kMorph, 0.0f), 0.0f);   // the content's offset
         if (alpha < 0.01f)
             return;
 
@@ -256,7 +263,7 @@ namespace esia::ui
         // soon as the card has shrunk into it (no empty black shape in between)
         const float fitCard = Saturate((wv - cardW * 0.75f) / std::max(cardW * 0.25f, 1.0f));
         const float fitPill = Saturate((wv - pillW * 0.75f) / std::max(pillW * 0.25f, 1.0f));
-        const Rect content(r.min.x, r.min.y, r.max.x, r.min.y + hb);
+        const Rect content(r.min.x, r.min.y + under, r.max.x, r.min.y + hb);
         const float cyc = content.Center().y;
         if (notif)
         {
@@ -285,8 +292,9 @@ namespace esia::ui
                 p.Rect(tileR, Style().Radius(tileS * 0.5f).Fill(tint));
                 DrawIcon(p, tileR.Center(), rt.item.icon ? rt.item.icon : icons::Bell, tileS * 0.52f, Color::White());
                 const Vec2 ts = MeasureText(cf, label);
-                p.TextBox(Rect(tileR.max.x + Sc(10), std::floor(cyc - ts.y * 0.5f), r.max.x - Sc(40), std::floor(cyc + ts.y * 0.5f + 1.0f)), Vec2(0, 0), cf,
-                          Color::White(), label, text::TextFlags_Ellipsis);
+                if (!housing)
+                    p.TextBox(Rect(tileR.max.x + Sc(10), std::floor(cyc - ts.y * 0.5f), r.max.x - Sc(40), std::floor(cyc + ts.y * 0.5f + 1.0f)), Vec2(0, 0), cf,
+                              Color::White(), label, text::TextFlags_Ellipsis);
                 const Vec2 rc(r.max.x - Sc(21), cyc);
                 p.Ring(rc, Sc(8), Sc(2.5f), Style().Fill(tint.Fade(0.25f)));
                 p.Arc(rc, Sc(8), Sc(2.5f), -kPi * 0.5f, kTau * left, Style().Fill(tint));
@@ -300,8 +308,9 @@ namespace esia::ui
             const Ui::Impl::Activity& a = acts[0];
             DrawIcon(p, Vec2(r.min.x + Sc(22), cyc), a.icon ? a.icon : icons::Sync, Sc(15), tint);
             const Vec2 ts = MeasureText(cf, a.title);
-            p.TextBox(Rect(r.min.x + Sc(40), std::floor(cyc - ts.y * 0.5f), r.max.x - Sc(44), std::floor(cyc + ts.y * 0.5f + 1.0f)), Vec2(0, 0), cf,
-                      Color::White(), a.title, text::TextFlags_Ellipsis);
+            if (!housing)
+                p.TextBox(Rect(r.min.x + Sc(40), std::floor(cyc - ts.y * 0.5f), r.max.x - Sc(44), std::floor(cyc + ts.y * 0.5f + 1.0f)), Vec2(0, 0), cf,
+                          Color::White(), a.title, text::TextFlags_Ellipsis);
             const Vec2 rc(r.max.x - Sc(22), cyc);
             if (a.progress >= 0.0f)
             {
@@ -314,7 +323,7 @@ namespace esia::ui
                 const float ang = (float)std::fmod(m.time * 5.0, (double)kTau);
                 p.Arc(rc, Sc(9), Sc(3), ang, kPi * 1.3f, Style().Fill(Paint::Conic(tint.Fade(0.0f), tint, Degrees(ang))));
             }
-            if (acts.size() > 1)
+            if (acts.size() > 1 && !housing)   // (beside a camera there is room for the icon and the ring only)
             {
                 char buf[16];
                 std::snprintf(buf, sizeof(buf), "+%d", (int)acts.size() - 1);

@@ -349,6 +349,28 @@ ESIA_TEST(UiDock, LayoutTabsAndRoundTrip)
     h.ctx.EndFrame();
 }
 
+ESIA_TEST(UiDock, ASpaceWithoutARectIsTheSafeArea)
+{
+    // a phone's display: the dock space keeps clear of the camera housing and the home indicator
+    Context ctx;
+    ui::Ui u{ctx, {}};
+    const Rect safe(0, 62, 440, 922);
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        ctx.NewFrame({{440, 956}, {3, 3}, 1.0 + frame / 60.0, safe});
+        u.NewFrame();
+        ui::DockSpace("phone");
+        if (frame == 0)
+            ui::DockWindow("Panel", "phone");
+        if (ui::BeginWindow("Panel"))
+            ui::EndWindow();
+        u.EndFrame();
+        ctx.EndFrame();
+    }
+    const Window* w = ctx.FindWindowByName("Panel");
+    ESIA_CHECK(w && w->GetRect().min.y >= safe.min.y && w->GetRect().max.y <= safe.max.y && w->GetRect().Height() > 700.0f);
+}
+
 ESIA_TEST(UiDock, DragToDockAndTabOut)
 {
     DockHarness h;
