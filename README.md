@@ -287,6 +287,10 @@ The examples are `build/linux-clang/bin/showcase` and `glass_window` (`linux-cla
 
 ## macOS
 
+<p align="center"><img src="docs/images/showcase-macos.jpg" width="80%" alt="The showcase on macOS over the system's wallpaper: Settings, Effects Lab and Control Center as liquid-glass windows, the island at the top, the dock at the bottom, SF Symbols for the icons"></p>
+<p align="center"><sub>The showcase on a MacBook Pro (M3 Pro, macOS 27), Metal: 2400 x 1500 pixels at UI scale 1.5
+(<code>showcase --size 1600x1000 --scale 1.5</code>).</sub></p>
+
 **Build.** Apple silicon or Intel, macOS 11 or later; Xcode (the SDK and the Metal compiler) and Homebrew:
 
 ```
@@ -321,6 +325,9 @@ The examples are `build/macos-clang/bin/showcase` and `glass_window`.
   variable font and the FreeType text system loads its default instance: the UI's bold weights draw as regular.
 
 ## iOS
+
+<p align="center"><img src="docs/images/showcase-ios.jpg" width="80%" alt="Three screens of the showcase on an iPhone: Settings, the Control Center and the Languages panel with Chinese in PingFang, color emoji and flags"></p>
+<p align="center"><sub>The showcase on an iPhone 18 Pro Max (iOS 27), Metal: Settings, Control Center, Languages.</sub></p>
 
 **Build** (iPhones and iPads, iOS 16 or later; on a Mac with Xcode). The examples become app bundles, signed after the
 link with a provisioning profile Xcode has for them (`tools/ios/codesign.py`: sign in to Xcode with your Apple ID; a
