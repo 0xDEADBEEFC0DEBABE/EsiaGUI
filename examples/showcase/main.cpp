@@ -1,7 +1,7 @@
 // showcase - WGT's demo on Esia: its panels in liquid-glass windows over the wallpaper, the dock that opens them, the
 // island a worker thread posts notifications and a download to, and the status bar. The panels are WGT's
 // (examples/demo/showcase.cpp at tag wgt-1.1-final), widget for widget, so captures compare with WGT's reference
-// screenshots (branch reference/wgt-1.1: 1600 x 1000 pixels at UI scale 1 and 1.5, the same clock):
+// screenshots (1600 x 1000 pixels at UI scale 1 and 1.5, the same clock; docs/UI_WIDGETS.md, section 11):
 //
 //   showcase.exe --api d3d11 --size 1600x1000 --scale 1 --open <panel> [--light] --fixed-dt 0.016667
 //                --frames 120 --screenshot <panel>_<dark|light>_x1.png

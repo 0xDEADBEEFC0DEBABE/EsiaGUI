@@ -1,5 +1,5 @@
 # showcase: WGT's demo on Esia (its panels, the dock, the island, the status bar), in the frame of glass_window
-# (glass_app). Captures compare with WGT's reference screenshots (branch reference/wgt-1.1).
+# (glass_app). Its captures were compared with WGT's reference screenshots (docs/UI_WIDGETS.md, section 11).
 if(NOT TARGET glass_app)
     message(STATUS "showcase: needs glass_window's frame (Win32 + a window-capable backend, or macOS + Metal) - not built")
     return()
