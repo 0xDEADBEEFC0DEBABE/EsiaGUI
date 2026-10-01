@@ -60,6 +60,7 @@ namespace esia
             if (e.down)
             {
                 b.clicked = true;
+                b.touch = e.touch;
                 b.downTime = time_;
                 b.clickPos = mousePos_;
                 b.maxDistSq = 0.0f;

@@ -37,6 +37,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace esia::ui
 {
@@ -190,6 +191,15 @@ namespace esia::ui
     ESIA_API GlassLook CurrentGlassLook();
     ESIA_API GlassMaterial LookMaterial(const GlassMaterial& themed);    // a themed material as the style renders it
 
+    // Alignment in containers and table columns.
+    enum class Align : std::uint8_t
+    {
+        Start,
+        Center,
+        End,
+        Stretch,   // cross axis: fill; main axis (justify): space between
+    };
+
     // ================================================================ text
     // Text never runs past its container: wider than the room left on its line, it wraps at the container's edge.
     // Inside an auto-layout container the container sizes it.
@@ -328,6 +338,7 @@ namespace esia::ui
         bool clearButton = true;       // an x while there is text
         bool background = true;        // false: no fill (the field sits on glass or a surface of its own)
         std::size_t maxBytes = 0;      // > 0: the longest text it takes (UTF-8 bytes)
+        bool selectOnFocus = false;    // taking the keyboard selects all the text (number fields)
     };
     struct TextFieldResult
     {
@@ -354,6 +365,164 @@ namespace esia::ui
         Color fill = Color::Clear();         // the base color (Clear = the theme's: light white / dark gray)
     };
     ESIA_API TextFieldResult SearchBar(std::string_view id, std::string* text, const SearchBarOptions& options = {});
+
+    // A multi-line editor: everything the text field does, over lines - Enter starts a new one, Up / Down and Page Up /
+    // Down move by visual line, Home / End go to the line's ends (Ctrl: the text's), long lines wrap at the width (or
+    // scroll sideways). It scrolls inside its height and draws only the lines in view.
+    //
+    //   ui::TextEditor("notes", &notes, {.size = {0, 240}, .lineNumbers = true});
+    struct TextEditorOptions
+    {
+        Vec2 size = Vec2(0, 200);      // x: > 0 fixed, else the available width; y: the height (it scrolls inside)
+        bool wrap = true;              // long lines wrap at the width (false: the view scrolls sideways)
+        bool readOnly = false;         // selectable and copyable, not editable
+        bool lineNumbers = false;      // a gutter with the line numbers
+        bool monospace = false;        // the monospace font (code, logs)
+        bool tabInput = false;         // Tab types a tab (otherwise it moves the keyboard focus)
+        std::size_t maxBytes = 0;      // > 0: the longest text it takes (UTF-8 bytes)
+    };
+    ESIA_API TextFieldResult TextEditor(std::string_view id, std::string* text, const TextEditorOptions& options = {});
+
+    // ======================================================= number fields
+    // A number in a field: drag it sideways to scrub the value, click it to type one (an expression such as 2*(3+4)
+    // works; Enter or a click elsewhere takes it, Escape keeps the old value), Up / Down step while typing. With both
+    // limits finite the field fills in proportion to the value. True when the value changed.
+    //
+    //   ui::NumberField("speed", &speed, {.min = 0, .max = 10, .step = 0.1, .format = "%.1f m/s"});
+    struct NumberOptions
+    {
+        double min = -INFINITY, max = INFINITY;
+        double step = 0.0;             // Up / Down and the buttons; 0 = 1 for integers, else a hundredth of a finite range, else 0.1
+        double speed = 0.0;            // value per UI unit dragged; 0 = from the range (or the step)
+        const char* format = nullptr;  // printf of the value (units may follow it); null = "%d" / "%.3f" trimmed
+        float width = 0.0f;            // > 0 fixed, else the available width
+        std::string_view label;        // a short label inside the field, on its left ("X")
+        Color labelColor = Color::Clear();   // its color (Clear = the secondary label color)
+        bool buttons = false;          // - and + at the field's ends
+    };
+    ESIA_API bool NumberField(std::string_view id, float* value, const NumberOptions& options = {});
+    ESIA_API bool NumberField(std::string_view id, double* value, const NumberOptions& options = {});
+    ESIA_API bool NumberField(std::string_view id, int* value, const NumberOptions& options = {});
+    // 2 - 4 numbers side by side (a position, a size, a color), labeled X Y Z W in red, green, blue and gray.
+    ESIA_API bool VectorField(std::string_view id, float* values, int count, const NumberOptions& options = {});
+
+    // ============================================================= colors
+    struct ColorPickerOptions
+    {
+        bool alpha = true;             // an opacity bar, and the alpha in the hex text
+        bool hex = true;               // the hex field (#RRGGBB, #RRGGBBAA)
+        std::span<const Color> swatches;   // colors picked with one click (empty: none)
+        float width = 0.0f;            // > 0 fixed, else the available width (at most 340)
+    };
+    // A spectrum of saturation and brightness over a hue bar, an opacity bar, the hex value and swatches (iOS's color
+    // picker). True when the color changed.
+    ESIA_API bool ColorPicker(std::string_view id, Color* color, const ColorPickerOptions& options = {});
+    // A round color well (UIColorWell): a click opens the picker in a glass popover.
+    ESIA_API bool ColorWell(std::string_view id, Color* color, const ColorPickerOptions& options = {}, float diameter = 0.0f);
+
+    // ====================================================== tables and trees
+    enum TableFlags_ : std::uint32_t
+    {
+        TableFlags_None = 0,
+        TableFlags_Sortable = 1u << 0,      // a click on a header sorts by it (TableSortSpec)
+        TableFlags_Resizable = 1u << 1,     // the lines between the headers drag
+        TableFlags_Selectable = 1u << 2,    // a click selects a row (TableOptions::selection); Ctrl adds, Shift extends
+        TableFlags_Striped = 1u << 3,       // every other row tinted
+        TableFlags_NoHeader = 1u << 4,
+        TableFlags_ColumnLines = 1u << 5,   // hairlines between the columns
+    };
+    struct TableColumn
+    {
+        std::string_view label;
+        float width = 0.0f;            // > 0 fixed (UI units); 0 = a share of what the fixed columns leave
+        float weight = 1.0f;           // that share
+        Align align = Align::Start;    // the header's and TableCell's alignment
+        bool sortable = true;
+    };
+    struct TableOptions
+    {
+        std::uint32_t flags = TableFlags_None;
+        float height = 0.0f;           // > 0: rows scroll inside this height under the header; 0 = as tall as the rows
+        float rowHeight = 0.0f;        // 0 = 34
+        std::vector<int>* selection = nullptr;   // Selectable: the selected row indices, sorted
+    };
+    struct TableSort
+    {
+        int column = -1;               // -1 = in the data's order
+        bool ascending = true;
+        bool changed = false;          // this frame: sort again
+    };
+    struct TableRange
+    {
+        int first = 0, last = 0;       // [first, last): the rows in view
+    };
+    struct TableRowResult
+    {
+        bool selected = false;
+        bool clicked = false;
+        bool doubleClicked = false;
+    };
+    // Rows go between BeginTable and EndTable. Only the rows in view are submitted (TableVisible), so a table of a
+    // million rows costs what the visible ones cost. In a row, each TableCell or TableNextColumn moves to the next
+    // cell; widgets submitted after TableNextColumn go in that cell.
+    //
+    //   if (ui::BeginTable("files", {{"Name"}, {"Size", 90, 0, ui::Align::End}}, {.flags = ui::TableFlags_Sortable})) {
+    //       if (ui::TableSortSpec().changed) Sort(files, ui::TableSortSpec());
+    //       const ui::TableRange rows = ui::TableVisible((int)files.size());
+    //       for (int i = rows.first; i < rows.last; ++i) {
+    //           ui::TableRow(i);
+    //           ui::TableCell(files[i].name);
+    //           ui::TableCell(files[i].size);
+    //       }
+    //       ui::EndTable();
+    //   }
+    ESIA_API bool BeginTable(std::string_view id, std::span<const TableColumn> columns, const TableOptions& options = {});
+    inline bool BeginTable(std::string_view id, std::initializer_list<TableColumn> columns, const TableOptions& options = {})
+    {
+        return BeginTable(id, std::span<const TableColumn>(columns.begin(), columns.size()), options);
+    }
+    ESIA_API void EndTable();
+    ESIA_API TableSort TableSortSpec();
+    ESIA_API TableRange TableVisible(int rowCount);
+    ESIA_API TableRowResult TableRow(int index);
+    ESIA_API void TableNextColumn();
+    ESIA_API void TableCell(std::string_view text, Color color = Color::Clear());
+    ESIA_API void TableCellIcon(Icon icon, std::string_view text, Color iconColor = Color::Clear());
+
+    enum TreeFlags_ : std::uint32_t
+    {
+        TreeFlags_None = 0,
+        TreeFlags_DefaultOpen = 1u << 0,
+        TreeFlags_Leaf = 1u << 1,        // no children: no arrow, never open (no TreePop)
+        TreeFlags_Selected = 1u << 2,    // drawn selected (the host keeps the selection)
+        TreeFlags_OpenOnArrow = 1u << 3, // only the arrow opens it; a click on the row only selects
+    };
+    struct TreeNodeOptions
+    {
+        std::uint32_t flags = TreeFlags_None;
+        Icon icon = 0;
+        Color iconColor = Color::Clear();   // Clear = the secondary label color
+        std::string_view detail;            // secondary text on the right
+    };
+    struct TreeNodeResult
+    {
+        bool open = false;               // submit the children, then TreePop (also while they slide closed)
+        bool clicked = false;            // the row was clicked this frame
+        bool doubleClicked = false;
+        bool toggled = false;            // it opened or closed this frame
+        explicit operator bool() const { return open; }
+    };
+    // A row of an outline: an arrow that turns as it opens, an optional icon, the label. The children submitted before
+    // TreePop slide open and closed under it, with a guide line on their left.
+    //
+    //   if (ui::TreeNode("Scene", {.icon = ui::icons::Folder})) {
+    //       ui::TreeNode("Camera", {.flags = ui::TreeFlags_Leaf, .icon = ui::icons::Camera});
+    //       ui::TreePop();
+    //   }
+    ESIA_API TreeNodeResult TreeNode(std::string_view label, const TreeNodeOptions& options = {});
+    ESIA_API void TreePop();
+    // Opens or closes a node the next time it is submitted (expand all, reveal a selection).
+    ESIA_API void SetNextTreeNodeOpen(bool open);
 
     // ================================================= inset grouped lists
     // iOS Settings: sections of rows on a card, with an optional header and footer. A row's label takes what its
@@ -488,6 +657,34 @@ namespace esia::ui
     ESIA_API bool BeginCard(std::string_view id, Vec2 size = Vec2(0, 0), const CardOptions& options = {});
     ESIA_API void EndCard();
 
+    // ============================================================= docking
+    // An area windows dock into. A window dragged by its header over it shows where it would go - into a node's tabs
+    // (the middle) or beside it (an edge) - and docks there when let go; a tab dragged out of its node floats the
+    // window again. The splitters between nodes resize them. Docked windows fill their node under a glass tab bar and
+    // stay behind floating windows.
+    //
+    //   ui::DockSpace("main");                                  // every frame, before the windows
+    //   if (first) {                                            // an initial layout
+    //       ui::DockWindow("Scene", "main");
+    //       ui::DockWindow("Outline", "main", ui::DockSide::Left, 0.22f);
+    //       ui::DockWindow("Console", "main", ui::DockSide::Bottom, 0.28f, "Scene");
+    //   }
+    //   if (ui::BeginWindow("Scene")) { ...; ui::EndWindow(); }
+    enum class DockSide : std::uint8_t { Center, Left, Right, Top, Bottom };
+    // `rect`: UI units; empty = the whole display (less the safe area).
+    ESIA_API void DockSpace(std::string_view id, Rect rect = Rect());
+    // Docks `window` (a BeginWindow title) into `dockSpace`: into the tabs of the node holding `relativeTo` (Center) or
+    // beside it with `ratio` of its room; relativeTo empty: the whole dock space. A window already docked moves.
+    ESIA_API void DockWindow(std::string_view window, std::string_view dockSpace, DockSide side = DockSide::Center, float ratio = 0.25f,
+                             std::string_view relativeTo = {});
+    ESIA_API void UndockWindow(std::string_view window);
+    ESIA_API bool IsWindowDocked(std::string_view window);
+    // Brings a docked window's tab to the front of its node ("show the console").
+    ESIA_API void FocusDockedWindow(std::string_view window);
+    // The layout as text, to keep with the application's settings, and back (false: not a layout of this version).
+    ESIA_API std::string SaveDockLayout(std::string_view dockSpace);
+    ESIA_API bool LoadDockLayout(std::string_view dockSpace, std::string_view layout);
+
     // ========================================================= auto layout
     // Containers that size and place their children from the room they are given, so pages re-flow with the window.
     // Every widget (or nested container) submitted directly inside is one child; children are measured every frame,
@@ -495,13 +692,6 @@ namespace esia::ui
     // (sliders, width < 0 buttons, wrapped text ...) are flexible children.
     //
     //   ui::BeginFlow("buttons"); ui::Button("Play"); ui::Button("Settings"); ui::EndFlow();
-    enum class Align : std::uint8_t
-    {
-        Start,
-        Center,
-        End,
-        Stretch,   // cross axis: fill; main axis (justify): space between
-    };
     struct StackOptions
     {
         float spacing = -1.0f;          // < 0 = the theme's spacing

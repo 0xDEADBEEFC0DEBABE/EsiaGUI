@@ -73,10 +73,19 @@ namespace esia
         std::string text;
         int imeCursor = 0;
         int imeTargetBegin = 0, imeTargetEnd = 0;
+        bool touch = false;   // MouseButton: a finger's (touch screens report their first finger as the left button)
 
         static InputEvent MouseMove(Vec2 p) { InputEvent e; e.type = Type::MousePos; e.pos = p; return e; }
         static InputEvent MouseLeave() { return MouseMove(Vec2(kNoMousePos, kNoMousePos)); }
-        static InputEvent Button(MouseButton b, bool isDown) { InputEvent e; e.type = Type::MouseButton; e.button = b; e.down = isDown; return e; }
+        static InputEvent Button(MouseButton b, bool isDown, bool byTouch = false)
+        {
+            InputEvent e;
+            e.type = Type::MouseButton;
+            e.button = b;
+            e.down = isDown;
+            e.touch = byTouch;
+            return e;
+        }
         static InputEvent Wheel(float x, float y) { InputEvent e; e.type = Type::MouseWheel; e.wheel = Vec2(x, y); return e; }
         static InputEvent KeyEvent(Key k, bool isDown, std::uint32_t m = 0) { InputEvent e; e.type = Type::Key; e.key = k; e.down = isDown; e.mods = m; return e; }
         static InputEvent TextEvent(std::string utf8) { InputEvent e; e.type = Type::Text; e.text = std::move(utf8); return e; }
@@ -98,6 +107,8 @@ namespace esia
         float doubleClickTime = 0.30f;       // seconds
         float doubleClickDistance = 6.0f;    // UI units
         float dragThreshold = 6.0f;          // UI units before a press counts as a drag
+        float touchSlop = 8.0f;              // UI units (dp) a finger moves before its press is a scroll or a drag
+        float touchDelay = 0.15f;            // seconds a finger rests before an item that acts on the press gets it
         float keyRepeatDelay = 0.275f;
         float keyRepeatRate = 0.050f;
     };
@@ -126,6 +137,8 @@ namespace esia
         bool MouseDoubleClicked(MouseButton b) const { return Button(b).clicked && Button(b).clickCount == 2; }
         float MouseDownDuration(MouseButton b) const { return Button(b).down ? (float)(time_ - Button(b).downTime) : -1.0f; }
         Vec2 MouseClickedPos(MouseButton b) const { return Button(b).clickPos; }
+        // The button's last press was a finger's (InputEvent::touch): held or released, until the next press.
+        bool MouseTouch(MouseButton b) const { return Button(b).touch; }
         // Movement since the press (zero until it passed the drag threshold, unless threshold < 0).
         Vec2 MouseDragDelta(MouseButton b, float threshold = -1.0f) const;
         bool MouseDragging(MouseButton b, float threshold = -1.0f) const;
@@ -156,7 +169,7 @@ namespace esia
     private:
         struct ButtonState
         {
-            bool down = false, clicked = false, released = false, canceled = false, changed = false;
+            bool down = false, clicked = false, released = false, canceled = false, changed = false, touch = false;
             int clickCount = 0;
             double downTime = 0.0, lastClickTime = -1e9;
             Vec2 clickPos, lastClickPos;

@@ -1,7 +1,7 @@
 # showcase: WGT's demo on Esia (its panels, the dock, the island, the status bar), in the frame of glass_window
 # (glass_app). Its captures were compared with WGT's reference screenshots (docs/UI_WIDGETS.md, section 11).
 if(NOT TARGET glass_app)
-    message(STATUS "showcase: needs glass_window's frame (Win32 or X11 + a window-capable backend, or macOS + Metal) - not built")
+    message(STATUS "showcase: needs glass_window's frame (Win32, X11 or Android + a window-capable backend, or macOS + Metal) - not built")
     return()
 endif()
 if(APPLE)
@@ -28,8 +28,8 @@ elseif(WIN32)
     add_executable(showcase main.cpp image_file.cpp image_file.hpp)
     target_link_libraries(showcase PRIVATE glass_app esia::ui windowscodecs ole32)
 else()
-    # Linux: PNG wallpapers through the test kit (glass_app links it), JPEG ones when libjpeg is installed
-    add_executable(showcase main.cpp image_file_linux.cpp image_file.hpp)
+    # Linux and Android: PNG wallpapers through the test kit (glass_app links it), JPEG ones when libjpeg is installed
+    glass_add_app(showcase main.cpp image_file_linux.cpp image_file.hpp)
     target_link_libraries(showcase PRIVATE glass_app esia::ui)
     find_package(JPEG)
     if(TARGET JPEG::JPEG)
