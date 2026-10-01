@@ -10,7 +10,11 @@ execute_process(COMMAND xcrun --sdk iphoneos --show-sdk-path OUTPUT_VARIABLE _es
 if(NOT _esia_sdk)
     message(FATAL_ERROR "iOS: no iPhoneOS SDK (install Xcode and select it: sudo xcode-select -s /Applications/Xcode.app)")
 endif()
-# by name: CMake picks the target from it (-mios-simulator-version-min for the simulator)
+# by name: CMake picks the target from it (-mios-simulator-version-min for the simulator). The device unless a preset
+# says otherwise (ios-simulator): an empty sysroot is the macOS SDK, and CMake then builds for Mac Catalyst.
+if(NOT ESIA_IOS_PLATFORM)
+    set(ESIA_IOS_PLATFORM iphoneos)
+endif()
 set(CMAKE_OSX_SYSROOT ${ESIA_IOS_PLATFORM} CACHE STRING "")
 # Xcode's clang, not Homebrew LLVM's: the SDK's frameworks and Apple's linker are what an app is built with
 execute_process(COMMAND xcrun --sdk iphoneos -f clang OUTPUT_VARIABLE _esia_cc OUTPUT_STRIP_TRAILING_WHITESPACE)
