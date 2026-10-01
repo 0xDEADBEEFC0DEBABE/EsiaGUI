@@ -16,9 +16,57 @@ A liquid-glass (iOS 26 style) UI toolkit for games and tools, in C++20: its own 
 hardware interface (RHI), with backends for Direct3D 9 to 12, OpenGL / OpenGL ES, Vulkan and Metal. It replaces WGT UI,
 the Dear ImGui based `wgt.dll`; WGT's last version is tag `wgt-1.1-final`, in this repository's history.
 
-* [Status](#status) · [Getting it](#getting-it) · [Building](#building) · [Running the examples](#running-the-examples)
+* [Esia and Dear ImGui](#esia-and-dear-imgui) · [Status](#status) · [Getting it](#getting-it) · [Building](#building) ·
+  [Running the examples](#running-the-examples)
 * Per system: [Windows](#windows) · [Linux](#linux) · [macOS](#macos) · [iOS](#ios)
 * [Changing the shaders](#changing-the-shaders) · [Documents](#documents) · [Roadmap](#roadmap) · [Third-party](#third-party)
+
+## Esia and Dear ImGui
+
+Esia began as WGT, a liquid-glass layer on a modified Dear ImGui, and then replaced ImGui with a core of its own. It
+keeps ImGui's model, so its code reads much like ImGui code:
+
+* it is immediate mode: a widget is a function call each frame and returns true when it changed something;
+* ids come from labels, with the same `##` convention;
+* windows are `BeginWindow` / `EndWindow`.
+
+What differs is what it draws, how it draws it, and what that costs. There is no compatibility layer: moving a panel
+from ImGui to Esia means writing it again with `esia::ui`.
+
+| | Dear ImGui | Esia |
+| --- | --- | --- |
+| Made for | tools: debug panels, editors, dense data | UI that users see, in the iOS 26 liquid-glass style |
+| Look | flat panels and one global style (`ImGuiStyle`, with push / pop of colors and variables) | liquid glass (backdrop blur, refraction, dispersion, specular rims), glow and shadows; a theme whose light and dark modes cross-fade; styles per widget or per block; three glass looks |
+| Motion | none: a change shows on the next frame | springs on every control: the switch's knob, the segmented control's lens, momentum scrolling, panels, the island |
+| Rendering | hands the host triangles (`ImDrawData`), drawn in one pass by any renderer that can draw textured triangles with a scissor | its own renderer, several passes per frame (backdrop captures, a blur pyramid, glow layers), through its RHI on Direct3D 9 - 12, OpenGL / ES, Vulkan or Metal |
+| GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes 0.9 ms on an RTX 4080 SUPER and runs at about 170 fps at 3024 x 1890 on an M3 Pro; each backdrop capture breaks the render pass, which tile-based GPUs feel most |
+| Text | its font atlas (stb_truetype, or FreeType). Text is not shaped, so scripts that need shaping (Arabic, Devanagari and the other Indic scripts) do not come out right, and there is no right-to-left | FreeType + HarfBuzz shaping, the system's fonts with a fallback chain for every major script, editing by grapheme, IME composition in the field (Windows, iOS), color emoji from bitmap fonts. A line in one direction is right; mixed directions wait for the bidi algorithm |
+| Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, single-line text fields, a line chart, the island and the dock. No tables, trees, number fields, color picker, multi-line editor or docking |
+| Integration | copy a few files; platform and renderer backends exist for almost everything (Win32, GLFW, SDL, Android, Emscripten ...) | a CMake project that needs FreeType and HarfBuzz (found or built). The host creates an Esia device on its own device or context and passes a render target each frame. Windows has a platform layer; on other systems the host queues the input events itself, as the examples' frames do |
+| Platforms | anywhere that can draw triangles: desktop, mobile, web, consoles | Windows, Linux, macOS, iOS |
+| Threads | a context is used from one thread at a time | one UI thread per context, no global state; the input queue and the texture registry are thread-safe; worker threads post to the UI (the island's notifications) |
+| Maturity | more than ten years old, used in a great many games and engines, with extensions (ImPlot, node editors), bindings for many languages and a stable API | new in 2026: the API can still change, there is no package yet (`find_package` is on the roadmap), and one team works on it |
+
+**Strengths of Esia:**
+
+* how the UI looks and moves;
+* correct text in every major script, with the system's fonts;
+* styling per component rather than one global style;
+* one renderer for Direct3D, OpenGL, Vulkan and Metal, tested against the same golden images on each.
+
+**Weaknesses of Esia:**
+
+* GPU cost;
+* fewer and different widgets: nothing for dense data;
+* heavier integration;
+* fewer platforms;
+* youth.
+
+**Use Esia** for the UI users see: a game's menus and overlays, a launcher, an application's settings. It fits where
+the glass, the motion and the text matter and about a millisecond of GPU time is affordable.
+
+**Use Dear ImGui** for internal tools, debuggers and editors, dense data (tables, trees, property grids), docking, the
+smallest integration and GPU cost, or a platform Esia does not run on.
 
 ## Status
 
