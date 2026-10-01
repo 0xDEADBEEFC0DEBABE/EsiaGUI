@@ -86,12 +86,24 @@ namespace esia::text
             return kSet.find(c) != std::u32string_view::npos;
         }
 
+        // A font file mapped into memory (HarfBuzz's blob), shared by the faces of a collection. Its own type rather
+        // than a shared_ptr with hb_blob_destroy as deleter: a custom deleter instantiates std::type_info::operator==,
+        // which clang with mingw-w64's libstdc++ 13 defines twice (a duplicate symbol at link time).
+        struct MappedFile
+        {
+            hb_blob_t* blob = nullptr;
+            explicit MappedFile(hb_blob_t* b) : blob(b) {}
+            MappedFile(const MappedFile&) = delete;
+            MappedFile& operator=(const MappedFile&) = delete;
+            ~MappedFile() { hb_blob_destroy(blob); }
+        };
+
         struct Face
         {
             // AddFontFile: the file, mapped into memory (HarfBuzz's blob); FreeType and HarfBuzz read it in place, and
             // the faces of a collection share it. Mapped, not read: a color emoji font is 200 MB, of which a frame
             // touches a few pages.
-            std::shared_ptr<hb_blob_t> file;
+            std::shared_ptr<const MappedFile> file;
             FT_Face ft = nullptr;
             bool colorStrikes = false;   // color bitmap strikes (sbix, CBDT: emoji): drawn from those, not outlines
             hb_font_t* hb = nullptr;
@@ -260,8 +272,8 @@ namespace esia::text
                 if (!path)
                     return 0;
                 // the faces of a collection (the CJK fonts of a system's fallback chain: 20 MB and more) share one copy
-                std::weak_ptr<hb_blob_t>& cached = files_[path];
-                std::shared_ptr<hb_blob_t> blob = cached.lock();
+                std::weak_ptr<const MappedFile>& cached = files_[path];
+                std::shared_ptr<const MappedFile> blob = cached.lock();
                 if (!blob)
                 {
                     blob = MapFile(path);
@@ -488,19 +500,19 @@ namespace esia::text
 
         private:
             // The path is UTF-8 on every platform (HarfBuzz converts it for Windows); mapped where the platform can.
-            static std::shared_ptr<hb_blob_t> MapFile(const char* path)
+            static std::shared_ptr<const MappedFile> MapFile(const char* path)
             {
                 hb_blob_t* blob = hb_blob_create_from_file_or_fail(path);
                 if (!blob)
                     return nullptr;
                 // not make_shared: with mingw-w64's libstdc++ it duplicates std::type_info::operator== at link time
-                std::shared_ptr<hb_blob_t> shared(blob, &hb_blob_destroy);
+                std::shared_ptr<const MappedFile> file(new MappedFile(blob));
                 if (hb_blob_get_length(blob) == 0)
                     return nullptr;
-                return shared;
+                return file;
             }
 
-            FontId AddFace(std::shared_ptr<hb_blob_t> file, const void* data, std::size_t size, int faceIndex)
+            FontId AddFace(std::shared_ptr<const MappedFile> file, const void* data, std::size_t size, int faceIndex)
             {
                 if (faces_.size() >= kNoGlyph || faceIndex < 0)
                     return 0;
@@ -509,7 +521,7 @@ namespace esia::text
                 if (face->file)
                 {
                     unsigned length = 0;
-                    data = hb_blob_get_data(face->file.get(), &length);
+                    data = hb_blob_get_data(face->file->blob, &length);
                     size = length;
                 }
                 if (!data || size == 0 || FT_New_Memory_Face(ft_, static_cast<const FT_Byte*>(data), (FT_Long)size, faceIndex, &face->ft) != 0)
@@ -520,7 +532,7 @@ namespace esia::text
                 face->colorStrikes = FT_HAS_COLOR(face->ft) && FT_HAS_FIXED_SIZES(face->ft);
                 if (!FT_IS_SCALABLE(face->ft) && !face->colorStrikes)
                     return 0;   // monochrome bitmap fonts: nothing to rasterize
-                hb_blob_t* blob = face->file ? hb_blob_reference(face->file.get())
+                hb_blob_t* blob = face->file ? hb_blob_reference(face->file->blob)
                                              : hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
                 hb_face_t* hbFace = hb_face_create(blob, (unsigned)faceIndex);
                 hb_blob_destroy(blob);
@@ -1168,7 +1180,7 @@ namespace esia::text
             hb_buffer_t* buffer_ = nullptr;
             hb_unicode_funcs_t* unicode_ = nullptr;
             std::vector<std::unique_ptr<Face>> faces_;   // FontId - 1
-            std::unordered_map<std::string, std::weak_ptr<hb_blob_t>> files_;   // AddFontFile's, by path
+            std::unordered_map<std::string, std::weak_ptr<const MappedFile>> files_;   // AddFontFile's, by path
             std::vector<std::uint16_t> fallbacks_;
             GlyphAtlas atlas_;
             GlyphAtlas colorAtlas_;   // RGBA8: color glyphs
