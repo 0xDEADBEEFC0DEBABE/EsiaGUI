@@ -14,7 +14,8 @@ namespace esia::text::detail
         // comes from Hiragino Sans GB (Simplified) and Heiti SC / TC (STHeiti), ordinary files in /System/Library/Fonts
         // on every macOS version. The scripts SF does not cover come from the public fonts macOS installs for them
         // (SF Arabic, SF Hebrew ... are the UI's private faces, like PingFang): what Segoe UI, Nirmala UI and
-        // Leelawadee UI are in the Windows chain. Small files: FreeType reads each one whole.
+        // Leelawadee UI are in the Windows chain. Then Apple Color Emoji (color bitmap strikes, 200 MB: the text
+        // system maps its fonts, it does not read them), before Apple Symbols so that emoji keep their color.
         constexpr std::string_view kChain[] = {
             kSystemUiFamily, "Helvetica Neue", "Hiragino Sans GB", "Heiti SC", "Heiti TC", "Hiragino Sans", "Apple SD Gothic Neo",
             "Geeza Pro",              // Arabic
@@ -34,6 +35,7 @@ namespace esia::text::detail
             "Khmer Sangam MN",        // Khmer
             "Noto Sans Myanmar",      // Myanmar
             "Noto Sans Armenian",     // Armenian
+            "Apple Color Emoji",      // emoji
             "Apple Symbols",
         };
 

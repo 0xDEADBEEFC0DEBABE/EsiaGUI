@@ -41,7 +41,8 @@ namespace esia::text
     {
         int left = 0, top = 0;       // of the bitmap, in pixels from the integer pen position on the baseline
         int width = 0, height = 0;   // 0 x 0 for a glyph without ink (a space)
-        std::vector<std::uint8_t> pixels;   // 8-bit coverage, rows top first, tightly packed
+        std::vector<std::uint8_t> pixels;   // rows top first, tightly packed: 8-bit coverage, or RGBA8 (channels 4)
+        int channels = 1;            // 1: coverage; 4: a color glyph, straight-alpha RGBA8 (emoji)
     };
 
     // Rasterizes `outline` shifted right by `offsetX` pixels (the pen's sub-pixel phase). Every edge of the bitmap

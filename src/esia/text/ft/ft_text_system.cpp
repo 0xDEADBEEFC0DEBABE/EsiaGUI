@@ -88,9 +88,12 @@ namespace esia::text
 
         struct Face
         {
-            // AddFontFile: the file, which FreeType and HarfBuzz read in place; shared by the faces of a collection
-            std::shared_ptr<const std::vector<std::uint8_t>> file;
+            // AddFontFile: the file, mapped into memory (HarfBuzz's blob); FreeType and HarfBuzz read it in place, and
+            // the faces of a collection share it. Mapped, not read: a color emoji font is 200 MB, of which a frame
+            // touches a few pages.
+            std::shared_ptr<hb_blob_t> file;
             FT_Face ft = nullptr;
+            bool colorStrikes = false;   // color bitmap strikes (sbix, CBDT: emoji): drawn from those, not outlines
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
             float ascent = 0.0f, descent = 0.0f, gap = 0.0f;   // design units, descent positive
@@ -225,7 +228,8 @@ namespace esia::text
         {
         public:
             FreeTypeTextSystem(TextureRegistry& textures, const FreeTypeDesc& desc)
-                : atlas_(textures, GlyphAtlasDesc{desc.atlasPageSize, desc.atlasMaxPages, 1})
+                : atlas_(textures, GlyphAtlasDesc{desc.atlasPageSize, desc.atlasMaxPages, 1}),
+                  colorAtlas_(textures, GlyphAtlasDesc{std::min(desc.atlasPageSize, 1024), 2, 1, TextureFormat::RGBA8})
             {
             }
 
@@ -256,16 +260,16 @@ namespace esia::text
                 if (!path)
                     return 0;
                 // the faces of a collection (the CJK fonts of a system's fallback chain: 20 MB and more) share one copy
-                std::weak_ptr<const std::vector<std::uint8_t>>& cached = files_[path];
-                std::shared_ptr<const std::vector<std::uint8_t>> bytes = cached.lock();
-                if (!bytes)
+                std::weak_ptr<hb_blob_t>& cached = files_[path];
+                std::shared_ptr<hb_blob_t> blob = cached.lock();
+                if (!blob)
                 {
-                    bytes = ReadFile(path);
-                    if (!bytes)
+                    blob = MapFile(path);
+                    if (!blob)
                         return 0;
-                    cached = bytes;
+                    cached = blob;
                 }
-                return AddFace(std::move(bytes), nullptr, 0, faceIndex);
+                return AddFace(std::move(blob), nullptr, 0, faceIndex);
             }
 
             FontId AddFontMemory(const void* data, std::size_t size, int faceIndex) override { return AddFace(nullptr, data, size, faceIndex); }
@@ -289,6 +293,7 @@ namespace esia::text
                     params_.pixelsPerUnit = 1.0f;
                 ++frame_;
                 atlas_.BeginFrame();
+                colorAtlas_.BeginFrame();
                 if (layouts_.size() > kLayoutCacheLimit)
                     std::erase_if(layouts_, [this](const auto& entry) { return entry.second.lastFrame + kLayoutCacheFrames < frame_; });
             }
@@ -423,7 +428,7 @@ namespace esia::text
                 const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
                 // animated scales are quantized to 1/4 px of em, so an animation does not flood the atlas
                 const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
-                const std::uint32_t rgba = color.ToRgba8();
+                const std::uint32_t rgba = color.ToRgba8(), colorGlyphRgba = Color::White(color.a).ToRgba8();
                 const Rect clip = dl.ClipRect();
                 TextureId bound = 0;
                 for (const PlacedGlyph& g : layout->glyphs)
@@ -452,7 +457,7 @@ namespace esia::text
                         dl.PushTexture(s->page);
                         bound = s->page;
                     }
-                    dl.AddRectFilledUV(r, s->uv0, s->uv1, rgba);
+                    dl.AddRectFilledUV(r, s->uv0, s->uv1, s->color ? colorGlyphRgba : rgba);
                 }
                 if (bound)
                     dl.PopTexture();
@@ -478,28 +483,24 @@ namespace esia::text
                 dl.AddImage(s->page,
                             Rect((ox + (float)s->left) * inv, (oy + (float)s->top) * inv, (ox + (float)(s->left + s->width)) * inv,
                                  (oy + (float)(s->top + s->height)) * inv),
-                            s->uv0, s->uv1, color.ToRgba8());
+                            s->uv0, s->uv1, s->color ? Color::White(color.a).ToRgba8() : color.ToRgba8());
             }
 
         private:
-            static std::shared_ptr<const std::vector<std::uint8_t>> ReadFile(const char* path)
+            // The path is UTF-8 on every platform (HarfBuzz converts it for Windows); mapped where the platform can.
+            static std::shared_ptr<hb_blob_t> MapFile(const char* path)
             {
-                // the path is UTF-8 on every platform
-                std::ifstream file(std::filesystem::path(std::u8string_view(reinterpret_cast<const char8_t*>(path))), std::ios::binary | std::ios::ate);
-                if (!file)
-                    return nullptr;
-                const std::streamoff size = file.tellg();
-                if (size <= 0)
+                hb_blob_t* blob = hb_blob_create_from_file_or_fail(path);
+                if (!blob)
                     return nullptr;
                 // not make_shared: with mingw-w64's libstdc++ it duplicates std::type_info::operator== at link time
-                std::shared_ptr<std::vector<std::uint8_t>> bytes(new std::vector<std::uint8_t>((std::size_t)size));
-                file.seekg(0);
-                if (!file.read(reinterpret_cast<char*>(bytes->data()), size))
+                std::shared_ptr<hb_blob_t> shared(blob, &hb_blob_destroy);
+                if (hb_blob_get_length(blob) == 0)
                     return nullptr;
-                return bytes;
+                return shared;
             }
 
-            FontId AddFace(std::shared_ptr<const std::vector<std::uint8_t>> file, const void* data, std::size_t size, int faceIndex)
+            FontId AddFace(std::shared_ptr<hb_blob_t> file, const void* data, std::size_t size, int faceIndex)
             {
                 if (faces_.size() >= kNoGlyph || faceIndex < 0)
                     return 0;
@@ -507,17 +508,20 @@ namespace esia::text
                 face->file = std::move(file);
                 if (face->file)
                 {
-                    data = face->file->data();
-                    size = face->file->size();
+                    unsigned length = 0;
+                    data = hb_blob_get_data(face->file.get(), &length);
+                    size = length;
                 }
                 if (!data || size == 0 || FT_New_Memory_Face(ft_, static_cast<const FT_Byte*>(data), (FT_Long)size, faceIndex, &face->ft) != 0)
                 {
                     face->ft = nullptr;
                     return 0;
                 }
-                if (!FT_IS_SCALABLE(face->ft))
-                    return 0;   // bitmap-only fonts have no outlines to rasterize
-                hb_blob_t* blob = hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+                face->colorStrikes = FT_HAS_COLOR(face->ft) && FT_HAS_FIXED_SIZES(face->ft);
+                if (!FT_IS_SCALABLE(face->ft) && !face->colorStrikes)
+                    return 0;   // monochrome bitmap fonts: nothing to rasterize
+                hb_blob_t* blob = face->file ? hb_blob_reference(face->file.get())
+                                             : hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
                 hb_face_t* hbFace = hb_face_create(blob, (unsigned)faceIndex);
                 hb_blob_destroy(blob);
                 face->hb = hb_font_create(hbFace);
@@ -1042,12 +1046,13 @@ namespace esia::text
             {
                 const std::uint64_t q = (std::uint64_t)std::min(emPixels * 16.0f + 0.5f, 134217727.0f);   // 1/16 px, 27 bits
                 const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (q << 2) | (std::uint64_t)(phase & 3);
+                if (faces_[face]->colorStrikes)
+                    return ColorGlyph(face, glyph, emPixels);
                 if (const GlyphSlot* s = atlas_.Find(key))
                     return s;
                 Face& f = *faces_[face];
                 outline_.Clear();
-                // design units, no hinting, no embedded bitmaps; a glyph without an outline (bitmap strikes) draws
-                // nothing until color glyphs are supported
+                // design units, no hinting, no embedded bitmaps (color strikes: ColorGlyph)
                 if (FT_Load_Glyph(f.ft, glyph, FT_LOAD_NO_SCALE) == 0 && f.ft->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
                 {
                     FT_Outline_Funcs funcs{};
@@ -1065,13 +1070,108 @@ namespace esia::text
                 return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
             }
 
+            // A color glyph (emoji) at `emPixels`: the bitmap of the nearest strike at or above that size (the largest
+            // when none is), decoded by FreeType (sbix / CBDT: PNG), scaled by area averaging in premultiplied alpha,
+            // stored straight-alpha in the RGBA atlas. Whole pixels: no pen phases.
+            const GlyphSlot* ColorGlyph(std::uint16_t face, std::uint16_t glyph, float emPixels)
+            {
+                const std::uint64_t q = (std::uint64_t)std::min(emPixels * 4.0f + 0.5f, 134217727.0f);   // 1/4 px
+                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | q;
+                if (const GlyphSlot* s = colorAtlas_.Find(key))
+                    return s;
+                FT_Face ft = faces_[face]->ft;
+                int strike = -1;
+                float strikePx = 0.0f;
+                for (int i = 0; i < ft->num_fixed_sizes; ++i)
+                {
+                    const float ppem = (float)ft->available_sizes[i].y_ppem / 64.0f;
+                    const bool better = strike < 0 || (strikePx < emPixels ? ppem > strikePx : (ppem >= emPixels && ppem < strikePx));
+                    if (ppem > 0.0f && better)
+                    {
+                        strike = i;
+                        strikePx = ppem;
+                    }
+                }
+                bitmap_ = GlyphBitmap{};
+                bitmap_.channels = 4;
+                Rect ink;
+                if (strike >= 0 && FT_Select_Size(ft, strike) == 0 && FT_Load_Glyph(ft, glyph, FT_LOAD_COLOR) == 0 &&
+                    (ft->glyph->format == FT_GLYPH_FORMAT_BITMAP || FT_Render_Glyph(ft->glyph, FT_RENDER_MODE_NORMAL) == 0) &&
+                    ft->glyph->bitmap.pixel_mode == FT_PIXEL_MODE_BGRA && ft->glyph->bitmap.width > 0 && ft->glyph->bitmap.rows > 0)
+                {
+                    const FT_Bitmap& b = ft->glyph->bitmap;
+                    const float k = emPixels / strikePx;
+                    ScaleBgra(b.buffer, (int)b.width, (int)b.rows, b.pitch, k, bitmap_);
+                    bitmap_.left = (int)std::floor((float)ft->glyph->bitmap_left * k + 0.5f);
+                    bitmap_.top = -(int)std::floor((float)ft->glyph->bitmap_top * k + 0.5f);
+                    ink = Rect((float)bitmap_.left, (float)bitmap_.top, (float)(bitmap_.left + bitmap_.width), (float)(bitmap_.top + bitmap_.height));
+                }
+                const GlyphSlot* s = colorAtlas_.Add(key, bitmap_, ink);
+                return s ? s : colorAtlas_.Add(key, GlyphBitmap{0, 0, 0, 0, {}, 4}, Rect());   // larger than a page: empty
+            }
+
+            // Premultiplied BGRA (FreeType's color bitmaps) -> straight RGBA8, scaled by `k`: each target pixel the area
+            // average of the source pixels under it (a box filter both ways; only downscaling keeps every source pixel)
+            static void ScaleBgra(const unsigned char* src, int w, int h, int pitch, float k, GlyphBitmap& out)
+            {
+                const int dw = std::max(1, (int)std::lround((float)w * k)), dh = std::max(1, (int)std::lround((float)h * k));
+                const float sx = (float)w / (float)dw, sy = (float)h / (float)dh;
+                std::vector<float> rows((std::size_t)dw * h * 4, 0.0f);   // horizontal pass: dw x h
+                for (int y = 0; y < h; ++y)
+                {
+                    const unsigned char* line = src + (std::ptrdiff_t)y * pitch;
+                    for (int x = 0; x < dw; ++x)
+                    {
+                        const float x0 = (float)x * sx, x1 = x0 + sx;
+                        float acc[4] = {0, 0, 0, 0};
+                        for (int i = (int)x0; i < w && (float)i < x1; ++i)
+                        {
+                            const float wgt = std::min((float)i + 1.0f, x1) - std::max((float)i, x0);
+                            for (int c = 0; c < 4; ++c)
+                                acc[c] += (float)line[i * 4 + c] * wgt;
+                        }
+                        for (int c = 0; c < 4; ++c)
+                            rows[((std::size_t)y * dw + x) * 4 + c] = acc[c] / sx;
+                    }
+                }
+                out.width = dw;
+                out.height = dh;
+                out.pixels.assign((std::size_t)dw * dh * 4, 0);
+                for (int y = 0; y < dh; ++y)
+                {
+                    const float y0 = (float)y * sy, y1 = y0 + sy;
+                    for (int x = 0; x < dw; ++x)
+                    {
+                        float acc[4] = {0, 0, 0, 0};   // b g r a, premultiplied
+                        for (int j = (int)y0; j < h && (float)j < y1; ++j)
+                        {
+                            const float wgt = std::min((float)j + 1.0f, y1) - std::max((float)j, y0);
+                            for (int c = 0; c < 4; ++c)
+                                acc[c] += rows[((std::size_t)j * dw + x) * 4 + c] * wgt;
+                        }
+                        for (float& v : acc)
+                            v /= sy;
+                        std::uint8_t* px = out.pixels.data() + ((std::size_t)y * dw + x) * 4;
+                        const float a = acc[3];
+                        if (a <= 0.0f)
+                            continue;
+                        const auto straight = [a](float v) { return (std::uint8_t)std::clamp(v * 255.0f / a + 0.5f, 0.0f, 255.0f); };
+                        px[0] = straight(acc[2]);
+                        px[1] = straight(acc[1]);
+                        px[2] = straight(acc[0]);
+                        px[3] = (std::uint8_t)std::clamp(a + 0.5f, 0.0f, 255.0f);
+                    }
+                }
+            }
+
             FT_Library ft_ = nullptr;
             hb_buffer_t* buffer_ = nullptr;
             hb_unicode_funcs_t* unicode_ = nullptr;
             std::vector<std::unique_ptr<Face>> faces_;   // FontId - 1
-            std::unordered_map<std::string, std::weak_ptr<const std::vector<std::uint8_t>>> files_;   // AddFontFile's, by path
+            std::unordered_map<std::string, std::weak_ptr<hb_blob_t>> files_;   // AddFontFile's, by path
             std::vector<std::uint16_t> fallbacks_;
             GlyphAtlas atlas_;
+            GlyphAtlas colorAtlas_;   // RGBA8: color glyphs
             RasterParams params_;
             std::uint64_t frame_ = 0;
             std::unordered_map<std::uint64_t, Layout> layouts_;

@@ -3,6 +3,8 @@
 // density, fallback fonts, scaled and icon glyphs, caching - and the whole path end to end: the quads Draw emits,
 // composited on the CPU from the pages the registry received, against a golden image.
 #include "esia/text/freetype.hpp"
+#include "esia/text/system_fonts.hpp"
+#include <cstdio>
 #include "font_test_util.hpp"
 #include "ft_test_util.hpp"
 
@@ -283,6 +285,34 @@ ESIA_TEST(FreeType, IconGlyphsAreOpticallyCentered)
     DrawList none = NewList();
     f.ts->DrawGlyph(none, {f.droid, 24.0f}, 0x2665, Vec2(50.0f, 40.0f), Color::Black());
     ESIA_CHECK(none.Empty());
+}
+
+// Color bitmap strikes (sbix / CBDT): an installed color emoji font draws its glyphs in color, from an RGBA8 page, in
+// white with the text's alpha. Apple Color Emoji where the system has it (macOS), else skipped.
+ESIA_TEST(FreeType, ColorEmojiFromBitmapStrikes)
+{
+    const std::optional<text::SystemFont> emoji = text::FindSystemFont("Apple Color Emoji");
+    if (!emoji)
+    {
+        std::printf("  skipped: no Apple Color Emoji\n");
+        return;
+    }
+    Fixture f;
+    const text::FontId id = text::AddSystemFont(*f.ts, *emoji);
+    ESIA_CHECK(id != 0);   // a font without outlines loads when it has color strikes
+    f.ts->AddFallback(id);
+    DrawList dl = NewList();
+    f.ts->Draw(dl, {f.droid, 32.0f}, Vec2(10, 10), Color(0.2f, 0.4f, 0.6f, 0.5f), "A\xF0\x9F\x9A\x80");   // A + rocket
+    const std::vector<Quad> q = Quads(dl);
+    ESIA_CHECK(q.size() == 2);
+    if (q.size() != 2)
+        return;
+    TextureInfo letter, rocket;
+    ESIA_CHECK(f.textures.Info(q[0].texture, letter) && letter.Coverage());
+    ESIA_CHECK(f.textures.Info(q[1].texture, rocket) && rocket.format == TextureFormat::RGBA8);
+    ESIA_CHECK(q[1].color == Color::White(0.5f).ToRgba8() && q[0].color == Color(0.2f, 0.4f, 0.6f, 0.5f).ToRgba8());
+    // about one em, on the line
+    ESIA_CHECK(q[1].r.Width() > 20.0f && q[1].r.Width() < 44.0f && q[1].r.min.y < q[0].r.max.y && q[1].r.max.y > q[0].r.min.y);
 }
 
 ESIA_TEST(FreeType, CachesLayoutsAndGlyphs)

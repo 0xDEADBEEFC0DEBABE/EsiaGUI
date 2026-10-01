@@ -204,9 +204,12 @@ ESIA_TEST(SystemFonts, FallbackChainCoversEveryScript)
         char32_t c;
     } samples[] = {{"Latin", U'A'},    {"Simplified Chinese", U'语'}, {"Traditional Chinese", U'體'}, {"Japanese kana", U'の'},
                    {"Korean", U'한'}, {"symbols", U'→'},
-#if defined(_WIN32)
-                   // the scripts of WGT's Languages panel that Segoe UI does not have
-                   {"Devanagari", U'ह'}, {"Thai", U'ไ'},
+#if defined(_WIN32) || defined(__APPLE__)
+                   // the other scripts of WGT's Languages panel (on macOS each from a font of its own)
+                   {"Arabic", U'ع'}, {"Hebrew", U'ע'}, {"Devanagari", U'ह'}, {"Thai", U'ไ'},
+#endif
+#if defined(__APPLE__)
+                   {"emoji (Apple Color Emoji's bitmaps)", U'🚀'},
 #endif
     };
     for (const auto& s : samples)

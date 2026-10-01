@@ -1,5 +1,5 @@
 // Esia - glyph atlas: rasterized glyphs packed into Alpha8 coverage pages the TextureRegistry owns, cached under a
-// key the text system chooses.
+// key the text system chooses. An atlas of RGBA8 pages holds color glyphs (emoji) the same way.
 //
 // Shelf packing into square pages. When `maxPages` pages are full, the frame still gets overflow pages -
 // a glyph drawn earlier in the frame is never overwritten while the frame is being built - and the next BeginFrame
@@ -20,6 +20,7 @@ namespace esia::text
         Vec2 uv0, uv1;
         int left = 0, top = 0, width = 0, height = 0;   // the bitmap, in pixels from the integer pen position
         Rect ink;             // outline bounds in pixels from the pen position (optical centering of icons)
+        bool color = false;   // an RGBA8 page: the glyph has its own colors (drawn white, with the text's alpha)
     };
 
     struct GlyphAtlasDesc
@@ -27,6 +28,7 @@ namespace esia::text
         int pageSize = 2048;
         int maxPages = 4;   // before the atlas starts over
         int padding = 1;    // empty texels right of and below every glyph
+        TextureFormat format = TextureFormat::Alpha8;   // RGBA8: color glyphs (GlyphBitmap::channels 4)
     };
 
     class ESIA_API GlyphAtlas

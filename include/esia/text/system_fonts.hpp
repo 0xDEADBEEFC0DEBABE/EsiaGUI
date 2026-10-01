@@ -7,8 +7,9 @@
 //   * Linux and other Unix: fontconfig when Esia was built with it, else the standard font directories
 //     ($XDG_DATA_HOME/fonts, ~/.fonts, $XDG_DATA_DIRS/fonts, /usr/share/fonts, /usr/local/share/fonts), scanned once.
 // Families match any of their localized names ("Microsoft YaHei" and "微软雅黑" alike), ASCII case-insensitively;
-// the face is chosen by style first, then by weight with the CSS font-matching rules. Color emoji fonts are not part
-// of the chains: the rasterizer draws outlines only.
+// the face is chosen by style first, then by weight with the CSS font-matching rules. Emoji: the FreeType text system
+// draws color bitmap strikes (sbix, CBDT) in color - Apple Color Emoji in the macOS chain - and other fonts from their
+// outlines (Segoe UI Emoji's monochrome glyphs: COLR color layers are not drawn).
 //
 // Threading: every function may be called from any thread.
 #pragma once
@@ -58,7 +59,7 @@ namespace esia::text
     //            Apple SD Gothic Neo, Geeza Pro, Arial Hebrew, Kohinoor Devanagari / Bangla / Gujarati / Telugu,
     //            Mukta Mahee, Tamil Sangam MN, Noto Sans Kannada, Malayalam Sangam MN, Noto Sans Oriya, Sinhala
     //            Sangam MN, Thonburi, Lao Sangam MN, Khmer Sangam MN, Noto Sans Myanmar, Noto Sans Armenian,
-    //            Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
+    //            Apple Color Emoji, Apple Symbols (not PingFang: since macOS 12 it is the system UI's private font,
     //            which is not installed for the process)
     //   Linux    Noto Sans, Noto Sans CJK SC / TC / JP / KR, DejaVu Sans, Noto Sans Devanagari, Noto Sans Thai,
     //            Noto Sans Symbols, Noto Sans Symbols 2, WenQuanYi Zen Hei, Droid Sans Fallback

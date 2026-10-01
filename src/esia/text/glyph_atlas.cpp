@@ -59,7 +59,7 @@ namespace esia::text
             }
         }
         TextureInfo info;
-        info.format = TextureFormat::Alpha8;
+        info.format = desc_.format;
         info.width = info.height = desc_.pageSize;
         Page p;
         p.texture = textures_.Create(info);
@@ -83,16 +83,21 @@ namespace esia::text
         slot.width = bitmap.width;
         slot.height = bitmap.height;
         slot.ink = ink;
+        slot.color = desc_.format == TextureFormat::RGBA8;
         if (bitmap.width > 0 && bitmap.height > 0)
         {
+            const std::size_t bpp = (std::size_t)BytesPerPixel(desc_.format);
+            if ((std::size_t)bitmap.channels != bpp || bitmap.pixels.size() < (std::size_t)bitmap.width * bitmap.height * bpp)
+                return nullptr;   // a coverage bitmap for a color atlas or the other way round
             const int cw = bitmap.width + desc_.padding, ch = bitmap.height + desc_.padding;
             int page = 0, x = 0, y = 0;
             if (!Pack(cw, ch, page, x, y))
                 return nullptr;
             // the whole cell goes up, padding cleared: after a restart the texels next to a glyph may hold an old one
-            cell_.assign((std::size_t)cw * ch, 0);
+            cell_.assign((std::size_t)cw * ch * bpp, 0);
             for (int row = 0; row < bitmap.height; ++row)
-                std::memcpy(cell_.data() + (std::size_t)row * cw, bitmap.pixels.data() + (std::size_t)row * bitmap.width, (std::size_t)bitmap.width);
+                std::memcpy(cell_.data() + (std::size_t)row * cw * bpp, bitmap.pixels.data() + (std::size_t)row * bitmap.width * bpp,
+                            (std::size_t)bitmap.width * bpp);
             slot.page = pages_[page].texture;
             textures_.Update(slot.page, x, y, cw, ch, cell_.data());
             const float inv = 1.0f / (float)desc_.pageSize;

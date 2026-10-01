@@ -50,6 +50,30 @@ ESIA_TEST(Atlas, PacksGlyphsIntoRegistryPagesWithClearedPadding)
     ESIA_CHECK(changes[2].x == 11 && changes[2].width == 6 && changes[2].height == 6);
 }
 
+ESIA_TEST(Atlas, ColorPagesHoldRgbaGlyphs)
+{
+    TextureRegistry reg;
+    GlyphAtlas atlas(reg, GlyphAtlasDesc{64, 2, 1, TextureFormat::RGBA8});
+    GlyphBitmap rgba;
+    rgba.width = 2;
+    rgba.height = 2;
+    rgba.channels = 4;
+    rgba.pixels = {255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128};
+    const GlyphSlot* s = atlas.Add(1, rgba, Rect(0, -2, 2, 0));
+    TextureInfo info;
+    ESIA_CHECK(s && s->color && reg.Info(s->page, info) && info.format == TextureFormat::RGBA8 && !info.Coverage());
+    std::vector<TextureChange> changes;
+    reg.TakeChanges(changes);
+    ESIA_CHECK(changes.size() == 2 && changes[1].width == 3 && changes[1].height == 3 && changes[1].pixels.size() == 3 * 3 * 4);
+    const std::vector<std::uint8_t>& px = changes[1].pixels;   // rows of 3 texels: the glyph's 2, then padding
+    ESIA_CHECK(px[4] == 0 && px[5] == 255 && px[8] == 0 && px[11] == 0);           // row 0: green, padding cleared
+    ESIA_CHECK(px[12] == 0 && px[14] == 255 && px[15] == 255 && px[16 + 3] == 128);   // row 1: blue, half-transparent white
+    // a coverage bitmap does not go into a color atlas (nor the other way round)
+    ESIA_CHECK(atlas.Add(2, Solid(2, 2, 200), Rect()) == nullptr);
+    GlyphAtlas gray(reg, GlyphAtlasDesc{64, 2, 1});
+    ESIA_CHECK(gray.Add(1, rgba, Rect()) == nullptr && !gray.Add(2, Solid(2, 2, 200), Rect())->color);
+}
+
 ESIA_TEST(Atlas, GlyphsWithoutInkAndGlyphsLargerThanAPage)
 {
     TextureRegistry reg;
