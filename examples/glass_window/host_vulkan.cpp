@@ -1,7 +1,8 @@
 // glass_window - Vulkan host: VkSurfaceKHR + swapchain, two frames in flight of its own (fence, acquire semaphore and
 // command buffer per frame slot, a present semaphore per swapchain image), Esia recording into the frame's command
 // buffer. The loader (vulkan-1.dll, libvulkan.so.1) is loaded at run time, as the backend does: no import library
-// needed. The surface: VK_KHR_win32_surface on Windows, VK_KHR_xlib_surface on Linux (the X11 frame, app_linux.cpp).
+// needed. The surface: VK_KHR_win32_surface on Windows, VK_KHR_android_surface on Android (app_android.cpp: the window
+// can go and come back, AttachWindow), VK_KHR_xlib_surface on Linux (the X11 frame, app_linux.cpp).
 #if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif
@@ -37,6 +38,17 @@ namespace glass
 #if defined(_WIN32)
 #define GLASS_VK_SURFACE_FUNCTION(X) X(vkCreateWin32SurfaceKHR)
         constexpr const char* kSurfaceExtension = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+#elif defined(__ANDROID__)
+#define GLASS_VK_SURFACE_FUNCTION(X)
+        constexpr const char* kSurfaceExtension = "VK_KHR_android_surface";
+        struct AndroidSurfaceCreateInfo
+        {
+            VkStructureType sType = static_cast<VkStructureType>(1000008000);   // VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR
+            const void* pNext = nullptr;
+            VkFlags flags = 0;
+            void* window = nullptr;   // ANativeWindow*
+        };
+        using PFN_CreateAndroidSurface = VkResult(VKAPI_PTR*)(VkInstance, const AndroidSurfaceCreateInfo*, const VkAllocationCallbacks*, VkSurfaceKHR*);
 #else
 #define GLASS_VK_SURFACE_FUNCTION(X)
         // VK_KHR_xlib_surface, declared here: vulkan_xlib.h needs Xlib.h, whose macros (None, Bool, Status ...) are also
@@ -130,6 +142,34 @@ namespace glass
                 width_ = width;
                 height_ = height;
                 Recreate();
+            }
+
+            void ReleaseWindow() override
+            {
+                if (!device_)
+                    return;
+                vk_.vkDeviceWaitIdle(device_);
+                ReleaseSwapchain();
+                if (surface_)
+                    vk_.vkDestroySurfaceKHR(instance_, surface_, nullptr);
+                surface_ = VK_NULL_HANDLE;
+            }
+
+            bool AttachWindow(const NativeWindow& window, int width, int height, std::string& error) override
+            {
+                ReleaseWindow();
+                width_ = width;
+                height_ = height;
+                if (!CreateSurface(window, error))
+                    return false;
+                VkBool32 present = VK_FALSE;
+                vk_.vkGetPhysicalDeviceSurfaceSupportKHR(gpu_, family_, surface_, &present);
+                if (!present)
+                {
+                    error = "the queue cannot present to the new window";
+                    return false;
+                }
+                return CreateSwapchain(error);
             }
 
             bool BeginFrame() override
@@ -229,6 +269,11 @@ namespace glass
                 library_ = ::LoadLibraryW(L"vulkan-1.dll");
                 if (library_)
                     vk_.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(reinterpret_cast<void*>(::GetProcAddress(library_, "vkGetInstanceProcAddr")));
+#elif defined(__ANDROID__)
+                const char* loader = "libvulkan.so";
+                library_ = ::dlopen(loader, RTLD_NOW | RTLD_LOCAL);
+                if (library_)
+                    vk_.vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(::dlsym(library_, "vkGetInstanceProcAddr"));
 #else
                 const char* loader = "libvulkan.so.1";
                 library_ = ::dlopen(loader, RTLD_NOW | RTLD_LOCAL);
@@ -300,6 +345,12 @@ namespace glass
                         vk_.vkCreateDebugUtilsMessengerEXT(instance_, &mi, nullptr, &messenger_);
                     debugUtils_ = messenger_ != VK_NULL_HANDLE;
                 }
+                return CreateSurface(window, error);
+            }
+
+            bool CreateSurface(const NativeWindow& window, std::string& error)
+            {
+                VkResult r = VK_SUCCESS;
 #if defined(_WIN32)
                 VkWin32SurfaceCreateInfoKHR si{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
                 si.hinstance = ::GetModuleHandleW(nullptr);
@@ -307,6 +358,15 @@ namespace glass
                 if ((r = vk_.vkCreateWin32SurfaceKHR(instance_, &si, nullptr, &surface_)) != VK_SUCCESS)
                 {
                     error = "vkCreateWin32SurfaceKHR failed (" + std::to_string(r) + ")";
+                    return false;
+                }
+#elif defined(__ANDROID__)
+                AndroidSurfaceCreateInfo si;
+                si.window = window.window;
+                const auto createSurface = Load<PFN_CreateAndroidSurface>("vkCreateAndroidSurfaceKHR");
+                if (!createSurface || (r = createSurface(instance_, &si, nullptr, &surface_)) != VK_SUCCESS)
+                {
+                    error = "vkCreateAndroidSurfaceKHR failed (" + std::to_string(createSurface ? r : VK_ERROR_EXTENSION_NOT_PRESENT) + ")";
                     return false;
                 }
 #else
@@ -442,10 +502,17 @@ namespace glass
             // (Re)creates the swapchain for the window's size; the old one is retired only when the GPU is idle.
             bool CreateSwapchain(std::string& error)
             {
+                if (!surface_)
+                    return true;   // no window (Android, in the background): no swapchain until AttachWindow
                 vk_.vkDeviceWaitIdle(device_);
                 VkSurfaceCapabilitiesKHR caps;
                 vk_.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu_, surface_, &caps);
                 VkExtent2D extent = caps.currentExtent;
+#if defined(__ANDROID__)
+                // the window's own orientation and size (IDENTITY below): the compositor turns the image when the
+                // display is rotated against its natural orientation, which currentExtent is in
+                extent.width = 0xFFFFFFFFu;
+#endif
                 if (extent.width == 0xFFFFFFFFu)   // the surface takes the swapchain's size
                     extent = {std::clamp((std::uint32_t)width_, caps.minImageExtent.width, caps.maxImageExtent.width),
                               std::clamp((std::uint32_t)height_, caps.minImageExtent.height, caps.maxImageExtent.height)};
@@ -508,7 +575,19 @@ namespace glass
                 sci.imageUsage = usage;
                 sci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
                 sci.preTransform = caps.currentTransform;
+#if defined(__ANDROID__)
+                if (caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+                    sci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+#endif
+                // opaque where the surface offers it (Android's offer only INHERIT)
                 sci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+                for (const VkCompositeAlphaFlagBitsKHR a : {VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+                                                            VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR})
+                    if (caps.supportedCompositeAlpha & a)
+                    {
+                        sci.compositeAlpha = a;
+                        break;
+                    }
                 sci.presentMode = mode;
                 sci.clipped = VK_TRUE;
                 sci.oldSwapchain = swapchain_;

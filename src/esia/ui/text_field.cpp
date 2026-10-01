@@ -148,19 +148,13 @@ namespace esia::ui
         };
     }
 
-    TextFieldResult TextField(std::string_view id, std::string* value, std::string_view placeholder, const TextFieldOptions& o)
+    TextFieldResult detail::TextFieldAt(Id fid, const Rect& r, std::string* value, std::string_view placeholder, const TextFieldOptions& o)
     {
-        ItemScope scope;
         TextFieldResult result;
         Ui::Impl& m = M();
         Context& c = *m.ctx;
         const InputState& in = c.Input();
         const Palette& pc = C();
-
-        const float width = o.width > 0.0f ? Sc(o.width) : AvailableWidth();
-        const Rect r = Rect::FromSize(c.CursorPos(), Vec2(width, Sc(38)));
-        c.ItemSize(r.Size());
-        const Id fid = c.GetId(id);
         if (!value || !c.ItemAdd(fid, r, ItemFlags_Focusable))
             return result;
         EditState& s = c.State<EditState>(fid);
@@ -171,11 +165,15 @@ namespace esia::ui
         if (b.pressed && c.KeyboardFocusId() != fid)
             c.SetKeyboardFocusId(fid);
         bool active = c.KeyboardFocusId() == fid;
+        bool focusedNow = false;   // this frame (the click that focused it keeps a select-on-focus selection)
         if (active && !s.wasActive)
         {
+            focusedNow = true;
             // focused (a click, or Tab): edit a copy, the caret at the end (a click moves it below)
             s.text = *value;
             s.caret = s.anchor = (std::uint32_t)s.text.size();
+            if (o.selectOnFocus)
+                s.anchor = 0;
             s.undo.clear();
             s.redo.clear();
             s.blink = 0.0f;
@@ -323,7 +321,7 @@ namespace esia::ui
             const CaretMap& hm = o.password ? Geometry(s.shown, f, Bullets(gm2.stops.size() - 1)) : gm2;
             const float originX = x0 - s.scroll;
             const auto hit = [&] { return gm2.stops[std::min(HitIndex(hm, in.MousePos().x - originX), gm2.stops.size() - 1)].offset; };
-            if (b.pressed)
+            if (b.pressed && !(focusedNow && o.selectOnFocus))
             {
                 const int clicks = b.clicks;
                 const std::uint32_t at = hit();
@@ -474,6 +472,16 @@ namespace esia::ui
             }
         }
         return result;
+    }
+
+    TextFieldResult TextField(std::string_view id, std::string* value, std::string_view placeholder, const TextFieldOptions& o)
+    {
+        ItemScope scope;
+        Context& c = Ctx();
+        const float width = o.width > 0.0f ? Sc(o.width) : AvailableWidth();
+        const Rect r = Rect::FromSize(c.CursorPos(), Vec2(width, Sc(38)));
+        c.ItemSize(r.Size());
+        return TextFieldAt(c.GetId(id), r, value, placeholder, o);
     }
 
     TextFieldResult SearchField(std::string_view id, std::string* value, std::string_view placeholder)

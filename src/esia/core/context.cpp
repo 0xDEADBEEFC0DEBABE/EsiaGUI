@@ -410,6 +410,7 @@ namespace esia
 
             BeginScroll(w->scroll_, false);
             ApplyNextScroll(w->scroll_, true);
+            SnapScroll(w->scroll_, w->scale_);
             w->drawList_.Reset(w->rect_);
             // items are visible and hoverable inside the content rect only; decorations draw with a wider clip
             w->drawList_.PushClipRect(w->ContentRect());
@@ -618,6 +619,17 @@ namespace esia
             SetActiveId(ResizeId(*w));
             FocusWindow(w);
         }
+    }
+
+    void Context::StartWindowMove(Window* w, Vec2 grab)
+    {
+        if (!w || !input_.MouseDown(MouseButton::Left))
+            return;
+        dragWindow_ = w;
+        resizeEdges_ = 0;
+        dragOffset_ = grab;
+        SetActiveId(MoveId(*w));
+        FocusWindow(w);
     }
 
     void Context::UpdateMoveResize()

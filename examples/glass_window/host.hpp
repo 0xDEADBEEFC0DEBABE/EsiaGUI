@@ -16,11 +16,14 @@
 
 namespace glass
 {
-    // The window a host presents to: a Win32 window, or on Linux an X11 window (app_linux.cpp).
+    // The window a host presents to: a Win32 window, an Android window (app_android.cpp), or on Linux an X11 window
+    // (app_linux.cpp).
     struct NativeWindow
     {
 #if defined(_WIN32)
         HWND hwnd = nullptr;
+#elif defined(__ANDROID__)
+        void* window = nullptr;     // ANativeWindow*
 #else
         void* display = nullptr;    // Display*
         unsigned long window = 0;   // Window
@@ -44,6 +47,17 @@ namespace glass
         virtual esia::rhi::Device& Device() = 0;
         // The window's client area changed size (pixels, never 0).
         virtual void Resize(int width, int height) = 0;
+        // The window goes away and another comes (Android: the app in the background, then back): only the surface /
+        // swap chain is made again, the device and all it holds stay. AttachWindow false: this host cannot.
+        virtual void ReleaseWindow() {}
+        virtual bool AttachWindow(const NativeWindow& window, int width, int height, std::string& error)
+        {
+            (void)window;
+            (void)width;
+            (void)height;
+            error = "this host cannot change its window";
+            return false;
+        }
         // Waits for a free buffer and wraps it; false: skip this frame (swap chain being recreated).
         virtual bool BeginFrame() = 0;
         esia::rhi::Texture Target() const { return target_; }

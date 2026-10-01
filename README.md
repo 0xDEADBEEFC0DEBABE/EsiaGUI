@@ -1,9 +1,9 @@
 # Esia for Vulkan
 
 A liquid-glass UI toolkit for games and tools (C++20). This branch is `main` with the Vulkan backend alone (Vulkan 1.1
-and later), on Windows and Linux. It needs the Vulkan headers: on Windows the LunarG Vulkan SDK
-(https://vulkan.lunarg.com; its installer sets `VULKAN_SDK`), on Linux the distribution's package. Without them
-configuring says so and builds no backend.
+and later), on Windows, Linux and Android. It needs the Vulkan headers: on Windows the LunarG Vulkan SDK
+(https://vulkan.lunarg.com; its installer sets `VULKAN_SDK`), on Linux the distribution's package; the Android NDK has
+them. Without them configuring says so and builds no backend.
 
 ## Build on Windows
 
@@ -32,7 +32,22 @@ cmake --build --preset linux-clang && ctest --preset linux-clang
 The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
 the desktop's icon theme for the icons, Ubuntu's wallpaper.
 
+## Build for Android
+
+The Android NDK and SDK (a platform, build-tools and platform-tools; a JDK for the APK signing tools), CMake and
+Ninja:
+
+```
+export ANDROID_NDK_HOME=<the NDK> ANDROID_HOME=<the SDK>
+cmake --preset android
+cmake --build --preset android
+adb install build/android/apk/showcase.apk
+```
+
+The examples become APKs in `build/android/apk`, for arm64 phones (`-DANDROID_ABI=x86_64` for the emulator). Their
+icons are Google's Material Icons, downloaded when configuring.
+
 ## About this branch
 
-It is generated from `main` (8b500ca) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (502fe93) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.

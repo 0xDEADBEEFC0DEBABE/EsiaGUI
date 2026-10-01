@@ -125,8 +125,11 @@ ESIA_TEST(VulkanScenes, OlderApiVersions)
         for (std::uint32_t version : {VK_API_VERSION_1_1, VK_API_VERSION_1_2})
         {
             const Rendered old = Render(*scene, true, 1, version);
-            ESIA_CHECK(old.ok && old.validation == 0 && old.dynamicRendering);
+            ESIA_CHECK(old.ok && old.validation == 0);
             ESIA_CHECK(old.pixels == v13.pixels);
+            // a device that lists no VK_KHR_dynamic_rendering (Android's emulator) draws with render passes
+            if (!old.dynamicRendering)
+                std::printf("  %s, Vulkan 1.%u: render passes (no VK_KHR_dynamic_rendering)\n", name, VK_API_VERSION_MINOR(version));
         }
     }
 }

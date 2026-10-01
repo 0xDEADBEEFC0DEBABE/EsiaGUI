@@ -22,6 +22,9 @@ namespace esia::test
         void Move(Vec2 p) { ctx.QueueInput(InputEvent::MouseMove(p)); }
         void Down(MouseButton b = MouseButton::Left) { ctx.QueueInput(InputEvent::Button(b, true)); }
         void Up(MouseButton b = MouseButton::Left) { ctx.QueueInput(InputEvent::Button(b, false)); }
+        // a finger: the left button, marked as a touch
+        void TouchDown() { ctx.QueueInput(InputEvent::Button(MouseButton::Left, true, true)); }
+        void TouchUp() { ctx.QueueInput(InputEvent::Button(MouseButton::Left, false, true)); }
         void KeyDown(Key k, std::uint32_t mods = 0) { ctx.QueueInput(InputEvent::KeyEvent(k, true, mods)); }
         void KeyUp(Key k, std::uint32_t mods = 0) { ctx.QueueInput(InputEvent::KeyEvent(k, false, mods)); }
         void Wheel(float x, float y) { ctx.QueueInput(InputEvent::Wheel(x, y)); }

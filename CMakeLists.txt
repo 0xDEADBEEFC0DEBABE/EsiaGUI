@@ -27,6 +27,7 @@ option(ESIA_BUILD_EXAMPLES "Build the examples (examples/)" ${PROJECT_IS_TOP_LEV
 if(ESIA_BUILD_EXAMPLES AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/examples)
     add_subdirectory(examples/glass_window)
     add_subdirectory(examples/showcase)
+    add_subdirectory(examples/workbench)
 endif()
 if(BUILD_TESTING)
     add_subdirectory(tests)

@@ -13,13 +13,28 @@ namespace esia::text::detail
 {
     namespace
     {
+        // Android: Roboto first (its UI font; it has no Latin Noto Sans). Then a Noto font per script (Linux distributions
+        // install them with fonts-noto-core or the like; DejaVu Sans covers Arabic, Hebrew, Armenian and Georgian before
+        // them there, Android has no DejaVu). Color emoji last: CBDT strikes on Linux, COLR on Android (and its flags in
+        // a CBDT font of their own).
         constexpr std::string_view kChain[] = {
-            "Noto Sans",         "Noto Sans CJK SC",    "Noto Sans CJK TC",  "Noto Sans CJK JP",   "Noto Sans CJK KR",
-            "DejaVu Sans",       "Noto Sans Devanagari", "Noto Sans Thai",   "Noto Sans Symbols",   "Noto Sans Symbols 2",
-            "WenQuanYi Zen Hei", "Droid Sans Fallback",
+#if defined(__ANDROID__)
+            "Roboto",
+#endif
+            "Noto Sans",          "Noto Sans CJK SC",    "Noto Sans CJK TC",   "Noto Sans CJK JP",    "Noto Sans CJK KR",
+            "DejaVu Sans",        "Noto Sans Devanagari", "Noto Sans Thai",    "Noto Sans Arabic",    "Noto Naskh Arabic",
+            "Noto Sans Hebrew",   "Noto Sans Armenian",  "Noto Sans Georgian", "Noto Sans Bengali",   "Noto Sans Tamil",
+            "Noto Sans Telugu",   "Noto Sans Kannada",   "Noto Sans Malayalam", "Noto Sans Gujarati", "Noto Sans Gurmukhi",
+            "Noto Sans Sinhala",  "Noto Sans Khmer",     "Noto Sans Lao",      "Noto Sans Myanmar",   "Noto Sans Ethiopic",
+            "Noto Sans Symbols",  "Noto Sans Symbols 2", "WenQuanYi Zen Hei",  "Droid Sans Fallback", "Noto Color Emoji",
+            "Noto Color Emoji Flags",
         };
         // system-ui: the first of these that is installed
+#if defined(__ANDROID__)
+        constexpr std::string_view kUiFamilies[] = {"Roboto", "Noto Sans", "DejaVu Sans"};
+#else
         constexpr std::string_view kUiFamilies[] = {"Noto Sans", "DejaVu Sans"};
+#endif
 
 #if ESIA_TEXT_FONTCONFIG
         // Generic names fontconfig resolves itself (it answers them with some family: never compared with the result).

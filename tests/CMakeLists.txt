@@ -29,7 +29,7 @@ esia_add_test(esia_render_tests
     render/test_renderer.cpp)
 target_link_libraries(esia_render_tests PRIVATE esia::render)
 
-esia_add_test(esia_ui_tests ui/test_ui.cpp)
+esia_add_test(esia_ui_tests ui/test_ui.cpp ui/test_data_widgets.cpp)
 target_link_libraries(esia_ui_tests PRIVATE esia::ui)
 
 # test kit: PNG files and tolerant image comparison (the conformance suite's goldens)
@@ -43,9 +43,9 @@ target_link_libraries(esia_testkit_tests PRIVATE esia_testkit)
 # platform's fallback chain; its golden images (tests/text/golden) are CPU composites of the glyph quads, so they need
 # no GPU
 if(TARGET esia_text_ft)
-    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp text/test_platform_face.cpp)
+    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp text/test_platform_face.cpp text/test_color_glyphs.cpp)
     target_link_libraries(esia_text_ft_tests PRIVATE esia_text_ft esia_testkit esia::harfbuzz)
-    target_include_directories(esia_text_ft_tests PRIVATE ${ESIA_ROOT}/src/esia/text/ft)   # platform_face.hpp
+    target_include_directories(esia_text_ft_tests PRIVATE ${ESIA_ROOT}/src/esia/text/ft)   # platform_face.hpp, png.hpp
     if(APPLE)   # Core Text's own widths (coretext_util.cpp: its headers' Rect clashes with esia's in the tests)
         target_sources(esia_text_ft_tests PRIVATE text/coretext_util.cpp)
         target_link_libraries(esia_text_ft_tests PRIVATE "-framework CoreText" "-framework CoreFoundation")
