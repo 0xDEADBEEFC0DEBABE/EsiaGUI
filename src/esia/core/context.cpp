@@ -620,6 +620,17 @@ namespace esia
         }
     }
 
+    void Context::StartWindowMove(Window* w, Vec2 grab)
+    {
+        if (!w || !input_.MouseDown(MouseButton::Left))
+            return;
+        dragWindow_ = w;
+        resizeEdges_ = 0;
+        dragOffset_ = grab;
+        SetActiveId(MoveId(*w));
+        FocusWindow(w);
+    }
+
     void Context::UpdateMoveResize()
     {
         if (!dragWindow_)

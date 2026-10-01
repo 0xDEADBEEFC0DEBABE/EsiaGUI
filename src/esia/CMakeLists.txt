@@ -146,6 +146,11 @@ add_library(esia_ui STATIC
     ui/lists.cpp
     ui/navigation.cpp
     ui/text_field.cpp
+    ui/number.cpp
+    ui/color.cpp
+    ui/table.cpp
+    ui/text_editor.cpp
+    ui/dock.cpp
     ui/popups.cpp
     ui/charts.cpp
     ui/overlays.cpp)

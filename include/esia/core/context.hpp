@@ -341,6 +341,11 @@ namespace esia
         DrawList& ForegroundDrawList() { return foreground_; }
         DrawList& BackgroundDrawList() { return background_; }
         DrawList& WindowDrawList() { return CurrentWindow()->drawList_; }
+        // The window being moved by a drag (of its empty area, or StartWindowMove); null: none, or a resize.
+        Window* MovingWindow() const { return dragWindow_ && resizeEdges_ == 0 ? dragWindow_ : nullptr; }
+        // Moves `w` with the mouse from now on, as if it had been grabbed `grab` from its top-left, until the button is
+        // let go (docking: a tab dragged out of its dock node). Needs the left button held.
+        void StartWindowMove(Window* w, Vec2 grab);
 
         // ---- popups and tooltips (docs/UI_CORE.md, section 9)
         void OpenPopup(Id id);

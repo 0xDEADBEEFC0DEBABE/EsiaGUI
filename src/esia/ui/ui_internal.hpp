@@ -262,6 +262,23 @@ namespace esia::ui
         bool SegmentedAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items);
         // plain: in a list row (no well, the choice in the secondary color)
         bool PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain);
+        // the text field at an explicit rect (number fields, the color picker's hex field)
+        TextFieldResult TextFieldAt(Id id, const Rect& r, std::string* value, std::string_view placeholder, const TextFieldOptions& o);
+
+        // ---- docking (dock.cpp)
+        struct DockPlacement
+        {
+            Rect rect;                     // its node
+            bool shown = false;            // its tab is the node's active one
+            bool closeRequested = false;   // its tab's close button was pressed
+            bool pendingMove = false;      // just undocked by a tab drag (floating): under the mouse, moving with it
+            Vec2 grab;
+        };
+        // BeginWindow: true when `title` is docked in a dock space submitted this frame; `closable` and `icon` are
+        // what its tab shows.
+        bool DockedPlacement(std::string_view title, bool closable, Icon icon, DockPlacement& out);
+        // A docked window's header: its node's tabs. Returns the header's height.
+        float DockTabBar(std::string_view title, const Rect& header);
 
         // ---- glass popups (popups.cpp): a popup of the core on glass, its rows without gaps
         bool BeginGlassPopup(Id id, PopupOptions options, float minWidth);
