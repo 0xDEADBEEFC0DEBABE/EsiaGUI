@@ -69,7 +69,7 @@ namespace glass::apple
 
         // One frame into `texture`; `finish` adds to the command buffer before it is committed (present, copy).
         // `waitMs`: how long the caller waited for a drawable or a free frame slot. `safeArea`: UI units
-        // (SceneInfo::safeArea). Returns false once the last frame (--frames) was drawn.
+        // (FrameParams::safeArea). Returns false once the last frame (--frames) was drawn.
         bool Frame(id<MTLTexture> texture, void (^finish)(id<MTLCommandBuffer> cb), int width, int height, float scale, float waitMs,
                    esia::Rect safeArea = esia::Rect());
 

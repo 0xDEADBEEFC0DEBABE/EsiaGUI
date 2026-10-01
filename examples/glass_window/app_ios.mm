@@ -12,7 +12,7 @@
 // wants text input, a hidden text field has the keyboard: what the keyboard commits goes to the UI as text, an input
 // method's composition (pinyin, kana ...) as InputState::Composition, Backspace on the empty field and Return as keys.
 // The field holds nothing but the composition. The keys of a hardware keyboard (UIPress: HID usages) go to the UI
-// whatever has focus. Clipboard: UIPasteboard. The safe area (sensor housing, home indicator) is SceneInfo::safeArea.
+// whatever has focus. Clipboard: UIPasteboard. The safe area (sensor housing, home indicator) is FrameParams::safeArea.
 //
 // Threads: UIKit and the frame loop on the main thread, as on macOS. In the background the loop stops (iOS allows no
 // GPU work there) and resumes in the foreground. Frames come at the display's rate up to 120 Hz on ProMotion screens

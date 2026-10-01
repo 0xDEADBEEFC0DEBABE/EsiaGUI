@@ -2,8 +2,10 @@
 #include "scene.hpp"
 #include "esia/base/utf8.hpp"
 #include "esia/render/painter.hpp"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace glass
 {
@@ -70,12 +72,33 @@ namespace glass
         const float t = (float)ctx.Input().Time();
         Wallpaper(ctx, t);
 
-        // Windows are placed on first use only: afterwards they are where the user dragged them.
-        ctx.SetNextWindowPos(Vec2(60, 110), Cond::FirstUse);
-        ctx.SetNextWindowSize(Vec2(340, 230), Cond::FirstUse);
+        // Windows are placed on first use only: afterwards they are where the user dragged them. Side by side where the
+        // display is wide enough (a desktop), else fitted into the safe area: side by side in landscape, one under the
+        // other on a phone held upright.
+        const Rect safe = ctx.SafeArea();
+        const bool wide = safe.Width() >= 960.0f;
+        Rect controls = Rect::FromSize(safe.min + Vec2(60, 110), Vec2(340, 230));
+        Rect text = Rect::FromSize(safe.min + Vec2(440, 110), Vec2(480, 230));
+        if (!wide)
+        {
+            const float m = 16.0f, top = safe.min.y + 84.0f, avail = safe.Width() - 2.0f * m;
+            if (safe.Width() > safe.Height())
+            {
+                const float w = (avail - m) * 0.42f;
+                controls = Rect::FromSize(Vec2(safe.min.x + m, top), Vec2(w, 230));
+                text = Rect::FromSize(Vec2(controls.max.x + m, top), Vec2(avail - m - w, 230));
+            }
+            else
+            {
+                controls = Rect::FromSize(Vec2(safe.min.x + m, top), Vec2(std::min(340.0f, avail), 230));
+                text = Rect::FromSize(Vec2(safe.min.x + m, controls.max.y + m), Vec2(avail, 230));
+            }
+        }
+        ctx.SetNextWindowPos(controls.min, Cond::FirstUse);
+        ctx.SetNextWindowSize(controls.Size(), Cond::FirstUse);
         ControlsWindow(ctx, info);
-        ctx.SetNextWindowPos(Vec2(440, 110), Cond::FirstUse);
-        ctx.SetNextWindowSize(Vec2(480, 230), Cond::FirstUse);
+        ctx.SetNextWindowPos(text.min, Cond::FirstUse);
+        ctx.SetNextWindowSize(text.Size(), Cond::FirstUse);
         TextWindow(ctx);
 
         if (text_)
@@ -84,11 +107,19 @@ namespace glass
             env.pixelScale = info.scale;
             env.text = text_;
             Painter fg(ctx.ForegroundDrawList(), env);
-            char status[256];
-            std::snprintf(status, sizeof(status), "Esia  |  %s  |  %s  |  %d x %d px at %.2fx  |  %.0f fps", info.api, info.adapter.c_str(), info.width,
-                          info.height, info.scale, info.fps);
-            fg.Text(Vec2(24, 18), {font_, kSmall}, Color::White(0.85f), status);
-            fg.Text(Vec2(24, 40), {font_, kSmall}, Color::White(0.6f), "Drag a window by its empty area, resize it from its edges.");
+            // one line on a desktop, two on a phone
+            char api[160], size[96];
+            std::snprintf(api, sizeof(api), "Esia  |  %s  |  %s", info.api, info.adapter.c_str());
+            std::snprintf(size, sizeof(size), "%d x %d px at %.2fx  |  %.0f fps", info.width, info.height, info.scale, info.fps);
+            const Vec2 at = safe.min + Vec2(wide ? 24.0f : 16.0f, 18.0f);
+            if (wide)
+                fg.Text(at, {font_, kSmall}, Color::White(0.85f), std::string(api) + "  |  " + size);
+            else
+            {
+                fg.Text(at, {font_, kSmall}, Color::White(0.85f), api);
+                fg.Text(at + Vec2(0, 20), {font_, kSmall}, Color::White(0.85f), size);
+            }
+            fg.Text(at + Vec2(0, wide ? 22.0f : 42.0f), {font_, kSmall}, Color::White(0.6f), "Drag a window by its empty area, resize it from its edges.");
         }
     }
 
@@ -109,7 +140,17 @@ namespace glass
         for (float x = 18.0f; x < w; x += 64.0f)
             dl.AddRectFilled(Rect(x, 0, x + 7.0f, h), Color(1, 1, 1, 0.5f).ToRgba8());
 
-        // three glass cards drifting over it: clear, frosted, tinted
+        // three glass cards drifting over it, along the bottom of the safe area: clear, frosted, tinted
+        const Rect safe = ctx.SafeArea();
+        const bool wide = safe.Width() >= 960.0f;
+        const float m = wide ? 60.0f : 16.0f, gap = wide ? 30.0f : 12.0f, below = wide ? 60.0f : 24.0f;
+        float cw = wide ? 200.0f : std::min(200.0f, (safe.Width() - 2.0f * m - 2.0f * gap) / 3.0f), ch = wide ? 130.0f : cw * 0.65f;
+        if (!wide && safe.Width() > safe.Height())
+        {
+            // a phone on its side: small enough to stay below the windows (84 + 230 + a margin from the top)
+            ch = std::clamp(safe.Height() - 84.0f - 230.0f - 16.0f - below, 48.0f, ch);
+            cw = ch / 0.65f;
+        }
         struct Card
         {
             const char* name;
@@ -118,8 +159,10 @@ namespace glass
         const Card cards[3] = {{"clear", Glass(0, 14, 36)}, {"frosted", Glass(12, 10, 30)}, {"tinted", Glass(6, 10, 30, Color(kIndigo.r, kIndigo.g, kIndigo.b, 0.35f))}};
         for (int i = 0; i < 3; ++i)
         {
-            const Vec2 pos(60.0f + (float)i * 230.0f + 16.0f * std::sin(t * 0.7f + (float)i), h - 190.0f + 10.0f * std::cos(t * 0.5f + (float)i * 2.0f));
-            const Rect r = Rect::FromSize(pos, Vec2(200, 130));
+            const float sway = wide ? 16.0f : gap * 0.4f;   // never into the next card
+            const Vec2 pos(safe.min.x + m + (float)i * (cw + gap) + sway * std::sin(t * 0.7f + (float)i),
+                           safe.max.y - ch - below + (wide ? 10.0f : 4.0f) * std::cos(t * 0.5f + (float)i * 2.0f));
+            const Rect r = Rect::FromSize(pos, Vec2(cw, ch));
             p.Rect(r, Style().Radius(28).Glass(cards[i].glass).Shadow(Color::Black(0.25f), 22, Vec2(0, 8)));
             if (text_)
                 p.Text(r.min + Vec2(20, 16), {font_, kLabel}, Color::White(0.9f), cards[i].name);
