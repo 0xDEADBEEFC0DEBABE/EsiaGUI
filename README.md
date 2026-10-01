@@ -6,67 +6,123 @@ hardware interface (RHI). It replaces WGT UI, the Dear ImGui based `wgt.dll`; WG
 
 ## Status
 
-The renderer and its backends work; widgets, windowing and a demo are the next phases (see "Roadmap").
-
 | Part | State |
 | --- | --- |
 | UI core (`src/esia/core`) | second version ([UI_CORE.md](docs/UI_CORE.md)): ids, input, windows with per-window DPI, front-to-back hit testing, press and key ownership, containers and layout providers, child scroll regions, popups and tooltips, per-id state, draw lists, texture registry |
+| Widgets (`src/esia/ui`, `esia::ui`) | WGT's liquid-glass widgets on the core ([UI_WIDGETS.md](docs/UI_WIDGETS.md)): themes, per-widget styles, springs, auto layout, controls, lists, navigation, popups, text fields, charts, the island |
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
-| Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with CJK fallback chains; grayscale antialiasing |
-| Backends (`src/esia/rhi/<name>`) | Direct3D 9 / 10 / 11 / 12, OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal (below) |
-| Widgets, platform layer, demo | not yet: WGT's widgets are ported in phase 3, window / input / IME layers in phase 4 |
+| Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with fallback chains for every major script, color emoji from bitmap strikes (sbix, CBDT); grayscale antialiasing |
+| Backends (`src/esia/rhi/<name>`) | Direct3D 9 / 10 / 11 / 12, OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal |
+| Platform | Win32 layer (`src/esia/platform/win32`, [PLATFORM_WIN32.md](docs/PLATFORM_WIN32.md)); on macOS the examples' frame is AppKit + Metal (`examples/glass_window/app_macos.mm`) |
+| Examples | `showcase` (WGT's demo on Esia) and `glass_window` (a smoke test of the whole path), on Windows and macOS |
 
 | Backend | CMake option | Verified on |
 | --- | --- | --- |
 | Direct3D 11, 12, 10, 9 | `ESIA_BACKEND_D3D11` / `D3D12` / `D3D10` / `D3D9` | Windows 11, NVIDIA RTX 4080 SUPER, debug layers (D3D12 GPU-based validation); Wine |
 | OpenGL, OpenGL ES | `ESIA_BACKEND_OPENGL` | NVIDIA (WGL), Mesa llvmpipe (EGL) |
 | Vulkan | `ESIA_BACKEND_VULKAN` | NVIDIA and Mesa lavapipe, Khronos validation layer |
-| Metal | `ESIA_BACKEND_METAL` | macOS 15 on GitHub's arm64 runner (Apple Paravirtual device, Metal API and shader validation) |
+| Metal | `ESIA_BACKEND_METAL` | MacBook Pro, Apple M3 Pro, macOS 27 (Metal API and shader validation); macOS 15 on GitHub's arm64 runner |
 
 Every backend passes the conformance suite (17 scenes against golden images, single frame and across frames, with
 the API's validation counted); details and numbers in `docs/REWRITE_STATUS.md` and each backend's `STATUS.md`.
 
 ## Building
 
-The toolchain is LLVM (clang / clang-cl with lld); MSVC works too.
+The toolchain is LLVM (clang / clang-cl with lld); MSVC works too. `-DESIA_WERROR=ON` turns warnings into errors
+(every preset builds without warnings).
+
+**Windows**, from an "x64 Native Tools" prompt with LLVM on PATH (Vulkan: set `VULKAN_SDK`):
 
 ```
-# Windows, from an "x64 Native Tools" prompt with LLVM on PATH (Vulkan: set VULKAN_SDK)
 cmake --preset windows-clang-cl -DESIA_BACKEND_D3D11=ON -DESIA_BACKEND_OPENGL=ON
 cmake --build --preset windows-clang-cl
 ctest --preset windows-clang-cl
+```
 
-# Windows with MSVC (Visual Studio 2022)
-cmake --preset windows-msvc -DESIA_BACKEND_D3D11=ON
-cmake --build --preset windows-msvc-release
+With MSVC (Visual Studio 2022): `cmake --preset windows-msvc -DESIA_BACKEND_D3D11=ON` and
+`cmake --build --preset windows-msvc-release`. The Windows backends can be cross-compiled from Linux with
+`windows-mingw-cross` (or `windows-cross` with xwin).
 
-# Linux (clang + lld); macOS: macos-clang
+**Linux** (clang + lld):
+
+```
 cmake --preset linux-clang -DESIA_BACKEND_OPENGL=ON -DESIA_BACKEND_VULKAN=ON
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
-`-DESIA_WERROR=ON` turns warnings into errors (every preset builds without warnings). The Windows backends can be
-cross-compiled from Linux with `windows-mingw-cross` (or `windows-cross` with xwin).
-`python3 tools/shaders/build_shaders.py` regenerates the shader library after a change to `src/esia/shaders`.
+**macOS** (Apple silicon or Intel, macOS 11 or later; Xcode for the SDK and the Metal compiler):
+
+```
+brew install llvm lld ninja cmake freetype harfbuzz
+xcodebuild -downloadComponent MetalToolchain     # only if `xcrun metal` says the Metal toolchain is missing
+cmake --preset macos-clang -DESIA_BACKEND_METAL=ON
+cmake --build --preset macos-clang && ctest --preset macos-clang
+```
+
+`ctest` runs the Metal conformance suite on the Mac's GPU; set `MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1` for
+Metal's API and shader validation (CI does). The examples land in `build/macos-clang/bin`.
+
+**Shader library.** `src/esia/shaders/generated` (SPIR-V, GLSL, ESSL, MSL) is generated from the HLSL in
+`src/esia/shaders` by `tools/shaders/build_shaders.py`, with the glslang and SPIRV-Cross of Ubuntu 24.04 (CI checks the
+files byte for byte). Without those packages, push the shader change to a branch named `shaders/<anything>`: the
+`Shaders` workflow regenerates the library and commits it to that branch ([CI.md](docs/CI.md), section 5).
+
+## Running the examples
+
+```
+showcase                                   # Settings, Effects Lab and Control Center over a wallpaper, the dock, the island
+showcase --open-all --light                # every panel, light theme
+showcase --vsync off --stats               # uncapped frame rate, timings once a second (macOS)
+glass_window                               # the smoke test: glass, the core's windows, text and input
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--api d3d11 \| d3d12 \| d3d10 \| d3d9 \| opengl \| vulkan` | Windows: the backend (the first one built by default); macOS: Metal only |
+| `--size WxH`, `--scale s` | client area in UI units, and pixels per UI unit (default: the monitor's); `--size 1512x945 --scale 2` is 3024 x 1890 pixels |
+| `--vsync on \| off` | off: no frame cap. On macOS a window cannot present faster than the display, so frames render into offscreen targets as fast as they can and the newest is presented each refresh |
+| `--stats` | macOS: once a second the frame rate, UI / encode / wait times, the GPU time of the frame's command buffer, passes, backdrop captures, frames shown and dropped |
+| `--fullscreen`, `--fullscreen-at N` | macOS: start in full screen, or enter it after frame N |
+| `--frames N`, `--screenshot out.png`, `--fixed-dt s` | quit after N frames, write the last one, advance the UI clock by `s` per frame (deterministic captures) |
+| `--debug` | the API's validation layer (Metal: `MTL_DEBUG_LAYER`); the message count is printed at exit |
+| `--font file` | font files instead of the system's (the first is the main one) |
+| showcase: `--open list`, `--open-all`, `--light`, `--look theme \| clear \| frosted`, `--tab n`, `--page id` | panels to open (`settings,effects,control,components,languages,telemetry,plugin`), theme, glass look, the Components tab, the Settings page |
+
+On macOS the examples use the system fonts (SF, the fallback chain of `system_fonts.hpp`, Apple Color Emoji), SF
+Symbols for esia::ui's icons (Windows' icon fonts are not there) and a system wallpaper.
+
+**Performance on Metal** (showcase, MacBook Pro M3 Pro, 3024 x 1890 pixels at UI scale 2, `--vsync off`): about 140
+fps with the shader library generated before the FX feature variants, about 170 fps with them (the Fx shader is
+specialized per batch through Metal function constants). Where the time goes: the glass panels' pixels, the drop
+shadows around them, and about 15 backdrop captures per frame, each of which ends and resumes the render pass. Measure
+with `--stats` or Instruments' Metal System Trace.
+
+### Known limitations on macOS
+
+* Custom HLSL effects (`Renderer::SetEffectSource`, the showcase's "HLSL effect" card) need runtime HLSL compilation,
+  which only the Direct3D backends have: Metal draws those shapes with the built-in shader.
+* SF is a variable font and the FreeType text system loads its default instance: the UI's bold weights draw as
+  regular.
+* Color emoji come from bitmap strikes (Apple Color Emoji, Noto Color Emoji); COLR fonts (Segoe UI Emoji on Windows)
+  draw their monochrome outlines.
 
 ## Documents
 
 * `docs/CI.md`: the GitHub Actions jobs (Linux, Windows, macOS), what they prove, how to reproduce them.
 * `docs/REWRITE.md`: the architecture (layers, renderer, RHI, shaders, text, threading, phases).
 * `docs/UI_CORE.md`: the UI core (input, hit testing, layout, windows, scrolling, popups) and how widgets use it.
+* `docs/UI_WIDGETS.md`: the widget layer, its theme and styles, and what of WGT is ported.
+* `docs/PLATFORM_WIN32.md`: the Win32 platform layer and `glass_window`.
 * `docs/REWRITE_STATUS.md`: what is done and verified, known issues, next steps.
 * `docs/backends/README.md`: how to write and test an RHI backend.
 
 ## Roadmap
 
-1. ~~UI core, second version~~: done (`docs/UI_CORE.md`); the widget port builds on it.
-2. Platform layers: Win32 first (windows, input, IME, DPI, clipboard, swap chains), then Cocoa and SDL / X11 /
-   Wayland.
-3. Text: the bidi algorithm, a caret / grapheme query, per-language fallback (FreeType + HarfBuzz on every platform and
-   the system font lookup are done).
-4. Widgets: WGT's iOS-style controls, themes, per-component styles, animations and auto layout on the new core,
-   compared with the WGT reference screenshots; then the demo.
-5. Packaging (`find_package(esia)`), API reference, Metal on Apple silicon hardware and iOS.
+1. Platform layers: Cocoa as a library (the examples' AppKit frame is the start), then SDL / X11 / Wayland.
+2. Text: the bidi algorithm, variable-font instances (SF's weights), COLR color glyphs.
+3. Performance: fewer render-pass breaks per backdrop capture on tile-based GPUs; FX feature variants on Vulkan and
+   OpenGL (the specialization constant is already in the shader library).
+4. Packaging (`find_package(esia)`), API reference, iOS.
 
 ## Third-party
 
