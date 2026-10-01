@@ -7,7 +7,9 @@
 //     with a mouse) moves, clicks and scrolls as on a desktop;
 //   * keys by key code, with the text they type (KeyEvent.getUnicodeChar) - hardware keyboards and what soft keyboards
 //     send as key events; the soft keyboard shows while a text field has the keyboard;
-//   * the clipboard (ClipboardManager), and the screen's density as the UI scale: UI units are dp.
+//   * the clipboard (ClipboardManager), and the screen's density as the UI scale: UI units are dp;
+//   * the safe area (FrameParams::safeArea): the window minus what the system draws over it - the camera's cutout, the
+//     status and navigation bars, the gesture handle (the window's insets, read again every half second).
 // It works with a NativeActivity (android_native_app_glue): the app hands over the activity, then its window, its
 // configuration changes and every input event, all on the app's thread (android_main's), which it attaches to the Java
 // VM for the calls it makes into Java.
@@ -31,12 +33,16 @@ namespace esia::platform::android
         float scale = 1.0f;          // pixels per UI unit: the density / 160 (UI units are dp) times the UI scale
         bool visible = false;        // there is a window
         bool focused = false;
+        int safeLeft = 0, safeTop = 0, safeRight = 0, safeBottom = 0;   // pixels the system draws over at each edge
         FrameParams Params(double time) const
         {
             FrameParams p;
             p.displaySize = Vec2((float)width / scale, (float)height / scale);
             p.framebufferScale = Vec2(scale, scale);
             p.time = time;
+            if (safeLeft > 0 || safeTop > 0 || safeRight > 0 || safeBottom > 0)
+                p.safeArea = Rect((float)safeLeft / scale, (float)safeTop / scale, (float)(width - safeRight) / scale,
+                                  (float)(height - safeBottom) / scale);
             return p;
         }
     };

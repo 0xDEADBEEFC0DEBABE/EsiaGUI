@@ -107,6 +107,12 @@ namespace esia::platform::android
         jclass keyEventClass = nullptr;
         jmethodID keyEventCtor = nullptr, getUnicodeChar = nullptr;
 
+        // the window's insets (pixels: left, top, right, bottom), read every kInsetFrames frames and when the window
+        // or the configuration changes
+        static constexpr int kInsetFrames = 30;
+        int insets[4] = {0, 0, 0, 0};
+        int insetCountdown = 0;
+
         float Scale() const { return density * uiScale; }
         Vec2 Units(float x, float y) const { return Vec2(x / Scale(), y / Scale()); }
 
@@ -163,6 +169,72 @@ namespace esia::platform::android
             env->DeleteLocalRef(ke);
             env->ExceptionClear();
             return c > 0 && (c & 0x80000000) == 0 ? (char32_t)c : 0;   // the combining-accent bit: a dead key
+        }
+
+        // ---- the safe area: the decor view's WindowInsets - Type.systemBars() | displayCutout() (API 30), else the
+        // system window insets and the cutout's safe insets (API 28, 29). Null before the view is attached: kept as is.
+        void ReadInsets()
+        {
+            if (!env)
+                return;
+            env->PushLocalFrame(16);
+            const auto call = [&](jobject o, const char* name, const char* sig) -> jobject {
+                if (!o || env->ExceptionCheck())
+                    return nullptr;
+                jclass c = env->GetObjectClass(o);
+                jmethodID m = env->GetMethodID(c, name, sig);
+                return m ? env->CallObjectMethod(o, m) : nullptr;
+            };
+            const auto callInt = [&](jobject o, const char* name) -> int {
+                if (!o || env->ExceptionCheck())
+                    return 0;
+                jmethodID m = env->GetMethodID(env->GetObjectClass(o), name, "()I");
+                return m ? env->CallIntMethod(o, m) : 0;
+            };
+            jobject javaWindow = call(activity->clazz, "getWindow", "()Landroid/view/Window;");
+            jobject decor = call(javaWindow, "getDecorView", "()Landroid/view/View;");
+            jobject wi = call(decor, "getRootWindowInsets", "()Landroid/view/WindowInsets;");
+            int in[4] = {0, 0, 0, 0};
+            bool read = false;
+            if (wi && !env->ExceptionCheck())
+            {
+                jclass type = env->FindClass("android/view/WindowInsets$Type");
+                if (type && !env->ExceptionCheck())
+                {
+                    jmethodID bars = env->GetStaticMethodID(type, "systemBars", "()I");
+                    jmethodID cutout = env->GetStaticMethodID(type, "displayCutout", "()I");
+                    jmethodID getInsets = env->GetMethodID(env->GetObjectClass(wi), "getInsets", "(I)Landroid/graphics/Insets;");
+                    if (bars && cutout && getInsets)
+                    {
+                        const jint mask = env->CallStaticIntMethod(type, bars) | env->CallStaticIntMethod(type, cutout);
+                        jobject ins = env->ExceptionCheck() ? nullptr : env->CallObjectMethod(wi, getInsets, mask);
+                        if (ins && !env->ExceptionCheck())
+                        {
+                            jclass ic = env->GetObjectClass(ins);
+                            const char* names[4] = {"left", "top", "right", "bottom"};
+                            for (int i = 0; i < 4; ++i)
+                                if (jfieldID f = env->GetFieldID(ic, names[i], "I"))
+                                    in[i] = env->GetIntField(ins, f);
+                            read = !env->ExceptionCheck();
+                        }
+                    }
+                }
+                else
+                {
+                    env->ExceptionClear();   // API 28, 29
+                    const char* system[4] = {"getSystemWindowInsetLeft", "getSystemWindowInsetTop", "getSystemWindowInsetRight", "getSystemWindowInsetBottom"};
+                    const char* safe[4] = {"getSafeInsetLeft", "getSafeInsetTop", "getSafeInsetRight", "getSafeInsetBottom"};
+                    jobject cut = call(wi, "getDisplayCutout", "()Landroid/view/DisplayCutout;");
+                    for (int i = 0; i < 4; ++i)
+                        in[i] = std::max(callInt(wi, system[i]), callInt(cut, safe[i]));
+                    read = !env->ExceptionCheck();
+                }
+            }
+            env->ExceptionClear();
+            env->PopLocalFrame(nullptr);
+            if (read)
+                for (int i = 0; i < 4; ++i)
+                    insets[i] = std::max(in[i], 0);
         }
 
         // ---- the clipboard: Context.getSystemService("clipboard"), ClipData as plain text
@@ -398,8 +470,17 @@ namespace esia::platform::android
             m.activity->vm->DetachCurrentThread();
     }
 
-    void Platform::SetWindow(void* window) { impl_->window = static_cast<ANativeWindow*>(window); }
-    void Platform::ConfigurationChanged() { impl_->ReadDensity(); }
+    void Platform::SetWindow(void* window)
+    {
+        impl_->window = static_cast<ANativeWindow*>(window);
+        impl_->insetCountdown = 0;   // the insets are read again with the next frame
+    }
+
+    void Platform::ConfigurationChanged()
+    {
+        impl_->ReadDensity();
+        impl_->insetCountdown = 0;
+    }
 
     void Platform::SetFocused(bool focused)
     {
@@ -430,13 +511,22 @@ namespace esia::platform::android
 
     FrameInfo Platform::Frame() const
     {
-        const Impl& m = *impl_;
+        Impl& m = *impl_;
         FrameInfo f;
         f.visible = m.window != nullptr;
         f.width = m.window ? ANativeWindow_getWidth(m.window) : 0;
         f.height = m.window ? ANativeWindow_getHeight(m.window) : 0;
         f.scale = m.Scale();
         f.focused = m.focused;
+        if (m.window && --m.insetCountdown <= 0)
+        {
+            m.ReadInsets();
+            m.insetCountdown = Impl::kInsetFrames;
+        }
+        f.safeLeft = m.insets[0];
+        f.safeTop = m.insets[1];
+        f.safeRight = m.insets[2];
+        f.safeBottom = m.insets[3];
         return f;
     }
 
