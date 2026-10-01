@@ -633,6 +633,11 @@ CTest properties (`esia-vulkan` request 2, optional).
    adapter. The same sequence gives a working device without the debug layer, or on the RTX 4080
    (`ESIA_D3D_ADAPTER=high-performance`); a D3D12 device made before enabling the layer is no problem either. A
    driver issue, not Esia's. CTest runs each backend in its own process, so the suite never meets it.
+9. **PingFang through Core Text on macOS 15.** On GitHub's macos-15 runners, four ideographs in PingFang SC at 32 px
+   (the `coretext:` path, `src/esia/text/ft/platform_face.cpp`) measure 130.69 px, against Core Text's own advances of
+   128 px (2.1 % wider); on macOS 27 the two agree exactly. Not explained without a macOS 15 machine: the variation
+   axes `CTFontCopyVariation` reports, as HarfBuzz applies them through HVAR, are the first suspect.
+   `FreeType.SystemFontsCoreTextDraws` holds it within 3 % before macOS 26 and to 0.5 px from 26 on.
 
 ## 7. Building and testing
 
