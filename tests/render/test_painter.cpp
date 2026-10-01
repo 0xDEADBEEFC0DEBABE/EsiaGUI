@@ -208,6 +208,26 @@ ESIA_TEST(Painter, CheapPrimitives)
     ESIA_CHECK(p.SnapToPixel(10.3f) == 10.5f);
 }
 
+// Masks and scales reach SDF shapes only: a square FillRect under one becomes one (a checkerboard in a capsule, a
+// number field's fill in its rounded well kept their square corners), and stays indexed geometry otherwise.
+ESIA_TEST(Painter, FillRectFollowsMasksAndScales)
+{
+    DrawList dl = MakeList();
+    PainterEnv env;
+    Painter p(dl, env);
+    p.PushMask(Rect(0, 0, 40, 20), 10.0f);
+    p.FillRect(Rect(0, 0, 10, 20), Color::White());
+    p.PopMask();
+    p.PushScale(Vec2(20, 10), 0.5f);
+    p.FillRect(Rect(0, 0, 10, 20), Color::White());
+    p.PopScale();
+    p.FillRect(Rect(0, 0, 10, 20), Color::White());
+    ESIA_CHECK(dl.FxInstances().size() == 2);
+    ESIA_CHECK(dl.Vertices().size() == 4);
+    if (dl.FxInstances().size() == 2)
+        ESIA_CHECK(dl.FxInstances()[0].maskParams[0] > 0.0f && dl.FxInstances()[1].maskParams[0] == 0.0f);
+}
+
 ESIA_TEST(Painter, SquareImagesOnThePixelGridAreQuads)
 {
     DrawList dl = MakeList();

@@ -488,9 +488,10 @@ namespace esia
     // ------------------------------------------------------------ cheap primitives
     void Painter::FillRect(const esia::Rect& r, Color c, float rounding)
     {
-        if (rounding > 0.0f)
+        if (rounding > 0.0f || maskDepth_ > 0 || scaleDepth_ > 0)
         {
-            // rounded: one SDF instance (anti-aliased corners) instead of a tessellated outline
+            // rounded: one SDF instance (anti-aliased corners) instead of a tessellated outline; under a mask or a
+            // scale too, which only SDF shapes follow (a checkerboard in a capsule kept its square corners)
             Rect(r, Style().Fill(c).Radius(rounding).Smoothing(0.0f));
             return;
         }
