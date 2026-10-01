@@ -51,6 +51,7 @@ namespace glass
             float scale = 0.0f;                       // pixels per UI unit (0 = the screen's backing scale)
             bool vsync = true, debug = false, stats = false, fullscreen = false;
             int fullscreenAt = -1;   // --fullscreen-at N: toggle full screen after frame N (tests)
+            int hideAt = -1;         // --hide-at N: hide the app after frame N, as Cmd+H does (tests)
             double fixedDt = 0.0;
             int frames = 0;
             std::string screenshot;
@@ -89,6 +90,8 @@ namespace glass
                     o.fullscreen = true;
                 else if (a == "--fullscreen-at" && needs())
                     o.fullscreenAt = std::atoi(value);
+                else if (a == "--hide-at" && needs())
+                    o.hideAt = std::atoi(value);
                 else if (a == "--no-shader-cache")
                     ;
                 else if (a == "--api" && needs())
@@ -668,6 +671,7 @@ namespace glass
             esia::Context* Ctx() const { return ctx_.get(); }
             int FrameCount() const { return frame_; }
             int FullscreenAt() const { return opt_.fullscreenAt; }
+            int HideAt() const { return opt_.hideAt; }
             const esia::PlatformRequests* Requests() const { return ctx_ ? &ctx_->Requests() : nullptr; }
 
             // One frame into `texture`; `finish` adds to the command buffer before it is committed (present, copy).
@@ -1057,6 +1061,8 @@ namespace glass
 {
     if (runner_->FrameCount() == runner_->FullscreenAt())
         [self.window toggleFullScreen:nil];
+    if (runner_->FrameCount() == runner_->HideAt())
+        [NSApp hide:nil];
     const esia::PlatformRequests* r = runner_->Requests();
     if (!r)
         return;
@@ -1282,6 +1288,12 @@ namespace glass
 
         @autoreleasepool
         {
+            // A frame loop is user-initiated and latency critical, as a game's: without this, macOS naps the app
+            // once its window is hidden or covered for half a minute, and its main thread runs on efficiency cores
+            // (UI and encoding 4 - 6 times slower; measured with --hide-at). Idle system sleep stays allowed.
+            static id<NSObject> activity = [NSProcessInfo.processInfo beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep | NSActivityLatencyCritical
+                                                                                       reason:@"Esia frame loop"];
+            (void)activity;
             NSApplication* nsApp = [NSApplication sharedApplication];
             [nsApp setActivationPolicy:NSApplicationActivationPolicyRegular];
             GlassAppDelegate* delegate = [GlassAppDelegate new];

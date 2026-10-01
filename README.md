@@ -82,7 +82,7 @@ glass_window                               # the smoke test: glass, the core's w
 | `--size WxH`, `--scale s` | client area in UI units, and pixels per UI unit (default: the monitor's); `--size 1512x945 --scale 2` is 3024 x 1890 pixels |
 | `--vsync on \| off` | off: no frame cap. On macOS a window cannot present faster than the display, so frames render into offscreen targets as fast as they can and the newest is presented each refresh |
 | `--stats` | macOS: once a second the frame rate, UI / encode / wait times, the GPU time of the frame's command buffer, passes, backdrop captures, frames shown and dropped |
-| `--fullscreen`, `--fullscreen-at N` | macOS: start in full screen, or enter it after frame N |
+| `--fullscreen`, `--fullscreen-at N`, `--hide-at N` | macOS: start in full screen, enter it after frame N, or hide the app after frame N (tests: the frame loop keeps its speed hidden, it declares itself latency critical so macOS does not nap it) |
 | `--frames N`, `--screenshot out.png`, `--fixed-dt s` | quit after N frames, write the last one, advance the UI clock by `s` per frame (deterministic captures) |
 | `--debug` | the API's validation layer (Metal: `MTL_DEBUG_LAYER`); the message count is printed at exit |
 | `--font file` | font files instead of the system's (the first is the main one) |
@@ -93,7 +93,8 @@ Symbols for esia::ui's icons (Windows' icon fonts are not there) and a system wa
 
 **Performance on Metal** (showcase, MacBook Pro M3 Pro, 3024 x 1890 pixels at UI scale 2, `--vsync off`): about 140
 fps with the shader library generated before the FX feature variants, about 170 fps with them (the Fx shader is
-specialized per batch through Metal function constants). Where the time goes: the glass panels' pixels, the drop
+specialized per batch through Metal function constants); about 180 fps in the default 2560 x 1600 window. The GPU's
+clock follows its temperature and load: a hot laptop or another app drawing can halve these for a while. Where the time goes: the glass panels' pixels, the drop
 shadows around them, and about 15 backdrop captures per frame, each of which ends and resumes the render pass. Measure
 with `--stats` or Instruments' Metal System Trace.
 
