@@ -83,7 +83,7 @@ namespace glass
             for (const std::string& api : apis)
             {
                 std::unique_ptr<Host> h = CreateHost(api);
-                if (h && h->Init(static_cast<HWND>(platform.Hwnd()), fi.width, fi.height, {opt.vsync, opt.debug}, error))
+                if (h && h->Init({static_cast<HWND>(platform.Hwnd())}, fi.width, fi.height, {opt.vsync, opt.debug}, error))
                 {
                     host = std::move(h);
                     break;

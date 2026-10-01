@@ -26,24 +26,29 @@ import sys
 import tempfile
 
 BACKENDS = ['src/esia/rhi/directx', 'src/esia/rhi/opengl', 'src/esia/rhi/vulkan', 'src/esia/rhi/metal']
-# The example hosts of each API on Windows (glass_window builds the ones whose backend is there).
+# The example hosts of each API (glass_window builds the ones whose backend is there): OpenGL has one per system (WGL,
+# EGL on X11), the Vulkan host serves both.
 HOSTS = {
     'directx': ['examples/glass_window/host_d3d9.cpp', 'examples/glass_window/host_d3d10.cpp',
                 'examples/glass_window/host_d3d11.cpp', 'examples/glass_window/host_d3d12.cpp',
                 'examples/glass_window/dxgi_swap_chain.cpp', 'examples/glass_window/dxgi_swap_chain.hpp'],
-    'opengl': ['examples/glass_window/host_opengl.cpp'],
+    'opengl': ['examples/glass_window/host_opengl.cpp', 'examples/glass_window/host_opengl_egl.cpp'],
     'vulkan': ['examples/glass_window/host_vulkan.cpp'],
 }
+# The hosts' interface (Windows and Linux); the icon text system of the frames without Windows' icon fonts (Apple, Linux).
+HOST_COMMON = ['examples/glass_window/host.cpp', 'examples/glass_window/host.hpp']
+SYMBOLS = ['examples/glass_window/symbol_text.hpp']
 # What only Apple systems build; what only Windows builds; what only Linux builds.
 APPLE = ['src/esia/text/system_fonts_apple.cpp', 'examples/glass_window/Info-ios.plist.in',
          'examples/glass_window/app_apple.hpp', 'examples/glass_window/app_apple.mm', 'examples/glass_window/app_ios.mm',
          'examples/glass_window/app_macos.mm', 'examples/showcase/image_file_apple.mm', 'tests/text/coretext_util.cpp',
          'cmake/toolchains/apple-ios.cmake', 'cmake/toolchains/clang-macos.cmake', 'tools/ios']
 WINDOWS = ['src/esia/platform/win32', 'include/esia/platform', 'src/esia/text/system_fonts_windows.cpp',
-           'examples/glass_window/app.cpp', 'examples/glass_window/host.cpp', 'examples/glass_window/host.hpp',
-           'examples/showcase/image_file.cpp', 'cmake/toolchains/clang-cl-windows.cmake',
+           'examples/glass_window/app.cpp', 'examples/showcase/image_file.cpp', 'cmake/toolchains/clang-cl-windows.cmake',
            'cmake/toolchains/clang-cl-xwin.cmake', 'cmake/toolchains/clang-mingw.cmake']
-LINUX = ['src/esia/text/system_fonts_unix.cpp', 'cmake/toolchains/clang-linux.cmake']
+LINUX = ['src/esia/text/system_fonts_unix.cpp', 'cmake/toolchains/clang-linux.cmake', 'examples/glass_window/app_linux.cpp',
+         'examples/glass_window/icons_linux.cpp', 'examples/glass_window/icons_linux.hpp',
+         'examples/showcase/image_file_linux.cpp']
 # Every branch: no CI of its own (main's covers it), no screenshots of other APIs.
 COMMON_DROP = ['.github', 'examples/glass_window/wine_screenshots']
 
@@ -56,11 +61,11 @@ def drop(branch):
     backend = 'src/esia/rhi/' + branch
     paths = [b for b in BACKENDS if b != backend]
     if branch == 'directx':
-        return paths + others('directx', HOSTS) + APPLE + LINUX
+        return paths + others('directx', HOSTS) + APPLE + LINUX + SYMBOLS
     if branch in ('opengl', 'vulkan'):
         return paths + others(branch, HOSTS) + APPLE
     if branch == 'metal':
-        return paths + [p for h in HOSTS.values() for p in h] + WINDOWS + LINUX
+        return paths + [p for h in HOSTS.values() for p in h] + HOST_COMMON + WINDOWS + LINUX
     raise ValueError(branch)
 
 
@@ -87,15 +92,16 @@ and lld on PATH, from an "x64 Native Tools" prompt): `cmake --preset windows-cla
 `cmake --build --preset windows-clang-cl`. Keep the clone's path under about 140 characters: Visual Studio's build
 fails on paths over 260.
 """
-LINUX_BUILD = """clang, lld, Ninja and CMake (Ubuntu: `sudo apt install clang lld ninja-build cmake libfreetype-dev
-libharfbuzz-dev{extra}`):
+LINUX_BUILD = """clang, lld, Ninja and CMake, and X11 for the examples (Ubuntu: `sudo apt install clang lld ninja-build cmake
+libfreetype-dev libharfbuzz-dev libx11-dev libjpeg-dev{extra}`):
 
 ```
 cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
-There is no example window on Linux yet: the library, its tests and the conformance suite.
+The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
+the desktop's icon theme for the icons, Ubuntu's wallpaper.
 """
 README = {
     'directx': """# Esia for DirectX
@@ -175,7 +181,9 @@ def git(*args, env=None, input=None):
 
 
 def blob(text):
-    return git('hash-object', '-w', '--stdin', input=text)
+    # bytes, not text: on Windows a text pipe would write CRLF line ends, and the branch would differ from CI's
+    return subprocess.run(['git', 'hash-object', '-w', '--stdin'], check=True, capture_output=True,
+                          input=text.encode('utf-8')).stdout.decode().strip()
 
 
 def presets(source, keep):

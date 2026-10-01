@@ -104,6 +104,9 @@ float4 WgtEffect(WgtFx fx)
         {"telemetry", "Telemetry", icon::Diagnostic, 0x30D158, {430, 460}, {470, 120}, false},
         {"plugin", "Plugin: Hello", icon::Code, 0x5E5CE6, {360, 380}, {-1, -1}, false},
     };
+    // --spread: every panel open, side by side, none over another or under the island and the dock, in a window of
+    // 1872 x 1400 UI units (the README's picture)
+    const Vec2 kSpread[PanelCount] = {{40, 140}, {454, 140}, {40, 864}, {948, 140}, {1402, 140}, {474, 824}, {1437, 924}};
 
     float S(float v) { return ui::S(v); }
     Rect Bottom(const Rect& r, float h) { return Rect(r.min.x, r.max.y - h, r.max.x, r.max.y); }
@@ -135,6 +138,7 @@ float4 WgtEffect(WgtFx fx)
         float styledSlider = 0.6f;
         int styledSegment = 1;
         bool openMenu = false;
+        bool spread = false;   // --spread: panels at kSpread
         std::string openPage;
 
         // settings
@@ -1089,7 +1093,7 @@ float4 WgtEffect(WgtFx fx)
                 const PanelInfo& pi = kPanels[i];
                 ui::WindowOptions wo;
                 wo.size = pi.size;
-                wo.pos = pi.pos;
+                wo.pos = spread ? kSpread[i] : pi.pos;
                 if (compact)
                     FitCompact(wo);
                 wo.icon = pi.icon;
@@ -1143,6 +1147,12 @@ int main(int argc, char** argv)
                 b = true;
             return true;
         }
+        if (o == "--spread")
+        {
+            for (bool& b : d.open)
+                b = true;
+            return d.spread = true;
+        }
         if (o == "--menu")
             return d.openMenu = true;
         if (!value)
@@ -1194,20 +1204,23 @@ int main(int argc, char** argv)
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
         desc.glassLook = look;
-#if defined(__APPLE__)
-        desc.iconFontFile = glass::kSystemSymbolsFont;   // SF Symbols for the icons
+#if !defined(_WIN32)
+        desc.iconFontFile = glass::kSystemSymbolsFont;   // SF Symbols, or the Linux desktop's icon theme, for the icons
 #endif
         d.glassLook = (int)look;
         d.ui = std::make_unique<ui::Ui>(ctx, desc);
         // the wallpaper WGT's demo used, scaled down to 2560 on its longer side
         showcase::ImageFile wall;
-        // (on macOS one of the system's: WGT's is a Windows file; on iOS the app bundle's, from the Mac that built it)
+        // (on macOS one of the system's: WGT's is a Windows file; on iOS the app bundle's, from the Mac that built it; on
+        // Linux Ubuntu's, else GNOME's)
 #if defined(__APPLE__) && TARGET_OS_IPHONE
         for (const wchar_t* path : {L"wallpaper.jpg"})
 #elif defined(__APPLE__)
         for (const wchar_t* path : {L"/System/Library/Desktop Pictures/Sonoma.heic", L"/System/Library/Desktop Pictures/Mac Blue.heic"})
-#else
+#elif defined(_WIN32)
         for (const wchar_t* path : {L"C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg", L"C:\\Windows\\Web\\4K\\Wallpaper\\Windows\\img0_1920x1200.jpg"})
+#else
+        for (const wchar_t* path : {L"/usr/share/backgrounds/warty-final-ubuntu.png", L"/usr/share/backgrounds/gnome/adwaita-l.jpg"})
 #endif
             if (showcase::LoadImageFile(path, wall, 2560))
                 break;
