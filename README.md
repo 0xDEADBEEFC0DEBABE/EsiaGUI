@@ -326,8 +326,13 @@ The examples are `build/macos-clang/bin/showcase` and `glass_window`.
 
 ## iOS
 
-<p align="center"><img src="docs/images/showcase-ios.jpg" width="80%" alt="Three screens of the showcase on an iPhone: Settings, the Control Center and the Languages panel with Chinese in PingFang, color emoji and flags"></p>
-<p align="center"><sub>The showcase on an iPhone 18 Pro Max (iOS 27), Metal: Settings, Control Center, Languages.</sub></p>
+<p align="center">
+  <img src="docs/images/ios-settings.jpg" width="30%" alt="The showcase's Settings panel on an iPhone, under the Dynamic Island, the status bar and the dock below it">
+  <img src="docs/images/ios-control-center.jpg" width="30%" alt="The Control Center on an iPhone: glass toggles, the media card, sliders and the Focus module">
+  <img src="docs/images/ios-languages.jpg" width="30%" alt="The Languages panel on an iPhone: Chinese in PingFang, Japanese, Korean, Arabic, Hebrew, Hindi, Thai and color emoji">
+</p>
+<p align="center"><sub>The showcase on an iPhone 18 Pro Max (iOS 27), Metal: Settings, Control Center, Languages, screenshots
+taken on the phone.</sub></p>
 
 **Build** (iPhones and iPads, iOS 16 or later; on a Mac with Xcode). The examples become app bundles, signed after the
 link with a provisioning profile Xcode has for them (`tools/ios/codesign.py`: sign in to Xcode with your Apple ID; a
