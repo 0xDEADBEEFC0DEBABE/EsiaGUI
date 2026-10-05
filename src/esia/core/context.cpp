@@ -60,15 +60,19 @@ namespace esia
             w->hitsPrev_.clear();
             w->childrenPrev_.clear();
             w->laidOutPrev_.clear();
+            w->lineRoomPrev_.clear();
             if (w->wasActive_)
             {
                 w->hitsPrev_.swap(w->hits_);
                 w->childrenPrev_.swap(w->children_);
                 w->laidOutPrev_.swap(w->laidOut_);
+                w->lineRoomPrev_.swap(w->lineRoom_);
+                std::sort(w->lineRoomPrev_.begin(), w->lineRoomPrev_.end());
             }
             w->hits_.clear();
             w->children_.clear();
             w->laidOut_.clear();
+            w->lineRoom_.clear();
         }
         // what refers to a window that was not submitted lets go of it (it may be freed below)
         if (focusedWindow_ && !focusedWindow_->wasActive_)
@@ -372,6 +376,14 @@ namespace esia
             else
                 w->hidden_ = false;
             Vec2 sz(Clamp(w->rect_.Width(), w->minSize_.x, w->maxSize_.x), Clamp(w->rect_.Height(), w->minSize_.y, w->maxSize_.y));
+            // An auto-sized window is whole physical pixels in size, and placed on them (below). Layout positions
+            // snap to pixels, so what its content measures depends on where it starts between two pixels; anchored
+            // at its right (a menu under a button's right edge) its place in turn depends on that size: the two fed
+            // each other and its edge crept and jumped every frame.
+            const bool autoSize = (w->flags_ & WindowFlags_AutoSize) != 0;
+            const float pixel = 1.0f / std::max(w->scaleKnown_ ? w->scale_ : MonitorScale(w->rect_), 1e-3f);
+            if (autoSize)
+                sz = Vec2(std::ceil(sz.x / pixel - 1e-3f) * pixel, std::ceil(sz.y / pixel - 1e-3f) * pixel);
             if (hasNextPos_ && applies(nextPosCond_))
                 w->rect_ = Rect::FromSize(nextPos_ - sz * nextPivot_, sz);
             w->rect_.max = w->rect_.min + sz;
@@ -401,6 +413,11 @@ namespace esia
             }
             else if (!(w->flags_ & WindowFlags_NoMove) && w->layer_ != WindowLayer::Background)
                 KeepOnScreen(*w);
+            if (autoSize)
+            {
+                const float px = 1.0f / std::max(w->scale_, 1e-3f);
+                w->rect_ = Rect::FromSize(Vec2(std::floor(w->rect_.min.x / px + 1e-3f) * px, std::floor(w->rect_.min.y / px + 1e-3f) * px), w->rect_.Size());
+            }
 
             w->active_ = true;
             w->lastFrame_ = frame_;
@@ -752,6 +769,7 @@ namespace esia
         wo.flags = WindowFlags_NoMove | WindowFlags_NoResize | WindowFlags_AutoSize;
         wo.layer = WindowLayer::Overlay;
         wo.minSize = options.minSize;
+        wo.maxSize = options.maxSize;
         wo.padding = options.padding;
         const Vec2 anchor = options.pos.x != kNoMousePos ? options.pos : e.openPos;
         SetNextWindowPos(anchor, Cond::Always, options.pivot);

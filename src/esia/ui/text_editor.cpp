@@ -570,6 +570,7 @@ namespace esia::ui
         co.size = r.Size() - Vec2(pad, pad);
         co.padding = Vec2(pad * 0.5f, pad * 0.5f);
         co.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll | (o.wrap ? 0u : ChildFlags_ScrollX);
+        c.PushId(id);   // the editor's id scope: two editors in a window scroll on their own
         const Id child = c.GetId("##lines");
         ScrollBegin(child);
         c.BeginChild("##lines", co);
@@ -718,6 +719,7 @@ namespace esia::ui
         EndScrollEdgeFade(fade);
         ScrollEnd(child, -1.0f);
         c.EndChild();
+        c.PopId();
         if (!comp.empty())
             M().animating = true;
         return result;
