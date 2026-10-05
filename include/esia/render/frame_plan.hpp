@@ -116,5 +116,6 @@ namespace esia::render
         };
         std::vector<Piece> pieces_;
         std::vector<std::uint32_t> opFirst_, opLast_;
+        std::vector<int> layerStack_;   // the layers open while Build walks the lists
     };
 }

@@ -57,6 +57,9 @@ namespace esia
         Vec2 minSize{32, 32};
         Vec2 maxSize{1e6f, 1e6f};
         Vec2 padding{-1, -1};        // < 0 = LayoutMetrics::windowPadding
+        // UI units: a square at the bottom-right corner that resizes the window both ways, above the items there (where
+        // the widget layer draws a grip; a rounded corner lies well inside the edges' bands). 0 = the edges only.
+        float resizeGrip = 0.0f;
     };
 
     enum ItemFlags_ : std::uint32_t
@@ -293,6 +296,7 @@ namespace esia
         WindowLayer layer_ = WindowLayer::Normal;
         bool active_ = false, wasActive_ = false, appearing_ = true, hidden_ = false, wasHidden_ = false;
         bool measured_ = false;           // AutoSize: its content was measured at least once
+        float resizeGrip_ = 0.0f;         // WindowOptions::resizeGrip
         float scale_ = 1.0f;
         bool scaleKnown_ = false, scaleChanged_ = false;
         std::uint64_t lastFrame_ = 0;

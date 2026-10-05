@@ -71,16 +71,26 @@ namespace esia::ui
                 Ctx().SetNextScroll(Vec2(-1.0f, s.followY));   // no glide: the content stays under the pointer
         }
 
-        float WindowLane(const Rect& view)
+        float WindowLane(const Rect& view, float* cornerRadius)
         {
             const Ui::Impl& m = M();
+            if (cornerRadius)
+                *cornerRadius = 0.0f;
             for (auto it = m.containers.rbegin(); it != m.containers.rend(); ++it)
                 if (it->kind == Ui::Impl::ContainerEntry::Kind::Window)
-                    return std::fabs(view.max.x - (it->view.max.x - it->padX)) < 1.0f && it->padX >= IndicatorLane() - 0.5f ? it->view.max.x - it->padX * 0.5f : -1.0f;
+                {
+                    if (!(std::fabs(view.max.x - (it->view.max.x - it->padX)) < 1.0f && it->padX >= IndicatorLane() - 0.5f))
+                        return -1.0f;
+                    if (cornerRadius)
+                        *cornerRadius = it->radius;
+                    return it->view.max.x - it->padX * 0.5f;
+                }
             return -1.0f;
         }
 
-        void ScrollEnd(Id child, float laneX)
+        float ResizeGripSize() { return Sc(26); }
+
+        void ScrollEnd(Id child, float laneX, float cornerRadius)
         {
             Ui::Impl& m = M();
             Context& c = *m.ctx;
@@ -103,7 +113,12 @@ namespace esia::ui
             const float lane = IndicatorLane();
             const float x = laneX >= 0.0f ? laneX : view.max.x - lane * 0.5f;
             const float trackPad = Sc(6);
-            const float trackH = std::max(view.Height() - trackPad * 2.0f, 1.0f);
+            // In its window's lane the track ends above the window's rounded bottom corner: the indicator stays inside
+            // the window's shape (it ran down into the corner's curve) and off the grip that resizes the window.
+            float trackEnd = view.max.y - trackPad;
+            if (cornerRadius > 0.0f)
+                trackEnd = std::min(trackEnd, c.CurrentWindow()->GetRect().max.y - std::max(cornerRadius, trackPad));
+            const float trackH = std::max(trackEnd - (view.min.y + trackPad), 1.0f);
             const float thumbH = std::min(std::max(Sc(36), trackH * view.Height() / (view.Height() + max)), trackH);
             const float thumbY = view.min.y + trackPad + (trackH - thumbH) * (max > 0.0f ? Saturate(scroll / max) : 0.0f);
             const Rect hit(x - lane * 0.5f, view.min.y, x + lane * 0.5f, view.max.y);
@@ -293,7 +308,9 @@ namespace esia::ui
     {
         const Entry e = PopEntry(Entry::Kind::Scroll);
         EndScrollEdgeFade(e.edgeFade);
-        ScrollEnd(e.child, WindowLane(Ctx().ViewRect()));
+        float radius = 0.0f;
+        const float lane = WindowLane(Ctx().ViewRect(), &radius);
+        ScrollEnd(e.child, lane, radius);
         Ctx().EndChild();
     }
 
@@ -387,6 +404,8 @@ namespace esia::ui
             wo.flags |= esia::WindowFlags_NoInputs;
         wo.padding = Vec2(0, 0);
         wo.minSize = Vec2(Sc(220), Sc(160));
+        if (!(o.flags & WindowFlags_NoResize))
+            wo.resizeGrip = ResizeGripSize();   // where the grip shows (EndWindow): its corner is well inside the edges
         if (docked)
         {
             // behind the floating windows, where its node puts it
@@ -505,6 +524,7 @@ namespace esia::ui
         const float side = std::floor(padX * 0.5f);
         const float cut = side < radius ? radius - std::sqrt(std::max(radius * radius - (radius - side) * (radius - side), 0.0f)) + 1.0f : 0.0f;
         e.cornerCut = cut;
+        e.radius = radius;
         c.SetCursorPos(Vec2(wr.min.x, wr.min.y + headerH));
         ChildOptions co;
         co.size = Vec2(wr.Width(), std::max(1.0f, wr.Height() - headerH));
@@ -539,14 +559,14 @@ namespace esia::ui
         c.ItemSize(Vec2(0, std::max(Sc(T().metrics.padding), e.cornerCut)));
         EndScrollEdgeFade(e.edgeFade);
         if (!(e.windowFlags & WindowFlags_NoScroll))
-            ScrollEnd(e.child, e.padX >= Sc(12) - 0.5f ? e.view.max.x - e.padX * 0.5f : -1.0f);
+            ScrollEnd(e.child, e.padX >= Sc(12) - 0.5f ? e.view.max.x - e.padX * 0.5f : -1.0f, e.padX >= Sc(12) - 0.5f ? e.radius : 0.0f);
         c.EndChild();
 
         // resize affordance at the bottom-right corner, shown while the mouse is near it
         if (!(e.windowFlags & WindowFlags_NoResize))
         {
             const Rect wr = c.CurrentWindow()->GetRect();
-            const float zone = Sc(26);
+            const float zone = ResizeGripSize();
             const InputState& in = c.Input();
             const bool nearCorner = c.HoveredWindow() == c.CurrentWindow() && in.MouseValid() &&
                                     Rect(wr.max - Vec2(zone, zone), wr.max + Vec2(4, 4)).Contains(in.MousePos());

@@ -47,7 +47,7 @@ icons are Google's Material Icons, downloaded when configuring.
 
 ## About this branch
 
-It is generated from `main` (e8c4ff4) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (0f2e0f0) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.
 
 ## License
