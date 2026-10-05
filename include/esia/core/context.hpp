@@ -311,7 +311,7 @@ namespace esia
         // per item of a line followed by SameLine items: how far the line reached past it (LineRoom); last frame's
         // sorted by key
         std::vector<std::pair<Id, float>> lineRoom_, lineRoomPrev_;
-        std::unordered_map<Id, ChildState> childStates_;
+        std::unordered_map<Id, ChildState, IntHash> childStates_;
     };
 
     class ESIA_API Context

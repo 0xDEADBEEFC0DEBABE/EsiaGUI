@@ -6,6 +6,7 @@
 // updated from any thread; a change becomes visible in the next frame that collects it.
 #pragma once
 #include "esia/base/math.hpp"
+#include "esia/base/hash.hpp"
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -57,7 +58,7 @@ namespace esia
     private:
         mutable std::mutex mutex_;
         TextureId next_ = 1;
-        std::unordered_map<TextureId, TextureInfo> live_;
+        std::unordered_map<TextureId, TextureInfo, IntHash> live_;
         std::vector<TextureChange> pending_;
     };
 }

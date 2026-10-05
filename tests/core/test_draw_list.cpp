@@ -28,6 +28,40 @@ ESIA_TEST(DrawList, GeometryMergesUntilStateChanges)
     ESIA_CHECK(dl.Commands()[2].first == 18);
 }
 
+// A quad run (a text's glyphs) leaves exactly what AddRectFilledUV one by one does: the same vertices, indices
+// and commands, continuing the open command of its texture, with fewer quads written than reserved.
+ESIA_TEST(DrawList, QuadRunsMatchSingleQuads)
+{
+    DrawList a, b;
+    a.Reset(Rect(0, 0, 100, 100));
+    b.Reset(Rect(0, 0, 100, 100));
+    for (DrawList* dl : {&a, &b})
+    {
+        dl->AddRectFilled(Rect(0, 0, 10, 10), 0xFFFFFFFFu);
+        dl->PushTexture(7);
+        dl->AddRectFilledUV(Rect(1, 1, 2, 2), Vec2(0, 0), Vec2(0.5f, 0.5f), 0xFF0000FFu);
+        dl->PopTexture();
+    }
+    const Rect glyphs[3] = {Rect(10, 10, 14, 18), Rect(15, 10, 19, 18), Rect(20, 9, 24, 18)};
+    for (const Rect& r : glyphs)
+        a.AddImage(7, r, Vec2(0.25f, 0.5f), Vec2(0.75f, 1.0f), 0xFF00FF00u);
+    a.AddImage(9, Rect(30, 10, 40, 20), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    DrawList::QuadWriter w = b.BeginQuads(7, 5);   // two more reserved than written
+    for (const Rect& r : glyphs)
+        w.Add(r, Vec2(0.25f, 0.5f), Vec2(0.75f, 1.0f), 0xFF00FF00u);
+    b.EndQuads(w);
+    w = b.BeginQuads(9, 1);
+    w.Add(Rect(30, 10, 40, 20), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    b.EndQuads(w);
+    ESIA_CHECK(b.CurrentTexture() == 0);
+    ESIA_CHECK(a.Vertices().size() == b.Vertices().size() && a.Indices() == b.Indices());
+    ESIA_CHECK(std::memcmp(a.Vertices().data(), b.Vertices().data(), a.Vertices().size() * sizeof(Vertex)) == 0);
+    ESIA_CHECK(a.Commands().size() == 3 && b.Commands().size() == 3);   // white, page 7 (continued), page 9
+    for (std::size_t i = 0; i < a.Commands().size() && i < b.Commands().size(); ++i)
+        ESIA_CHECK(a.Commands()[i].texture == b.Commands()[i].texture && a.Commands()[i].first == b.Commands()[i].first &&
+                   a.Commands()[i].count == b.Commands()[i].count);
+}
+
 ESIA_TEST(DrawList, TransparentGeometryIsSkipped)
 {
     DrawList dl;

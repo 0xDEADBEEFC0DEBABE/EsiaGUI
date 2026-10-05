@@ -12,6 +12,7 @@
 //   * GL keeps an object alive while queued commands use it, so destruction is immediate.
 #pragma once
 #include "esia/rhi/opengl.hpp"
+#include "esia/base/hash.hpp"
 #include "gl_api.hpp"
 #include <string>
 #include <unordered_map>
@@ -210,9 +211,9 @@ namespace esia::rhi::opengl
         std::uint32_t callbackErrors_ = 0;   // errors the KHR_debug callback reported since the last CheckErrors
 
         std::uint32_t next_ = 1;
-        std::unordered_map<std::uint32_t, Tex> textures_;
-        std::unordered_map<std::uint32_t, Buf> buffers_;
-        std::unordered_map<std::uint32_t, Pipe> pipelines_;
+        std::unordered_map<std::uint32_t, Tex, IntHash> textures_;
+        std::unordered_map<std::uint32_t, Buf, IntHash> buffers_;
+        std::unordered_map<std::uint32_t, Pipe, IntHash> pipelines_;
         Program programs_[(int)ShaderProgram::Count];
         Tex resolve_;   // single-sample copy of a multisampled source (readback, format-changing copies)
         GLuint copyProgram_ = 0;         // DrawCopy's program, built at the first sRGB -> raw copy

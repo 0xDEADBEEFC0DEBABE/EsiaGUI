@@ -212,6 +212,12 @@ namespace esia::text
             std::vector<PlacedGlyph> glyphs;
             TextMetrics metrics;
             std::uint64_t lastFrame = 0;
+            // Draw's atlas slots of the glyphs, from its last call: valid while the atlases did not start over and the
+            // em size, the scale and the pen's sub-pixel origin are the same - text drawn where it was last frame
+            // looks nothing up (the per-glyph lookups were a sixth of building the UI)
+            std::vector<const GlyphSlot*> slots;
+            std::uint64_t slotGeneration = 0;   // 0 = none
+            float slotEm = 0.0f, slotScale = 0.0f, slotOrigin = -1.0f;
         };
 
         // FreeType outline (design units, y up) -> Outline (pixels, y down)
@@ -322,6 +328,7 @@ namespace esia::text
                 ++frame_;
                 atlas_.BeginFrame();
                 colorAtlas_.BeginFrame();
+                lastLayout_ = nullptr;   // (it may leave the cache now)
                 // layouts unused for a while leave the cache, and wait (with their storage) to hold the next new texts:
                 // text that changes every frame (a frame rate, a timer) does not allocate once the cache is warm
                 if (layouts_.size() > kLayoutCacheLimit)
@@ -461,7 +468,7 @@ namespace esia::text
             Vec2 Draw(DrawList& dl, FontRef font, Vec2 pos, Color color, std::string_view text, float wrapWidth, std::uint32_t flags,
                       float scale) override
             {
-                const Layout* layout = GetLayout(font, text, wrapWidth, flags);
+                Layout* layout = GetLayout(font, text, wrapWidth, flags);
                 if (!layout)
                     return Vec2(0, 0);
                 if (color.a <= 0.0f || !(scale > 0.0f))
@@ -471,9 +478,23 @@ namespace esia::text
                 const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
                 const std::uint32_t rgba = color.ToRgba8(), colorGlyphRgba = Color::White(color.a).ToRgba8();
                 const Rect clip = dl.ClipRect();
+                // the glyphs' phases follow from the origin's sub-pixel offset and the scale: the same as last time, the
+                // same slots (atlases only start over between frames, and their slots stay where they are)
+                const float originPx = pos.x * rs;
+                const float origin = originPx - std::floor(originPx);
+                const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
+                const std::size_t n = layout->glyphs.size();
+                const bool reuse = layout->slotGeneration == generation && layout->slotEm == em && layout->slotScale == scale &&
+                                   layout->slotOrigin == origin && layout->slots.size() == n;
+                if (!reuse)
+                    layout->slots.assign(n, nullptr);
+                // the glyphs go in as quad runs, one per atlas page (a color glyph's page interrupts one)
+                const bool rgbaShown = (rgba >> 24) != 0, colorShown = (colorGlyphRgba >> 24) != 0;
                 TextureId bound = 0;
-                for (const PlacedGlyph& g : layout->glyphs)
+                DrawList::QuadWriter run;
+                for (std::size_t gi = 0; gi < n; ++gi)
                 {
+                    const PlacedGlyph& g = layout->glyphs[gi];
                     // physical-pixel placement: the baseline on a whole pixel, the pen at a quarter-pixel phase
                     const float px = (pos.x + g.pos.x * scale) * rs, py = (pos.y + g.pos.y * scale) * rs;
                     float xi = std::floor(px);
@@ -484,24 +505,28 @@ namespace esia::text
                         xi += 1.0f;
                     }
                     const float yi = std::floor(py + 0.5f);
-                    const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase);
+                    const GlyphSlot* s = reuse ? layout->slots[gi] : (layout->slots[gi] = Glyph(g.face, g.glyph, em, phase));
                     if (!s || !s->page)
                         continue;
                     const Rect r((xi + (float)s->left) * inv, (yi + (float)s->top) * inv, (xi + (float)(s->left + s->width)) * inv,
                                  (yi + (float)(s->top + s->height)) * inv);
-                    if (!r.Overlaps(clip))
+                    if (!r.Overlaps(clip) || r.Empty() || !(s->color ? colorShown : rgbaShown))
                         continue;
                     if (s->page != bound)
                     {
                         if (bound)
-                            dl.PopTexture();
-                        dl.PushTexture(s->page);
+                            dl.EndQuads(run);
+                        run = dl.BeginQuads(s->page, (std::uint32_t)(n - gi));
                         bound = s->page;
                     }
-                    dl.AddRectFilledUV(r, s->uv0, s->uv1, s->color ? colorGlyphRgba : rgba);
+                    run.Add(r, s->uv0, s->uv1, s->color ? colorGlyphRgba : rgba);
                 }
                 if (bound)
-                    dl.PopTexture();
+                    dl.EndQuads(run);
+                layout->slotGeneration = generation;
+                layout->slotEm = em;
+                layout->slotScale = scale;
+                layout->slotOrigin = origin;
                 return layout->metrics.size;
             }
 
@@ -697,12 +722,45 @@ namespace esia::text
                 return IsCjk(prev) || IsCjk(cur);
             }
 
-            const Layout* GetLayout(FontRef font, std::string_view text, float wrapWidth, std::uint32_t flags)
+            // A text's key: its parameters and its bytes, 8 at a time (FNV-1a went byte by byte)
+            static std::uint64_t LayoutKey(const std::uint32_t (&params)[4], std::string_view text)
+            {
+                std::uint64_t h = 0x9E3779B97F4A7C15ull ^ text.size();
+                const auto mix = [&h](std::uint64_t v) {
+                    h ^= v * 0xBF58476D1CE4E5B9ull;
+                    h = (h ^ (h >> 29)) * 0x94D049BB133111EBull;
+                };
+                mix(((std::uint64_t)params[0] << 32) | params[1]);
+                mix(((std::uint64_t)params[2] << 32) | params[3]);
+                const char* p = text.data();
+                std::size_t n = text.size();
+                for (; n >= 8; p += 8, n -= 8)
+                {
+                    std::uint64_t v;
+                    std::memcpy(&v, p, 8);
+                    mix(v);
+                }
+                if (n > 0)
+                {
+                    std::uint64_t v = 0;
+                    std::memcpy(&v, p, n);
+                    mix(v);
+                }
+                return h ^ (h >> 31);
+            }
+
+            Layout* GetLayout(FontRef font, std::string_view text, float wrapWidth, std::uint32_t flags)
             {
                 if (font.id == 0 || font.id > faces_.size() || !(font.size > 0.0f))
                     return nullptr;
                 const std::uint32_t params[4] = {font.id, std::bit_cast<std::uint32_t>(font.size), std::bit_cast<std::uint32_t>(wrapWidth), flags};
-                const std::uint64_t key = ((std::uint64_t)HashBytes(params, sizeof(params), 0) << 32) | HashString(text, params[1]);
+                // a widget measures a text and then draws it: the same layout again, found without hashing
+                if (lastLayout_ && lastLayout_->text == text && std::memcmp(lastLayout_->params, params, sizeof(params)) == 0)
+                {
+                    lastLayout_->lastFrame = frame_;
+                    return lastLayout_;
+                }
+                const std::uint64_t key = LayoutKey(params, text);
                 auto it = layouts_.find(key);
                 if (it == layouts_.end())
                 {
@@ -726,9 +784,11 @@ namespace esia::text
                     std::memcpy(layout.params, params, sizeof(params));
                     layout.glyphs.clear();
                     layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
+                    layout.slotGeneration = 0;   // other glyphs: their slots are looked up again
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
+                lastLayout_ = &layout;
                 return &layout;
             }
 
@@ -1345,8 +1405,9 @@ namespace esia::text
             GlyphAtlas colorAtlas_;   // RGBA8: color glyphs
             RasterParams params_;
             std::uint64_t frame_ = 0;
-            std::unordered_map<std::uint64_t, Layout> layouts_;
-            std::vector<std::unordered_map<std::uint64_t, Layout>::node_type> spareLayouts_;   // evicted, to be reused
+            std::unordered_map<std::uint64_t, Layout, IntHash> layouts_;
+            Layout* lastLayout_ = nullptr;   // the last GetLayout's (a measure is followed by the draw)
+            std::vector<std::unordered_map<std::uint64_t, Layout, IntHash>::node_type> spareLayouts_;   // evicted, to be reused
 
             // scratch, reused by every layout
             std::vector<CodePoint> cps_;

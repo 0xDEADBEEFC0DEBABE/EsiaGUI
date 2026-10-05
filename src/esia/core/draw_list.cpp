@@ -79,8 +79,12 @@ namespace esia
     std::uint32_t DrawList::PrimBegin(std::uint32_t indexCount, std::uint32_t vertexCount)
     {
         Geometry();
-        idx_.reserve(idx_.size() + indexCount);
-        vtx_.reserve(vtx_.size() + vertexCount);
+        // grown geometrically: reserve(size + n) allocates exactly that, so a frame that outgrew the last one copied
+        // the whole list at every primitive
+        if (idx_.capacity() < idx_.size() + indexCount)
+            idx_.reserve(std::max(idx_.size() + indexCount, idx_.capacity() * 2));
+        if (vtx_.capacity() < vtx_.size() + vertexCount)
+            vtx_.reserve(std::max(vtx_.size() + vertexCount, vtx_.capacity() * 2));
         return (std::uint32_t)vtx_.size();
     }
 
@@ -88,16 +92,48 @@ namespace esia
     {
         if (r.Empty() || (color >> 24) == 0)
             return;
+        // written in place (a glyph is one of these: text is most of what a frame adds)
         const std::uint32_t b = PrimBegin(6, 4);
-        WriteVertex(r.min, uv0, color);
-        WriteVertex(Vec2(r.max.x, r.min.y), Vec2(uv1.x, uv0.y), color);
-        WriteVertex(r.max, uv1, color);
-        WriteVertex(Vec2(r.min.x, r.max.y), Vec2(uv0.x, uv1.y), color);
-        WriteTriangle(b, b + 1, b + 2);
-        WriteTriangle(b, b + 2, b + 3);
+        const std::size_t v = vtx_.size(), i = idx_.size();
+        vtx_.resize(v + 4);
+        idx_.resize(i + 6);
+        Vertex* w = vtx_.data() + v;
+        w[0] = {r.min, uv0, color};
+        w[1] = {Vec2(r.max.x, r.min.y), Vec2(uv1.x, uv0.y), color};
+        w[2] = {r.max, uv1, color};
+        w[3] = {Vec2(r.min.x, r.max.y), Vec2(uv0.x, uv1.y), color};
+        std::uint32_t* x = idx_.data() + i;
+        x[0] = b;
+        x[1] = b + 1;
+        x[2] = b + 2;
+        x[3] = b;
+        x[4] = b + 2;
+        x[5] = b + 3;
+        cmds_.back().count += 6;
     }
 
     void DrawList::AddRectFilled(const Rect& r, std::uint32_t color) { AddRectFilledUV(r, Vec2(0, 0), Vec2(1, 1), color); }
+
+    DrawList::QuadWriter DrawList::BeginQuads(TextureId texture, std::uint32_t maxQuads)
+    {
+        PushTexture(texture);
+        QuadWriter w;
+        w.base = PrimBegin(maxQuads * 6, maxQuads * 4);
+        const std::size_t i = idx_.size();
+        vtx_.resize(w.base + (std::size_t)maxQuads * 4);
+        idx_.resize(i + (std::size_t)maxQuads * 6);
+        w.vtx = vtx_.data() + w.base;
+        w.idx = idx_.data() + i;
+        return w;
+    }
+
+    void DrawList::EndQuads(const QuadWriter& w)
+    {
+        vtx_.resize(w.base + (std::size_t)w.written * 4);
+        idx_.resize((std::size_t)(w.idx - idx_.data()) + (std::size_t)w.written * 6);
+        cmds_.back().count += w.written * 6;
+        PopTexture();
+    }
 
     void DrawList::AddImage(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
     {

@@ -77,6 +77,35 @@ namespace esia
         void AddTriangleFilled(Vec2 a, Vec2 b, Vec2 c, std::uint32_t color);
         void AddConvexPolyFilled(const Vec2* points, int count, std::uint32_t color);
 
+        // A run of textured quads (a text's glyphs): room for `maxQuads` reserved once with `texture` current, the
+        // quads written in place - the same vertices, indices and command as AddRectFilledUV one by one. Nothing else
+        // may be added to the list until EndQuads, which keeps the quads written.
+        struct QuadWriter
+        {
+            Vertex* vtx = nullptr;
+            std::uint32_t* idx = nullptr;
+            std::uint32_t base = 0, written = 0;
+            void Add(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
+            {
+                Vertex* w = vtx + (std::size_t)written * 4;
+                w[0] = {r.min, uv0, color};
+                w[1] = {Vec2(r.max.x, r.min.y), Vec2(uv1.x, uv0.y), color};
+                w[2] = {r.max, uv1, color};
+                w[3] = {Vec2(r.min.x, r.max.y), Vec2(uv0.x, uv1.y), color};
+                std::uint32_t* x = idx + (std::size_t)written * 6;
+                const std::uint32_t b = base + written * 4;
+                x[0] = b;
+                x[1] = b + 1;
+                x[2] = b + 2;
+                x[3] = b;
+                x[4] = b + 2;
+                x[5] = b + 3;
+                ++written;
+            }
+        };
+        QuadWriter BeginQuads(TextureId texture, std::uint32_t maxQuads);
+        void EndQuads(const QuadWriter& w);
+
         // ---- FX command stream
         void AddFx(const fx::Instance& instance, EffectId effect = 0, TextureId texture = 0);
         void BeginLayer(const fx::LayerParams& params);

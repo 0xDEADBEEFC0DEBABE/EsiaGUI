@@ -136,6 +136,7 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `Draw(3, 0)` | Full-screen triangle, no vertex buffer: `SV_VertexID` 0..2 (Downsample, LayerComposite, Clear). |
 | `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray). |
 | `DrawInstanced(4, n)` | Triangle strip, no vertex buffer, `SV_InstanceID` 0..n-1; the draw's first instance is in the Draw constants. |
+| `DrawInstancedFrom(4, n, first)` | Only with `drawFirstInstance`: the same, with the shaders' instance index starting at `first` (the Draw constants' first instance is 0). Direct3D 11 feeds it as an instance-rate attribute (`INSTANCEINDEX`, an immutable 0, 1, 2 ... buffer at slot 1, `ESIA_INSTANCE_ATTRIBUTE` in `FxVS`): `SV_InstanceID` does not count `StartInstanceLocation`. |
 | `CopyTexture(dst, x, y, src, rect)` | Outside passes; raw bits (`dst` is `src`'s format or `RawFormat(src)`); resolves a multisampled source. `(x, y)` may differ from `rect`'s position (the renderer copies captures in place, the conformance suite checks an offset): where the API resolves only whole subresources or identical rectangles (D3D11 `ResolveSubresource`, GLES blits), resolve into a temporary first. |
 | `NativeRenderState()` | Inside a pass: the object host callbacks record with (table in section 1). Forget every binding afterwards. |
 | `BeginProfile(category)` / `EndProfile()` / `ReadProfile(out)` | Non-nesting scopes, inside or outside passes. Resolve timestamps a few frames later without stalling; `ReadProfile` returns the latest complete frame (`GpuProfile::totalMs`, per-category ms). With `timestampQueries = false` these are no-ops. |
@@ -189,6 +190,7 @@ With `asyncPipelines`, `CreatePipeline` may return a handle at once and build it
 | `fxFeatureVariants` | one FX pipeline per batch feature mask (`PipelineDesc::fxFeatures`) | yes | optional | optional | optional | no | no | no | no |
 | `asyncPipelines` | variants build off the render thread; batches draw with a ready pipeline meanwhile (section 2) | recommended | optional | optional | optional | no | no | no | no |
 | `firstDrawCompiles` | the driver finishes a shader at its first draw: the renderer draws a ready user effect once where no pixel is written (an empty scissor) | yes (NVIDIA) | no | no | no (its debug layer warns about the empty scissor) | no | no | no | no |
+| `drawFirstInstance` | `DrawInstancedFrom` (above): the Draw constants then change only with the edge fade - each change is a buffer update, one per FX batch was most of Direct3D 11's submit | no | no | yes | no | no | no | no | no |
 | `maxTextureSize`, `maxFxDataWidth` | limits (the FX texture is `perRow * 24` wide) | device caps; `maxFxDataWidth` = 24 x a power of two | 8192 | 16384 | 16384 | `GL_MAX_TEXTURE_SIZE` | same | limits | 16384 |
 
 ## 4. Shaders and the binding model
@@ -221,6 +223,22 @@ the instance index and the six rows): within GL 3.3 / GLES 3.0 / D3D10 (15-16 ve
 define `ESIA_FX_FETCH_ALL=1` restores the old path (every row fetched at the start of `FxPS`, 2 varyings) for A / B
 measurements: `tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1` or `/DESIA_FX_FETCH_ALL=1` in
 `D3DCompile`; the pixels are identical, only the cost differs (do not commit a library built that way).
+
+**The solid area.** Most pixels of a window, a card or a large button lie inside a solid rounded rectangle, away
+from its edge and its corners, where every layer of the FX shader but the fill is zero or under an opaque fill.
+`FxVS` passes that area in two more varyings (`solid`, `solidCorner`: the center and half sizes less the edge band -
+the stroke inside the edge and 2 pixels - and less the corners, 1.6 x the radius for continuous ones), and `FxPS`
+returns the fill color there without the distance field, the same bits as the full path. On an RTX 4080 SUPER four
+solid 380 x 900 windows took 0.026 ms of GPU time and take 0.016 ms. SM3 has neither the varyings nor the
+instruction slots to spare: `ESIA_COMPACT` (the D3D9 prelude) leaves it out, as it keeps the compact forms of the
+backdrop sampling (`esia_common.hlsli`).
+
+**Until the next regeneration of the library**, the SPIR-V path is compiled as compact too (`esia_common.hlsli`
+defines `ESIA_COMPACT` with `ESIA_SPIRV`): the generated SPIR-V, GLSL, ESSL and MSL are those of the sources before
+the solid area and the straight-line backdrop sampling, byte for byte (`build_shaders.py` gives the same output for
+both with the Vulkan SDK's tools). The Direct3D 10 - 12 backends compile the source at run time and have both. To
+give them to OpenGL, GLES, Vulkan and Metal, drop that define and regenerate the library with the CI's tool versions
+(docs/CI.md, the Shaders workflow).
 
 Blend modes: `Opaque` = replace; `Straight` = rgb `src*srcA + dst*(1-srcA)`, alpha `src + dst*(1-srcA)`;
 `Premultiplied` = rgb and alpha `src + dst*(1-srcA)`. No dual-source blending, no depth, no stencil, no culling.
