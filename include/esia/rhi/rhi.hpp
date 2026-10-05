@@ -281,6 +281,10 @@ namespace esia::rhi
         // change only with the edge fade: every change is a buffer update (Direct3D 11: a map with discard), and one
         // per FX batch was most of Direct3D 11's submit time. Optional.
         bool drawFirstInstance = false;
+        // DrawIndexedBase adds a base vertex to the indices. The renderer then uploads every draw list's vertices and
+        // indices as they are, each at its offset in the frame's buffers - no merged copy, no rebasing (most of the
+        // submit of a frame of text). Optional.
+        bool baseVertex = false;
         int maxTextureSize = 4096;
         int maxFxDataWidth = 4096;      // FxStorage::Texture: width of the instance texture in texels
     };
@@ -302,6 +306,23 @@ namespace esia::rhi
         virtual Buffer CreateBuffer(const BufferDesc& desc) = 0;
         // Replaces the first `size` bytes (size <= desc.size).
         virtual void UpdateBuffer(Buffer buf, const void* data, std::size_t size) = 0;
+        // UpdateBuffer written in place: the first `size` bytes to write, valid until UnmapBuffer (one buffer at a
+        // time, outside passes; null if the buffer cannot be written). The renderer writes the frame's vertices,
+        // indices and FX instances straight from the draw lists. This default stages them for UpdateBuffer;
+        // backends with mappable buffers hand out their memory.
+        virtual void* MapBuffer(Buffer, std::size_t size)
+        {
+            if (mapStaging_.size() < size)
+                mapStaging_.resize(size);
+            mapSize_ = size;
+            return mapStaging_.data();
+        }
+        virtual void UnmapBuffer(Buffer buf)
+        {
+            if (mapSize_ > 0)
+                UpdateBuffer(buf, mapStaging_.data(), mapSize_);
+            mapSize_ = 0;
+        }
         virtual void DestroyBuffer(Buffer buf) = 0;
         virtual Pipeline CreatePipeline(const PipelineDesc& desc) = 0;
         virtual void DestroyPipeline(Pipeline p) = 0;
@@ -325,6 +346,12 @@ namespace esia::rhi
         virtual void SetIndexBuffer(Buffer buf) = 0;
         virtual void Draw(std::uint32_t vertexCount, std::uint32_t firstVertex) = 0;
         virtual void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) = 0;
+        // Caps::baseVertex: `baseVertex` is added to every index. The renderer calls it only on a device with the cap.
+        virtual void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex)
+        {
+            (void)baseVertex;
+            DrawIndexed(indexCount, firstIndex);
+        }
         // Instance ids start at 0 in every draw; the renderer passes the first instance in the Draw constants.
         virtual void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) = 0;
         // Caps::drawFirstInstance: the shaders' instance ids start at `firstInstance` (the Draw constants' first
@@ -358,5 +385,9 @@ namespace esia::rhi
         // counts its contract violations); 0 when there is no validation or it is off. The conformance suite
         // fails a scene whose device reports any after its readback.
         virtual std::uint32_t ValidationErrors() const { return 0; }
+
+    private:
+        std::vector<unsigned char> mapStaging_;   // MapBuffer's default
+        std::size_t mapSize_ = 0;
     };
 }

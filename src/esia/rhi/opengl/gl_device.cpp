@@ -111,6 +111,7 @@ namespace esia::rhi::opengl
             gl_.LoadOptional(gl_.QueryCounter, "glQueryCounter");
             gl_.LoadOptional(gl_.GetQueryObjectui64v, "glGetQueryObjectui64v");
             gl_.LoadOptional(gl_.PolygonMode, "glPolygonMode");
+            gl_.LoadOptional(gl_.DrawElementsBaseVertex, "glDrawElementsBaseVertex");   // GL 3.2 core
             if (extra && (v >= 43 || ext.count("GL_ARB_invalidate_subdata")))
                 gl_.LoadOptional(gl_.InvalidateFramebuffer, "glInvalidateFramebuffer");
             if (khrDebug)
@@ -161,6 +162,7 @@ namespace esia::rhi::opengl
         caps_.sampleRenderTarget = true;
         caps_.timestampQueries = gl_.QueryCounter && gl_.GetQueryObjectui64v;
         caps_.readback = true;
+        caps_.baseVertex = gl_.DrawElementsBaseVertex != nullptr;
         caps_.runtimeEffects = false;
         caps_.fxFeatureVariants = false;
         caps_.maxTextureSize = maxTex;
@@ -1086,6 +1088,15 @@ namespace esia::rhi::opengl
             return;
         PrepareDraw();
         gl_.DrawElements(GL_TRIANGLES, (GLsizei)indexCount, GL_UNSIGNED_INT, reinterpret_cast<const void*>((std::uintptr_t)firstIndex * 4u));
+    }
+
+    void GlDevice::DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex)
+    {
+        if (!inPass_ || !pipe_ || !vb_ || !ib_ || !gl_.DrawElementsBaseVertex)
+            return;
+        PrepareDraw();
+        gl_.DrawElementsBaseVertex(GL_TRIANGLES, (GLsizei)indexCount, GL_UNSIGNED_INT, reinterpret_cast<const void*>((std::uintptr_t)firstIndex * 4u),
+                                   (GLint)baseVertex);
     }
 
     void GlDevice::DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount)

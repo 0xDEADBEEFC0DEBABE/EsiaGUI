@@ -714,7 +714,7 @@ namespace esia
         const Vec2 o = scaleOrigin_[scaleDepth_];
         if (k != 1.0f)
         {
-            std::vector<Vertex>& vtx = dl_->Vertices();
+            VertexVector& vtx = dl_->Vertices();
             int ex = 0;
             for (std::size_t i = scaleVtxStart_[scaleDepth_]; i < vtx.size(); ++i)
             {
@@ -728,6 +728,7 @@ namespace esia
                 }
                 vtx[i].pos = ScalePoint(vtx[i].pos, o, k);
             }
+            dl_->RefreshBounds(scaleVtxStart_[scaleDepth_]);
         }
         if (scaleDepth_ == 0)
             excludedCount_ = 0;

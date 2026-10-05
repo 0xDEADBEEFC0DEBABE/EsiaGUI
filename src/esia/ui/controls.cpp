@@ -1,8 +1,10 @@
 // Esia UI - text and controls: buttons, switches, sliders, steppers, progress, badges (WGT's, ported).
 #include "ui_internal.hpp"
 #include <algorithm>
+#include <charconv>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 
 namespace esia::ui
 {
@@ -40,13 +42,111 @@ namespace esia::ui
         p.Text(pos, f, color, str, wrapWidth);
     }
 
+    std::size_t detail::FormatV(char* buf, std::size_t size, const char* fmt, va_list args)
+    {
+        if (size == 0)
+            return 0;
+        // the conversions first, so a format this does not write goes to vsnprintf with its arguments untouched
+        for (const char* p = fmt; *p; ++p)
+        {
+            if (*p != '%')
+                continue;
+            ++p;
+            if (*p == '%')
+                continue;
+            if (*p == 'z')
+                ++p;
+            else if (*p == 'l')
+                p += p[1] == 'l' ? 2 : 1;
+            if (!*p || !std::strchr("diuxXsc", *p) || (*p == 'c' && p[-1] != '%') || (*p == 's' && p[-1] != '%'))
+            {
+                const int n = std::vsnprintf(buf, size, fmt, args);
+                return n < 0 ? 0 : std::min((std::size_t)n, size - 1);
+            }
+        }
+        char* out = buf;
+        char* const end = buf + size - 1;
+        auto put = [&](const char* s, std::size_t n) {
+            n = std::min(n, (std::size_t)(end - out));
+            std::memcpy(out, s, n);
+            out += n;
+        };
+        for (const char* p = fmt; *p && out < end; ++p)
+        {
+            if (*p != '%')
+            {
+                *out++ = *p;
+                continue;
+            }
+            ++p;
+            int length = 0;   // 1 = l, 2 = ll, 3 = z
+            if (*p == 'z')
+            {
+                length = 3;
+                ++p;
+            }
+            else if (*p == 'l')
+            {
+                length = p[1] == 'l' ? 2 : 1;
+                p += length;
+            }
+            char num[24];
+            std::to_chars_result r{num, std::errc()};
+            switch (*p)
+            {
+            case '%':
+                *out++ = '%';
+                break;
+            case 'd':
+            case 'i':
+                r = length == 0 ? std::to_chars(num, num + sizeof(num), va_arg(args, int))
+                    : length == 1 ? std::to_chars(num, num + sizeof(num), va_arg(args, long))
+                    : length == 2 ? std::to_chars(num, num + sizeof(num), va_arg(args, long long))
+                                  : std::to_chars(num, num + sizeof(num), va_arg(args, std::ptrdiff_t));
+                put(num, (std::size_t)(r.ptr - num));
+                break;
+            case 'u':
+            case 'x':
+            case 'X':
+            {
+                const int base = *p == 'u' ? 10 : 16;
+                r = length == 0 ? std::to_chars(num, num + sizeof(num), va_arg(args, unsigned), base)
+                    : length == 1 ? std::to_chars(num, num + sizeof(num), va_arg(args, unsigned long), base)
+                    : length == 2 ? std::to_chars(num, num + sizeof(num), va_arg(args, unsigned long long), base)
+                                  : std::to_chars(num, num + sizeof(num), va_arg(args, std::size_t), base);
+                if (*p == 'X')
+                    for (char* c = num; c < r.ptr; ++c)
+                        if (*c >= 'a' && *c <= 'f')
+                            *c = (char)(*c - 'a' + 'A');
+                put(num, (std::size_t)(r.ptr - num));
+                break;
+            }
+            case 's':
+            {
+                const char* s = va_arg(args, const char*);
+                if (!s)
+                    s = "(null)";
+                put(s, std::strlen(s));
+                break;
+            }
+            case 'c':
+                *out++ = (char)va_arg(args, int);
+                break;
+            default:
+                break;
+            }
+        }
+        *out = '\0';
+        return (std::size_t)(out - buf);
+    }
+
     namespace
     {
         void TextV(TextStyle style, Color color, const char* fmt, va_list args)
         {
             char buf[1024];
-            std::vsnprintf(buf, sizeof(buf), fmt, args);
-            TextImpl(Font(style), color, buf, false);
+            FormatV(buf, sizeof(buf), fmt, args);
+            TextImpl(Font(style), color, buf, false);   // up to a %c of 0, as ever
         }
     }
 

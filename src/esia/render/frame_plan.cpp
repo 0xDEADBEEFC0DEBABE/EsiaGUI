@@ -76,31 +76,13 @@ namespace esia::render
             return pad;
         }
 
-        // A command's indices address a run of vertices of its own (a list appends both together): the range of its
-        // indices, then the vertices in it, each once and in order - not every index through to its vertex (a
-        // glyph's six indices name four vertices). A range holding other vertices would only make the bounds larger.
-        PxRect VertexBounds(const DrawList& dl, const DrawCmd& cmd, const Mapper& map)
+        // The pixels a geometry command touches: its vertices' bounds, which the list keeps as they are written
+        // (DrawCmd::vtxBounds), plus a pixel
+        PxRect VertexBounds(const DrawCmd& cmd, const Mapper& map)
         {
-            const std::uint32_t* idx = dl.Indices().data() + cmd.first;
-            std::uint32_t lo = 0xFFFFFFFFu, hi = 0;
-            for (std::uint32_t i = 0; i < cmd.count; ++i)
-            {
-                lo = std::min(lo, idx[i]);
-                hi = std::max(hi, idx[i]);
-            }
-            if (cmd.count == 0 || hi >= dl.Vertices().size())
+            if (cmd.vtxEnd <= cmd.vtxFirst)
                 return {};
-            const Vertex* vtx = dl.Vertices().data();
-            float x0 = FLT_MAX, y0 = FLT_MAX, x1 = -FLT_MAX, y1 = -FLT_MAX;
-            for (std::uint32_t v = lo; v <= hi; ++v)
-            {
-                const Vec2 p = vtx[v].pos;
-                x0 = std::min(x0, p.x);
-                y0 = std::min(y0, p.y);
-                x1 = std::max(x1, p.x);
-                y1 = std::max(y1, p.y);
-            }
-            return map(x0, y0, x1, y1).Expand(1.0f);
+            return map(cmd.vtxBounds).Expand(1.0f);
         }
 
         void CloseLayer(std::vector<RenderOp>& ops, int begin, float scale)
@@ -116,16 +98,20 @@ namespace esia::render
         }
 
         constexpr int kJoinLookBack = 64;                         // ops searched for a batch to join
-        constexpr std::uint32_t kVertexBoundsMaxIndices = 1u << 14;   // larger geometry commands are bounded by their clip
         constexpr std::uint32_t kNoPiece = 0xFFFFFFFFu;
     }
 
-    void FramePlan::Build(const DrawData& dd, const TextureInfoFn& textureInfo)
+    void FramePlan::Build(const DrawData& dd, const TextureInfoFn& textureInfo, bool directGeometry)
     {
         ops.clear();
         instances.clear();
         vertices.clear();
         indices.clear();
+        lists.clear();
+        geometry.clear();
+        instanceRuns.clear();
+        direct = directGeometry;
+        totalVertices = totalIndices = 0;
         pieces_.clear();
         opFirst_.clear();
         opLast_.clear();
@@ -134,9 +120,12 @@ namespace esia::render
         anyLayer = false;
         fxCount = 0;
         plannedCaptures = 0;
-        vertices.reserve(dd.TotalVertices());
-        indices.reserve(dd.TotalIndices());
-        instances.reserve(dd.TotalFx());
+        if (!direct)
+        {
+            vertices.reserve(dd.TotalVertices());
+            indices.reserve(dd.TotalIndices());
+            instances.reserve(dd.TotalFx());
+        }
 
         const Mapper map{dd.displayPos, dd.framebufferScale};
 
@@ -209,8 +198,13 @@ namespace esia::render
 
         for (const DrawList* dl : dd.lists)
         {
-            const std::uint32_t vtxBase = (std::uint32_t)vertices.size();
-            vertices.insert(vertices.end(), dl->Vertices().begin(), dl->Vertices().end());
+            const std::uint32_t vtxBase = totalVertices, idxBase = totalIndices;
+            totalVertices += (std::uint32_t)dl->Vertices().size();
+            totalIndices += (std::uint32_t)dl->Indices().size();
+            if (direct)
+                lists.push_back({dl, vtxBase, idxBase});
+            else
+                vertices.insert(vertices.end(), dl->Vertices().begin(), dl->Vertices().end());
 
             float fade[4] = {0, 0, 0, 0};   // edge fade of this draw list (FadeBegin / FadeEnd)
             for (const DrawCmd& cmd : dl->Commands())
@@ -385,8 +379,8 @@ namespace esia::render
                     if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
                         o.coverage = ti.Coverage();
                     o.idxCount = cmd.count;
-                    const PxRect whole = cmd.count <= kVertexBoundsMaxIndices ? VertexBounds(*dl, cmd, map) : clip;
-                    const bool cut = cmd.count > kVertexBoundsMaxIndices || !clip.Contains(whole);
+                    const PxRect whole = VertexBounds(cmd, map);
+                    const bool cut = !clip.Contains(whole);
                     o.bounds = whole.Intersect(clip);
                     if (o.bounds.Empty())
                         break;   // nothing inside the clip
@@ -406,7 +400,7 @@ namespace esia::render
                         ops.push_back(o);
                         k = (int)ops.size() - 1;
                     }
-                    link(k, Piece{nullptr, dl->Indices().data() + cmd.first, cmd.count, vtxBase, kNoPiece});
+                    link(k, Piece{nullptr, dl->Indices().data() + cmd.first, cmd.count, vtxBase, kNoPiece, idxBase + cmd.first});
                     addToLayers(o.bounds);
                     break;
                 }
@@ -425,6 +419,7 @@ namespace esia::render
         // the instances and indices, batch by batch
         const PxRect screen = map(dd.displayPos.x, dd.displayPos.y, dd.displayPos.x + dd.displaySize.x, dd.displayPos.y + dd.displaySize.y);
         opFirst_.resize(ops.size(), kNoPiece);
+        std::uint32_t instanceCount = 0;
         for (std::size_t k = 0; k < ops.size(); ++k)
         {
             RenderOp& o = ops[k];
@@ -432,6 +427,31 @@ namespace esia::render
             // it when that does (no scissor change), else the whole target.
             if (o.clipFree)
                 o.clip = k > 0 && ops[k - 1].clip.Contains(o.bounds.Intersect(screen)) ? ops[k - 1].clip : screen;
+            if (direct)
+            {
+                // the instances as runs, the draws at their lists' offsets
+                if (o.type == RenderOp::FxBatch)
+                    o.instStart = instanceCount;
+                else if (o.type == RenderOp::Draw)
+                    o.geometryFirst = (std::uint32_t)geometry.size();
+                for (std::uint32_t p = opFirst_[k]; p != kNoPiece; p = pieces_[p].next)
+                {
+                    const Piece& pc = pieces_[p];
+                    if (pc.inst)
+                    {
+                        if (!instanceRuns.empty() && instanceRuns.back().first + instanceRuns.back().count == pc.inst)
+                            instanceRuns.back().count += pc.count;
+                        else
+                            instanceRuns.push_back({pc.inst, pc.count});
+                        instanceCount += pc.count;
+                    }
+                    else
+                        geometry.push_back({pc.firstIndex, pc.count, pc.base});
+                }
+                if (o.type == RenderOp::Draw)
+                    o.geometryCount = (std::uint32_t)geometry.size() - o.geometryFirst;
+                continue;
+            }
             if (o.type == RenderOp::FxBatch)
                 o.instStart = (std::uint32_t)instances.size();
             else if (o.type == RenderOp::Draw)
