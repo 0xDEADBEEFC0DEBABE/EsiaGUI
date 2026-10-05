@@ -69,7 +69,8 @@ namespace esia::rhi
     void NullDevice::Error(const std::string& what)
     {
         errors_.push_back(what);
-        Record("!! " + what);
+        if (record_)
+            Record("!! " + what);
     }
 
     bool NullDevice::InFrame(const char* call)
@@ -120,8 +121,9 @@ namespace esia::rhi
                 for (int y = 0; y < desc.height; ++y)
                     std::memcpy(d.data() + row * (std::size_t)y, static_cast<const std::uint8_t*>(data) + pitch * (std::size_t)y, row);
         }
-        Record(Fmt("create texture #%u %dx%d %s usage=%x%s%s", t.id, desc.width, desc.height, FormatName(desc.format), desc.usage,
-                   desc.samples > 1 ? " msaa" : "", desc.debugName ? (std::string(" ") + desc.debugName).c_str() : ""));
+        if (record_)
+            Record(Fmt("create texture #%u %dx%d %s usage=%x%s%s", t.id, desc.width, desc.height, FormatName(desc.format), desc.usage,
+                       desc.samples > 1 ? " msaa" : "", desc.debugName ? (std::string(" ") + desc.debugName).c_str() : ""));
         return t;
     }
 
@@ -150,7 +152,8 @@ namespace esia::rhi
         if (r.Empty() || r.x0 < 0 || r.y0 < 0 || r.x1 > it->second.width || r.y1 > it->second.height || !data)
             Error("UpdateTexture: bad rect or data " + Rect(r));
         ++stats_.textureUpdates;
-        Record(Fmt("update texture #%u ", tex.id) + Rect(r));
+        if (record_)
+            Record(Fmt("update texture #%u ", tex.id) + Rect(r));
         if (keepData_ && data && !r.Empty() && r.x0 >= 0 && r.y0 >= 0 && r.x1 <= it->second.width && r.y1 <= it->second.height)
         {
             const std::size_t bpp = (std::size_t)BytesPerPixel(it->second.format);
@@ -167,7 +170,8 @@ namespace esia::rhi
         if (textures_.erase(tex.id) == 0)
             Error("DestroyTexture: unknown texture");
         data_.erase(tex.id);
-        Record(Fmt("destroy texture #%u", tex.id));
+        if (record_)
+            Record(Fmt("destroy texture #%u", tex.id));
     }
 
     TextureDesc NullDevice::GetTextureDesc(Texture tex) const
@@ -190,7 +194,8 @@ namespace esia::rhi
         const Buffer b{next_++};
         buffers_[b.id] = desc;
         static const char* kinds[] = {"vertex", "index", "fx"};
-        Record(Fmt("create buffer #%u %s %zu bytes", b.id, kinds[(int)desc.kind], desc.size));
+        if (record_)
+            Record(Fmt("create buffer #%u %s %zu bytes", b.id, kinds[(int)desc.kind], desc.size));
         return b;
     }
 
@@ -207,7 +212,8 @@ namespace esia::rhi
         if (inFrame_ && passStarted_)
             Error("UpdateBuffer after the frame's first pass");
         ++stats_.bufferUpdates;
-        Record(Fmt("update buffer #%u %zu bytes", buf.id, size));
+        if (record_)
+            Record(Fmt("update buffer #%u %zu bytes", buf.id, size));
         if (keepData_ && data && size <= it->second.size)
         {
             std::vector<std::uint8_t>& d = data_[buf.id];
@@ -221,24 +227,28 @@ namespace esia::rhi
         if (buffers_.erase(buf.id) == 0)
             Error("DestroyBuffer: unknown buffer");
         data_.erase(buf.id);
-        Record(Fmt("destroy buffer #%u", buf.id));
+        if (record_)
+            Record(Fmt("destroy buffer #%u", buf.id));
     }
 
     Pipeline NullDevice::CreatePipeline(const PipelineDesc& d)
     {
         if (d.effect != 0 && !caps_.runtimeEffects)
         {
-            Record(Fmt("create pipeline refused: runtime effect %u unsupported", d.effect));
+            if (record_)
+                Record(Fmt("create pipeline refused: runtime effect %u unsupported", d.effect));
             return {};
         }
         if (options_.refusePrograms & (1u << (unsigned)d.program))
         {
-            Record(Fmt("create pipeline refused: %s", ShaderProgramName(d.program)));
+            if (record_)
+                Record(Fmt("create pipeline refused: %s", ShaderProgramName(d.program)));
             return {};
         }
         if (d.fxFeatures != 0 && options_.refuseFxVariants)
         {
-            Record(Fmt("create pipeline refused: fx variant 0x%x", d.fxFeatures));
+            if (record_)
+                Record(Fmt("create pipeline refused: fx variant 0x%x", d.fxFeatures));
             return {};
         }
         if (d.program >= ShaderProgram::Count)
@@ -256,9 +266,10 @@ namespace esia::rhi
         const bool background = d.background && caps_.asyncPipelines;
         if (background)
             pipelineReadyAt_[p.id] = frame_ + (std::uint64_t)std::max(options_.pendingFrames, 0);
-        Record(Fmt("create pipeline #%u %s %s %s %s%s%s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
-                   BlendName(d.blend), FormatName(d.targetFormat), d.effect ? Fmt(" effect=%u", d.effect).c_str() : "",
-                   d.fxFeatures ? Fmt(" features=0x%x", d.fxFeatures).c_str() : "", background ? " background" : ""));
+        if (record_)
+            Record(Fmt("create pipeline #%u %s %s %s %s%s%s%s", p.id, ShaderProgramName(d.program), d.topology == Topology::TriangleStrip ? "strip" : "list",
+                       BlendName(d.blend), FormatName(d.targetFormat), d.effect ? Fmt(" effect=%u", d.effect).c_str() : "",
+                       d.fxFeatures ? Fmt(" features=0x%x", d.fxFeatures).c_str() : "", background ? " background" : ""));
         return p;
     }
 
@@ -267,7 +278,8 @@ namespace esia::rhi
         if (pipelines_.erase(p.id) == 0)
             Error("DestroyPipeline: unknown pipeline");
         pipelineReadyAt_.erase(p.id);
-        Record(Fmt("destroy pipeline #%u", p.id));
+        if (record_)
+            Record(Fmt("destroy pipeline #%u", p.id));
     }
 
     PipelineStatus NullDevice::GetPipelineStatus(Pipeline p) const
@@ -296,7 +308,8 @@ namespace esia::rhi
         for (bool& c : constantsSet_)
             c = false;
         ++frame_;
-        Record(Fmt("begin frame %llu", (unsigned long long)frame_) + (desc.hostFrame ? Fmt(" host %llu", (unsigned long long)desc.hostFrame) : ""));
+        if (record_)
+            Record(Fmt("begin frame %llu", (unsigned long long)frame_) + (desc.hostFrame ? Fmt(" host %llu", (unsigned long long)desc.hostFrame) : ""));
         return true;
     }
 
@@ -309,7 +322,8 @@ namespace esia::rhi
         if (profileDepth_ != 0)
             Error("EndFrame with an open profile scope");
         inFrame_ = false;
-        Record("end frame");
+        if (record_)
+            Record("end frame");
     }
 
     void NullDevice::BeginPass(const PassDesc& d)
@@ -333,7 +347,8 @@ namespace esia::rhi
         passTarget_ = d.target;
         ++stats_.passes;
         static const char* loads[] = {"load", "clear", "dont-care"};
-        Record(Fmt("pass %s %s%s", TexName(d.target).c_str(), loads[(int)d.load], d.debugName ? (std::string(" ") + d.debugName).c_str() : ""));
+        if (record_)
+            Record(Fmt("pass %s %s%s", TexName(d.target).c_str(), loads[(int)d.load], d.debugName ? (std::string(" ") + d.debugName).c_str() : ""));
     }
 
     void NullDevice::EndPass()
@@ -342,7 +357,8 @@ namespace esia::rhi
             return;
         inPass_ = false;
         passTarget_ = {};
-        Record("end pass");
+        if (record_)
+            Record("end pass");
     }
 
     void NullDevice::SetPipeline(Pipeline p)
@@ -363,7 +379,8 @@ namespace esia::rhi
         if (it->second.samples != t.samples)
             Error(Fmt("SetPipeline: pipeline for %d samples, target has %d", it->second.samples, t.samples));
         pipeline_ = p;
-        Record(Fmt("pipeline #%u", p.id));
+        if (record_)
+            Record(Fmt("pipeline #%u", p.id));
     }
 
     void NullDevice::SetScissor(const IRect& r)
@@ -373,7 +390,8 @@ namespace esia::rhi
         const TextureDesc& t = textures_[passTarget_.id];
         if (r.x0 < 0 || r.y0 < 0 || r.x1 > t.width || r.y1 > t.height || r.x1 < r.x0 || r.y1 < r.y0)
             Error("SetScissor outside the target " + Rect(r));
-        Record("scissor " + Rect(r));
+        if (record_)
+            Record("scissor " + Rect(r));
     }
 
     void NullDevice::SetConstants(ConstantSlot slot, const void* data, std::uint32_t size)
@@ -384,7 +402,8 @@ namespace esia::rhi
             Error(Fmt("SetConstants: size %u is not a multiple of 16", size));
         constantsSet_[(int)slot] = true;
         static const char* names[] = {"frame", "pass", "draw"};
-        Record(Fmt("constants %s: ", names[(int)slot]) + Floats(data, size));
+        if (record_)
+            Record(Fmt("constants %s: ", names[(int)slot]) + Floats(data, size));
     }
 
     void NullDevice::SetTexture(int slot, Texture tex)
@@ -409,7 +428,8 @@ namespace esia::rhi
                 Error("SetTexture: t7 is a buffer on this device (SetFxBuffer)");
         }
         bound_[slot] = tex;
-        Record(Fmt("texture t%d %s", slot, tex ? TexName(tex).c_str() : "-"));
+        if (record_)
+            Record(Fmt("texture t%d %s", slot, tex ? TexName(tex).c_str() : "-"));
     }
 
     void NullDevice::SetFxBuffer(Buffer buf)
@@ -422,7 +442,8 @@ namespace esia::rhi
         if (buf && (it == buffers_.end() || it->second.kind != BufferKind::FxInstances))
             Error("SetFxBuffer: not an FX instance buffer");
         fxBuffer_ = buf;
-        Record(Fmt("fx buffer #%u", buf.id));
+        if (record_)
+            Record(Fmt("fx buffer #%u", buf.id));
     }
 
     void NullDevice::SetVertexBuffer(Buffer buf)
@@ -433,7 +454,8 @@ namespace esia::rhi
         if (it == buffers_.end() || it->second.kind != BufferKind::Vertex)
             Error("SetVertexBuffer: not a vertex buffer");
         vertexBuffer_ = buf;
-        Record(Fmt("vertex buffer #%u", buf.id));
+        if (record_)
+            Record(Fmt("vertex buffer #%u", buf.id));
     }
 
     void NullDevice::SetIndexBuffer(Buffer buf)
@@ -444,7 +466,8 @@ namespace esia::rhi
         if (it == buffers_.end() || it->second.kind != BufferKind::Index)
             Error("SetIndexBuffer: not an index buffer");
         indexBuffer_ = buf;
-        Record(Fmt("index buffer #%u", buf.id));
+        if (record_)
+            Record(Fmt("index buffer #%u", buf.id));
     }
 
     void NullDevice::CheckDraw(const char* call, bool instanced)
@@ -491,7 +514,8 @@ namespace esia::rhi
     {
         CheckDraw("Draw", false);
         ++stats_.draws;
-        Record(Fmt("draw %u from %u", vertexCount, firstVertex));
+        if (record_)
+            Record(Fmt("draw %u from %u", vertexCount, firstVertex));
     }
 
     void NullDevice::DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex)
@@ -501,7 +525,8 @@ namespace esia::rhi
             Error("DrawIndexed without vertex / index buffers");
         ++stats_.draws;
         ++stats_.indexedDraws;
-        Record(Fmt("draw indexed %u from %u", indexCount, firstIndex));
+        if (record_)
+            Record(Fmt("draw indexed %u from %u", indexCount, firstIndex));
     }
 
     void NullDevice::DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount)
@@ -509,7 +534,8 @@ namespace esia::rhi
         CheckDraw("DrawInstanced", true);
         ++stats_.draws;
         ++stats_.instancedDraws;
-        Record(Fmt("draw instanced %u x %u", vertexCount, instanceCount));
+        if (record_)
+            Record(Fmt("draw instanced %u x %u", vertexCount, instanceCount));
     }
 
     void NullDevice::CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r)
@@ -534,7 +560,8 @@ namespace esia::rhi
             dstX + r.Width() > d->second.width || dstY + r.Height() > d->second.height)
             Error("CopyTexture: region out of bounds " + Rect(r));
         ++stats_.copies;
-        Record(Fmt("copy %s -> #%u at %d,%d ", TexName(src).c_str(), dst.id, dstX, dstY) + Rect(r));
+        if (record_)
+            Record(Fmt("copy %s -> #%u at %d,%d ", TexName(src).c_str(), dst.id, dstX, dstY) + Rect(r));
     }
 
     void NullDevice::BeginProfile(ProfileCategory c)
@@ -544,7 +571,8 @@ namespace esia::rhi
         if (profileDepth_++ != 0)
             Error("BeginProfile: scopes do not nest");
         static const char* names[] = {"capture", "layer", "fx", "fx-glass", "geometry"};
-        Record(Fmt("profile %s", names[(int)c]));
+        if (record_)
+            Record(Fmt("profile %s", names[(int)c]));
     }
 
     void NullDevice::EndProfile()
@@ -553,7 +581,8 @@ namespace esia::rhi
             return;
         if (--profileDepth_ != 0)
             Error("EndProfile without BeginProfile");
-        Record("end profile");
+        if (record_)
+            Record("end profile");
     }
 
     bool NullDevice::ReadProfile(GpuProfile& out)
@@ -578,7 +607,8 @@ namespace esia::rhi
         fxBuffer_ = vertexBuffer_ = indexBuffer_ = {};
         for (bool& c : constantsSet_)
             c = false;
-        Record("native render state");
+        if (record_)
+            Record("native render state");
         return nullptr;
     }
 

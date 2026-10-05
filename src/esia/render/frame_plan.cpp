@@ -119,6 +119,7 @@ namespace esia::render
         pieces_.clear();
         opFirst_.clear();
         opLast_.clear();
+        layerStack_.clear();
         anyGlass = false;
         anyLayer = false;
         fxCount = 0;
@@ -129,7 +130,7 @@ namespace esia::render
 
         const Mapper map{dd.displayPos, dd.framebufferScale};
 
-        std::vector<int> layerStack;
+        std::vector<int>& layerStack = layerStack_;   // kept from frame to frame, as every buffer here: no allocation
         auto addToLayers = [&](const PxRect& b) {
             for (int li : layerStack)
                 ops[(std::size_t)li].bounds = ops[(std::size_t)li].bounds.Union(b);
@@ -418,27 +419,31 @@ namespace esia::render
     // new capture.
     namespace
     {
+        // At most 64 rectangles (past that they merge into one), in place: planning allocates nothing.
         struct DirtyRects
         {
-            void Clear() { rects.clear(); }
-            std::vector<PxRect> rects;
+            static constexpr int kMax = 64;
+            PxRect rects[kMax];
+            int count = 0;
+            void Clear() { count = 0; }
             void Add(const PxRect& r)
             {
                 if (r.Empty())
                     return;
-                if (rects.size() >= 64)
+                if (count >= kMax)
                 {
                     PxRect u = rects[0];
-                    for (const PxRect& x : rects)
-                        u = u.Union(x);
-                    rects.assign(1, u);
+                    for (int i = 1; i < count; ++i)
+                        u = u.Union(rects[i]);
+                    rects[0] = u;
+                    count = 1;
                 }
-                rects.push_back(r);
+                rects[count++] = r;
             }
             bool Overlaps(const PxRect& r) const
             {
-                for (const PxRect& x : rects)
-                    if (x.Overlaps(r))
+                for (int i = 0; i < count; ++i)
+                    if (rects[i].Overlaps(r))
                         return true;
                 return false;
             }

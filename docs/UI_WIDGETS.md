@@ -205,7 +205,8 @@ around it, and the light stops short of its neighbors:
     subtitle is cut with an ellipsis.
   * The body fades at its edges and is clipped to the window's rounded corners.
   * When closed, the window fades out before `*open` turns false.
-  * The core moves and resizes it; the resize corner shows as an arc.
+  * The core moves and resizes it; the resize corner shows as an arc, and that whole corner (26 units square)
+    resizes the window, above what is under it. The scroll indicator ends above the rounded corner.
   * First-use positions cascade when `pos` is negative.
   * Flags: `NoClose`, `NoResize`, `NoMove`, `NoHeader`, `NoScroll`, `Solid`, `LargeTitle`, `NoShadow`, `NoPadding`,
     `ClearGlass`.

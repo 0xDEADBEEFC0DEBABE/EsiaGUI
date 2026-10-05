@@ -107,6 +107,33 @@ causes.
 * `MeasureText` on unchanged strings was reported as a cost: the text system already keeps laid-out text per font,
   size, wrap width, flags and string, so a repeated measure is a hash lookup without an allocation.
 
+Then (the same day):
+
+* **The resize grip** (`WindowOptions::resizeGrip`, set by `ui::BeginWindow` to the square where the arc shows): a
+  window's bottom-right corner resizes it both ways and is above the items there. The arc is drawn along the rounded
+  corner, well inside the 5-unit edge bands that resized it, so the arc could not be dragged; and a window scrolled to
+  its end had its indicator in that corner, which took the press.
+* **The window's indicator stops above its rounded corner**: in the window's lane the track ends a corner radius above
+  the window's bottom (`ScrollEnd`'s `cornerRadius`). It ran down into the corner's curve, outside the window's shape.
+* **No allocation per frame in the render submit.** Counted on the showcase (1600 x 1000, every panel, the island
+  live), operator new per frame after 150 frames, before -> after:
+
+  | | Direct3D 12 | Direct3D 11 | Vulkan | OpenGL |
+  | --- | --- | --- | --- | --- |
+  | `Renderer::Render` | 88 -> 0.08 | 0.01 | 207 -> 0.01 | 2 -> 0 |
+  | building the UI (`Demo::Frame`, `EndFrame`) | 61 -> 5.4 | 4.8 | 5.3 | 5.9 |
+
+  What allocated: the capture planner's dirty-rectangle lists (two per glass batch, now in place), a layer stack in
+  `FramePlan::Build`, Vulkan's barrier batches (in place up to eight images), the timestamp read-backs of Vulkan and
+  OpenGL and OpenGL's row repacking (kept buffers); in the UI the list of draw lists and of windows in draw order
+  (`Context::EndFrame`), the auto-layout containers' child lists (moved away each frame, now swapped) and their
+  grid / flow scratch, a section footer's copy, the island's copy of the activities. The rest is the text layouts of
+  strings never seen before (a frame rate, a timer): a new layout reserves its glyphs at once, and once the cache is
+  full, evicted layouts take new strings with their storage. What remains in `Render` is a glyph page upload.
+  `Renderer.SteadyFramesAllocateNothing` counts it on the null device (which formats its log only when it records).
+* A `-Werror` release build on Windows failed: `gl_headless.cpp` declared the WGL debug flag and used it only in debug
+  builds.
+
 ### Verified (2026-10-05)
 
 * Windows 11, clang-cl 22 with `ESIA_WERROR=ON`, every backend: ctest 33 / 33 (`esia_core_tests` 104 / 104,
@@ -117,6 +144,10 @@ causes.
   `UiPopups.ALongPickerScrollsOpenedAtTheChoice`, `UiTheme.DarkModeKeepsTheMetrics`; `Child.NestedScrollAreasAndWheel`
   now pauses before the parent takes the wheel. Each new test fails with its fix taken out (the popup one: its edge
   went through four places in turn).
+* Then: ctest 33 / 33 in Debug, a RelWithDebInfo build of everything with `-Werror`; `esia_core_tests` 105 / 105,
+  `esia_ui_tests` 46 / 46, `esia_render_tests` 49 / 49 (new: `Context.ResizeGripIsAboveTheItemsAtTheCorner`,
+  `UiWindow.TheGripResizesAWindowScrolledToItsEnd`, `Renderer.SteadyFramesAllocateNothing`, each failing without its
+  fix). The allocation counts above come from a temporary probe (operator new with stack traces) in the showcase.
 * The changed sources pass the Linux / macOS warning flags (`-Wpedantic -Wshadow -Wnon-virtual-dtor`, clang 22).
 
 ### Not verified

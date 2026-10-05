@@ -200,7 +200,9 @@ namespace esia::ui
         Context& c = *m.ctx;
         c.ItemSize(Vec2(0.0f, Sc(12)));
         EndScrollEdgeFade(pe.edgeFade);
-        ScrollEnd(pe.child, WindowLane(c.ViewRect()));
+        float radius = 0.0f;
+        const float lane = WindowLane(c.ViewRect(), &radius);
+        ScrollEnd(pe.child, lane, radius);
         c.EndChild();   // the scrolling content
         if (pe.clipped && pe.shadowAlpha > 0.0f)
         {

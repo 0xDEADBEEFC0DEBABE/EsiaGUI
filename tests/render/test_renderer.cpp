@@ -6,13 +6,34 @@
 #include "esia/rhi/null_device.hpp"
 #include "esia_test.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 #include <sstream>
 #include <string>
 
 using namespace esia;
 using namespace esia::render;
 using namespace esia::rhi;
+
+// Heap allocations while g_countAllocations is set (Renderer.SteadyFramesAllocateNothing). The other forms of new and
+// delete forward to these.
+namespace
+{
+    bool g_countAllocations = false;
+    long g_allocations = 0;
+}
+
+void* operator new(std::size_t size)
+{
+    if (g_countAllocations)
+        ++g_allocations;
+    if (void* p = std::malloc(size ? size : 1))
+        return p;
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 namespace
 {
@@ -799,4 +820,45 @@ ESIA_TEST(Renderer, SmallFixes)
         r.Render(Data({&dl}), nullptr, s.target, params);
         ESIA_CHECK(NoErrors(s.dev) && Lines(s.dev, "begin frame 1 host 7") == 1);
     }
+}
+
+// Once a scene has been drawn, drawing it again allocates nothing on the heap: the frame plan, its capture planning
+// and the renderer keep their storage from frame to frame.
+ESIA_TEST(Renderer, SteadyFramesAllocateNothing)
+{
+    NullDevice dev(NullOptions{Caps{}, false});   // no log: the null device's own text lines would allocate
+    const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true, 1);
+    DrawList dl = MakeList(), over = MakeList();
+    {
+        Painter p(dl);
+        GlassScene(dl, 12.0f);
+        for (int i = 0; i < 6; ++i)   // glass controls on the card, content between them: several captures
+        {
+            const float x = 70.0f + 44.0f * (float)i;
+            p.Rect(Rect(x, 150, x + 36, 170), Style().Fill(Color::Hex(0x336699)));
+            p.Rect(Rect(x, 80 + 10.0f * (float)i, x + 36, 116 + 10.0f * (float)i), Style().Radius(12).Glass(Glass(6)));
+        }
+        p.BeginEdgeFade(Rect(60, 60, 340, 240), 12.0f, 16.0f);
+        p.Rect(Rect(80, 200, 320, 230), Style().Radius(6).Fill(Color::White(0.6f)));
+        p.EndEdgeFade();
+        p.BeginGlowLayer(Color::Hex(0x00FFFF, 0.5f), 12.0f, 1.5f);
+        p.Rect(Rect(100, 250, 200, 280), Style().Fill(Color::White()).Radius(8));
+        p.EndGlowLayer();
+        Painter q(over);
+        q.Rect(Rect(250, 20, 390, 120), Style().Radius(20).Glass(Glass(20)).Shadow(Color::Black(0.3f), 12, Vec2(0, 4)));
+    }
+    Renderer r(dev);
+    const DrawData dd = Data({&dl, &over});
+    for (int i = 0; i < 3; ++i)
+        r.Render(dd, nullptr, target);
+    ESIA_CHECK(r.Stats().backdropCaptures >= 2 && r.Stats().glowLayers == 1);
+    g_allocations = 0;
+    g_countAllocations = true;
+    for (int i = 0; i < 5; ++i)
+        r.Render(dd, nullptr, target);
+    g_countAllocations = false;
+    ESIA_CHECK(g_allocations == 0);
+    if (g_allocations != 0)
+        std::fprintf(stderr, "    %ld allocations in 5 frames\n", g_allocations);
+    ESIA_CHECK(NoErrors(dev));
 }
