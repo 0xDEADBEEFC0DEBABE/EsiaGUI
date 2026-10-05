@@ -263,7 +263,9 @@ whole). Integer layouts at scale 1 are unchanged.
   API);
 * **kept on screen**: after a drag, a display size change or a DPI change, a movable window keeps at least
   `LayoutMetrics::keepOnScreen` units (and its top edge) inside the display;
-* **resize** keeps the grab offset: the first frame of a resize does not snap the edge to the pointer;
+* **resize** keeps the grab offset: the first frame of a resize does not snap the edge to the pointer.
+  `WindowOptions::resizeGrip` adds a square at the bottom-right corner that resizes both ways, above the items there
+  (the widget layer draws its grip there: on a rounded window it lies well inside the edges' bands);
 * **DPI per window**: `Context::SetMonitors(std::vector<Monitor>)` (rect in UI units, scale = physical pixels per
   UI unit). A window's `Scale()` is the scale of the monitor under its center (without monitors,
   `FrameParams::framebufferScale.x`); `ScaleChanged()` is true for the frame it changed, and the window's size is

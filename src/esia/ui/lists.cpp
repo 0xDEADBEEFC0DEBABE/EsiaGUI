@@ -209,7 +209,10 @@ namespace esia::ui
 
         Section s;
         s.id = id;
-        s.footer = std::string(footer);
+        // the footer is copied (it may be a temporary) into a string kept per depth: no allocation once it is long enough
+        if (m.sectionFooters.size() <= m.sections.size())
+            m.sectionFooters.resize(m.sections.size() + 1);
+        m.sectionFooters[m.sections.size()].assign(footer);
         s.stylePushed = stylePushed;
         s.mark = c.WindowDrawList().Mark();   // the card goes under the rows, drawn at EndSection
         ContainerOptions card;
@@ -231,8 +234,9 @@ namespace esia::ui
         ESIA_ASSERT(!m.sections.empty() && "EndSection without BeginSection");
         if (m.sections.empty())
             return;
-        const Section s = std::move(m.sections.back());
+        const Section s = m.sections.back();
         m.sections.pop_back();
+        const std::string& footer = m.sectionFooters[m.sections.size()];
         Context& c = *m.ctx;
         const Theme& t = T();
         const Rect card = c.EndContainer();
@@ -253,10 +257,10 @@ namespace esia::ui
         persist.valid = true;
 
         const float spacing = c.Metrics().itemSpacing.y;
-        if (!s.footer.empty())
+        if (!footer.empty())
         {
             c.ItemSize(Vec2(0.0f, Sc(6) + spacing));
-            SectionNote(Salt(s.id, 4), s.footer);
+            SectionNote(Salt(s.id, 4), footer);
             c.ItemSize(Vec2(0.0f, spacing));
         }
         c.ItemSize(Vec2(0.0f, Sc(t.metrics.sectionSpacing)));

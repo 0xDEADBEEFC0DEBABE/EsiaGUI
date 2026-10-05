@@ -66,6 +66,7 @@ namespace esia::ui
             Id child = 0;                   // window / scroll area: its scrolling child region
             Rect view;                      // window: its content region (ViewRect: padding included)
             float padX = 0.0f;              // window: the content's side padding (the scroll indicator's lane)
+            float radius = 0.0f;            // window: its corner radius
         };
         std::vector<ContainerEntry> containers;
         int windowCascade = 0;
@@ -78,10 +79,10 @@ namespace esia::ui
             int rows = 0;
             Rect mask;                     // last frame's card at this frame's top: row highlights stay inside
             std::size_t mark = 0;          // where the card's background goes in the draw list
-            std::string footer;
             bool stylePushed = false;
         };
         std::vector<SectionEntry> sections;
+        std::vector<std::string> sectionFooters;   // per depth of sections: copies kept from frame to frame
         std::vector<std::uint8_t> rowStyles;   // BeginRow: whether the row took a Next() style
 
         // navigation stacks and pages being submitted (navigation.cpp)
@@ -130,6 +131,7 @@ namespace esia::ui
             double start = 0.0;
             std::vector<std::string> knownActs;   // activity ids already shown (a new one arrives once)
             double actStart = -100.0;
+            std::vector<Activity> acts;           // this frame's copy of the activities (its storage kept)
         };
         IslandState island;
 
@@ -233,11 +235,16 @@ namespace esia::ui
         // WGT's ScrollAreaBegin / End on the core's scrolling: ScrollBegin before the area's BeginChild (a drag in
         // progress sets the offset), ScrollEnd inside it before EndChild, after its edge fade: drag-to-scroll on empty
         // space with momentum, and the auto-hiding, draggable indicator in the lane at `laneX` (< 0: over the content
-        // at the right edge). `child`: the id BeginChild gave the area.
+        // at the right edge). `child`: the id BeginChild gave the area. `cornerRadius` > 0: the lane is its window's,
+        // whose corners have that radius - the track ends that far above the window's bottom, inside its shape and
+        // clear of its resize grip.
         void ScrollBegin(Id child);
-        void ScrollEnd(Id child, float laneX);
-        // The lane of a scroll area flush with the right of the innermost window's content: in its padding (else -1).
-        float WindowLane(const Rect& view);
+        void ScrollEnd(Id child, float laneX, float cornerRadius = 0.0f);
+        // The lane of a scroll area flush with the right of the innermost window's content: in its padding (else -1);
+        // `cornerRadius`: that window's corner radius (when the lane is its).
+        float WindowLane(const Rect& view, float* cornerRadius = nullptr);
+        // The square at a window's bottom-right corner that resizes it (WindowOptions::resizeGrip), where its grip shows.
+        float ResizeGripSize();
 
         // ---- layout
         // In an auto-layout container, true while the item being submitted is one of its direct children.

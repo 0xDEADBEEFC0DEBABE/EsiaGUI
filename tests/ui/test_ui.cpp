@@ -774,6 +774,44 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
 }
 
+// A window scrolled to its end: its indicator stops above the rounded bottom corner (inside the window's shape), and
+// the grip there resizes the window (the indicator used to sit on it and take the press)
+ESIA_TEST(UiWindow, TheGripResizesAWindowScrolledToItsEnd)
+{
+    UiHarness h;
+    const Id thumb = ui::Salt(HashLabel("##content", HashLabel("Glass", 0)), 0x1D1);   // ScrollEnd's indicator
+    Rect thumbRect, window;
+    bool scrollToEnd = true;
+    auto frame = [&] {
+        h.Frame([&] {
+            if (ui::BeginWindow("Glass", nullptr, {.size = {300, 300}, .pos = {100, 50}}))
+            {
+                ui::Spacer(1000);
+                if (scrollToEnd)
+                    h.ctx.SetScrollY(1e6f);
+                thumbRect = h.ctx.ItemStatusOf(thumb).rect;
+                window = h.ctx.CurrentWindow()->GetRect();
+                ui::EndWindow();
+            }
+        });
+    };
+    for (int i = 0; i < 30; ++i)
+        frame();
+    scrollToEnd = false;
+    frame();
+    ESIA_CHECK(!thumbRect.Empty() && thumbRect.max.y <= window.max.y - 28.0f + 0.01f);
+    const Vec2 grab = window.max - Vec2(10, 10);   // where the indicator used to end
+    h.ctx.QueueInput(InputEvent::MouseMove(grab));
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+    frame();
+    h.ctx.QueueInput(InputEvent::MouseMove(grab + Vec2(20, 30)));
+    frame();
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+    frame();
+    ESIA_CHECK(window.Width() == 320.0f && window.Height() == 330.0f);
+}
+
 // A finger that presses a row and then moves along the area scrolls it, past a slop, and the row does not press; a
 // tap still presses, a sideways move does not scroll, and the mouse keeps the row (it drags only empty space).
 ESIA_TEST(UiScroll, TouchDragFromARowScrolls)

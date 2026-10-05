@@ -31,6 +31,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <string>
@@ -321,8 +322,21 @@ namespace esia::text
                 ++frame_;
                 atlas_.BeginFrame();
                 colorAtlas_.BeginFrame();
+                // layouts unused for a while leave the cache, and wait (with their storage) to hold the next new texts:
+                // text that changes every frame (a frame rate, a timer) does not allocate once the cache is warm
                 if (layouts_.size() > kLayoutCacheLimit)
-                    std::erase_if(layouts_, [this](const auto& entry) { return entry.second.lastFrame + kLayoutCacheFrames < frame_; });
+                    for (auto it = layouts_.begin(); it != layouts_.end();)
+                    {
+                        auto next = std::next(it);
+                        if (it->second.lastFrame + kLayoutCacheFrames < frame_)
+                        {
+                            if (spareLayouts_.size() < kLayoutCacheLimit / 4)
+                                spareLayouts_.push_back(layouts_.extract(it));
+                            else
+                                layouts_.erase(it);
+                        }
+                        it = next;
+                    }
             }
 
             // ------------------------------------------------------------------ editing
@@ -689,13 +703,29 @@ namespace esia::text
                     return nullptr;
                 const std::uint32_t params[4] = {font.id, std::bit_cast<std::uint32_t>(font.size), std::bit_cast<std::uint32_t>(wrapWidth), flags};
                 const std::uint64_t key = ((std::uint64_t)HashBytes(params, sizeof(params), 0) << 32) | HashString(text, params[1]);
-                Layout& layout = layouts_[key];
+                auto it = layouts_.find(key);
+                if (it == layouts_.end())
+                {
+                    if (!spareLayouts_.empty())
+                    {
+                        // an evicted layout takes the new text: its strings and glyphs keep their storage
+                        auto node = std::move(spareLayouts_.back());
+                        spareLayouts_.pop_back();
+                        node.key() = key;
+                        node.mapped().text.clear();
+                        it = layouts_.insert(std::move(node)).position;
+                    }
+                    else
+                        it = layouts_.try_emplace(key).first;
+                }
+                Layout& layout = it->second;
                 if (layout.text != text || std::memcmp(layout.params, params, sizeof(params)) != 0)
                 {
                     // new, or a hash collision: (re)build in place
                     layout.text.assign(text);
                     std::memcpy(layout.params, params, sizeof(params));
                     layout.glyphs.clear();
+                    layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
@@ -1316,6 +1346,7 @@ namespace esia::text
             RasterParams params_;
             std::uint64_t frame_ = 0;
             std::unordered_map<std::uint64_t, Layout> layouts_;
+            std::vector<std::unordered_map<std::uint64_t, Layout>::node_type> spareLayouts_;   // evicted, to be reused
 
             // scratch, reused by every layout
             std::vector<CodePoint> cps_;

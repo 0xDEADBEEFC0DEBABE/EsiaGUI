@@ -175,17 +175,21 @@ namespace esia
                 focusId_ = 0;
         }
 
-        // output
+        // output (the list of lists keeps its storage: a frame allocates nothing here)
+        std::vector<const DrawList*> lists = std::move(drawData_.lists);
+        lists.clear();
         drawData_ = DrawData();
+        drawData_.lists = std::move(lists);
         drawData_.displaySize = params_.displaySize;
         drawData_.framebufferScale = params_.framebufferScale;
         drawData_.time = params_.time;
         drawData_.deltaTime = input_.DeltaTime();
         if (!background_.Empty())
             drawData_.lists.push_back(&background_);
-        for (Window* w : WindowsInDrawOrder())
-            if (!w->hidden_ && !w->drawList_.Empty())
-                drawData_.lists.push_back(&w->drawList_);
+        for (int layer = 0; layer <= (int)WindowLayer::Tooltip; ++layer)   // WindowsInDrawOrder, without its vector
+            for (Window* w : order_)
+                if ((int)w->layer_ == layer && w->active_ && !w->hidden_ && !w->drawList_.Empty())
+                    drawData_.lists.push_back(&w->drawList_);
         if (!foreground_.Empty())
             drawData_.lists.push_back(&foreground_);
 
@@ -361,6 +365,7 @@ namespace esia
             w->layer_ = options.layer;
             w->minSize_ = options.minSize;
             w->maxSize_ = options.maxSize;
+            w->resizeGrip_ = options.resizeGrip;
             w->padding_ = options.padding.x >= 0.0f ? options.padding : desc_.layout.windowPadding;
             const auto applies = [&](Cond c) { return c == Cond::Always || (c == Cond::FirstUse && created) || (c == Cond::Appearing && w->appearing_); };
             if (hasNextSize_ && applies(nextSizeCond_))
@@ -601,6 +606,8 @@ namespace esia
         const Rect& r = w.rect_;
         if (!r.Expanded(b).Contains(p))
             return 0;
+        if (w.resizeGrip_ > 0.0f && p.x >= r.max.x - w.resizeGrip_ && p.y >= r.max.y - w.resizeGrip_)
+            return kEdgeRight | kEdgeBottom;   // the grip
         int e = 0;
         if (p.x < r.min.x + b)
             e |= kEdgeLeft;
@@ -619,12 +626,21 @@ namespace esia
         if (!w || dragWindow_ || activeId_ != 0 || PressBlocked())
             return;
         const Vec2 p = input_.MousePos();
-        // an item at the edge keeps the mouse; outside the window the border band is the resize handle's
-        if (hitId_ != 0 && w->rect_.Contains(p))
+        // an item at the edge keeps the mouse; outside the window the border band is the resize handle's. The grip is
+        // above the items under it: they do not hover there (a row or the scroll indicator at the corner)
+        const Rect& wr = w->rect_;
+        const bool grip = w->resizeGrip_ > 0.0f && !(w->flags_ & WindowFlags_NoResize) && wr.Expanded(desc_.layout.resizeBorder).Contains(p) &&
+                          p.x >= wr.max.x - w->resizeGrip_ && p.y >= wr.max.y - w->resizeGrip_;
+        if (hitId_ != 0 && wr.Contains(p) && !grip)
             return;
         const int edges = ResizeEdgesAt(*w, p);
         if (edges == 0)
             return;
+        if (grip)
+        {
+            hitId_ = ResizeId(*w);   // the grip is the hit: no item claims the hover under it
+            hitFlags_ = 0;
+        }
         requests_.cursor = ResizeCursor(edges);
         if (input_.MouseClicked(MouseButton::Left) && pressOwner_[(int)MouseButton::Left] == PressOwner::Ui)
         {
