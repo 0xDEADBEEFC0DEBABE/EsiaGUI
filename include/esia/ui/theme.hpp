@@ -97,6 +97,10 @@ namespace esia::ui
         float sectionSpacing = 22.0f;
         float hairline = 1.0f;
         float scrollIndicator = 5.0f;
+        // 0: scroll indicators show while an area scrolls and hide at rest (iOS); 1: an area that scrolls always shows
+        // its indicator, dimmed at rest, on a faint track (desktop apps, where users look for a scroll bar). A float,
+        // as every metric: a theme transition blends it.
+        float scrollIndicatorAlways = 0.0f;
     };
 
     struct Typography

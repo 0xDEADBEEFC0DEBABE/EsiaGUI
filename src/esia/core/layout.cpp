@@ -13,6 +13,21 @@ namespace esia
 
         // A scroll offset may move `delta` from where it is (or glides to)?
         bool CanMove(float at, float max, float delta) { return (delta < 0.0f && at > 0.0f) || (delta > 0.0f && at < max); }
+
+        // How long the wheel stays with the area it scrolled after it stopped turning (WheelLatch).
+        constexpr double kWheelLatchSeconds = 0.3;
+
+        // ---- the layout cursor's lines (Context::LineRoom)
+        constexpr int kLineEdges = 4;   // the items of a line that know what follows them
+
+        // A frame among this frame's frames: from its parent's, the place it has in its parent's lines and its id.
+        // Nothing positional: it stays the same while things move (scrolling, an animation above it).
+        Id FrameSeq(Id parentSeq, int line, int lineItems, bool sameLine, Id id)
+        {
+            return HashInt(((std::int64_t)line << 24) ^ ((std::int64_t)lineItems << 1) ^ (sameLine ? 1 : 0), HashInt(id, parentSeq));
+        }
+
+        Id LineKey(Id seq, int line, int item) { return HashInt(((std::int64_t)line << 8) | item, seq); }
     }
 
     // ------------------------------------------------------------------ frames
@@ -63,6 +78,7 @@ namespace esia
         f.cursor = f.cursorMax = f.prevLineEnd = f.contentOrigin;
         f.lineStartX = f.cursor.x;
         f.lineTop = f.cursor.y;
+        f.seq = w.id_;
         f.scroll = &w.scroll_;
         w.scroll_.view = Max(content.Size(), Vec2(0, 0));
         w.frames_.push_back(f);
@@ -96,6 +112,31 @@ namespace esia
         if (baseline >= 0.0f && f.firstBaseline < 0.0f)
             f.firstBaseline = r.min.y + baseline;
         f.anyItem = true;
+        if (!f.layout)
+        {
+            // the line: SameLine continues it, any other item starts the next one. Each item continuing it tells
+            // the items before it how far the line now reaches past them (LineRoom, next frame).
+            if (!f.sameLine)
+            {
+                ++f.line;
+                f.lineItems = 0;
+            }
+            f.sameLine = false;
+            const int k = f.lineItems++;
+            std::vector<std::pair<Id, float>>& rooms = CurrentWindow()->lineRoom_;
+            for (int i = 0; i < std::min(k, kLineEdges); ++i)
+            {
+                const Id key = LineKey(f.seq, f.line, i);
+                const float room = r.max.x - f.lineEdges[i];
+                auto it = std::find_if(rooms.rbegin(), rooms.rend(), [key](const std::pair<Id, float>& e) { return e.first == key; });
+                if (it != rooms.rend())
+                    it->second = std::max(it->second, room);
+                else
+                    rooms.emplace_back(key, room);
+            }
+            if (k < kLineEdges)
+                f.lineEdges[k] = r.max.x;
+        }
         if (f.layout)
         {
             // the provider places the next child
@@ -144,11 +185,13 @@ namespace esia
         f.cursor = pos;
         f.lineTop = pos.y;
         f.cursorMax = Max(f.cursorMax, pos);
+        f.sameLine = false;
     }
 
     void Context::SameLine(float offsetFromStartX, float spacing)
     {
         Window::Frame& f = CurFrame();
+        f.sameLine = true;
         const float sp = spacing < 0.0f ? desc_.layout.itemSpacing.x : spacing;
         if (offsetFromStartX != 0.0f)
             f.cursor = Vec2(f.lineStartX + offsetFromStartX + (spacing < 0.0f ? 0.0f : spacing), f.prevLineEnd.y);
@@ -204,6 +247,35 @@ namespace esia
         return w->GetRect();
     }
 
+    Rect Context::VisibleViewRect() const
+    {
+        const Window* w = CurrentWindow();
+        if (!w)
+            return Rect();
+        for (auto it = w->frames_.rbegin(); it != w->frames_.rend(); ++it)
+            if (it->childIndex >= 0)
+                return w->children_[(std::size_t)it->childIndex].clip;   // its rect inside its parent's clip
+        return w->GetRect();
+    }
+
+    float Context::LineRoom() const
+    {
+        const Window* w = CurrentWindow();
+        if (!w || w->frames_.empty())
+            return 0.0f;
+        const Window::Frame& f = w->frames_.back();
+        if (f.layout)
+            return 0.0f;
+        const int line = f.sameLine ? f.line : f.line + 1;
+        const int item = f.sameLine ? f.lineItems : 0;
+        if (item >= kLineEdges)
+            return 0.0f;
+        const Id key = LineKey(f.seq, line, item);
+        const auto& rooms = w->lineRoomPrev_;
+        const auto it = std::lower_bound(rooms.begin(), rooms.end(), key, [](const std::pair<Id, float>& e, Id k) { return e.first < k; });
+        return it != rooms.end() && it->first == key ? std::max(it->second, 0.0f) : 0.0f;
+    }
+
     float Context::LineBaseline() const { return CurFrame().lineBaseline; }
 
     float Context::AlignToLineBaseline(float baseline)
@@ -227,6 +299,7 @@ namespace esia
         const Window::Frame& parent = w->frames_.back();
         Window::Frame f;
         f.id = id;
+        f.seq = FrameSeq(parent.seq, parent.line, parent.lineItems, parent.sameLine, id);
         f.layout = options.layout;
         f.origin = parent.cursor;
         f.padding = options.padding;
@@ -338,6 +411,7 @@ namespace esia
 
         Window::Frame f;
         f.id = id;
+        f.seq = FrameSeq(parent.seq, parent.line, parent.lineItems, parent.sameLine, id);
         f.origin = rect.min;
         f.padding = options.padding;
         f.fixedSize = rect.Size();
@@ -574,33 +648,67 @@ namespace esia
                 if ((innermost < 0 || w->childrenPrev_[(std::size_t)i].layer >= w->childrenPrev_[(std::size_t)innermost].layer) &&
                     ChildClipNow(*w, (std::size_t)i).Contains(input_.MousePos()))
                     innermost = i;
+        const double now = params_.time;
         for (int a = 0; a < 2; ++a)
         {
             const float d = a == 0 ? delta.x : delta.y;
             if (d == 0.0f)
                 continue;
             const std::uint32_t axisFlag = a == 0 ? ChildFlags_ScrollX : ChildFlags_ScrollY;
-            bool taken = false;
-            for (int i = innermost; i >= 0 && !taken; i = w->childrenPrev_[(std::size_t)i].parent)
-            {
+            const auto state = [&](int i) -> Window::ChildState* {
                 const Window::ChildRecord& c = w->childrenPrev_[(std::size_t)i];
                 if (!(c.flags & axisFlag) || (c.flags & ChildFlags_NoWheel))
-                    continue;
+                    return nullptr;
                 auto it = w->childStates_.find(c.id);
-                if (it == w->childStates_.end())
-                    continue;
-                Window::ScrollState& s = it->second.scroll;
-                const bool smooth = (c.flags & ChildFlags_SmoothScroll) != 0;
+                return it != w->childStates_.end() ? &it->second : nullptr;
+            };
+            const auto canMove = [&](int i) {
+                const Window::ScrollState& s = w->childStates_.find(w->childrenPrev_[(std::size_t)i].id)->second.scroll;
+                const bool smooth = (w->childrenPrev_[(std::size_t)i].flags & ChildFlags_SmoothScroll) != 0;
+                return CanMove(smooth ? (a == 0 ? s.target.x : s.target.y) : (a == 0 ? s.scroll.x : s.scroll.y), a == 0 ? s.max.x : s.max.y, d);
+            };
+
+            // While the wheel keeps turning (and the mouse stays put) it stays with the area it scrolled, as in a
+            // browser: the window scrolling a table in under the mouse does not hand the rest of the turn to the
+            // table, and an area at its end does not pass it on to its parent halfway. -1 = the window.
+            WheelLatch& latch = wheelLatch_[a];
+            const bool latched = latch.window == w->id_ && now - latch.time < kWheelLatchSeconds && input_.MouseValid() &&
+                                 std::fabs(input_.MousePos().x - latch.mouse.x) < 8.0f && std::fabs(input_.MousePos().y - latch.mouse.y) < 8.0f;
+            int target = -2;
+            if (latched && latch.child == 0)
+                target = -1;
+            else if (latched)
+                for (int i = 0; i < (int)w->childrenPrev_.size(); ++i)
+                    if (w->childrenPrev_[(std::size_t)i].id == latch.child && state(i))
+                        target = i;
+            if (target == -2)
+            {
+                for (int i = innermost; i >= 0 && target == -2; i = w->childrenPrev_[(std::size_t)i].parent)
+                    if (state(i) && canMove(i))
+                        target = i;
+                if (target == -2 && !(w->flags_ & WindowFlags_NoScroll))
+                    target = -1;
+            }
+            if (target == -2)
+            {
+                latch.window = 0;
+                continue;
+            }
+            latch.window = w->id_;
+            latch.child = target >= 0 ? w->childrenPrev_[(std::size_t)target].id : 0;
+            latch.time = now;
+            latch.mouse = input_.MousePos();
+
+            if (target >= 0)
+            {
+                Window::ScrollState& s = state(target)->scroll;
+                const bool smooth = (w->childrenPrev_[(std::size_t)target].flags & ChildFlags_SmoothScroll) != 0;
                 float& at = smooth ? (a == 0 ? s.target.x : s.target.y) : (a == 0 ? s.scroll.x : s.scroll.y);
-                const float max = a == 0 ? s.max.x : s.max.y;
-                if (!CanMove(at, max, d))
-                    continue;
-                at = Clamp(at + d, 0.0f, max);
+                at = Clamp(at + d, 0.0f, a == 0 ? s.max.x : s.max.y);
                 if (!smooth)
                     (a == 0 ? s.target.x : s.target.y) = at;
-                taken = true;
             }
-            if (!taken && !(w->flags_ & WindowFlags_NoScroll))
+            else if (!(w->flags_ & WindowFlags_NoScroll))
             {
                 Window::ScrollState& s = w->scroll_;
                 float& at = a == 0 ? s.scroll.x : s.scroll.y;

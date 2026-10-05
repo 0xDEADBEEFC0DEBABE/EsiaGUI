@@ -164,8 +164,8 @@ ESIA_TEST(Child, NestedScrollAreasAndWheel)
     Harness h;
     Vec2 innerScroll, outerScroll;
     Id innerButton = 0, outerButton = 0;
-    auto frame = [&] {
-        h.Frame();
+    auto frame = [&](double dt = 1.0 / 60.0) {
+        h.Frame(dt);
         WindowOptions o;
         o.padding = {0, 0};
         h.Win("W", {0, 0}, {400, 400}, o);
@@ -203,7 +203,12 @@ ESIA_TEST(Child, NestedScrollAreasAndWheel)
     frame();
     frame();
     ESIA_CHECK(innerScroll.y == 192.0f && outerScroll.y == 0.0f);
-    h.Wheel(0, -1);   // at its end: the outer area takes the next notch
+    h.Wheel(0, -1);   // at its end while the wheel turns on: it keeps the wheel (the outer area does not move)
+    frame();
+    frame();
+    ESIA_CHECK(innerScroll.y == 192.0f && outerScroll.y == 0.0f);
+    frame(0.5);       // a pause: the next notch goes to the outer area
+    h.Wheel(0, -1);
     frame();
     frame();
     ESIA_CHECK(innerScroll.y == 192.0f && outerScroll.y == 48.0f);
@@ -365,4 +370,115 @@ ESIA_TEST(Child, PaddingIsPartOfTheRegion)
     frame();
     frame();
     ESIA_CHECK(listScroll == 48.0f && h.ctx.FindWindowByName("W")->Scroll().y == 0.0f);
+}
+
+// The wheel stays with the area it scrolls while it keeps turning: the window scrolling an inner area in under the
+// mouse does not hand it the rest of the turn; after a pause the area under the mouse takes it.
+ESIA_TEST(Child, WheelStaysWithTheAreaItScrolls)
+{
+    Harness h;
+    Vec2 innerScroll, outerScroll;
+    auto frame = [&](double dt = 1.0 / 60.0) {
+        h.Frame(dt);
+        WindowOptions o;
+        o.padding = {0, 0};
+        h.Win("W", {0, 0}, {400, 400}, o);
+        ChildOptions outer;
+        outer.size = {300, 200};
+        outer.flags = ChildFlags_ScrollY;
+        h.ctx.BeginChild("outer", outer);
+        h.ctx.ItemSize({50, 142});   // the inner area starts at 150
+        ChildOptions inner;
+        inner.size = {0, 100};
+        inner.flags = ChildFlags_ScrollY;
+        h.ctx.BeginChild("inner", inner);
+        for (int i = 0; i < 10; ++i)
+            h.ctx.ItemSize({50, 22});   // 192 to scroll
+        innerScroll = h.ctx.Scroll();
+        h.ctx.EndChild();
+        for (int i = 0; i < 10; ++i)
+            h.ctx.ItemSize({50, 22});   // 550 in all: 350 to scroll
+        outerScroll = h.ctx.Scroll();
+        h.ctx.EndChild();
+        h.ctx.End();
+        h.End();
+    };
+    h.Move({50, 50});   // over the outer area, above the inner one
+    frame();
+    frame();
+    for (int notch = 1; notch <= 4; ++notch)   // after the third the inner area (at 6 .. 106) is under the mouse
+    {
+        h.Wheel(0, -1);
+        frame();
+        frame();
+        ESIA_CHECK(outerScroll.y == 48.0f * (float)notch && innerScroll.y == 0.0f);
+    }
+    frame(0.5);
+    h.Wheel(0, -1);
+    frame();
+    frame();
+    ESIA_CHECK(outerScroll.y == 192.0f && innerScroll.y == 48.0f);
+    // moving the mouse ends it at once: over the outer area's own content again (below the inner one)
+    h.Wheel(0, -1);
+    frame();
+    h.Move({50, 150});
+    h.Wheel(0, -1);
+    frame();
+    frame();
+    ESIA_CHECK(outerScroll.y == 240.0f && innerScroll.y == 96.0f);
+}
+
+// An area half out of its parent: VisibleViewRect is the part still in it (where its scroll indicator may show).
+ESIA_TEST(Child, VisibleViewRectStopsAtTheParent)
+{
+    Harness h;
+    h.Frame();
+    WindowOptions o;
+    o.padding = {0, 0};
+    h.Win("W", {0, 0}, {400, 300}, o);
+    h.ctx.ItemSize({10, 242});   // the area starts at 250
+    ChildOptions c;
+    c.size = {200, 100};
+    c.flags = ChildFlags_ScrollY;
+    h.ctx.BeginChild("area", c);
+    ESIA_CHECK(h.ctx.ViewRect() == Rect(0, 250, 200, 350));
+    ESIA_CHECK(h.ctx.VisibleViewRect() == Rect(0, 250, 200, 300));
+    h.ctx.EndChild();
+    ESIA_CHECK(h.ctx.VisibleViewRect() == Rect(0, 0, 400, 300));   // the window: its rect
+    h.ctx.End();
+    h.End();
+}
+
+// LineRoom: an item asking at the start of a line learns how far the SameLine items after it reached last frame
+ESIA_TEST(Layout, LineRoomOfSameLineItems)
+{
+    Harness h;
+    float room[4] = {};
+    float lead = 0.0f;
+    auto frame = [&] {
+        h.Frame();
+        WindowOptions o;
+        o.padding = {0, 0};
+        h.Win("W", {0, 0}, {400, 300}, o);
+        h.ctx.ItemSize({100, 20});           // a line of its own
+        room[0] = h.ctx.LineRoom();          // a line of three: something filling, then two of 60 and 40
+        lead = 400.0f - room[0];
+        h.ctx.ItemSize({lead, 20});
+        h.ctx.SameLine();
+        room[1] = h.ctx.LineRoom();
+        h.ctx.ItemSize({60, 20});
+        h.ctx.SameLine();
+        room[2] = h.ctx.LineRoom();
+        h.ctx.ItemSize({40, 20});
+        room[3] = h.ctx.LineRoom();          // the next line: nothing after it
+        h.ctx.ItemSize({100, 20});
+        h.ctx.End();
+        h.End();
+    };
+    frame();
+    ESIA_CHECK(room[0] == 0.0f);   // the first frame knows nothing yet
+    frame();
+    ESIA_CHECK(room[0] == 116.0f && room[1] == 48.0f && room[2] == 0.0f && room[3] == 0.0f);   // 8 + 60 + 8 + 40
+    frame();
+    ESIA_CHECK(room[0] == 116.0f && lead == 284.0f);   // the same every frame: the line ends at the window's edge
 }

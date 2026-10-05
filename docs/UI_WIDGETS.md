@@ -68,8 +68,9 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
   the accent and what derives from it.
 * **Spacing.** Every frame the Ui sets the core's item spacing (`Context::Metrics().itemSpacing`) from the theme:
   `metrics.spacing` across and 0.8 of it down, times the scale, as WGT set Dear ImGui's `ItemSpacing`.
-* **Changing the theme.** `Ui::SetTheme(theme, animate)`, `SetDarkMode(dark)` (keeps the accent) and
-  `SetAccent(color)` cross-fade over the theme's transition time; an accent set with `SetAccent` stays across
+* **Changing the theme.** `Ui::SetTheme(theme, animate)`, `SetDarkMode(dark)` and `SetAccent(color)` cross-fade over
+  the theme's transition time. `SetDarkMode` changes only the colors and materials: the accent, the metrics (the
+  scale, `scrollIndicatorAlways`), the type and the motion stay as they were set; an accent set with `SetAccent` stays across
   theme changes (`Color::Clear()` returns to the theme's own). `LerpTheme` blends every color, material and
   metric; `dark` switches at the middle.
 * **Glass look.** `Ui::SetGlassLook` sets how every glass surface renders:
@@ -145,15 +146,20 @@ if (ui::BeginMenu("actions", {.anchor = {r.max.x, r.max.y + 6}, .pivot = {1, 0}}
     ui::EndMenu();
 }
 ui::Picker("size", &size, {"Small", "Medium", "Large"});   // shows the choice, opens a menu of the choices
+ui::Picker("item", &item, names, {.width = 220, .maxRows = 12});   // a long list scrolls inside its menu
 ui::Tooltip("What it does");                                // for the widget before it
 ```
 
 * A menu opens with `OpenMenu` (at the mouse, or at `MenuOptions::anchor` with `pivot`) and is submitted with
   `BeginMenu` every frame. It fades in and grows from 96 % on the popover glass, sized to its widest item (at least
   `minWidth`). Choosing an item, a click outside it or Escape closes it. The click outside belongs to the menu:
-  the widget under it does not react (iOS).
-* `Picker` is a pop-up button: its menu opens under it, right-aligned, with a check at the current choice.
-  `RowPicker` is the same in a list row.
+  the widget under it does not react (iOS). Items past `maxHeight` (by default: what fits on the display) scroll
+  inside the menu, with the edge fades and the indicator of a scroll area.
+* `Picker` is a pop-up button: its menu opens under it, right-aligned, with a check at the current choice. It shows
+  `PickerOptions::maxRows` choices at most (10); a longer list scrolls inside it and opens with the current choice
+  in the middle. `RowPicker` is the same in a list row.
+* Menus are on whole physical pixels: anchored at their right edge between two pixels, they no longer creep and
+  jump ([UI_CORE.md](UI_CORE.md) section 7).
 * `Tooltip` shows a glass tip after half a second over the widget before it, following the mouse. It waits again
   when the mouse comes back.
 
@@ -216,9 +222,15 @@ around it, and the light stops short of its neighbors:
   * the wheel and the core's scroll calls glide (`ChildFlags_SmoothScroll`);
   * pressed on empty space, the content follows the pointer, and let go it glides on with the drag's speed (no
     rubber band past the ends: the core keeps the offset in range - WGT's rubber band did nothing either);
-  * the indicator shows while the content moves and for 0.9 s after, and when the mouse comes near. It widens under
+  * the indicator shows while the content moves and for 0.9 s after, and when the mouse comes near. It also flashes
+    when an area appears with more than it shows, or grows past it (iOS's `flashScrollIndicators`). It widens under
     the mouse and can be dragged. It runs in a lane in the window's right padding (also for a page or scroll area
-    flush with the window's content), else over the content at the right edge;
+    flush with the window's content), else over the content at the right edge. It shows, and takes clicks, only
+    where its area shows: a table scrolled half out of its window has its indicator in the window;
+  * `Theme::metrics.scrollIndicatorAlways = 1` keeps the indicator of every area that scrolls, dimmed at rest, on a
+    faint track: for desktop apps, where users look for a scroll bar. The default (0) hides it at rest, as iOS;
+  * the wheel stays with the area it scrolls while it turns: a table the window scrolls in under the mouse does not
+    take the rest of the turn ([UI_CORE.md](UI_CORE.md) section 8);
   * a drag on empty space scrolls instead of moving the window; the header, and content that cannot scroll, still
     move it (the core moves a window only when no widget took the click);
   * a finger scrolls from anywhere, as on a phone (presses marked `InputEvent::touch`: Android, iOS, Windows touch
@@ -323,6 +335,9 @@ nested container submitted directly inside one is one child.
   Any other stack is as wide as its content. For example, two gauge stacks in a flow sit side by side.
 * **Size classes.** `GetSizeClass(width)` returns `Compact` (< 420), `Regular` (< 760) or `Expanded`, for pages that
   change their structure with the width.
+* **Outside a container, with `SameLine`.** A widget that fills the available width (`AvailableWidth()`: a number,
+  vector or text field, a picker of width < 0, a table) leaves the items after it on its line the room they took last
+  frame: `NumberField` then `SameLine()` and a button keeps the button in view (`Context::LineRoom`).
 
 ## 9. Custom widgets and animation
 
@@ -489,6 +504,19 @@ if (first) {
   (click, Ctrl adds, Shift extends), stripes and column lines are flags. A cell holds text (`TableCell`), an icon and
   text, or any widget after `TableNextColumn`. Row offsets are kept in doubles, so the last of a million rows lands on
   its pixel.
+  * Height: `height` fixes it (the rows scroll inside); `maxHeight` makes it as tall as its rows up to that height,
+    then they scroll. It takes the height from the count given to `TableVisible`, in the same frame;
+    0 of both: as tall as all the rows.
+  * Selection: `selection` holds row indices. Rows that move (sorted, filtered, a list refreshed under the table)
+    keep the selection as keys instead: `selectedKeys` with `rowKey(i)`, the key of row i now (an id of your data).
+    A selected item stays selected wherever its row goes, and Shift selects the rows between in their order now.
+  * A table is an id scope: tables in one window scroll on their own, and widgets in their cells never share an id
+    with another table's. The multi-line editor is one too.
+
+  ```cpp
+  ui::TableOptions o{.flags = ui::TableFlags_Selectable, .maxHeight = 330, .selectedKeys = &picked};
+  o.rowKey = [&](int i) { return items[i].id; };
+  ```
 * **Trees** (`TreeNode` / `TreePop`): an arrow that turns as the node opens, an icon, the label and a detail on the
   right; children slide open and closed under it with a guide line. `TreeFlags_OpenOnArrow` keeps clicks on the row
   for selecting; `SetNextTreeNodeOpen` expands or reveals.

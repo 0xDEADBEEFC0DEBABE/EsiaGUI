@@ -39,7 +39,9 @@ namespace esia
         WindowFlags_NoScroll = 1u << 3,        // the wheel does not scroll it
         WindowFlags_NoBringToFront = 1u << 4,  // focusing it keeps its place in the z-order
         WindowFlags_NoFocus = 1u << 5,         // clicking it does not focus it
-        WindowFlags_AutoSize = 1u << 6,        // sized to the content measured last frame; hidden the frame it appears
+        // sized to the content measured last frame (whole physical pixels, placed on them: what it measures does not
+        // depend on where it is); hidden the frame it appears
+        WindowFlags_AutoSize = 1u << 6,
     };
 
     // Draw order: every window of a higher layer is above every window of a lower one.
@@ -184,6 +186,7 @@ namespace esia
         Vec2 pos{kNoMousePos, kNoMousePos}; // anchor; default: the mouse position when it was opened
         Vec2 pivot{0, 0};                   // which point of the popup sits on the anchor (0,0 top-left, 1,0 top-right)
         Vec2 minSize{0, 0};
+        Vec2 maxSize{1e6f, 1e6f};
         Vec2 padding{-1, -1};               // < 0 = LayoutMetrics::windowPadding
         bool consumeClickAway = true;       // the click that dismisses it does nothing else
     };
@@ -243,6 +246,12 @@ namespace esia
             ScrollState* scroll = nullptr;
             bool smooth = false;
             std::vector<std::pair<const void*, const void*>> scope;
+            // the layout cursor's lines (LineRoom): the frame among this frame's frames (the same from frame to frame),
+            // the lines started in it, the items on the current line and the right edges of the first ones
+            Id seq = 0;
+            int line = -1, lineItems = 0;
+            bool sameLine = false;        // SameLine: the next item continues the line
+            float lineEdges[4] = {};
         };
         // An item as the next frame's hit test sees it. Content moves when a scroll area it is in scrolls (the wheel,
         // a glide, SetScroll*) before the next layout: the hit test shifts the record by how far its scroll areas
@@ -295,6 +304,9 @@ namespace esia
         std::vector<ChildRecord> children_, childrenPrev_;
         std::vector<int> childStack_;     // indices into children_ of the children being submitted
         std::vector<LaidOutItem> laidOut_, laidOutPrev_;
+        // per item of a line followed by SameLine items: how far the line reached past it (LineRoom); last frame's
+        // sorted by key
+        std::vector<std::pair<Id, float>> lineRoom_, lineRoomPrev_;
         std::unordered_map<Id, ChildState> childStates_;
     };
 
@@ -427,6 +439,13 @@ namespace esia
         // What the innermost child region being submitted shows (else the window): its rect where it is, padding
         // included, not moved by its own scroll. Bars that float over an area (tab bars, search bars) are placed in it.
         Rect ViewRect() const;
+        // The part of ViewRect inside the clips of what it is in (an area scrolled half out of its window: the half
+        // still in it). Scroll indicators, which may lie in a parent's padding, stay inside it.
+        Rect VisibleViewRect() const;
+        // The width the items after the next one on its line took last frame (SameLine), measured from the next
+        // item's right edge: an item that fills what is available leaves them this room. 0 = nothing follows it, or
+        // an auto-layout container (its provider places the items).
+        float LineRoom() const;
         int CurrentDepth() const;
         // The current line's baseline from its top (< 0 = none) and moving the cursor down so an item with
         // `baseline` lines up with it; returns how far it moved.
@@ -533,6 +552,16 @@ namespace esia
         std::vector<Monitor> monitors_;
         std::uint64_t frame_ = 0;
         bool inFrame_ = false;
+        // The wheel stays with the area it scrolled while it keeps turning (a browser's scroll latching): content
+        // moving under the mouse does not take it over halfway. Per axis.
+        struct WheelLatch
+        {
+            Id window = 0;
+            Id child = 0;                  // 0 = the window's own scroll
+            double time = -1e9;
+            Vec2 mouse;
+        };
+        WheelLatch wheelLatch_[2];
 
         std::mutex inputMutex_;
         std::vector<InputEvent> queued_;

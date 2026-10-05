@@ -14,17 +14,46 @@ namespace esia::ui
             const Vec2 c = r.Center(), h = r.Size() * (0.5f * k);
             return Rect(c - h, c + h);
         }
+
+        struct GlassPopupState
+        {
+            Vec2 rows;                   // what the rows measured last frame
+            bool measured = false;       // ... since it opened
+            bool scrolled = false;       // its scroll area was opened since it opened (centerOn is applied once)
+        };
+
+        // a glass popup being submitted: its rows may be in a scroll area
+        struct GlassPopupFrame
+        {
+            Id id = 0;
+            bool scrolls = false;
+            Id child = 0;
+            bool edgeFade = false;
+        };
+        thread_local std::vector<GlassPopupFrame> g_glassPopups;
     }
 
     // ================================================================ popups
-    bool detail::BeginGlassPopup(Id id, PopupOptions options, float minWidth)
+    bool detail::BeginGlassPopup(Id id, PopupOptions options, float minWidth, float maxHeight, float centerOn)
     {
         Context& c = Ctx();
+        const float pad = Sc(6);
+        GlassPopupState& st = c.State<GlassPopupState>(Salt(id, 0x52));
+        // the rows' height at most: maxHeight, and what fits on the display (a menu never runs off it)
+        float rowsMax = std::max(c.SafeArea().Height() - Sc(24) - pad * 2.0f, Sc(68));
+        if (maxHeight > 0.0f)
+            rowsMax = std::min(rowsMax, Sc(maxHeight));
         options.minSize = Vec2(std::max(options.minSize.x, minWidth), options.minSize.y);
-        options.padding = Vec2(Sc(6), Sc(6));
+        options.maxSize.y = std::min(options.maxSize.y, rowsMax + pad * 2.0f);   // also the frame it measured them unscrolled
+        options.padding = Vec2(pad, pad);
         if (!c.BeginPopup(id, options))
+        {
+            st.measured = st.scrolled = false;
             return false;
+        }
         const Window& w = *c.CurrentWindow();
+        if (w.Appearing())
+            st.measured = st.scrolled = false;
         // it fades in and grows from 96 % (a spring), on glass
         const Id aid = Salt(id, 0x50);
         if (w.Appearing())
@@ -38,6 +67,27 @@ namespace esia::ui
             p.Rect(Scaled(wr, 0.96f + 0.04f * a),
                    Style().Radius(Sc(14)).Glass(LookMaterial(T().materials.popover)).Shadow(C().shadow.Fade(1.2f), Sc(28), Vec2(0, Sc(10))));
         }
+        // More rows than fit scroll inside the height they may take, in an area as wide as the widest (a fixed
+        // size: an area sized by the popup would feed its size back to it). The frame a popup opens measures them
+        // unscrolled (it is hidden then).
+        GlassPopupFrame g;
+        g.id = id;
+        g.scrolls = st.measured && st.rows.y > rowsMax + 0.5f;
+        if (g.scrolls)
+        {
+            if (!st.scrolled && centerOn >= 0.0f)
+                c.SetNextScroll(Vec2(-1.0f, std::clamp(centerOn - rowsMax * 0.5f, 0.0f, st.rows.y - rowsMax)));
+            st.scrolled = true;
+            ChildOptions ch;
+            ch.size = Vec2(std::max(st.rows.x, options.minSize.x - pad * 2.0f), rowsMax);
+            ch.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
+            g.child = c.GetId("##rows");
+            ScrollBegin(g.child);
+            c.BeginChild("##rows", ch);
+            g.edgeFade = BeginScrollEdgeFade();
+        }
+        g_glassPopups.push_back(g);
+
         // its rows follow each other without gaps
         StackLayout& rows = c.State<StackLayout>(Salt(id, 0x51));
         rows.horizontal = false;
@@ -52,7 +102,18 @@ namespace esia::ui
     void detail::EndGlassPopup()
     {
         Context& c = Ctx();
-        c.EndContainer();
+        ESIA_ASSERT(!g_glassPopups.empty() && "EndGlassPopup without BeginGlassPopup");
+        const GlassPopupFrame g = g_glassPopups.back();
+        g_glassPopups.pop_back();
+        GlassPopupState& st = c.State<GlassPopupState>(Salt(g.id, 0x52));
+        st.rows = c.EndContainer().Size();
+        st.measured = true;
+        if (g.scrolls)
+        {
+            EndScrollEdgeFade(g.edgeFade);
+            ScrollEnd(g.child, -1.0f);
+            c.EndChild();
+        }
         PopStyle();
         c.EndPopup();
     }
@@ -63,10 +124,11 @@ namespace esia::ui
         const text::FontRef f = Font(TextStyle::Body);
         const std::string_view shown = VisibleLabel(label);
         const Vec2 ts = MeasureText(f, shown);
-        // the popup sizes itself to its widest row; every row then spans the popup (its width last frame)
+        // The popup sizes itself to its widest row (what each measures: ItemSize); every row then spans the popup
+        // (or the scroll area its rows are in) as wide as it is now.
         const float natural = ts.x + Sc(64), h = Sc(34);
-        const float width = std::max(natural, c.CurrentWindow()->ContentRect().Width());
         const Vec2 pos = c.CursorPos();
+        const float width = std::max(natural, c.WorkRect().max.x - pos.x);
         c.ItemSize(Vec2(natural, h));
         const Interaction it = InteractImpl(c.GetId(label), Rect::FromSize(pos, Vec2(width, h)), InteractFlags_None);
         if (!it.visible)
@@ -102,7 +164,7 @@ namespace esia::ui
         if (o.anchor.x >= 0.0f && o.anchor.y >= 0.0f)
             po.pos = o.anchor;
         po.pivot = o.pivot;
-        return BeginGlassPopup(c.GetId(id), po, Sc(o.minWidth));
+        return BeginGlassPopup(c.GetId(id), po, Sc(o.minWidth), o.maxHeight);
     }
 
     bool MenuItem(std::string_view label, Icon icon, bool checked)
@@ -116,7 +178,7 @@ namespace esia::ui
     void EndMenu() { EndGlassPopup(); }
 
     // ================================================================ picker
-    bool detail::PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain)
+    bool detail::PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain, int maxRows)
     {
         Context& c = Ctx();
         const Palette& pc = C();
@@ -144,7 +206,7 @@ namespace esia::ui
                       text::TextFlags_Ellipsis);
         }
 
-        // the menu opens under the button, right-aligned with it
+        // the menu opens under the button, right-aligned with it; a long list scrolls inside it, at the choice
         const Id popupId = Salt(id, 0x60);
         if (it.pressed)
             c.OpenPopup(popupId);
@@ -152,7 +214,8 @@ namespace esia::ui
         PopupOptions po;
         po.pos = Vec2(r.max.x, r.max.y + Sc(6));
         po.pivot = Vec2(1.0f, 0.0f);
-        if (BeginGlassPopup(popupId, po, std::max(r.Width(), Sc(180))))
+        const float rowH = Sc(34);   // PopupRow's
+        if (BeginGlassPopup(popupId, po, std::max(r.Width(), Sc(180)), maxRows > 0 ? 34.0f * (float)maxRows : 0.0f, sel >= 0 ? ((float)sel + 0.5f) * rowH : -1.0f))
         {
             for (int i = 0; i < count; ++i)
             {
@@ -170,10 +233,11 @@ namespace esia::ui
         return changed;
     }
 
-    bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, float width)
+    bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, const PickerOptions& o)
     {
         ItemScope scope;
         Context& c = Ctx();
+        const float width = o.width;
         float w = width > 0.0f ? Sc(width) : 0.0f;
         if (width < 0.0f)
             w = AvailableWidth();
@@ -188,7 +252,7 @@ namespace esia::ui
         const Vec2 size(w, Sc(34));
         const Vec2 pos = c.CursorPos();
         c.ItemSize(size);
-        return PickerAt(c.GetId(id), Rect::FromSize(pos, size), selected, items, false);
+        return PickerAt(c.GetId(id), Rect::FromSize(pos, size), selected, items, false, o.maxRows);
     }
 
     // ============================================================== tooltips

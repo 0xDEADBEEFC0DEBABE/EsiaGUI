@@ -598,6 +598,64 @@ ESIA_TEST(UiPopups, PickerOpensItsMenuAndTakesAChoice)
     ESIA_CHECK(behind == 1);   // closed: the next click reaches it
 }
 
+// A long list scrolls inside a menu of ten rows, opened at the choice; the menu, anchored between two pixels at its
+// right edge, lands on whole pixels and stays put
+ESIA_TEST(UiPopups, ALongPickerScrollsOpenedAtTheChoice)
+{
+    UiHarness h;
+    h.scale = {1.25f, 1.25f};
+    std::vector<std::string> names;
+    for (int i = 0; i < 50; ++i)
+        names.push_back("Item " + std::to_string(i));
+    const std::vector<std::string_view> items(names.begin(), names.end());
+    int choice = 40;
+    auto frame = [&] {
+        h.Frame([&] {
+            h.ctx.SetCursorPos({100.5f, 0.0f});   // its right edge (the menu's anchor) at 300.5
+            ui::Picker("pick", &choice, std::span<const std::string_view>(items), 200);
+        });
+    };
+    const auto menu = [&] {
+        for (Window* w : h.ctx.WindowsInDrawOrder())
+            if (w->Layer() == WindowLayer::Overlay)
+                return w->GetRect();
+        return Rect();
+    };
+    frame();
+    ClickAt(h, {200, 17}, frame);
+    std::vector<Rect> seen;
+    for (int i = 0; i < 8; ++i)
+    {
+        frame();
+        seen.push_back(menu());
+    }
+    const Rect m = seen.back();
+    for (std::size_t i = 2; i < seen.size(); ++i)
+        ESIA_CHECK(seen[i] == m);
+    ESIA_CHECK(m.Height() == 10 * 34.0f + 12.0f && m.max.x <= 300.5f && m.max.x > 299.5f);
+    const auto whole = [](float v) { return std::fabs(v * 1.25f - std::round(v * 1.25f)) < 1e-3f; };
+    ESIA_CHECK(whole(m.min.x) && whole(m.min.y) && whole(m.Width()));
+    // the choice is in the middle: the row under it is the next one
+    ClickAt(h, {m.Center().x, m.min.y + 6.0f + 170.0f + 17.0f}, frame);
+    ESIA_CHECK(choice == 41);
+}
+
+// SetDarkMode swaps the colors and keeps what SetTheme set: the scale, the indicators
+ESIA_TEST(UiTheme, DarkModeKeepsTheMetrics)
+{
+    UiHarness h;
+    ui::Theme t = ui::ThemeLight();
+    t.metrics.scale = 1.5f;
+    t.metrics.scrollIndicatorAlways = 1.0f;
+    h.ui.SetTheme(t, false);
+    h.ui.SetDarkMode(true, false);
+    h.Frame([] {});
+    const ui::Theme& now = h.ui.GetTheme();
+    ESIA_CHECK(now.dark && now.metrics.scale == 1.5f && now.metrics.scrollIndicatorAlways == 1.0f);
+    ESIA_CHECK(now.colors.label == ui::ThemeDark().colors.label);
+    ESIA_CHECK(ui::LerpTheme(ui::ThemeLight(), t, 0.5f).metrics.scrollIndicatorAlways == 0.5f);   // it blends
+}
+
 ESIA_TEST(UiPopups, MenuItemsCloseTheMenu)
 {
     UiHarness h;

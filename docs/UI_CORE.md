@@ -201,6 +201,13 @@ child (or the provider's).
 **The cursor layout** (no provider) is the default: items go below each other with `LayoutMetrics::itemSpacing`,
 `SameLine`, `NewLine`, `Spacing`, `Indent` work as before, `SetCursorPos` places the next item explicitly.
 
+**The room of a line.** `LineRoom()` is how far the items after the next one on its line (`SameLine`) reached past
+it last frame. A widget that fills what is available takes that much less (`ui::AvailableWidth`), so a field that
+fills the width does not push the button after it out of view. The lines are told apart by their place in their
+container and the container's place in its parent, nothing positional: the room stays found while the content
+scrolls or moves above them. It only covers the first four items of a line and the cursor layout (a provider
+places its children itself).
+
 **Layout providers** hand out slots instead (`include/esia/core/layout.hpp`):
 
 ```cpp
@@ -245,7 +252,11 @@ whole). Integer layouts at scale 1 are unchanged.
 * `Cond::Appearing` for `SetNextWindowPos` / `SetNextWindowSize` (applied each time the window appears);
   `SetNextWindowPos(pos, cond, pivot)`;
 * `WindowFlags_AutoSize`: the window takes the size its content measured last frame (plus padding, within min /
-  max); its first frame is hidden (submitted, measured, not drawn or hit), so it never flashes at a wrong size;
+  max); its first frame is hidden (submitted, measured, not drawn or hit), so it never flashes at a wrong size. Its
+  size is rounded up to whole physical pixels and its place down onto them. Layout positions snap to pixels, so what
+  the content measures depends on where it starts between two pixels; anchored at its right edge (a menu under a
+  button's right edge) the window's place depends on its size in turn, and the two fed each other: the edge crept
+  by a fraction of a pixel every frame and jumped back (`Context.AutoSizedPopupAtItsRightEdgeStaysPut`);
 * **focus lifecycle**: a window that appears again comes to the front and takes focus (unless `NoFocus` /
   `NoBringToFront`); the focused, hovered and dragged window are cleared when it is not submitted; a window unused
   for `ContextDesc::retainFrames` frames is freed (a `Window*` to it dangles after that, as in any immediate-mode
@@ -291,7 +302,10 @@ drag-to-scroll checks it with `HoveredId() == 0`.
 | `SetNextScroll(Vec2)` | the next `Begin` / `BeginChild` starts at this offset (a negative component is left alone), clamped at its end to the range measured then, so it works on an area's first frame (restoring a saved position); on a window already begun this frame it is a request for its `End` |
 
 The wheel goes to the innermost scroll area under the mouse (from last frame's records) that can still move in that
-direction, else outward to its parents and the window; Shift+wheel scrolls horizontally. With
+direction, else outward to its parents and the window; Shift+wheel scrolls horizontally. While it keeps turning it
+stays with the area it scrolled (per axis), as a browser latches it: the window scrolling a table in under the mouse
+does not hand the table the rest of the turn, and an area at its end does not pass it on to its parent halfway. A
+pause of 0.3 s, moving the mouse or leaving the window ends that. With
 `ChildFlags_SmoothScroll` the offset follows its target (exponentially, time constant
 `LayoutMetrics::scrollSmoothing` seconds, at least one physical pixel per frame so the tail never stalls) on whole
 physical pixels, ending on the pixel nearest the target; the glide steps in `NewFrame`, before the hit test; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
@@ -303,6 +317,10 @@ range), whatever set the offset: a glide, a drag, a request, the clamp itself. L
 (section 6), so an offset between pixels would change what the content measures, and with it the range that clamps
 the offset; a drag held past the end, which asks for the end every frame, made the content jump a pixel every few
 frames.
+
+`VisibleViewRect()` is the part of `ViewRect()` inside the clips of what the area is in: for an area its window
+scrolled half out of view, the half still in it. The widget layer's scroll indicator, which may lie in a parent's
+padding (outside the parent's clip), is clipped to it, so it never shows or takes clicks past the window.
 
 ## 9. Popups and tooltips
 
@@ -317,7 +335,7 @@ bool BeginTooltip();    void EndTooltip();                  // WindowLayer::Tool
   sibling submenu); outside any popup it replaces the whole stack (one menu at a time). A popup that is not
   submitted in a frame closes.
 * **Placement.** `PopupOptions::pos` and `pivot` (default: the mouse position when opened, pivot top-left);
-  `WindowFlags_AutoSize` by default, `minSize`; kept entirely on screen.
+  `WindowFlags_AutoSize` by default (on whole pixels, section 7), `minSize`, `maxSize`; kept entirely on screen.
 * **Focus.** An opened popup comes to the front of the overlay layer and takes window focus.
 * **Click-away.** A click outside the popup and its child popups closes them. With
   `PopupOptions::consumeClickAway` (default) the dismissing press belongs to the popup: the item under it does not
@@ -546,4 +564,7 @@ For the widget layer (`esia_ui`, [UI_WIDGETS.md](UI_WIDGETS.md)):
 
 * **Added**: `Context::ViewRect()`, what the innermost child region being submitted shows (else the window): its
   rect, padding included, unmoved by its own scroll. The tab bar and the search bar float at its bottom.
+* **Added**: `Context::VisibleViewRect()` (section 8), `Context::LineRoom()` (section 6), `PopupOptions::maxSize`.
+* **Changed**: the wheel stays with the area it scrolls while it turns (section 8); auto-sized windows are on whole
+  physical pixels (section 7).
 * **Changed**: `Context::Snap` snaps down instead of to the nearest pixel (section 6), as WGT's Dear ImGui did.
