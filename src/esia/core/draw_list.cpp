@@ -67,12 +67,15 @@ namespace esia
                 last.texture = tex;
                 last.clip = clipStack_.back();
                 last.first = (std::uint32_t)idx_.size();
+                last.vtxFirst = last.vtxEnd = (std::uint32_t)vtx_.size();
+                last.vtxBounds = DrawCmd().vtxBounds;
                 return last;
             }
         }
         DrawCmd& c = Push(DrawCmdKind::Geometry);
         c.texture = tex;
         c.first = (std::uint32_t)idx_.size();
+        c.vtxFirst = c.vtxEnd = (std::uint32_t)vtx_.size();
         return c;
     }
 
@@ -109,7 +112,10 @@ namespace esia
         x[3] = b;
         x[4] = b + 2;
         x[5] = b + 3;
-        cmds_.back().count += 6;
+        DrawCmd& c = cmds_.back();
+        c.count += 6;
+        c.vtxEnd = (std::uint32_t)vtx_.size();
+        c.vtxBounds = c.vtxBounds.Union(r);
     }
 
     void DrawList::AddRectFilled(const Rect& r, std::uint32_t color) { AddRectFilledUV(r, Vec2(0, 0), Vec2(1, 1), color); }
@@ -131,8 +137,27 @@ namespace esia
     {
         vtx_.resize(w.base + (std::size_t)w.written * 4);
         idx_.resize((std::size_t)(w.idx - idx_.data()) + (std::size_t)w.written * 6);
-        cmds_.back().count += w.written * 6;
+        DrawCmd& c = cmds_.back();
+        c.count += w.written * 6;
+        if (w.written > 0)
+        {
+            c.vtxEnd = (std::uint32_t)vtx_.size();
+            c.vtxBounds = c.vtxBounds.Union(w.bounds);
+        }
         PopTexture();
+    }
+
+    void DrawList::RefreshBounds(std::size_t fromVertex)
+    {
+        for (DrawCmd& c : cmds_)
+        {
+            if (c.kind != DrawCmdKind::Geometry || c.vtxEnd <= fromVertex)
+                continue;
+            Rect b = DrawCmd().vtxBounds;
+            for (std::uint32_t v = c.vtxFirst; v < c.vtxEnd; ++v)
+                b = b.Union(Rect(vtx_[v].pos, vtx_[v].pos));
+            c.vtxBounds = b;
+        }
     }
 
     void DrawList::AddImage(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)

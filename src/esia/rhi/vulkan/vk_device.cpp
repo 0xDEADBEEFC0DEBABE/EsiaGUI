@@ -144,6 +144,7 @@ namespace esia::rhi::vulkan
         caps_.sampleRenderTarget = true;
         caps_.timestampQueries = timestampBits > 0 && timestampNs_ > 0.0;
         caps_.readback = true;
+        caps_.baseVertex = true;   // vkCmdDrawIndexed's vertexOffset
         caps_.runtimeEffects = false;
         caps_.fxFeatureVariants = false;
         caps_.maxTextureSize = (int)std::min<std::uint32_t>(props_.limits.maxImageDimension2D, 1u << 30);
@@ -1520,6 +1521,12 @@ namespace esia::rhi::vulkan
     {
         if (boundVertices_ && boundIndices_ && PrepareDraw())
             vk_.vkCmdDrawIndexed(cmd_, indexCount, 1, firstIndex, 0, 0);
+    }
+
+    void VulkanDevice::DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex)
+    {
+        if (boundVertices_ && boundIndices_ && PrepareDraw())
+            vk_.vkCmdDrawIndexed(cmd_, indexCount, 1, firstIndex, (std::int32_t)baseVertex, 0);
     }
 
     void VulkanDevice::DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount)

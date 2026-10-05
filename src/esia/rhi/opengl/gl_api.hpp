@@ -166,7 +166,8 @@ namespace esia::rhi::opengl
     X(void, DeleteQueries, (GLsizei n, const GLuint* ids))                                                                      \
     X(void, GetQueryObjectuiv, (GLuint id, GLenum pname, GLuint * value))
 
-    // May be null. GL 4.3 / ES 3.0, GL 3.3 / EXT_disjoint_timer_query, KHR_debug, desktop GL only (PolygonMode).
+    // May be null. GL 4.3 / ES 3.0, GL 3.3 / EXT_disjoint_timer_query, KHR_debug, desktop GL only (PolygonMode,
+    // DrawElementsBaseVertex: GLES has it from 3.2).
 #define ESIA_GL_OPTIONAL(X)                                                                                                     \
     X(void, InvalidateFramebuffer, (GLenum target, GLsizei count, const GLenum* attachments))                                   \
     X(void, QueryCounter, (GLuint id, GLenum target))                                                                           \
@@ -175,7 +176,8 @@ namespace esia::rhi::opengl
     X(void, DebugMessageControl, (GLenum source, GLenum type, GLenum severity, GLsizei count, const GLuint* ids,                 \
                                   GLboolean enabled))                                                                           \
     X(void, ObjectLabel, (GLenum identifier, GLuint name, GLsizei length, const GLchar* label))                                 \
-    X(void, PolygonMode, (GLenum face, GLenum mode))
+    X(void, PolygonMode, (GLenum face, GLenum mode))                                                                            \
+    X(void, DrawElementsBaseVertex, (GLenum mode, GLsizei count, GLenum type, const void* offset, GLint base))
 
     struct GlApi
     {

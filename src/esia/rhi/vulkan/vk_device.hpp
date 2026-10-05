@@ -80,6 +80,7 @@ namespace esia::rhi::vulkan
         void SetIndexBuffer(Buffer buf) override;
         void Draw(std::uint32_t vertexCount, std::uint32_t firstVertex) override;
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override;
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override;
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override;
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& srcRect) override;
         void* NativeRenderState() override;

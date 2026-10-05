@@ -167,6 +167,7 @@ namespace esia::rhi::d3d10
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
             c.readback = true;
+            c.baseVertex = true;
             c.runtimeEffects = true;
             // the whole FX shader fits SM4: one pipeline instead of one per feature mask
             c.fxFeatureVariants = false;
@@ -453,6 +454,26 @@ namespace esia::rhi::d3d10
             }
         }
 
+        void* MapBuffer(Buffer buf, std::size_t size) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (!b || size == 0 || size > b->desc.size)
+                return nullptr;
+            void* m = nullptr;
+            if (!log_.Check(b->buf->Map(D3D10_MAP_WRITE_DISCARD, 0, &m), "Map (buffer)"))
+                return nullptr;
+            mappedBuffer_ = buf.id;
+            return m;
+        }
+
+        void UnmapBuffer(Buffer buf) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (b && mappedBuffer_ == buf.id)
+                b->buf->Unmap();
+            mappedBuffer_ = 0;
+        }
+
         void DestroyBuffer(Buffer buf) override { buffers_.Remove(buf.id); }
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
@@ -638,6 +659,10 @@ namespace esia::rhi::d3d10
 
         void Draw(std::uint32_t vertexCount, std::uint32_t firstVertex) override { dev_->Draw(vertexCount, firstVertex); }
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override { dev_->DrawIndexed(indexCount, firstIndex, 0); }
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override
+        {
+            dev_->DrawIndexed(indexCount, firstIndex, (INT)baseVertex);
+        }
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { dev_->DrawInstanced(vertexCount, instanceCount, 0, 0); }
 
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r) override
@@ -875,6 +900,7 @@ namespace esia::rhi::d3d10
         ComPtr<ID3D10DepthStencilState> depth_;
         ComPtr<ID3D10SamplerState> samplers_[2];
         ComPtr<ID3D10Buffer> cbs_[3];
+        std::uint32_t mappedBuffer_ = 0;   // MapBuffer's, until UnmapBuffer
 
         HostState host_;
         bool hostTouched_ = false;

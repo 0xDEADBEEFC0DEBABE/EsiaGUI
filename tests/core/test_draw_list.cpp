@@ -62,6 +62,27 @@ ESIA_TEST(DrawList, QuadRunsMatchSingleQuads)
                    a.Commands()[i].count == b.Commands()[i].count);
 }
 
+// Every geometry command keeps the bounds of its vertices as they are written (the planner's), through each way of
+// writing them, and again after positions were rewritten (Painter::PopScale).
+ESIA_TEST(DrawList, CommandsKeepTheirVertexBounds)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 100, 100));
+    dl.AddRectFilled(Rect(10, 20, 30, 40), 0xFFFFFFFFu);
+    dl.AddTriangleFilled(Vec2(50, 5), Vec2(60, 50), Vec2(40, 45), 0xFFFFFFFFu);   // WriteVertex, the same command
+    ESIA_CHECK(dl.Commands().size() == 1);
+    ESIA_CHECK(dl.Commands()[0].vtxFirst == 0 && dl.Commands()[0].vtxEnd == 7 && dl.Commands()[0].vtxBounds == Rect(10, 5, 60, 50));
+    DrawList::QuadWriter w = dl.BeginQuads(5, 4);   // more reserved than written
+    w.Add(Rect(70, 70, 80, 90), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    dl.EndQuads(w);
+    ESIA_CHECK(dl.Commands().size() == 2 && dl.Commands()[1].texture == 5);
+    ESIA_CHECK(dl.Commands()[1].vtxFirst == 7 && dl.Commands()[1].vtxEnd == 11 && dl.Commands()[1].vtxBounds == Rect(70, 70, 80, 90));
+    for (std::size_t i = 7; i < 11; ++i)
+        dl.Vertices()[i].pos = Vec2(dl.Vertices()[i].pos.x * 0.5f, dl.Vertices()[i].pos.y * 0.5f);
+    dl.RefreshBounds(7);
+    ESIA_CHECK(dl.Commands()[1].vtxBounds == Rect(35, 35, 40, 45) && dl.Commands()[0].vtxBounds == Rect(10, 5, 60, 50));
+}
+
 ESIA_TEST(DrawList, TransparentGeometryIsSkipped)
 {
     DrawList dl;

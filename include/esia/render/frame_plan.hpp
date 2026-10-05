@@ -61,6 +61,7 @@ namespace esia::render
         TextureId texture = 0;
         // Draw
         std::uint32_t idxCount = 0, idxOffset = 0;   // into FramePlan::indices
+        std::uint32_t geometryFirst = 0, geometryCount = 0;   // direct plans: into FramePlan::geometry
         bool coverage = false;       // glyph coverage texture: the text pipeline
         // FxBatch
         std::uint32_t instStart = 0, instCount = 0;   // into FramePlan::instances
@@ -100,13 +101,38 @@ namespace esia::render
         std::vector<RenderOp> ops;
         std::vector<fx::Instance> instances;
         std::vector<Vertex> vertices;        // every list's vertices, back to front
-        std::vector<std::uint32_t> indices;  // rebased onto `vertices`
+        IndexVector indices;                 // rebased onto `vertices`
+
+        // A direct plan (Build's `direct`: a device with rhi::Caps::baseVertex) leaves `instances`, `vertices` and
+        // `indices` empty: the lists' vertices and indices go to the GPU as they are, every list at its offset in the
+        // frame's buffers (`lists`), and a Draw op is `geometryCount` draws from `geometry[geometryFirst]`, each with
+        // its list's first vertex as base vertex. The FX instances are `instanceRuns`, in op order.
+        struct ListGeometry
+        {
+            const DrawList* list = nullptr;
+            std::uint32_t firstVertex = 0, firstIndex = 0;
+        };
+        struct GeometryDraw
+        {
+            std::uint32_t firstIndex = 0, count = 0, baseVertex = 0;
+        };
+        struct InstanceRun
+        {
+            const fx::Instance* first = nullptr;
+            std::uint32_t count = 0;
+        };
+        bool direct = false;
+        std::vector<ListGeometry> lists;
+        std::vector<GeometryDraw> geometry;
+        std::vector<InstanceRun> instanceRuns;
+        std::uint32_t totalVertices = 0, totalIndices = 0;
+
         bool anyGlass = false;
         bool anyLayer = false;
         int fxCount = 0;
         int plannedCaptures = 0;
 
-        void Build(const DrawData& dd, const TextureInfoFn& textureInfo);
+        void Build(const DrawData& dd, const TextureInfoFn& textureInfo, bool direct = false);
 
     private:
         // Decides before which glass batches the backdrop is captured and over which region (see .cpp).
@@ -118,6 +144,7 @@ namespace esia::render
             const fx::Instance* inst = nullptr;   // FX batch: `count` instances from here
             const std::uint32_t* idx = nullptr;   // draw: `count` indices from here, rebased by `base`
             std::uint32_t count = 0, base = 0, next = 0;
+            std::uint32_t firstIndex = 0;          // draw: where `idx` lands in the frame's index buffer (direct)
         };
         std::vector<Piece> pieces_;
         std::vector<std::uint32_t> opFirst_, opLast_;
