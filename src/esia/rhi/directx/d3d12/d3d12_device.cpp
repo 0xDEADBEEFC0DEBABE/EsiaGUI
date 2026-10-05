@@ -206,6 +206,8 @@ namespace esia::rhi::d3d12
             c.readback = true;
             c.runtimeEffects = true;
             c.fxFeatureVariants = false;   // the whole FX shader fits SM5
+            // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
+            c.drawFirstInstance = true;
             c.maxTextureSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             c.maxFxDataWidth = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             return c;
@@ -463,6 +465,7 @@ namespace esia::rhi::d3d12
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
+            vr.instanceAttribute = desc.program == ShaderProgram::Fx;   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;
@@ -519,8 +522,12 @@ namespace esia::rhi::d3d12
                 {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
                 {"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
             };
+            // FX: the instance's index, from InstanceIndices at slot 1
+            const D3D12_INPUT_ELEMENT_DESC fx[] = {{"INSTANCEINDEX", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1}};
             if (desc.layout == VertexLayout::UiVertex)
                 d.InputLayout = {ui, 3};
+            else if (desc.program == ShaderProgram::Fx)
+                d.InputLayout = {fx, 1};
             d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
             d.NumRenderTargets = 1;
             d.RTVFormats[0] = f.rtv;
@@ -573,6 +580,7 @@ namespace esia::rhi::d3d12
             }
             else
                 cl_ = static_cast<ID3D12GraphicsCommandList*>(desc.nativeContext);
+            ForgetListState();   // a new list (or the host's): heaps, root signature, pipeline are set at the first pass
             // a shared slot keeps timing: its profile covers the host frame (first device frame's start to the last end)
             if (!sharedSlot)
             {
@@ -641,8 +649,17 @@ namespace esia::rhi::d3d12
                 return;
             if (hostTouched_)
                 ApplyPassState();
-            cl_->SetPipelineState(pipe->pso.Get());
-            cl_->IASetPrimitiveTopology(pipe->topology);
+            // the list keeps its pipeline across passes: set only when it changes
+            if (pipe->pso.Get() != listPso_)
+            {
+                cl_->SetPipelineState(pipe->pso.Get());
+                listPso_ = pipe->pso.Get();
+            }
+            if (pipe->topology != listTopology_)
+            {
+                cl_->IASetPrimitiveTopology(pipe->topology);
+                listTopology_ = pipe->topology;
+            }
         }
 
         void SetScissor(const IRect& r) override
@@ -716,10 +733,51 @@ namespace esia::rhi::d3d12
                 cl_->DrawIndexedInstanced(indexCount, 1, firstIndex, 0, 0);
         }
 
-        void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override
+        void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { DrawInstancedFrom(vertexCount, instanceCount, 0); }
+
+        // The FX vertex shader reads the instance's index from an attribute (slot 1): unlike SV_InstanceID it starts at
+        // the draw's first instance, so no Draw constants are written per batch.
+        void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override
         {
-            if (FlushTable())
-                cl_->DrawInstanced(vertexCount, instanceCount, 0, 0);
+            if (!BindInstanceIndices(firstInstance + instanceCount) || !FlushTable())
+                return;
+            cl_->DrawInstanced(vertexCount, instanceCount, 0, firstInstance);
+        }
+
+        bool BindInstanceIndices(std::uint32_t count)
+        {
+            if (count > instanceIndexCount_)
+            {
+                // 0, 1, 2 ... in an upload buffer, grown by doubling; the old one goes when frames in flight are done
+                std::uint32_t n = std::max<std::uint32_t>(4096u, instanceIndexCount_ * 2u);
+                while (n < count)
+                    n *= 2u;
+                const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
+                const D3D12_RESOURCE_DESC bd = BufferResource((UINT64)n * 4u);
+                ComPtr<ID3D12Resource> b;
+                if (!log_.Check(dev_->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &bd, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&b)),
+                                "CreateCommittedResource (instance indices)"))
+                    return false;
+                std::uint32_t* p = nullptr;
+                const D3D12_RANGE none = {0, 0};
+                if (!log_.Check(b->Map(0, &none, reinterpret_cast<void**>(&p)), "Map (instance indices)"))
+                    return false;
+                for (std::uint32_t i = 0; i < n; ++i)
+                    p[i] = i;
+                b->Unmap(0, nullptr);
+                if (instanceIndices_)
+                    Slot().garbage.push_back(ComPtr<IUnknown>(instanceIndices_.Get()));
+                instanceIndices_ = b;
+                instanceIndexCount_ = n;
+                listIndices_ = false;
+            }
+            if (!listIndices_)
+            {
+                const D3D12_VERTEX_BUFFER_VIEW v = {instanceIndices_->GetGPUVirtualAddress(), instanceIndexCount_ * 4u, 4u};
+                cl_->IASetVertexBuffers(1, 1, &v);
+                listIndices_ = true;
+            }
+            return true;
         }
 
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r) override
@@ -756,6 +814,7 @@ namespace esia::rhi::d3d12
         void* NativeRenderState() override
         {
             hostTouched_ = true;   // the host may change anything: the pass state is applied again at the next pipeline
+            ForgetListState();
             return cl_;
         }
 
@@ -1122,9 +1181,15 @@ namespace esia::rhi::d3d12
             cl_->RSSetViewports(1, &vp);
             const D3D12_RECT all = {0, 0, pass_->desc.width, pass_->desc.height};
             cl_->RSSetScissorRects(1, &all);
-            ID3D12DescriptorHeap* heaps[] = {tables_.Get()};
-            cl_->SetDescriptorHeaps(1, heaps);
-            cl_->SetGraphicsRootSignature(root_.Get());
+            // once per list: setting them again at every pass (a hundred a frame with glass) cost driver time, and
+            // the root arguments are bound again in every pass anyway (rhi.hpp: a pass starts with nothing bound)
+            if (!rootBound_)
+            {
+                ID3D12DescriptorHeap* heaps[] = {tables_.Get()};
+                cl_->SetDescriptorHeaps(1, heaps);
+                cl_->SetGraphicsRootSignature(root_.Get());
+                rootBound_ = true;
+            }
             for (int& b : bound_)
                 b = nullSrv_;
             tableDirty_ = true;
@@ -1149,13 +1214,25 @@ namespace esia::rhi::d3d12
                 const UINT first = SlotIndex() * kTableDescriptorsPerFrame + s.tableOffset;
                 s.tableOffset += kTableSlots;
                 const D3D12_CPU_DESCRIPTOR_HANDLE dst = {tables_->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
+                // one copy of the table's descriptors (scattered sources into one range)
+                D3D12_CPU_DESCRIPTOR_HANDLE src[kTableSlots];
+                UINT ones[kTableSlots];
                 for (UINT i = 0; i < kTableSlots; ++i)
-                    dev_->CopyDescriptorsSimple(1, {dst.ptr + (SIZE_T)i * inc}, srvs_.Cpu(bound_[i]), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                {
+                    src[i] = srvs_.Cpu(bound_[i]);
+                    ones[i] = 1;
+                }
+                const UINT count = kTableSlots;
+                dev_->CopyDescriptors(1, &dst, &count, kTableSlots, src, ones, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                 tableGpu_ = {tables_->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc};
                 tableFrame_ = frame_;
                 std::memcpy(tableBound_, bound_, sizeof(bound_));
             }
-            cl_->SetGraphicsRootDescriptorTable(RootTextures, tableGpu_);
+            if (tableGpu_.ptr != listTable_)
+            {
+                cl_->SetGraphicsRootDescriptorTable(RootTextures, tableGpu_);
+                listTable_ = tableGpu_.ptr;
+            }
             tableDirty_ = false;
             return true;
         }
@@ -1290,6 +1367,23 @@ namespace esia::rhi::d3d12
 
         // this frame
         ID3D12GraphicsCommandList* cl_ = nullptr;
+        // what cl_ has set (none after a host's callback): the tables' heap and the root signature, the pipeline, the
+        // topology and the texture table - set again only when they change
+        bool rootBound_ = false;
+        ID3D12PipelineState* listPso_ = nullptr;
+        D3D12_PRIMITIVE_TOPOLOGY listTopology_ = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+        UINT64 listTable_ = 0;
+        bool listIndices_ = false;   // InstanceIndices bound at slot 1
+        void ForgetListState()
+        {
+            rootBound_ = false;
+            listPso_ = nullptr;
+            listTopology_ = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+            listTable_ = 0;
+            listIndices_ = false;
+        }
+        ComPtr<ID3D12Resource> instanceIndices_;   // 0, 1, 2 ... (DrawInstancedFrom)
+        std::uint32_t instanceIndexCount_ = 0;
         bool ownFrame_ = false, hostTouched_ = false, tableDirty_ = true;
         Tex* pass_ = nullptr;
         int bound_[kTableSlots] = {};

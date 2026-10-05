@@ -53,7 +53,7 @@ namespace esia::render
             {
                 const std::uint64_t a = (std::uint64_t)k.program | ((std::uint64_t)k.blend << 8) | ((std::uint64_t)k.format << 16) |
                                         ((std::uint64_t)(k.samples & 0xFF) << 24) | ((std::uint64_t)k.effect << 32);
-                return std::hash<std::uint64_t>()(a ^ ((std::uint64_t)k.features * 0x9E3779B97F4A7C15ull));
+                return IntHash()(a ^ ((std::uint64_t)k.features * 0x9E3779B97F4A7C15ull));
             }
         };
     }
@@ -67,14 +67,14 @@ namespace esia::render
         FramePlan plan;
         RenderStats stats;
 
-        std::unordered_map<TextureId, DeviceTexture> textures;
+        std::unordered_map<TextureId, DeviceTexture, IntHash> textures;
         std::vector<TextureChange> changes;
         std::unordered_map<PipelineKey, rhi::Pipeline, PipelineKeyHash> pipelines;
         struct Effect
         {
             std::string name, source;
         };
-        std::unordered_map<EffectId, Effect> effects;
+        std::unordered_map<EffectId, Effect, IntHash> effects;
         std::unordered_map<EffectId, std::uint64_t> effectTried;   // frame of the last pipeline attempt
         std::vector<EffectId> prewarm;                             // effects to start compiling at the next frame
         std::vector<EffectId> warmUp;                              // prewarmed effects not drawn yet (WarmUp)
@@ -768,13 +768,17 @@ namespace esia::render
                     BindTexture(rhi::kSlotFxData, fxTex);
                 fxDataBound = true;
             }
-            BindDraw(op.fade, op.instStart);
+            // the first instance in the draw where the device takes it there: the Draw constants then stay as they were
+            BindDraw(op.fade, caps.drawFirstInstance ? 0u : op.instStart);
             if (!warmUp.empty() && passFormat == targetDesc.format && passSamples == targetDesc.samples && WarmUp(op))
             {
                 BindPipeline(p);
                 dev.SetScissor(boundScissor);
             }
-            dev.DrawInstanced(4, op.instCount);
+            if (caps.drawFirstInstance)
+                dev.DrawInstancedFrom(4, op.instCount, op.instStart);
+            else
+                dev.DrawInstanced(4, op.instCount);
             ++stats.drawCalls;
             ++stats.fxBatches;
         }
@@ -798,7 +802,10 @@ namespace esia::render
                 if (op.instCount > 0 && BindPipeline(wp))
                 {
                     dev.SetScissor(rhi::IRect{0, 0, 0, 0});
-                    dev.DrawInstanced(4, 1);
+                    if (caps.drawFirstInstance)
+                        dev.DrawInstancedFrom(4, 1, op.instStart);
+                    else
+                        dev.DrawInstanced(4, 1);
                     ++stats.drawCalls;
                     drew = true;
                 }

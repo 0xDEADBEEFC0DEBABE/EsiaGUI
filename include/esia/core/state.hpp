@@ -6,11 +6,10 @@
 // type.
 #pragma once
 #include "esia/base/config.hpp"
+#include "esia/base/hash.hpp"
 #include <cstddef>
-#include <functional>
 #include <memory>
-#include <unordered_map>
-#include <utility>
+#include <vector>
 
 namespace esia
 {
@@ -22,29 +21,40 @@ namespace esia
         StateStorage& operator=(const StateStorage&) = delete;
         ~StateStorage() { Clear(); }
 
+        // Every widget looks its springs and state up here every frame: one probe of a flat table (the entries
+        // themselves live apart and never move, so a reference stays valid while the entry exists).
         template <class T>
         T& Get(Id id, std::uint64_t frame)
         {
-            const Key key{id, &Tag<T>::tag};
-            auto it = slots_.find(key);
-            if (it == slots_.end())
+            const void* type = &Tag<T>::tag;
+            if (!slots_.empty())
             {
-                // constructed before it is stored: a constructor that throws leaves nothing behind
-                auto data = std::make_unique<T>();
-                Slot slot;
-                slot.destroy = [](void* p) { delete static_cast<T*>(p); };
-                slot.data = data.get();
-                it = slots_.emplace(key, slot).first;
-                data.release();
+                const std::size_t mask = slots_.size() - 1;
+                for (std::size_t i = Home(id, type) & mask;; i = (i + 1) & mask)
+                {
+                    Slot& s = slots_[i];
+                    if (s.type == type && s.id == id)
+                    {
+                        s.lastFrame = frame;
+                        return *static_cast<T*>(s.data);
+                    }
+                    if (!s.type)
+                        break;
+                }
             }
-            it->second.lastFrame = frame;
-            return *static_cast<T*>(it->second.data);
+            // constructed before it is stored: a constructor that throws leaves nothing behind
+            auto data = std::make_unique<T>();
+            Slot& s = Insert(id, type);
+            s.destroy = [](void* p) { delete static_cast<T*>(p); };
+            s.data = data.release();
+            s.lastFrame = frame;
+            return *static_cast<T*>(s.data);
         }
 
         // Destroys the entries not used since `frame - retain`.
         void Collect(std::uint64_t frame, std::uint64_t retain);
         void Clear();
-        std::size_t Size() const { return slots_.size(); }
+        std::size_t Size() const { return count_; }
 
     private:
         // one address per type: identifies the type of an entry without RTTI. Writable on purpose: identical
@@ -54,22 +64,21 @@ namespace esia
         {
             static inline char tag = 0;
         };
-        struct Key
-        {
-            Id id;
-            const void* type;
-            bool operator==(const Key&) const = default;
-        };
-        struct KeyHash
-        {
-            std::size_t operator()(const Key& k) const { return std::hash<const void*>()(k.type) ^ ((std::size_t)k.id * 0x9E3779B97F4A7C15ull); }
-        };
         struct Slot
         {
+            Id id = 0;
+            const void* type = nullptr;   // null: a free slot
             void* data = nullptr;
             void (*destroy)(void*) = nullptr;
             std::uint64_t lastFrame = 0;
         };
-        std::unordered_map<Key, Slot, KeyHash> slots_;
+        static std::size_t Home(Id id, const void* type) { return IntHash()(((std::uint64_t)reinterpret_cast<std::uintptr_t>(type) << 7) ^ id); }
+        Slot& Insert(Id id, const void* type);   // a free slot for a new entry (grows the table)
+        void Rehash(std::size_t size);
+        void Erase(std::size_t i);
+
+        // open addressing with linear probing: a power of two in size, at most 3/4 full
+        std::vector<Slot> slots_;
+        std::size_t count_ = 0;
     };
 }

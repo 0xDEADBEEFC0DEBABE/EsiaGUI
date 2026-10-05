@@ -29,6 +29,14 @@
 #include "esia_shader_prelude.hlsli"
 #endif
 
+// The shader library (src/esia/shaders/generated: SPIR-V and the GLSL / ESSL / MSL made from it) is the output of the
+// CI's tool versions (tools/shaders/build_shaders.py). Until its next regeneration it keeps the compact forms of the
+// backdrop sampling below and FxPS without its solid area (esia_fx.hlsl): the Direct3D 10 - 12 backends, which compile
+// the source at run time, have both.
+#if defined(ESIA_SPIRV) && !defined(ESIA_COMPACT)
+#define ESIA_COMPACT 1
+#endif
+
 #ifndef ESIA_BINDING
 #ifdef ESIA_SPIRV
 #define ESIA_BINDING(n) [[vk::binding(n, 0)]]
@@ -206,6 +214,41 @@ float4 WgtBSplineRead(ESIA_TEXTURE_ARG tex, WgtBSpline b)
 
 float4 WgtSampleBSpline(ESIA_TEXTURE_ARG tex, float2 uv, float4 level) { return WgtBSplineRead(tex, WgtBSplineTaps(uv, level)); }
 
+#ifndef ESIA_COMPACT
+// Shader models without SM3's slot limit read the backdrop as straight-line code: every level's branch computes its
+// own taps, the render-target flip is applied once (the B-spline is symmetric), and a blur's two levels are two calls,
+// not a loop - the compiler schedules their reads together. The compact forms below (SM3) cost the glass ~40% more
+// GPU time on an RTX 4080 (Direct3D 11).
+float4 WgtSampleBSplineRt(ESIA_TEXTURE_ARG tex, float2 t, float4 level)   // `t`: render-target uv (WgtRtUv)
+{
+    float2 texel = t * level.xy - 0.5;
+    float2 tc = floor(texel);
+    float2 f = texel - tc;
+    float2 f2 = f * f, f3 = f2 * f;
+    float2 w0 = (1.0 / 6.0) * (-f3 + 3.0 * f2 - 3.0 * f + 1.0);
+    float2 w1 = (1.0 / 6.0) * (3.0 * f3 - 6.0 * f2 + 4.0);
+    float2 w2 = (1.0 / 6.0) * (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0);
+    float2 w3 = (1.0 / 6.0) * f3;
+    float2 s0 = w0 + w1, s1 = w2 + w3;
+    float2 t0 = (tc - 0.5 + w1 / s0) * level.zw;
+    float2 t1 = (tc + 1.5 + w3 / s1) * level.zw;
+    return (ESIA_SAMPLE_LEVEL(tex, gLinear, float2(t0.x, t0.y)) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, float2(t1.x, t0.y)) * s1.x) * s0.y +
+           (ESIA_SAMPLE_LEVEL(tex, gLinear, float2(t0.x, t1.y)) * s0.x + ESIA_SAMPLE_LEVEL(tex, gLinear, float2(t1.x, t1.y)) * s1.x) * s1.y;
+}
+
+float4 WgtSampleLevel(int level, float2 uv)
+{
+    const float2 t = WgtRtUv(uv);
+    float4 r;
+    [branch] if (level <= 0)      r = ESIA_SAMPLE_LEVEL(gBackdrop0, gLinear, t);
+    else if (level == 1)          r = WgtSampleBSplineRt(gBackdrop1, t, gLevel[1]);
+    else if (level == 2)          r = WgtSampleBSplineRt(gBackdrop2, t, gLevel[2]);
+    else if (level == 3)          r = WgtSampleBSplineRt(gBackdrop3, t, gLevel[3]);
+    else if (level == 4)          r = WgtSampleBSplineRt(gBackdrop4, t, gLevel[4]);
+    else                          r = WgtSampleBSplineRt(gBackdrop5, t, gLevel[5]);
+    return r;
+}
+#else
 float4 WgtSampleLevel(int level, float2 uv)
 {
     const WgtBSpline b = WgtBSplineTaps(uv, gLevel[clamp(level, 1, 5)]);
@@ -218,6 +261,7 @@ float4 WgtSampleLevel(int level, float2 uv)
     else                          r = WgtBSplineRead(gBackdrop5, b);
     return r;
 }
+#endif
 
 // One level, plain bilinear: for wide, low-contrast reads (reflections, exposure) where the B-spline's smoothing
 // cannot be seen - one texture read instead of four.
@@ -234,6 +278,32 @@ float4 WgtSampleLevelBilinear(int level, float2 uv)
     return r;
 }
 
+#ifndef ESIA_COMPACT
+// WgtSampleBackdrop's soft sibling (bilinear per level): the blurred surroundings a rim reflects.
+float3 WgtSampleBackdropSoft(float2 uv, float radiusPx)
+{
+    float lv = clamp(log2(max(radiusPx, 1.0)) - 1.0, 0.0, 5.0);
+    int l0 = (int)floor(lv);
+    float f = lv - (float)l0;
+    float3 a = WgtSampleLevelBilinear(l0, uv).rgb;
+    [branch] if (f > 0.02 && l0 < 5)
+        a = lerp(a, WgtSampleLevelBilinear(l0 + 1, uv).rgb, f);
+    return a;
+}
+
+// Samples the captured backdrop at screen uv (top-left based) with an (approximate) gaussian blur radius in pixels:
+// the two levels around it, blended.
+float3 WgtSampleBackdrop(float2 uv, float radiusPx)
+{
+    float lv = clamp(log2(max(radiusPx, 1.0)) - 1.0, 0.0, 5.0);
+    int l0 = (int)floor(lv);
+    float f = lv - (float)l0;
+    float3 a = WgtSampleLevel(l0, uv).rgb;
+    [branch] if (f > 0.02 && l0 < 5)
+        a = lerp(a, WgtSampleLevel(l0 + 1, uv).rgb, f);
+    return a;
+}
+#else
 // WgtSampleBackdrop's soft sibling (bilinear per level): the blurred surroundings a rim reflects. Its two levels are
 // read in a loop too.
 float3 WgtSampleBackdropSoft(float2 uv, float radiusPx)
@@ -269,5 +339,6 @@ float3 WgtSampleBackdrop(float2 uv, float radiusPx)
     }
     return a;
 }
+#endif
 
 #endif

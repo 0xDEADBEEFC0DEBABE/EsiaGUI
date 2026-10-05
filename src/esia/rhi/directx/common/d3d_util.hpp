@@ -3,6 +3,7 @@
 // every backend can include it whatever else it builds with.
 #pragma once
 #include "esia/rhi/d3d_common.hpp"
+#include "esia/base/hash.hpp"
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -159,7 +160,7 @@ namespace esia::rhi::d3d
         }
 
     private:
-        std::unordered_map<std::uint32_t, T> items_;
+        std::unordered_map<std::uint32_t, T, IntHash> items_;
         std::uint32_t next_ = 1;
     };
 

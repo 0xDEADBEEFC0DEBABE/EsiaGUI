@@ -47,8 +47,8 @@ namespace esia::rhi::d3d11
             ComPtr<ID3D11Buffer> ib;
             DXGI_FORMAT ibFormat = DXGI_FORMAT_UNKNOWN;
             UINT ibOffset = 0;
-            ComPtr<ID3D11Buffer> vb;
-            UINT vbStride = 0, vbOffset = 0;
+            ID3D11Buffer* vbs[2] = {};       // slot 0: geometry, slot 1: the FX instance indices
+            UINT vbStrides[2] = {}, vbOffsets[2] = {};
             ComPtr<ID3D11InputLayout> layout;
             ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
             ComPtr<ID3D11DepthStencilView> dsv;
@@ -76,7 +76,7 @@ namespace esia::rhi::d3d11
                 c->PSGetConstantBuffers(0, 3, psCb);
                 c->IAGetPrimitiveTopology(&topology);
                 c->IAGetIndexBuffer(&ib, &ibFormat, &ibOffset);
-                c->IAGetVertexBuffers(0, 1, &vb, &vbStride, &vbOffset);
+                c->IAGetVertexBuffers(0, 2, vbs, vbStrides, vbOffsets);
                 c->IAGetInputLayout(&layout);
                 // UAVs share the output slots with the render targets: both are put back together
                 c->OMGetRenderTargetsAndUnorderedAccessViews(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, rtvs, &dsv, 0, D3D11_PS_CS_UAV_REGISTER_COUNT, uavs);
@@ -120,9 +120,9 @@ namespace esia::rhi::d3d11
                 c->PSSetConstantBuffers(0, 3, psCb);
                 c->IASetPrimitiveTopology(topology);
                 c->IASetIndexBuffer(ib.Get(), ibFormat, ibOffset);
-                ID3D11Buffer* vbp = vb.Get();
-                c->IASetVertexBuffers(0, 1, &vbp, &vbStride, &vbOffset);
+                c->IASetVertexBuffers(0, 2, vbs, vbStrides, vbOffsets);
                 c->IASetInputLayout(layout.Get());
+                ReleaseAll(vbs);
                 ReleaseAll(psSrv);
                 ReleaseAll(vsSrv);
                 ReleaseAll(psSamplers);
@@ -185,6 +185,8 @@ namespace esia::rhi::d3d11
             c.runtimeEffects = true;
             // the whole FX shader fits SM5: one pipeline instead of one per feature mask
             c.fxFeatureVariants = false;
+            // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
+            c.drawFirstInstance = true;
             c.maxTextureSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             c.maxFxDataWidth = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             return c;
@@ -496,6 +498,7 @@ namespace esia::rhi::d3d11
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
+            vr.instanceAttribute = desc.program == ShaderProgram::Fx;   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;
@@ -536,6 +539,17 @@ namespace esia::rhi::d3d11
                 }
                 p.layout = uiLayout_;
             }
+            else if (desc.program == ShaderProgram::Fx)
+            {
+                if (!fxLayout_)
+                {
+                    // the instance's index, from InstanceIndices at slot 1 (every FX vertex shader has this input)
+                    const D3D11_INPUT_ELEMENT_DESC e = {"INSTANCEINDEX", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1};
+                    if (!log_.Check(dev_->CreateInputLayout(&e, 1, vs->data(), vs->size(), &fxLayout_), "CreateInputLayout (fx)"))
+                        return {};
+                }
+                p.layout = fxLayout_;
+            }
             return Pipeline{pipelines_.Add(std::move(p))};
         }
 
@@ -545,6 +559,7 @@ namespace esia::rhi::d3d11
         bool BeginFrame(const FrameDesc&) override
         {
             ++frame_;
+            instanceIndicesBound_ = false;
             // with restoreHostState, what the frame changes is captured and put back (ClearState would also drop the
             // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
             if (restore_)
@@ -555,7 +570,14 @@ namespace esia::rhi::d3d11
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 if (s.pending)
+                {
                     ReadSlot(s);   // the GPU is kProfileSlots frames behind: the old numbers are dropped if not ready
+                    // Still not done: nothing presented since (a headless loop, which a present would have
+                    // submitted). Submit what waits now. A presenting host never gets here: flushing every frame at
+                    // its end cost Direct3D 11 0.18 ms of CPU a frame, on top of the present's own submit.
+                    if (s.pending)
+                        ctx_->Flush();
+                }
                 s.used = 0;
                 s.pending = false;
                 s.frame.Reset(frame_);
@@ -573,8 +595,6 @@ namespace esia::rhi::d3d11
                 s.frame.frameEnd = Stamp();
                 ctx_->End(s.disjoint.Get());
                 s.pending = s.frame.frameEnd > 0;
-                // submitted now, so the queries complete even when nothing presents (headless, several targets)
-                ctx_->Flush();
             }
             if (restore_)
                 host_.Restore(ctx_.Get());
@@ -675,7 +695,50 @@ namespace esia::rhi::d3d11
 
         void Draw(std::uint32_t vertexCount, std::uint32_t firstVertex) override { ctx_->Draw(vertexCount, firstVertex); }
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override { ctx_->DrawIndexed(indexCount, firstIndex, 0); }
-        void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { ctx_->DrawInstanced(vertexCount, instanceCount, 0, 0); }
+        void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { DrawInstancedFrom(vertexCount, instanceCount, 0); }
+
+        // The FX vertex shader reads the instance's index from an attribute (slot 1, one per instance): unlike
+        // SV_InstanceID it starts at the draw's first instance, so the Draw constants need not change per batch.
+        void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override
+        {
+            if (!BindInstanceIndices(firstInstance + instanceCount))
+                return;
+            ctx_->DrawInstanced(vertexCount, instanceCount, 0, firstInstance);
+        }
+
+        bool BindInstanceIndices(std::uint32_t count)
+        {
+            if (count > instanceIndexCount_)
+            {
+                // 0, 1, 2 ...: immutable, grown by doubling (a frame's FX instances, a few thousand)
+                std::uint32_t n = std::max<std::uint32_t>(4096u, instanceIndexCount_ * 2u);
+                while (n < count)
+                    n *= 2u;
+                std::vector<std::uint32_t> indices(n);
+                for (std::uint32_t i = 0; i < n; ++i)
+                    indices[i] = i;
+                D3D11_BUFFER_DESC bd = {};
+                bd.ByteWidth = n * 4u;
+                bd.Usage = D3D11_USAGE_IMMUTABLE;
+                bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                D3D11_SUBRESOURCE_DATA init = {indices.data(), 0, 0};
+                ComPtr<ID3D11Buffer> b;
+                if (!log_.Check(dev_->CreateBuffer(&bd, &init, &b), "CreateBuffer (instance indices)"))
+                    return false;
+                SetDebugName(b.Get(), "esia instance indices");
+                instanceIndices_ = b;
+                instanceIndexCount_ = n;
+                instanceIndicesBound_ = false;
+            }
+            if (!instanceIndicesBound_)
+            {
+                ID3D11Buffer* b = instanceIndices_.Get();
+                const UINT stride = 4, offset = 0;
+                ctx_->IASetVertexBuffers(1, 1, &b, &stride, &offset);
+                instanceIndicesBound_ = true;
+            }
+            return true;
+        }
 
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r) override
         {
@@ -733,12 +796,17 @@ namespace esia::rhi::d3d11
 
         bool ReadProfile(GpuProfile& out) override
         {
-            // oldest first, so `latest_` ends as the newest complete frame
-            for (int i = 1; i <= kProfileSlots; ++i)
+            // oldest first, so `latest_` ends as the newest complete frame. Queries complete in order: the first
+            // frame not done yet ends the look (each look is a driver call), and the frame just ended is not even
+            // submitted yet (it is read in a later frame)
+            for (int i = 1; i < kProfileSlots; ++i)
             {
                 ProfileSlot& s = profile_[(frame_ + (std::uint64_t)i) % kProfileSlots];
+                if (!s.pending)
+                    continue;
+                ReadSlot(s);
                 if (s.pending)
-                    ReadSlot(s);
+                    break;
             }
             out = latest_;
             return latest_.valid;
@@ -783,6 +851,7 @@ namespace esia::rhi::d3d11
         void ApplyPassState()
         {
             hostTouched_ = false;
+            instanceIndicesBound_ = false;   // a host callback may have bound its own
             if (!pass_)
                 return;
             ID3D11RenderTargetView* rtv = pass_->rtv.Get();
@@ -905,6 +974,10 @@ namespace esia::rhi::d3d11
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D11VertexShader>> vertexShaders_;
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D11PixelShader>> pixelShaders_;
         ComPtr<ID3D11InputLayout> uiLayout_;
+        ComPtr<ID3D11InputLayout> fxLayout_;
+        ComPtr<ID3D11Buffer> instanceIndices_;   // 0, 1, 2 ... (DrawInstancedFrom)
+        std::uint32_t instanceIndexCount_ = 0;
+        bool instanceIndicesBound_ = false;
         ComPtr<ID3D11BlendState> blends_[3];   // per BlendMode
         ComPtr<ID3D11RasterizerState> raster_;
         ComPtr<ID3D11DepthStencilState> depth_;

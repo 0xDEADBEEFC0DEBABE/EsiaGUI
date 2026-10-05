@@ -42,11 +42,16 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Frame cost against Dear ImGui** (2026-10-05): the showcase against WGT's demo (Dear ImGui 1.92.9 with the same
+glass) on the same scene, and plain widgets against a vanilla Dear ImGui; batches no longer split at clips that cut
+nothing, a solid-area path in the FX shader, a flat per-id state table, glyph runs, fewer timestamp reads.
+
 **Scrolling, menus and tables in use** (2026-10-05): what an application built on the widgets ran into - tables that
 shared their scroll state, menus too long for the display or creeping by a fraction of a pixel, indicators past the
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Frame cost against Dear ImGui](#frame-cost-against-dear-imgui)
 * [Scrolling, menus and tables in use](#scrolling-menus-and-tables-in-use)
 * [Data widgets, Android, color glyphs, touch](#data-widgets-android-color-glyphs-touch)
 * [Examples on Linux](#examples-on-linux)
@@ -64,6 +69,93 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Frame cost against Dear ImGui
+
+Measured on Windows 11 with an RTX 4080 SUPER, MSVC 19.44 Release builds of both sides, 1600 x 1000 pixels, vsync off,
+1800 frames after 300 of warm-up, the median of three alternating runs. Build: the UI from `NewFrame` to the draw
+data; submit: the renderer (or `RenderDrawData`) up to the present; GPU: the frame's timestamps.
+
+**The glass scene**: the showcase and WGT's demo with the same six panels open (`--open settings,effects,control,
+components,languages,telemetry`), WGT's `--text gray`.
+
+| ms per frame | WGT CPU | Esia CPU | | WGT GPU | Esia GPU | |
+| --- | --- | --- | --- | --- | --- | --- |
+| Direct3D 11 | 0.373 | 0.232 | -38% | 0.440 | 0.398 | -10% |
+| Direct3D 12 | 0.453 | 0.338 | -25% | 0.410 | 0.406 | -1% |
+
+The GPU time by category (Direct3D 11, every scope timed): backdrop captures WGT 0.229, Esia 0.166 (13 captures a
+frame against 19: glass sees what lies under its shape, not the whole blur footprint); the glass shading 0.170 and
+0.172 (the same shader); everything else 0.042 and 0.045. A capture's cost is mostly fixed (a copy and four pyramid
+passes, each waiting for the one before): what is left to gain there means fewer captures or fewer levels, which the
+glass would show, or the pyramid in one compute pass.
+
+**Plain widgets**: four solid windows without shadows, 8 rows of a label, a button, a toggle and a slider, and a
+wrapped paragraph each, against vanilla Dear ImGui 1.92.9 (WGT's patch reversed) drawing the same with its standard
+widgets and Segoe UI at 15 px, on the same adapter, flip-model swap chain and timestamps.
+
+| Direct3D 11, ms per frame | build | submit | GPU | draws |
+| --- | --- | --- | --- | --- |
+| Dear ImGui | 0.041 | 0.010 | 0.024 | 8 |
+| Esia before the first six changes below | 0.069 | 0.046 | 0.057 | 172 |
+| Esia now | 0.060 | 0.037 | 0.046 | 66 |
+
+Esia draws more than Dear ImGui there: a soft shadow under every button and knob, antialiased distance-field shapes,
+springs behind every control's states, text shaped by HarfBuzz; Dear ImGui draws flat rectangles. Its submit is a
+memcpy of the draw lists and 8 draws; Esia's plans batches across the lists (15 us), copies its 384-byte FX
+instances three times on their way to the GPU (6 us for the last two) and times the frame on the GPU (5 us of
+Direct3D 11 query calls).
+
+### What changed
+
+* **Clips that cut nothing do not split batches** (`frame_plan.cpp`). Controls push a clip of their own around their
+  shadow (`ScopedUnclip`) between labels clipped by the window's body, so every button, toggle knob and slider knob
+  was a batch and a draw. A draw its clip does not cut (all of it inside) looks the same under any scissor that holds
+  it whole: it joins batches of other clips, and such a batch keeps a free clip (`RenderOp::clipFree`) until a draw its
+  clip does cut fixes the batch's scissor. Planned, a free batch takes the scissor before it when that holds it, else
+  the whole target, so no scissor changes are added. The plain scene: 172 -> 66 draws. The 17 conformance scenes
+  render identically on Direct3D 11 and 12 (compared pixel for pixel) and the null backend's command logs are the
+  goldens unchanged.
+* **The FX shader's solid area** (`esia_fx.hlsl`, [backends/README.md](backends/README.md) section 4): the interior
+  of a solid rounded rectangle is its fill color from a few varyings, without the distance field - bit for bit what
+  the full shader computes there. Direct3D 10 - 12 for now: the generated library keeps the previous shader until its
+  next regeneration.
+* **Per-id state in a flat table** (`StateStorage`, [UI_CORE.md](UI_CORE.md) section 10): one probe instead of a
+  node-based hash map; a spring at rest returns without stepping (`SpringState::Step`: exp, sin and cos for nothing).
+* **Glyph runs** (`DrawList::BeginQuads` / `EndQuads`): a text's glyphs are written in place after one reservation,
+  the same vertices, indices and commands as one `AddRectFilledUV` each.
+* **The planner's loops**: a geometry command's bounds from the range of its indices, then its vertices once each
+  (a glyph's six indices name four vertices); rebased indices written in place.
+* **Timestamp reads** (Direct3D 10 / 11): `ReadProfile` stops at the first frame not done yet and skips the frame
+  just ended (not submitted yet); each look is a driver call.
+* Also in this batch: Direct3D 11 draws FX batches with `DrawInstancedFrom` (`Caps::drawFirstInstance`,
+  [backends/README.md](backends/README.md) section 3), so the Draw constants no longer change per batch; Direct3D 12
+  skips unchanged root signatures, pipelines, topologies and descriptor tables and copies a table in one call; the
+  end-of-frame flush of Direct3D 11 (0.18 ms of CPU) only when timestamps are still pending a full ring later;
+  integer keys hashed by `esia::IntHash` instead of MSVC's byte-wise FNV; the text layout of the string just measured
+  found without hashing, glyph slots reused while the atlas, size and sub-pixel phase stay; a draw list grows
+  geometrically and writes a quad in place; `ui::detail::M()` is inline (a thread-local pointer); the straight-line
+  backdrop sampling on shader models without SM3's slot limit (the compact forms cost the glass ~40% more on an RTX
+  4080); glass content capture decided by the glass shape (+2 px), not its blur footprint (20 -> 13 captures in the
+  showcase, nothing visible changed).
+
+### Verified (2026-10-05)
+
+* ctest 33 / 33 in Debug (clang-cl 22, every backend): `esia_core_tests` 107 / 107, `esia_render_tests` 50 / 50,
+  `esia_ui_tests` 46 / 46; new: `Context.StateStorageTable` (3000 entries of two types, a third collected from the
+  middle of probe chains, the rest found at their addresses), `DrawList.QuadRunsMatchSingleQuads`,
+  `FramePlan.ClipsThatCutNothingDoNotSplitBatches` (and `FxInstancesBatchUntilTheStateChanges` with a clip that cuts).
+* `esia_conformance --strict`, one frame and `--frames 3`, on Direct3D 9, 10, 11, 12, OpenGL, GLES, Vulkan and null:
+  17 / 17 each. The showcase with `--debug` on all six APIs: no validation or debug-layer messages.
+* The conformance renders on Direct3D 11 and 12 with the new planner and shader against the same build with both
+  turned off: identical, all 17 scenes; the plain-widget scene identical before and after.
+* `build_shaders.py` with the Vulkan SDK's tools on the sources before and after: the same library, byte for byte.
+* The changed portable sources pass the Linux / macOS warning flags (`-Wpedantic -Wshadow -Wnon-virtual-dtor`).
+
+### Not verified
+
+* Linux, macOS, iOS and Android after these changes: CI only. The generated library is unchanged, so GL, GLES,
+  Vulkan and Metal draw with the shaders they had.
 
 ## Scrolling, menus and tables in use
 

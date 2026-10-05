@@ -20,6 +20,7 @@
 //     use them completed.
 #pragma once
 #include "vk_formats.hpp"
+#include "esia/base/hash.hpp"
 #include "vk_loader.hpp"
 #include "esia/rhi/vulkan.hpp"
 #include <atomic>
@@ -295,10 +296,10 @@ namespace esia::rhi::vulkan
         VkShaderModule modules_[(int)ShaderProgram::Count][2] = {};
 
         std::uint32_t nextId_ = 1;
-        std::unordered_map<std::uint32_t, Tex> textures_;
-        std::unordered_map<std::uint32_t, Buf> buffers_;
+        std::unordered_map<std::uint32_t, Tex, IntHash> textures_;
+        std::unordered_map<std::uint32_t, Buf, IntHash> buffers_;
         std::unordered_map<PipelineKey, CachedPipeline, PipelineKeyHash> pipelineEntries_;
-        std::unordered_map<std::uint32_t, PipelineKey> pipelines_;
+        std::unordered_map<std::uint32_t, PipelineKey, IntHash> pipelines_;
         std::unordered_map<VkImage, std::uint32_t> wrapped_;
         std::map<std::uint64_t, VkRenderPass> renderPasses_;
         std::vector<Garbage> garbage_;

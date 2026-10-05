@@ -112,6 +112,8 @@ namespace esia::rhi::d3d
                 k += ":f" + std::to_string(r.fxFeatures);
             if (fx && r.effectSource && r.stage == shaders::Stage::Pixel)
                 k += std::string(":e") + r.effectSource;
+            if (fx && r.instanceAttribute && r.stage == shaders::Stage::Vertex)
+                k += ":i";
             return k;
         }
 
@@ -231,6 +233,8 @@ namespace esia::rhi::d3d
             const bool effect = fx && r.effectSource && r.stage == shaders::Stage::Pixel;
             if (effect)
                 macros.push_back({"ESIA_CUSTOM_EFFECT", "1"});
+            if (fx && r.instanceAttribute && r.stage == shaders::Stage::Vertex)
+                macros.push_back({"ESIA_INSTANCE_ATTRIBUTE", "1"});
             macros.push_back({nullptr, nullptr});
 
             // as tools/shaders/build_shaders.py runs fxc: /O3, /Gec for SM3 (legacy syntax), /Ges otherwise

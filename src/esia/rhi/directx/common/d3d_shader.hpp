@@ -28,6 +28,7 @@ namespace esia::rhi::d3d
         ShaderModel model = ShaderModel::Sm5;
         std::uint32_t fxFeatures = 0;          // Fx: ESIA_FX_FEATURES (0 = every feature)
         const char* effectSource = nullptr;    // Fx pixel shader: the user effect (ESIA_CUSTOM_EFFECT)
+        bool instanceAttribute = false;        // Fx vertex shader: the instance index from an attribute (ESIA_INSTANCE_ATTRIBUTE)
         // Sm3: the prelude, prepended to the program's source (a #line keeps the program's file and line numbers in
         // the compiler's messages)
         const char* prelude = nullptr;
