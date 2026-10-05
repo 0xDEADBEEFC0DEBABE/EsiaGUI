@@ -608,7 +608,7 @@ namespace esia::rhi::opengl
         const std::size_t row = (std::size_t)w * (std::size_t)bpp;
         const std::size_t pitch = rowPitch > 0 ? (std::size_t)rowPitch : row;
         const auto* src = static_cast<const std::uint8_t*>(data);
-        std::vector<std::uint8_t> packed;
+        std::vector<std::uint8_t>& packed = uploadRows_;
         if (t.bottomUp || IsBgra(t.desc.format) || pitch != row)
         {
             packed.resize(row * (std::size_t)h);
@@ -1405,7 +1405,8 @@ namespace esia::rhi::opengl
                 return false;
             }
         }
-        std::vector<GLuint64> t((std::size_t)s.used);
+        std::vector<GLuint64>& t = timerValues_;
+        t.assign((std::size_t)s.used, 0);
         for (int i = 0; i < s.used; ++i)
             gl_.GetQueryObjectui64v(s.queries[(std::size_t)i], GL_QUERY_RESULT, &t[(std::size_t)i]);
         GpuProfile p;

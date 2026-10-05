@@ -334,10 +334,11 @@ namespace esia::rhi::opengl
             else
             {
 #ifdef NDEBUG
-                constexpr int kFlags = 0;
+                constexpr bool kDebugContext = false;
 #else
-                constexpr int kFlags = WGL_CONTEXT_DEBUG_BIT_ARB;   // full KHR_debug output in debug builds
+                constexpr bool kDebugContext = true;   // full KHR_debug output in debug builds
 #endif
+                constexpr int kFlags = kDebugContext ? WGL_CONTEXT_DEBUG_BIT_ARB : 0;   // (used either way: -Werror release builds)
                 const int glAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 3, WGL_CONTEXT_PROFILE_MASK_ARB,
                                          WGL_CONTEXT_CORE_PROFILE_BIT_ARB, WGL_CONTEXT_FLAGS_ARB, kFlags, 0};
                 const int esAttribs[] = {WGL_CONTEXT_MAJOR_VERSION_ARB, 3, WGL_CONTEXT_MINOR_VERSION_ARB, 0, WGL_CONTEXT_PROFILE_MASK_ARB,

@@ -238,6 +238,9 @@ namespace esia::rhi::opengl
 
         // timing
         TimerSlot timer_[kTimerSlots];
+        // scratch kept from frame to frame: timer results, rows repacked for an upload
+        std::vector<GLuint64> timerValues_;
+        std::vector<std::uint8_t> uploadRows_;
         TimerSlot* timerCur_ = nullptr;
         int profileStart_ = -1;
         ProfileCategory profileCategory_ = ProfileCategory::Capture;

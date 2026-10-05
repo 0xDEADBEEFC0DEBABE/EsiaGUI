@@ -486,16 +486,16 @@ namespace esia::rhi::vulkan
         ib.subresourceRange = ColorRange();
         b.src |= srcStage;
         b.dst |= dstStage;
-        b.images.push_back(ib);
+        b.Add(ib);
         t.layout = layout;
     }
 
     void VulkanDevice::Submit(Barriers& b, VkCommandBuffer cmd)
     {
-        if (b.images.empty() && !b.hasMemory)
+        if (b.count == 0 && !b.hasMemory)
             return;
         vk_.vkCmdPipelineBarrier(cmd, b.src, b.dst, 0, b.hasMemory ? 1u : 0u, b.hasMemory ? &b.memory : nullptr, 0, nullptr,
-                                 (std::uint32_t)b.images.size(), b.images.data());
+                                 b.count, b.Images());
         b = Barriers();
     }
 
@@ -1646,7 +1646,8 @@ namespace esia::rhi::vulkan
     {
         if (!s.timestampsPending)
             return false;
-        std::vector<std::uint64_t> t(s.queriesUsed);
+        std::vector<std::uint64_t>& t = timestampValues_;
+        t.assign(s.queriesUsed, 0);
         // without VK_QUERY_RESULT_WAIT_BIT: VK_NOT_READY while the frame runs, never a stall
         if (vk_.vkGetQueryPoolResults(desc_.device, s.queries, 0, s.queriesUsed, t.size() * sizeof(std::uint64_t), t.data(), sizeof(std::uint64_t),
                                       VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)

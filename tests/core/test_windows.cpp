@@ -729,3 +729,39 @@ ESIA_TEST(Context, AutoSizedPopupAtItsRightEdgeStaysPut)
     ESIA_CHECK(whole(r.min.x) && whole(r.min.y) && whole(r.Width()) && whole(r.Height()));
     ESIA_CHECK(r.max.x <= 300.5f + 1e-3f && r.max.x > 300.5f - 0.8f);   // its right edge on the anchor's pixel
 }
+
+// The resize grip (WindowOptions::resizeGrip): the square at the bottom-right corner resizes the window both ways,
+// above the item there; away from it the item keeps the mouse
+ESIA_TEST(Context, ResizeGripIsAboveTheItemsAtTheCorner)
+{
+    Harness h;
+    ButtonResult b;
+    int presses = 0;
+    auto frame = [&] {
+        h.Frame();
+        WindowOptions o;
+        o.padding = {0, 0};
+        o.resizeGrip = 26.0f;
+        h.Win("R", {100, 100}, {200, 150}, o);
+        b = h.Button("corner", Rect(220, 170, 300, 250));   // reaches into the corner
+        presses += b.pressed ? 1 : 0;
+        h.ctx.End();
+        h.End();
+    };
+    h.Move({290, 240});   // in the grip, 10 in from the corner: outside the edges' 5-unit bands
+    frame();
+    frame();
+    ESIA_CHECK(h.ctx.Requests().cursor == MouseCursor::ResizeNWSE && !b.hovered);
+    h.Down();
+    frame();
+    h.Move({320, 260});
+    frame();
+    ESIA_CHECK(h.ctx.FindWindowByName("R")->GetRect() == Rect(100, 100, 330, 270));
+    h.Up();
+    frame();
+    ESIA_CHECK(presses == 0);
+    h.Move({240, 190});   // the item, away from the grip
+    frame();
+    frame();
+    ESIA_CHECK(b.hovered && h.ctx.Requests().cursor == MouseCursor::Arrow);
+}

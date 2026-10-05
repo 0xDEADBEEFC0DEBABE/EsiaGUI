@@ -86,12 +86,11 @@ namespace esia::ui
 
         Vec2 End(float* baseline) override
         {
-            // this frame's measurements size the container; next frame places with them
-            std::vector<Rect> regions;
-            std::vector<Vec2> places;
+            // this frame's measurements size the container; next frame places with them (the lists trade places
+            // and keep their storage: a frame allocates nothing)
             Vec2 size;
-            Arrange(now_, regions, places, size);
-            last_ = std::move(now_);
+            Arrange(now_, endRegions_, endPlaces_, size);
+            last_.swap(now_);
             now_.clear();
             measured_ = true;
             if (baseline)
@@ -294,7 +293,12 @@ namespace esia::ui
                 cols = std::min(cols, maxColumns);
             const float cellW = std::max(0.0f, (W - s * (float)(cols - 1)) / (float)cols);
 
-            std::vector<int> rowOf(n), colOf(n), spanOf(n);
+            std::vector<int>& rowOf = gridInts_[0];
+            std::vector<int>& colOf = gridInts_[1];
+            std::vector<int>& spanOf = gridInts_[2];
+            rowOf.assign(n, 0);
+            colOf.assign(n, 0);
+            spanOf.assign(n, 0);
             int row = 0, col = 0;
             for (std::size_t i = 0; i < n; ++i)
             {
@@ -310,7 +314,12 @@ namespace esia::ui
                 col += span;
             }
             const std::size_t rows = n > 0 ? (std::size_t)row + 1 : 0;
-            std::vector<float> rowH(rows, 0.0f), rowM(rows, 0.0f), rowY(rows, 0.0f);
+            std::vector<float>& rowH = floats_[0];
+            std::vector<float>& rowM = floats_[1];
+            std::vector<float>& rowY = floats_[2];
+            rowH.assign(rows, 0.0f);
+            rowM.assign(rows, 0.0f);
+            rowY.assign(rows, 0.0f);
             for (std::size_t i = 0; i < n; ++i)
             {
                 float h = k[i].size.y;
@@ -350,17 +359,14 @@ namespace esia::ui
 
         void ArrangeFlow(const std::vector<LayoutChild>& k, std::vector<Rect>& regions, std::vector<Vec2>& places, Vec2& size) const
         {
-            struct Line
-            {
-                std::size_t first = 0, count = 0;
-                float width = 0.0f, height = 0.0f, margin = 0.0f;
-            };
             const std::size_t n = k.size();
             const float W = width_;
             const Vec2 o = origin_;
-            std::vector<Line> lines;
-            std::vector<float> xs(n);
-            Line cur;
+            std::vector<FlowLine>& lines = flowLines_;
+            lines.clear();
+            std::vector<float>& xs = floats_[0];
+            xs.assign(n, 0.0f);
+            FlowLine cur;
             float x = 0.0f;
             for (std::size_t i = 0; i < n; ++i)
             {
@@ -370,7 +376,7 @@ namespace esia::ui
                 {
                     cur.width = x;
                     lines.push_back(cur);
-                    cur = Line();
+                    cur = FlowLine();
                     cur.first = i;
                     x = 0.0f;
                     gap = 0.0f;
@@ -389,7 +395,7 @@ namespace esia::ui
             float y = lines.empty() ? 0.0f : lines[0].margin * 0.5f;
             for (std::size_t li = 0; li < lines.size(); ++li)
             {
-                const Line& ln = lines[li];
+                const FlowLine& ln = lines[li];
                 if (li > 0)
                     y += std::max(lineSpacing, lines[li - 1].margin + ln.margin);
                 const float free = std::max(0.0f, W - ln.width);
@@ -438,6 +444,17 @@ namespace esia::ui
         std::vector<Rect> regions_;
         std::vector<Vec2> places_;
         std::vector<SlotSpring> springs_;
+        // scratch kept from frame to frame: End's arrangement, the grid's and the flow's working lists
+        struct FlowLine
+        {
+            std::size_t first = 0, count = 0;
+            float width = 0.0f, height = 0.0f, margin = 0.0f;
+        };
+        std::vector<Rect> endRegions_;
+        std::vector<Vec2> endPlaces_;
+        mutable std::vector<int> gridInts_[3];
+        mutable std::vector<float> floats_[3];
+        mutable std::vector<FlowLine> flowLines_;
     };
 
     namespace
