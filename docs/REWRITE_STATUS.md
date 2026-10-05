@@ -130,10 +130,17 @@ against 0.477 (-32%), GPU 0.437 against 0.452 (-3%).
   and on Direct3D 12 the same with the base-vertex path on and off.
 * The changed portable sources pass the Linux / macOS warning flags.
 
+* Linux (the Ubuntu 24.04 VM with the CI's packages, clang 18, llvmpipe / lavapipe): `linux-clang` and
+  `linux-clang-release` with `ESIA_WERROR`, ctest 22 / 22 each (the two Metal conformance runs skip). It found a
+  fault of the previous batch, which failed the Linux CI there: `AddFallback` dropped the cached layouts but not the
+  pointer to the last one looked up, so the next measure of that string read a freed layout (glibc left it as it
+  was: the text measured as before the fallback; Microsoft's debug heap overwrites freed memory, so the Windows
+  tests passed). `AddFallback` forgets it now.
+
 ### Not verified
 
 * Metal (it keeps the merged buffers: `MapBuffer`'s default, no base vertex) and GLES 3.2's base vertex (unused).
-* Linux, macOS, iOS and Android after these changes: CI only.
+* macOS, iOS and Android after these changes: CI only.
 
 ## Frame cost against Dear ImGui
 
