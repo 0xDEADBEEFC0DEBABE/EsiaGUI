@@ -2,7 +2,9 @@
 // scope data (docs/UI_CORE.md, sections 7 - 10 and 14).
 #include "core_harness.hpp"
 #include "esia_test.hpp"
+#include <cmath>
 #include <string>
+#include <vector>
 
 using namespace esia;
 using esia::test::Harness;
@@ -683,4 +685,47 @@ ESIA_TEST(Context, StateStorageThrowingConstructor)
     ESIA_CHECK(st.Get<Fragile>(1, 2).v == 5 && st.Size() == 1);
     st.Collect(1000, 10);
     ESIA_CHECK(st.Size() == 0);
+}
+
+// An auto-sized popup anchored at its right edge between two pixels: it lands on whole pixels and stays put (its
+// measured size used to depend on where it started between pixels, and its place on that size: it crept and jumped)
+ESIA_TEST(Context, AutoSizedPopupAtItsRightEdgeStaysPut)
+{
+    Harness h;
+    h.fbScale = {1.25f, 1.25f};
+    const Id popup = h.ctx.GetId("menu");
+    StackLayout rows;
+    rows.spacing = 0.0f;
+    std::vector<Rect> seen;
+    auto frame = [&] {
+        h.Frame();
+        PopupOptions po;
+        po.pos = {300.5f, 40.0f};
+        po.pivot = {1.0f, 0.0f};
+        po.padding = {6.0f, 6.0f};
+        if (h.ctx.BeginPopup(popup, po))
+        {
+            ContainerOptions co;
+            co.layout = &rows;
+            h.ctx.BeginContainer(1, co);
+            h.ctx.ItemSize({120.7f, 34.0f});
+            h.ctx.ItemSize({96.0f, 34.0f});
+            h.ctx.EndContainer();
+            seen.push_back(h.ctx.CurrentWindow()->GetRect());
+            h.ctx.EndPopup();
+        }
+        h.End();
+    };
+    h.Frame();
+    h.ctx.OpenPopup(popup);
+    h.End();
+    for (int i = 0; i < 12; ++i)
+        frame();
+    ESIA_CHECK(seen.size() == 12);
+    for (std::size_t i = 3; i < seen.size(); ++i)
+        ESIA_CHECK(seen[i] == seen[2]);
+    const Rect& r = seen.back();
+    const auto whole = [](float v) { return std::fabs(v * 1.25f - std::round(v * 1.25f)) < 1e-3f; };
+    ESIA_CHECK(whole(r.min.x) && whole(r.min.y) && whole(r.Width()) && whole(r.Height()));
+    ESIA_CHECK(r.max.x <= 300.5f + 1e-3f && r.max.x > 300.5f - 0.8f);   // its right edge on the anchor's pixel
 }

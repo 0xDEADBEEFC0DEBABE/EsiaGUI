@@ -3,6 +3,8 @@
 #include "esia/ui/ui.hpp"
 #include "esia_test.hpp"
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -179,6 +181,166 @@ ESIA_TEST(UiTable, VisibleRowsSelectionAndSort)
     ESIA_CHECK(sort.column == 0 && sort.ascending);
     h.Click({100, 15});
     ESIA_CHECK(sort.column == 0 && !sort.ascending);
+}
+
+// Two tables that scroll in one window scroll on their own: the wheel over the first moves its rows (their scroll
+// state was shared, and the second table's few rows left nothing to scroll: the window took the wheel)
+ESIA_TEST(UiTable, TwoTablesScrollOnTheirOwn)
+{
+    Harness h;
+    ui::TableRange a, b;
+    h.body = [&] {
+        if (ui::BeginTable("a", {{"Name"}}, {.height = 150.0f}))
+        {
+            a = ui::TableVisible(40);
+            for (int i = a.first; i < a.last; ++i)
+            {
+                ui::TableRow(i);
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+        }
+        if (ui::BeginTable("b", {{"Name"}}, {.height = 150.0f}))
+        {
+            b = ui::TableVisible(2);
+            for (int i = b.first; i < b.last; ++i)
+            {
+                ui::TableRow(i);
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+        }
+        h.ctx.ItemSize({10, 400});   // the window scrolls too
+    };
+    h.Step();
+    h.Move({200, 90});   // over the first table's rows
+    h.ctx.QueueInput(InputEvent::Wheel(0, -2));
+    for (int i = 0; i < 40; ++i)
+        h.Step();
+    ESIA_CHECK(a.first >= 2 && b.first == 0);
+    ESIA_CHECK(h.ctx.FindWindowByName("W")->Scroll().y == 0.0f);
+}
+
+// maxHeight: as tall as the rows, up to it (then they scroll), in the frame the row count changes
+ESIA_TEST(UiTable, MaxHeightFitsTheRows)
+{
+    Harness h;
+    int rows = 2;
+    Rect table;
+    float below = 0.0f;
+    h.body = [&] {
+        if (ui::BeginTable("t", {{"Name"}}, {.maxHeight = 200.0f}))
+        {
+            const ui::TableRange r = ui::TableVisible(rows);
+            for (int i = r.first; i < r.last; ++i)
+            {
+                ui::TableRow(i);
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+            table = h.ctx.LastItemRect();
+        }
+        below = h.ctx.CursorPos().y;
+    };
+    h.Step();
+    ESIA_CHECK(table.Height() == 30.0f + 2 * 34.0f && below == table.max.y + h.ctx.Metrics().itemSpacing.y);
+    rows = 40;
+    h.Step();
+    ESIA_CHECK(table.Height() == 200.0f);
+    rows = 0;
+    h.Step();
+    ESIA_CHECK(table.Height() == 30.0f);   // the header
+}
+
+// The selection kept as keys follows its rows when they move; Shift runs from where the anchor's row is now
+ESIA_TEST(UiTable, SelectionByKeyFollowsTheRows)
+{
+    Harness h;
+    std::vector<int> data = {10, 20, 30, 40, 50};
+    std::vector<std::uint64_t> keys;
+    bool selected[5] = {};
+    h.body = [&] {
+        ui::TableOptions o;
+        o.flags = ui::TableFlags_Selectable;
+        o.height = 300.0f;
+        o.selectedKeys = &keys;
+        o.rowKey = [&](int i) { return (std::uint64_t)data[(std::size_t)i]; };
+        if (ui::BeginTable("t", {{"Name"}}, o))
+        {
+            const ui::TableRange r = ui::TableVisible((int)data.size());
+            for (int i = r.first; i < r.last; ++i)
+            {
+                selected[i] = ui::TableRow(i).selected;
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+        }
+    };
+    h.Step();
+    h.Click({200, 30 + 34 * 1 + 10});   // row 1: 20
+    ESIA_CHECK(keys == std::vector<std::uint64_t>({20}));
+    std::reverse(data.begin(), data.end());   // re-sorted: 20 is row 3 now
+    h.Step();
+    ESIA_CHECK(selected[3] && !selected[1]);
+    h.Click({200, 30 + 10}, Mod_Shift);       // to row 0: rows 0 .. 3 in their order now
+    ESIA_CHECK(keys == std::vector<std::uint64_t>({20, 30, 40, 50}));
+    h.Click({200, 30 + 34 * 1 + 10}, Mod_Ctrl);   // row 1 (40) out
+    ESIA_CHECK(keys == std::vector<std::uint64_t>({20, 30, 50}));
+    ESIA_CHECK(selected[0] && !selected[1] && selected[2] && selected[3] && !selected[4]);
+}
+
+// A table its window scrolled half out of view shows (and hits) its scroll indicator only inside the window
+ESIA_TEST(UiTable, TheIndicatorStaysInsideTheWindow)
+{
+    Harness h;
+    h.body = [&] {
+        h.ctx.ItemSize({10, 300});   // the table at 308 .. 508: the window ends at 400
+        if (ui::BeginTable("t", {{"Name"}}, {.height = 200.0f}))
+        {
+            const ui::TableRange r = ui::TableVisible(40);
+            for (int i = r.first; i < r.last; ++i)
+            {
+                ui::TableRow(i);
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+        }
+    };
+    for (int i = 0; i < 4; ++i)
+        h.Step();   // it appears with rows to scroll: its indicator flashes
+    int lanes = 0;
+    for (const DrawCmd& cmd : h.ctx.FindWindowByName("W")->GetDrawList().Commands())
+        if (std::fabs(cmd.clip.Width() - 12.0f) < 0.01f)
+        {
+            ++lanes;
+            ESIA_CHECK(cmd.clip.min.y >= 338.0f && cmd.clip.max.y <= 400.0f);
+        }
+    ESIA_CHECK(lanes > 0);
+}
+
+// A field that fills the width leaves the items after it on its line (SameLine) their room
+ESIA_TEST(UiLayout, AFieldThatFillsLeavesRoomForTheItemsAfterIt)
+{
+    Harness h;
+    double v = 1.0;
+    float vec[3] = {};
+    Rect set, apply;
+    h.body = [&] {
+        ui::NumberField("v", &v);
+        h.ctx.SameLine();
+        set = ui::Interact("set", {80, 32}).rect;
+        ui::VectorField("p", vec, 3);
+        h.ctx.SameLine();
+        ui::Interact("use", {60, 32});
+        h.ctx.SameLine();
+        apply = ui::Interact("apply", {70, 32}).rect;
+    };
+    h.Step();
+    h.Step();
+    ESIA_CHECK(set.max.x == 600.0f && set.min.x == 520.0f);
+    ESIA_CHECK(apply.max.x == 600.0f);
+    h.Step();
+    ESIA_CHECK(set.max.x == 600.0f && apply.max.x == 600.0f);   // and it stays so
 }
 
 ESIA_TEST(UiTree, OpensClosesAndLeaves)

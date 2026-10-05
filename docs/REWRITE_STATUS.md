@@ -42,6 +42,12 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Scrolling, menus and tables in use** (2026-10-05): what an application built on the widgets ran into - tables that
+shared their scroll state, menus too long for the display or creeping by a fraction of a pixel, indicators past the
+window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
+on a row index.
+
+* [Scrolling, menus and tables in use](#scrolling-menus-and-tables-in-use)
 * [Data widgets, Android, color glyphs, touch](#data-widgets-android-color-glyphs-touch)
 * [Examples on Linux](#examples-on-linux)
 * [Widget layer, second part](#widget-layer-second-part-featui-overlays)
@@ -58,6 +64,65 @@ Vulkan; COLR color emoji; scrolling by touch from any item.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Scrolling, menus and tables in use
+
+An application built on the widgets reported these, with minimal fixes of its own; they are fixed here at their
+causes.
+
+### What changed
+
+* **Tables are id scopes** (`BeginTable` pushes the table's id until `EndTable`). Two tables with a `height` in one
+  window had the same id for their rows' scroll area, so one scroll state: the table with few rows wrote a range of
+  0, the wheel over the other could not move it and scrolled the window. Widgets in cells could share ids across
+  tables too. The multi-line editor's lines had the same problem and the same fix.
+* **Long menus scroll.** A glass popup's rows past `maxHeight` (by default what fits on the display) scroll inside it
+  with the edge fades and the indicator. `Picker` shows `PickerOptions::maxRows` choices (10) and opens with the
+  current one in the middle; `MenuOptions::maxHeight`. Fifty choices ran from the top of the screen to past its
+  bottom.
+* **Auto-sized windows on whole pixels** ([UI_CORE.md](UI_CORE.md) section 7). A menu anchored at its right edge
+  between two pixels crept by a fraction of a pixel every frame and jumped back: what its content measured depended on
+  where it started between pixels (layout positions snap down), and where it started on its size. Its size is now
+  rounded up to whole physical pixels and its place down onto them. A menu row spans what its popup (or scroll area)
+  offers now instead of last frame's popup width.
+* **The scroll indicator stays where its area shows**: clipped to `Context::VisibleViewRect()`, the part of the area
+  inside its parents' clips. A table its window scrolled half out of view drew its indicator, and took clicks on it,
+  below the window.
+* **`SetDarkMode` keeps the metrics**, the type and the motion: it replaced the whole theme, so the UI scale went back
+  to 1 on a switch to dark or light.
+* **Indicators that show they scroll**: `Theme::metrics.scrollIndicatorAlways` (a float, so theme transitions blend
+  it; 1 = on) keeps the indicator of every area that scrolls, dimmed at rest, on a faint track - for desktop apps.
+  By default an area that appears with more than it shows, or grows past it, flashes its indicator, as iOS does.
+* **The wheel stays with the area it scrolls** while it turns (0.3 s, the mouse still, per axis), as in a browser:
+  the window scrolling a table in under the mouse no longer hands the table the rest of the turn.
+* **A field that fills the width leaves room for what follows on its line.** `NumberField` / `VectorField` (and every
+  widget taking `AvailableWidth()`) took the whole width, so a `SameLine` button after it was laid out outside the
+  clip, unseen and unclickable. The core now records how far each line reached past its items
+  (`Context::LineRoom()`), and `AvailableWidth()` leaves that much.
+* **Table selection by key**: `TableOptions::selectedKeys` with `rowKey(i)` keeps the selection as the rows' keys, so
+  it follows the items when the rows are sorted, filtered or refreshed; Shift selects from where the anchor's row is
+  now. Index selection (`selection`) is unchanged.
+* **`TableOptions::maxHeight`**: as tall as the rows up to it, then they scroll. The height comes from the count given
+  to `TableVisible`, in the same frame (a table of one row no longer keeps 330 units of empty rows).
+* `MeasureText` on unchanged strings was reported as a cost: the text system already keeps laid-out text per font,
+  size, wrap width, flags and string, so a repeated measure is a hash lookup without an allocation.
+
+### Verified (2026-10-05)
+
+* Windows 11, clang-cl 22 with `ESIA_WERROR=ON`, every backend: ctest 33 / 33 (`esia_core_tests` 104 / 104,
+  `esia_ui_tests` 45 / 45). New tests: `Context.AutoSizedPopupAtItsRightEdgeStaysPut`,
+  `Child.WheelStaysWithTheAreaItScrolls`, `Child.VisibleViewRectStopsAtTheParent`, `Layout.LineRoomOfSameLineItems`,
+  `UiTable.TwoTablesScrollOnTheirOwn`, `UiTable.MaxHeightFitsTheRows`, `UiTable.SelectionByKeyFollowsTheRows`,
+  `UiTable.TheIndicatorStaysInsideTheWindow`, `UiLayout.AFieldThatFillsLeavesRoomForTheItemsAfterIt`,
+  `UiPopups.ALongPickerScrollsOpenedAtTheChoice`, `UiTheme.DarkModeKeepsTheMetrics`; `Child.NestedScrollAreasAndWheel`
+  now pauses before the parent takes the wheel. Each new test fails with its fix taken out (the popup one: its edge
+  went through four places in turn).
+* The changed sources pass the Linux / macOS warning flags (`-Wpedantic -Wshadow -Wnon-virtual-dtor`, clang 22).
+
+### Not verified
+
+* The application's own scenes with these changes (only the tests and the examples here).
+* Linux, macOS, iOS and Android after these changes: CI only.
 
 ## Data widgets, Android, color glyphs, touch
 

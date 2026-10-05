@@ -32,6 +32,7 @@
 #include "esia/ui/icons.hpp"
 #include "esia/ui/theme.hpp"
 #include <cmath>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <span>
@@ -87,7 +88,8 @@ namespace esia::ui
 
         const Theme& GetTheme() const;   // the one in effect (mid-transition: the blend)
         void SetTheme(const Theme& theme, bool animate = true);
-        void SetDarkMode(bool dark, bool animate = true);   // the built-in light / dark theme with the accent kept
+        // The built-in light / dark colors and materials, with the accent, metrics (scale), type and motion kept.
+        void SetDarkMode(bool dark, bool animate = true);
         void SetAccent(Color accent);                       // Clear: the theme's own
         void SetGlassLook(GlassLook look);
         GlassLook GetGlassLook() const;
@@ -312,15 +314,25 @@ namespace esia::ui
         Vec2 anchor = Vec2(-1, -1);    // where it opens (< 0: where the mouse was at OpenMenu)
         Vec2 pivot = Vec2(0, 0);       // the point of the menu on the anchor (0,0 top-left, 1,0 top-right)
         float minWidth = 180.0f;
+        float maxHeight = 0.0f;        // > 0: items past this height scroll inside it; 0 = what fits on the display
     };
     ESIA_API void OpenMenu(std::string_view id);
     ESIA_API bool BeginMenu(std::string_view id, const MenuOptions& options = {});
     ESIA_API bool MenuItem(std::string_view label, Icon icon = 0, bool checked = false);   // chosen (closes the menu)
     ESIA_API void EndMenu();                                                               // when BeginMenu returned true
 
-    // A pop-up button showing the choice, with a menu of the choices (iOS). width: > 0 fixed, < 0 the available
-    // width, 0 = the widest choice. True when the choice changed.
-    ESIA_API bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, float width = 0.0f);
+    // A pop-up button showing the choice, with a menu of the choices (iOS). True when the choice changed. A long list
+    // scrolls inside the menu, opened at the current choice.
+    struct PickerOptions
+    {
+        float width = 0.0f;            // > 0 fixed, < 0 the available width, 0 = the widest choice
+        int maxRows = 10;              // the choices the menu shows at most (more scroll); 0 = what fits on the display
+    };
+    ESIA_API bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, const PickerOptions& options);
+    inline bool Picker(std::string_view id, int* selected, std::span<const std::string_view> items, float width = 0.0f)
+    {
+        return Picker(id, selected, items, PickerOptions{.width = width});
+    }
     inline bool Picker(std::string_view id, int* selected, std::initializer_list<std::string_view> items, float width = 0.0f)
     {
         return Picker(id, selected, std::span<const std::string_view>(items.begin(), items.size()), width);
@@ -443,8 +455,16 @@ namespace esia::ui
     {
         std::uint32_t flags = TableFlags_None;
         float height = 0.0f;           // > 0: rows scroll inside this height under the header; 0 = as tall as the rows
+        // > 0 (with height 0): as tall as the rows up to this height (the header included), then they scroll inside
+        // it. Call TableVisible before the rows: the table takes its height from the row count it is given.
+        float maxHeight = 0.0f;
         float rowHeight = 0.0f;        // 0 = 34
         std::vector<int>* selection = nullptr;   // Selectable: the selected row indices, sorted
+        // Selectable, for rows that move (sorted, filtered, a list refreshed under the table): the selection kept as
+        // the rows' keys (sorted) instead of their indices, rowKey(i) giving row i's key now (an id from your data).
+        // A selected item stays selected wherever it moves; Shift selects the rows between in their current order.
+        std::vector<std::uint64_t>* selectedKeys = nullptr;
+        std::function<std::uint64_t(int)> rowKey;
     };
     struct TableSort
     {
@@ -775,7 +795,8 @@ namespace esia::ui
     ESIA_API Painter GetPainter();
     // Theme-scaled value: S(12) == 12 * theme.metrics.scale.
     ESIA_API float S(float value);
-    // The width available at the cursor. In an auto-layout container, asking for it makes the item a flexible child.
+    // The width available at the cursor, less what the items after it on its line (SameLine) took last frame. In an
+    // auto-layout container, asking for it makes the item a flexible child.
     ESIA_API float AvailableWidth();
 
     // Animation, keyed by id (Context::State): the value that springs toward `target`. `initial` seeds the first

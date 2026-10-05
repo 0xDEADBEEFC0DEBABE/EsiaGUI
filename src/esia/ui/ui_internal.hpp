@@ -261,7 +261,8 @@ namespace esia::ui
         void IconTile(Painter& p, const Rect& r, Icon icon, Color color);
         bool SegmentedAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items);
         // plain: in a list row (no well, the choice in the secondary color)
-        bool PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain);
+        // maxRows: the choices the menu shows at most (more scroll inside it), 0 = what fits on the display.
+        bool PickerAt(Id id, const Rect& r, int* selected, std::span<const std::string_view> items, bool plain, int maxRows = 10);
         // the text field at an explicit rect (number fields, the color picker's hex field)
         TextFieldResult TextFieldAt(Id id, const Rect& r, std::string* value, std::string_view placeholder, const TextFieldOptions& o);
 
@@ -280,8 +281,10 @@ namespace esia::ui
         // A docked window's header: its node's tabs. Returns the header's height.
         float DockTabBar(std::string_view title, const Rect& header);
 
-        // ---- glass popups (popups.cpp): a popup of the core on glass, its rows without gaps
-        bool BeginGlassPopup(Id id, PopupOptions options, float minWidth);
+        // ---- glass popups (popups.cpp): a popup of the core on glass, its rows without gaps. Rows taller than
+        // `maxHeight` (UI units; 0 = what fits on the display, which also bounds it) scroll inside that height;
+        // `centerOn` >= 0: the y in the rows (from their top) brought to the middle when it opens (a picker's choice).
+        bool BeginGlassPopup(Id id, PopupOptions options, float minWidth, float maxHeight = 0.0f, float centerOn = -1.0f);
         void EndGlassPopup();
         bool PopupRow(std::string_view label, bool selected, Icon icon = 0);
 
