@@ -58,6 +58,7 @@ namespace esia::ui
                 float indicatorGrab = 0.0f;
                 float lastScroll = 0.0f;
                 double lastActivity = -10.0;
+                bool scrolled = false;       // it had something to scroll last frame
             };
 
             float IndicatorLane() { return Sc(12); }
@@ -91,6 +92,10 @@ namespace esia::ui
                 s.lastActivity = m.time;   // the wheel, a glide: the indicator shows
             s.lastScroll = scroll;
             s.follow = false;
+            const bool scrolls = max > 0.5f;
+            if (scrolls && !s.scrolled)
+                s.lastActivity = m.time;   // it appears with more than it shows (or grows past it): it flashes, as on iOS
+            s.scrolled = scrolls;
 
             // the indicator (auto-hiding, wider under the mouse, draggable) in its lane, over the content without one;
             // submitted before a drag of the content is decided, so a press on it is its own
@@ -102,9 +107,11 @@ namespace esia::ui
             const float thumbH = std::min(std::max(Sc(36), trackH * view.Height() / (view.Height() + max)), trackH);
             const float thumbY = view.min.y + trackPad + (trackH - thumbH) * (max > 0.0f ? Saturate(scroll / max) : 0.0f);
             const Rect hit(x - lane * 0.5f, view.min.y, x + lane * 0.5f, view.max.y);
-            const bool scrolls = max > 0.5f;
             Interaction it;
-            c.PushClipRect(hit, false);   // the lane may lie in a parent's padding
+            // The lane may lie in a parent's padding (outside its clip), but not past what shows of the area: one
+            // its window scrolls half out of view shows its indicator, and is hit there, only in the window.
+            const Rect shown = c.VisibleViewRect();
+            c.PushClipRect(Rect(hit.min.x, std::max(hit.min.y, shown.min.y), hit.max.x, std::min(hit.max.y, shown.max.y)).Intersect(c.CurrentWindow()->GetRect()), false);
             if (scrolls)
                 it = InteractImpl(Salt(child, 0x1D1), Rect(hit.min.x, thumbY, hit.max.x, thumbY + thumbH), InteractFlags_PressOnClick);
             if (it.pressed)
@@ -175,16 +182,21 @@ namespace esia::ui
             {
                 if (in.MouseValid() && hit.Contains(in.MousePos()) && c.HoveredWindow() == c.CurrentWindow())
                     s.lastActivity = std::max(s.lastActivity, m.time - 0.5);
-                const bool shown = (m.time - s.lastActivity) < 0.9 || it.held;
-                if (shown)
+                const bool active = (m.time - s.lastActivity) < 0.9 || it.held;
+                if (active)
                     m.animating = true;   // a frame when it is time to hide
-                const float show = ui::Anim(Salt(child, 0x1D2), shown ? 1.0f : 0.0f, shown ? SpringFast() : t.motion.gentle);
+                // at rest it hides (iOS), or stays, dimmed on a faint track, as the theme asks (desktop apps)
+                const float always = Saturate(t.metrics.scrollIndicatorAlways);
+                const float show = ui::Anim(Salt(child, 0x1D2), active ? 1.0f : 0.0f, active ? SpringFast() : t.motion.gentle);
                 const float wide = ui::Anim(Salt(child, 0x1D3), (it.hovered || it.held) ? 1.0f : 0.0f, SpringFast());
-                if (show > 0.01f)
+                const float alpha = std::max(show, 0.55f * always);
+                if (alpha > 0.01f)
                 {
                     const float w = Sc(t.metrics.scrollIndicator) + Sc(3) * wide;
                     Painter p = GetPainter();
-                    p.Capsule(Rect(x - w * 0.5f, thumbY, x + w * 0.5f, thumbY + thumbH), Style().Fill(C().label.Fade((0.28f + 0.2f * wide) * show)));
+                    if (always > 0.0f)
+                        p.Capsule(Rect(x - w * 0.5f, view.min.y + trackPad, x + w * 0.5f, view.min.y + trackPad + trackH), Style().Fill(C().label.Fade(0.07f * always)));
+                    p.Capsule(Rect(x - w * 0.5f, thumbY, x + w * 0.5f, thumbY + thumbH), Style().Fill(C().label.Fade((0.28f + 0.2f * wide) * alpha)));
                 }
             }
             c.PopClipRect();

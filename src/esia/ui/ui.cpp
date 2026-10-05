@@ -152,7 +152,16 @@ namespace esia::ui
         m.theme.Set(ThemeWithAccent(theme, m.accentOverride), animate);
     }
 
-    void Ui::SetDarkMode(bool dark, bool animate) { SetTheme(dark ? ThemeDark() : ThemeLight(), animate); }
+    void Ui::SetDarkMode(bool dark, bool animate)
+    {
+        // the built-in colors and materials of that mode; the metrics (the scale), type and motion stay as they were set
+        Theme t = dark ? ThemeDark() : ThemeLight();
+        const Theme& now = impl_->theme.to;
+        t.metrics = now.metrics;
+        t.type = now.type;
+        t.motion = now.motion;
+        SetTheme(t, animate);
+    }
 
     void Ui::SetAccent(Color accent)
     {
@@ -277,7 +286,12 @@ namespace esia::ui
     float AvailableWidth()
     {
         detail::MarkFill();
-        return detail::Ctx().ContentRegionAvail().x;
+        Context& c = detail::Ctx();
+        const float avail = c.ContentRegionAvail().x;
+        // What the items after it on its line (SameLine) took last frame stays theirs: a field filling the width does
+        // not push the button after it out of view.
+        const float room = c.LineRoom();
+        return room > 0.0f ? std::max(avail - room, std::min(avail, detail::Sc(40))) : avail;
     }
 
     Interaction InteractRect(Id id, const Rect& rect, std::uint32_t flags)
