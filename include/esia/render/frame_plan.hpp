@@ -52,6 +52,9 @@ namespace esia::render
 
         Type type = Draw;
         PxRect clip;                 // scissor in render-target pixels
+        bool clipFree = false;       // Draw / FxBatch: its clips cut nothing it draws - while planning it joins
+                                     // batches of other clips that hold it whole; planned, `clip` is any rect that
+                                     // holds its bounds on the target (the previous op's, else the whole target)
         PxRect bounds;               // pixels touched (dirty tracking, layer and capture regions)
         PxRect core;                 // visually significant part of `bounds` (shapes + the visible part of their shadows
                                      // / glows): what later glass must see. Liquid glass shapes go to `glassShape`.
@@ -65,7 +68,9 @@ namespace esia::render
         EffectId effect = 0;
         bool glass = false;
         PxRect glassRegion;          // area whose backdrop must be valid before drawing (generous: capture extent)
-        PxRect glassCore;            // area whose content visibly shows through (shape + blur + refraction)
+        PxRect glassCore;            // area whose backdrop must be current: the liquid glass shapes (+2 px of filtering;
+                                     // frost spreads what lies beside a shape into it too faintly to see), a user
+                                     // effect's whole region
         PxRect glassShape;           // liquid glass shapes the batch draws (without shadows / glows)
         float blurPx = 0.0f;         // largest backdrop blur read by the batch (px), < 0 = unknown (user effect)
                                      // LayerEnd: bloom radius (px)

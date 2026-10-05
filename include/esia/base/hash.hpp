@@ -7,6 +7,7 @@
 #pragma once
 #include "config.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 namespace esia
@@ -50,6 +51,24 @@ namespace esia
         const Id h = HashBytes(b, 8, seed);
         return h != 0 ? h : 1u;
     }
+
+    // Hash maps keyed by integers or pointers: one multiply between two xor-shifts. std::hash runs FNV-1a over every
+    // byte on MSVC, which was a measurable share of a frame for the maps looked up per glyph, per animation and per draw.
+    struct IntHash
+    {
+        std::size_t operator()(std::uint64_t v) const noexcept
+        {
+            v ^= v >> 32;
+            v *= 0xD6E8FEB86659FD93ull;
+            v ^= v >> 32;
+            return (std::size_t)v;
+        }
+        template <class T>
+        std::size_t operator()(T* p) const noexcept
+        {
+            return (*this)((std::uint64_t)reinterpret_cast<std::uintptr_t>(p));
+        }
+    };
 
     // The part of a label that is displayed (everything before "##").
     constexpr std::string_view LabelText(std::string_view label)

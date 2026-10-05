@@ -6,8 +6,8 @@ namespace esia::ui
 {
     void SpringState::Step(float target, const Spring& spring, float dt)
     {
-        if (dt <= 0.0f)
-            return;
+        if (dt <= 0.0f || (value == target && velocity == 0.0f))
+            return;   // at rest: stepping would change nothing
         const float omega = kTau / std::max(spring.response, 1e-3f);
         const float zeta = std::max(spring.damping, 0.0f);
         const float x0 = value - target;

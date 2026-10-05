@@ -7,6 +7,10 @@
 // source then serves both stages (gFxData is vertex sampler 0 in FxVS, some pixel sampler in FxPS) without a
 // stage define, and constants the compiler dropped cost nothing.
 
+// SM3 counts code against the pixel shader's instruction slots: esia_common.hlsli's compact forms of the backdrop
+// sampling (each level's code once, the two levels of a blur in a loop)
+#define ESIA_COMPACT 1
+
 // no binding annotations; cbuffers are plain groups of globals (float4 c registers)
 #define ESIA_BINDING(n)
 #define ESIA_LOCATION(n)

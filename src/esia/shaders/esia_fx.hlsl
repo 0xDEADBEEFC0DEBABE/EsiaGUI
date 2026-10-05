@@ -142,6 +142,9 @@ struct FxVSIn
 {
     ESIA_VERTEX_ID(vid);
     ESIA_INSTANCE_ID(iid);
+#ifdef ESIA_INSTANCE_ATTRIBUTE
+    uint index : INSTANCEINDEX;   // instance-rate: counts the draw's first instance (rhi::Caps::drawFirstInstance)
+#endif
 };
 
 struct FxPSIn
@@ -156,6 +159,10 @@ struct FxPSIn
     ESIA_FLAT float4 shape : TEXCOORD5;
     ESIA_FLAT float4 misc : TEXCOORD6;
     ESIA_FLAT uint4 flags : TEXCOORD7;
+#endif
+#ifndef ESIA_COMPACT   // SM3 has neither the varyings nor the instruction slots to spare (esia_common.hlsli)
+    ESIA_FLAT float4 solid : TEXCOORD8;         // the solid area (FxVS): center, half size less the edge band
+    ESIA_FLAT float4 solidCorner : TEXCOORD9;   // xy: half size less the corners, z: dither (shadow / glow)
 #endif
 };
 
@@ -186,8 +193,13 @@ FxInst FxPixelRows(FxPSIn i)
 FxPSIn FxVS(FxVSIn v)
 {
     FxPSIn o;
-    // instance ids start at 0 in every draw on every API: the draw's first instance comes in the constants
+    // instance ids start at 0 in every draw on every API: the draw's first instance comes in the constants, or (Direct3D
+    // 11) in an attribute that counts it
+#ifdef ESIA_INSTANCE_ATTRIBUTE
+    const uint instance = v.index;
+#else
     const uint instance = v.iid + (uint)gDrawInfo.x;
+#endif
     o.instance = instance;
     const float4 rect = FxFetch(instance, FX_ROW_rect);
     const float4 strokeParams = FxFetch(instance, FX_ROW_strokeParams);
@@ -228,6 +240,29 @@ FxPSIn FxVS(FxVSIn v)
     float2 c = float2(ESIA_HAS(v.vid, 1u) ? mx.x : mn.x, ESIA_HAS(v.vid, 2u) ? mx.y : mn.y);
     o.pos = ESIA_CLIP_POSITION(float4(c * gXform.xy + gXform.zw, 0.0, 1.0));
     o.local = c;
+#ifndef ESIA_COMPACT
+    // The solid area: where a solid rounded rectangle without layers inside it (no gradient, image, glass, inner
+    // shadow ...) adds up to its fill color - every other layer is zero there or lies under the opaque fill. FxPS
+    // draws it from a few varyings, without the distance field: most pixels of a window, a card, a large button. It
+    // keeps out of the edge band (the stroke inside the edge, 2 pixels of antialiasing) and the corners (continuous
+    // ones reach 1.6 x the radius); outside the corners the distance is the one to the nearest edge (SdRoundRect).
+    o.solid = float4(0.0, 0.0, -1.0, -1.0);
+    o.solidCorner = float4(-1.0, -1.0, 0.0, 0.0);
+    {
+        const float4 radii = FxFetch(instance, FX_ROW_radii);   // (the hot rows' reads below)
+        const float4 fill0 = FxFetch(instance, FX_ROW_fill0);
+        if (flags.z == SHAPE_RRECT && flags.y == PAINT_SOLID && FX_HAS(feat, F_FILL) && feat < 16u &&   // fill, stroke, shadow, glow
+            (fill0.a >= 1.0 || !(FX_HAS(feat, F_SHADOW) || FX_HAS(feat, F_GLOW))))
+        {
+            const float2 h = (rect.zw - rect.xy) * 0.5;
+            const float unit = max(2.0 * gTarget.z / max(abs(gXform.x), 1e-6), 2.0 * gTarget.w / max(abs(gXform.y), 1e-6));   // UI units per pixel
+            const float edge = (FX_HAS(feat, F_STROKE) ? max(strokeParams.x * (1.0 - strokeParams.y), 0.0) : 0.0) + 2.0 * unit;
+            const float corner = max(max(radii.x, radii.y), max(radii.z, radii.w)) * 1.6 + edge;
+            o.solid = float4((rect.xy + rect.zw) * 0.5, h - edge);
+            o.solidCorner = float4(h - corner, (FX_HAS(feat, F_SHADOW) || FX_HAS(feat, F_GLOW)) ? 1.0 : 0.0, 0.0);
+        }
+    }
+#endif
 #ifndef ESIA_FX_FETCH_ALL
     o.rect = rect;
     o.radii = FxFetch(instance, FX_ROW_radii);
@@ -597,6 +632,19 @@ float4 FxPS(FxPSIn i) : SV_Target
     const float2 spos = WgtPixelPos(i.pos);
     float2 p = i.local;
     float px = max(abs(ddx(p.x)) + abs(ddy(p.x)), 1e-4);
+#ifndef ESIA_COMPACT
+
+    // the solid area (FxVS): exactly what the layers below add up to there
+    const float2 sa = abs(p - i.solid.xy);
+    [branch] if (all(sa < i.solid.zw) && any(sa < i.solidCorner.xy))
+    {
+        float4 solid = Premul(I.fill0, 1.0) * (I.misc.x * 1.0 * WgtEdgeFade(spos.y));
+        [branch] if (i.solidCorner.z > 0.5)
+            solid.rgb += (WgtHash(floor(spos) + 17.0) - 0.5) * (1.0 / 255.0) * saturate(solid.a * 8.0);
+        solid.rgb = max(solid.rgb, 0.0);
+        return WgtOutputPremul(solid);
+    }
+#endif
 
     // the second shape of a liquid merge, the end points of a segment
     [branch] if (I.flags.z == SHAPE_SEGMENT || FX_HAS(feat, F_MERGE))

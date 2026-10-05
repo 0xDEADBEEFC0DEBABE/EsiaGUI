@@ -696,12 +696,17 @@ namespace esia::rhi::d3d10
 
         bool ReadProfile(GpuProfile& out) override
         {
-            // oldest first, so `latest_` ends as the newest complete frame
-            for (int i = 1; i <= kProfileSlots; ++i)
+            // oldest first, so `latest_` ends as the newest complete frame. Queries complete in order: the first
+            // frame not done yet ends the look (each look is a driver call), and the frame just ended is not even
+            // submitted yet (it is read in a later frame)
+            for (int i = 1; i < kProfileSlots; ++i)
             {
                 ProfileSlot& s = profile_[(frame_ + (std::uint64_t)i) % kProfileSlots];
+                if (!s.pending)
+                    continue;
+                ReadSlot(s);
                 if (s.pending)
-                    ReadSlot(s);
+                    break;
             }
             out = latest_;
             return latest_.valid;

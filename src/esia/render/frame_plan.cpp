@@ -3,6 +3,7 @@
 #include "esia/render/frame_plan.hpp"
 #include "gpu_constants.hpp"
 #include <cfloat>
+#include <cmath>
 
 namespace esia::render
 {
@@ -75,21 +76,30 @@ namespace esia::render
             return pad;
         }
 
+        // A command's indices address a run of vertices of its own (a list appends both together): the range of its
+        // indices, then the vertices in it, each once and in order - not every index through to its vertex (a
+        // glyph's six indices name four vertices). A range holding other vertices would only make the bounds larger.
         PxRect VertexBounds(const DrawList& dl, const DrawCmd& cmd, const Mapper& map)
         {
             const std::uint32_t* idx = dl.Indices().data() + cmd.first;
-            const Vertex* vtx = dl.Vertices().data();
-            float x0 = FLT_MAX, y0 = FLT_MAX, x1 = -FLT_MAX, y1 = -FLT_MAX;
+            std::uint32_t lo = 0xFFFFFFFFu, hi = 0;
             for (std::uint32_t i = 0; i < cmd.count; ++i)
             {
-                const Vec2 p = vtx[idx[i]].pos;
+                lo = std::min(lo, idx[i]);
+                hi = std::max(hi, idx[i]);
+            }
+            if (cmd.count == 0 || hi >= dl.Vertices().size())
+                return {};
+            const Vertex* vtx = dl.Vertices().data();
+            float x0 = FLT_MAX, y0 = FLT_MAX, x1 = -FLT_MAX, y1 = -FLT_MAX;
+            for (std::uint32_t v = lo; v <= hi; ++v)
+            {
+                const Vec2 p = vtx[v].pos;
                 x0 = std::min(x0, p.x);
                 y0 = std::min(y0, p.y);
                 x1 = std::max(x1, p.x);
                 y1 = std::max(y1, p.y);
             }
-            if (x1 < x0)
-                return {};
             return map(x0, y0, x1, y1).Expand(1.0f);
         }
 
@@ -168,6 +178,22 @@ namespace esia::render
         // last op joins it, so the backdrop captures stay where they were and plain shapes do not take on the glass
         // shader. Ops before a layer (it redirects drawing) or a callback (it draws what it likes) are never joined.
         int barrier = 0;
+        // Scissors. A draw its clip does not cut (all of it lies inside) looks the same under any scissor that holds it
+        // whole: such draws batch with draws of other clips. Controls push a clip of their own around their shadow
+        // (ScopedUnclip) between labels clipped by the window's body - without this, each one was a draw of its own.
+        // A batch of such draws only has a free clip; the first draw its clip does cut fixes the batch's scissor.
+        auto clipJoins = [](const RenderOp& o, const PxRect& clip, const PxRect& whole, bool cut) {
+            if (o.clipFree)
+                return !cut || clip.Contains(o.bounds);
+            return cut ? o.clip == clip : o.clip.Contains(whole);
+        };
+        auto joinClip = [](RenderOp& o, const PxRect& clip, bool cut) {
+            if (o.clipFree && cut)
+            {
+                o.clipFree = false;
+                o.clip = clip;
+            }
+        };
         auto findJoin = [&](const PxRect& reach, bool glass, const auto& compatible) {
             const int n = (int)ops.size();
             for (int k = n - 1; k >= barrier && k >= n - kJoinLookBack; --k)
@@ -205,6 +231,7 @@ namespace esia::render
                         const PxRect b = full.Intersect(clip);
                         if (b.Empty())
                             continue;
+                        // glass keeps its clip: its capture regions are planned within it
                         // the shape plus the part of its shadow / glow that is still visible (> 4%): the faint outer
                         // tails vanish through blurred glass, so they never force a new backdrop capture
                         PxRect shapeR = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]);
@@ -217,6 +244,7 @@ namespace esia::render
                         const bool glassShape = (in.flags[0] & fx::kGlass) && !(in.flags[0] & fx::kCustom);
                         const PxRect core = glassShape ? PxRect{} : shapeR.Expand(InstanceCoreExtent(in) * map.scale.x).Intersect(full).Intersect(clip);
                         const PxRect gShape = glassShape ? shapeR.Intersect(clip) : PxRect{};
+                        const bool cut = glass || !clip.Contains(full);
                         PxRect gRegion, gCore, g0;
                         // user effects may sample any blur level: -1 = build the whole pyramid. Glass reads its frost, the
                         // blurred surroundings its rim reflects and, with legibility, a wide neighbourhood (the exposure
@@ -234,10 +262,11 @@ namespace esia::render
                             const float halfMin = 0.5f * std::min(in.rect[2] - in.rect[0], in.rect[3] - in.rect[1]);
                             const float reach = in.glass[0] * 2.0f + GlassEnvReach(std::min(in.glass[2], std::max(halfMin, 1.0f))) + kGlassEnvBlur;
                             const float margin = (isGlass ? reach : 40.0f) * map.scale.x + 16.0f;
-                            // refraction samples inward from the rim, so only the blur footprint reaches outside
-                            const float coreMargin = (isGlass ? in.glass[0] : 40.0f) * map.scale.x + 4.0f;
                             gRegion = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(margin);
-                            gCore = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(coreMargin);
+                            // what glass shows of its backdrop is what lies under the shape (refraction pulls inwards):
+                            // content drawn beside it after the capture would reach its frost only faintly, so it does
+                            // not force a new capture. A user effect may read anywhere around it.
+                            gCore = glassShape ? gShape.Expand(2.0f) : map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(40.0f * map.scale.x + 4.0f);
                             // level 0 is read inside the shape only (refraction and the loupe pull inwards, dispersion
                             // stays within the pull), plus a bilinear footprint; a user effect may read anywhere
                             g0 = isGlass && !(in.flags[0] & fx::kCustom) ? shapeR.Expand(2.0f).Intersect(clip) : gRegion;
@@ -245,7 +274,7 @@ namespace esia::render
                         }
 
                         int k = findJoin(b, glass, [&](const RenderOp& o) {
-                            return o.type == RenderOp::FxBatch && o.clip == clip && o.texture == cmd.texture && o.effect == cmd.effect &&
+                            return o.type == RenderOp::FxBatch && clipJoins(o, clip, full, cut) && o.texture == cmd.texture && o.effect == cmd.effect &&
                                    std::equal(fade, fade + 4, o.fade) &&
                                    // a glass shape must see what the batch already drew under it -> new batch (new capture)
                                    !(glass && o.bounds.Overlaps(gRegion.Intersect(clip)));
@@ -253,6 +282,7 @@ namespace esia::render
                         if (k >= 0)
                         {
                             RenderOp& o = ops[(std::size_t)k];
+                            joinClip(o, clip, cut);
                             ++o.instCount;
                             o.features |= in.flags[0];
                             o.bounds = o.bounds.Union(b);
@@ -274,6 +304,7 @@ namespace esia::render
                             RenderOp o;
                             o.type = RenderOp::FxBatch;
                             o.clip = clip;
+                            o.clipFree = !cut;
                             o.bounds = b;
                             o.core = core;
                             o.glassShape = gShape;
@@ -354,15 +385,19 @@ namespace esia::render
                     if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
                         o.coverage = ti.Coverage();
                     o.idxCount = cmd.count;
-                    o.bounds = cmd.count <= kVertexBoundsMaxIndices ? VertexBounds(*dl, cmd, map).Intersect(clip) : clip;
+                    const PxRect whole = cmd.count <= kVertexBoundsMaxIndices ? VertexBounds(*dl, cmd, map) : clip;
+                    const bool cut = cmd.count > kVertexBoundsMaxIndices || !clip.Contains(whole);
+                    o.bounds = whole.Intersect(clip);
                     if (o.bounds.Empty())
                         break;   // nothing inside the clip
+                    o.clipFree = !cut;
                     int k = findJoin(o.bounds, false, [&](const RenderOp& x) {
-                        return x.type == RenderOp::Draw && x.clip == clip && x.texture == cmd.texture && x.coverage == o.coverage &&
+                        return x.type == RenderOp::Draw && clipJoins(x, clip, whole, cut) && x.texture == cmd.texture && x.coverage == o.coverage &&
                                std::equal(fade, fade + 4, x.fade);
                     });
                     if (k >= 0)
                     {
+                        joinClip(ops[(std::size_t)k], clip, cut);
                         ops[(std::size_t)k].idxCount += cmd.count;
                         ops[(std::size_t)k].bounds = ops[(std::size_t)k].bounds.Union(o.bounds);
                     }
@@ -388,10 +423,15 @@ namespace esia::render
         }
 
         // the instances and indices, batch by batch
+        const PxRect screen = map(dd.displayPos.x, dd.displayPos.y, dd.displayPos.x + dd.displaySize.x, dd.displayPos.y + dd.displaySize.y);
         opFirst_.resize(ops.size(), kNoPiece);
         for (std::size_t k = 0; k < ops.size(); ++k)
         {
             RenderOp& o = ops[k];
+            // A free clip: any scissor that holds what the batch draws on the target draws the same - the one before
+            // it when that does (no scissor change), else the whole target.
+            if (o.clipFree)
+                o.clip = k > 0 && ops[k - 1].clip.Contains(o.bounds.Intersect(screen)) ? ops[k - 1].clip : screen;
             if (o.type == RenderOp::FxBatch)
                 o.instStart = (std::uint32_t)instances.size();
             else if (o.type == RenderOp::Draw)
@@ -402,8 +442,13 @@ namespace esia::render
                 if (pc.inst)
                     instances.insert(instances.end(), pc.inst, pc.inst + pc.count);
                 else
+                {
+                    const std::size_t at = indices.size();
+                    indices.resize(at + pc.count);
+                    std::uint32_t* out = indices.data() + at;
                     for (std::uint32_t i = 0; i < pc.count; ++i)
-                        indices.push_back(pc.idx[i] + pc.base);
+                        out[i] = pc.idx[i] + pc.base;
+                }
             }
         }
         if (anyGlass)

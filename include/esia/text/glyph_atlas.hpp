@@ -63,7 +63,7 @@ namespace esia::text
         TextureRegistry& textures_;
         GlyphAtlasDesc desc_;
         std::vector<Page> pages_;
-        std::unordered_map<std::uint64_t, GlyphSlot> glyphs_;
+        std::unordered_map<std::uint64_t, GlyphSlot, IntHash> glyphs_;
         std::vector<std::uint8_t> cell_;   // upload scratch: the glyph with its padding cleared
         bool overflow_ = false;
         int resets_ = 0;
