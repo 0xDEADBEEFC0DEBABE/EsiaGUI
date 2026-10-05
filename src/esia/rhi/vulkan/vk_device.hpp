@@ -203,12 +203,31 @@ namespace esia::rhi::vulkan
         };
 
         // Collects image / memory barriers into one vkCmdPipelineBarrier.
+        // The image barriers sit in place up to a handful (every transition of a frame: no allocation); more (the
+        // textures of a large upload) go to `more`.
         struct Barriers
         {
+            static constexpr std::uint32_t kInline = 8;
             VkPipelineStageFlags src = 0, dst = 0;
-            std::vector<VkImageMemoryBarrier> images;
+            VkImageMemoryBarrier inlineImages[kInline];
+            std::vector<VkImageMemoryBarrier> more;
+            std::uint32_t count = 0;
             VkMemoryBarrier memory{VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, 0, 0};
             bool hasMemory = false;
+
+            void Add(const VkImageMemoryBarrier& b)
+            {
+                if (count < kInline && more.empty())
+                    inlineImages[count] = b;
+                else
+                {
+                    if (more.empty())
+                        more.assign(inlineImages, inlineImages + count);
+                    more.push_back(b);
+                }
+                ++count;
+            }
+            const VkImageMemoryBarrier* Images() const { return more.empty() ? inlineImages : more.data(); }
         };
 
         // ---- helpers
@@ -266,6 +285,7 @@ namespace esia::rhi::vulkan
         VkDeviceSize uboAlign_ = 256, cbStride_ = 256;
         double timestampNs_ = 1.0;
         std::uint64_t timestampMask_ = ~0ull;
+        std::vector<std::uint64_t> timestampValues_;   // ReadTimestamps' scratch, kept from frame to frame
 
         VkSampler samplers_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
         VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE;

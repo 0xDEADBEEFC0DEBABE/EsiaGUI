@@ -129,7 +129,7 @@ namespace esia::ui
         Ui::Impl& m = M();
         Context& c = *m.ctx;
         Ui::Impl::IslandState& rt = m.island;
-        std::vector<Ui::Impl::Activity> acts;
+        std::vector<Ui::Impl::Activity>& acts = rt.acts;   // assigned in place: its strings keep their storage
         {
             std::lock_guard lock(m.islandMutex);
             if (rt.hasItem && m.time - rt.start > rt.item.duration)
@@ -143,16 +143,12 @@ namespace esia::ui
             }
             acts = m.activities;
         }
-        {
-            std::vector<std::string> ids;
-            for (const Ui::Impl::Activity& a : acts)
-            {
-                ids.push_back(a.id);
-                if (std::find(rt.knownActs.begin(), rt.knownActs.end(), a.id) == rt.knownActs.end())
-                    rt.actStart = m.time;   // a new live activity: it arrives like a notification
-            }
-            rt.knownActs = std::move(ids);
-        }
+        for (const Ui::Impl::Activity& a : acts)
+            if (std::find(rt.knownActs.begin(), rt.knownActs.end(), a.id) == rt.knownActs.end())
+                rt.actStart = m.time;   // a new live activity: it arrives like a notification
+        rt.knownActs.resize(acts.size());
+        for (std::size_t i = 0; i < acts.size(); ++i)
+            rt.knownActs[i] = acts[i].id;
 
         const Theme& t = T();
         const Id id = 0x151A4Eu;
