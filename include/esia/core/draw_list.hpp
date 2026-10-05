@@ -10,6 +10,8 @@
 #pragma once
 #include "esia/base/math.hpp"
 #include "esia/core/fx.hpp"
+#include <memory>
+#include <utility>
 #include <vector>
 
 namespace esia
@@ -21,6 +23,27 @@ namespace esia
         std::uint32_t color;  // RGBA8, R in the lowest byte (Color::ToRgba8)
     };
     static_assert(sizeof(Vertex) == 20, "Vertex is the 20-byte UI vertex format (rhi::VertexLayout::UiVertex)");
+
+    // An allocator whose value-initialization leaves the memory as it is: a list reserves a run of quads and writes
+    // them in place (QuadWriter), and std::vector's resize zeroed every one first (as much again as writing them).
+    template <class T>
+    struct UninitAllocator : std::allocator<T>
+    {
+        template <class U>
+        struct rebind
+        {
+            using other = UninitAllocator<U>;
+        };
+        UninitAllocator() = default;
+        template <class U>
+        UninitAllocator(const UninitAllocator<U>&) noexcept {}
+        template <class U>
+        void construct(U*) noexcept {}
+        template <class U, class... A>
+        void construct(U* p, A&&... args) { ::new ((void*)p) U(std::forward<A>(args)...); }
+    };
+    using VertexVector = std::vector<Vertex, UninitAllocator<Vertex>>;
+    using IndexVector = std::vector<std::uint32_t, UninitAllocator<std::uint32_t>>;
 
     enum class DrawCmdKind : std::uint8_t
     {
@@ -48,6 +71,11 @@ namespace esia
         std::uint32_t payload = 0;   // LayerBegin / FadeBegin
         DrawCallback callback = nullptr;
         void* userData = nullptr;
+        // Geometry: its vertices [vtxFirst, vtxEnd) and their bounds (empty: none), kept as they are written - the
+        // renderer's planner needs every command's bounds, and scanning them back through the indices cost it more
+        // than writing them did
+        std::uint32_t vtxFirst = 0, vtxEnd = 0;
+        Rect vtxBounds{1e30f, 1e30f, -1e30f, -1e30f};
     };
 
     class ESIA_API DrawList
@@ -67,7 +95,13 @@ namespace esia
         // ---- geometry (uses the current clip rect and texture)
         // Reserves room and returns the index of the first new vertex; write with WriteVertex / WriteIndex.
         std::uint32_t PrimBegin(std::uint32_t indexCount, std::uint32_t vertexCount);
-        void WriteVertex(Vec2 pos, Vec2 uv, std::uint32_t color) { vtx_.push_back({pos, uv, color}); }
+        void WriteVertex(Vec2 pos, Vec2 uv, std::uint32_t color)
+        {
+            vtx_.push_back({pos, uv, color});
+            DrawCmd& c = cmds_.back();
+            c.vtxEnd = (std::uint32_t)vtx_.size();
+            c.vtxBounds = c.vtxBounds.Union(Rect(pos, pos));
+        }
         void WriteIndex(std::uint32_t i) { idx_.push_back(i); ++cmds_.back().count; }
         void WriteTriangle(std::uint32_t a, std::uint32_t b, std::uint32_t c) { WriteIndex(a); WriteIndex(b); WriteIndex(c); }
 
@@ -85,8 +119,10 @@ namespace esia
             Vertex* vtx = nullptr;
             std::uint32_t* idx = nullptr;
             std::uint32_t base = 0, written = 0;
+            Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};
             void Add(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
             {
+                bounds = bounds.Union(r);
                 Vertex* w = vtx + (std::size_t)written * 4;
                 w[0] = {r.min, uv0, color};
                 w[1] = {Vec2(r.max.x, r.min.y), Vec2(uv1.x, uv0.y), color};
@@ -125,9 +161,11 @@ namespace esia
         void MoveCommands(std::size_t from, std::size_t to);
 
         // ---- read access (renderer, tests)
-        const std::vector<Vertex>& Vertices() const { return vtx_; }
-        std::vector<Vertex>& Vertices() { return vtx_; }   // Painter::PopScale rewrites positions
-        const std::vector<std::uint32_t>& Indices() const { return idx_; }
+        const VertexVector& Vertices() const { return vtx_; }
+        // Painter::PopScale rewrites positions: whoever does calls RefreshBounds with the first vertex it changed
+        VertexVector& Vertices() { return vtx_; }
+        void RefreshBounds(std::size_t fromVertex);
+        const IndexVector& Indices() const { return idx_; }
         const std::vector<DrawCmd>& Commands() const { return cmds_; }
         const std::vector<fx::Instance>& FxInstances() const { return fx_; }
         const std::vector<fx::LayerParams>& Layers() const { return layers_; }
@@ -138,8 +176,8 @@ namespace esia
         DrawCmd& Geometry();   // current geometry command (opens one when the state changed)
         DrawCmd& Push(DrawCmdKind kind);
 
-        std::vector<Vertex> vtx_;
-        std::vector<std::uint32_t> idx_;
+        VertexVector vtx_;
+        IndexVector idx_;
         std::vector<DrawCmd> cmds_;
         std::vector<fx::Instance> fx_;
         std::vector<fx::LayerParams> layers_;

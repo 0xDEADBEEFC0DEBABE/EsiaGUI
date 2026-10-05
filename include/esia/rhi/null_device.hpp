@@ -70,6 +70,7 @@ namespace esia::rhi
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override;
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override;
         void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override;
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override;
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& srcRect) override;
         void BeginProfile(ProfileCategory category) override;
         void EndProfile() override;

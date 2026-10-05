@@ -118,6 +118,7 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `DestroyTexture(tex)` | Any time outside passes; defer the real release until the GPU is done with it. |
 | `GetTextureDesc(tex)` | Size, format, usage, samples. The renderer reads it for the target every frame. |
 | `CreateBuffer(desc)` / `UpdateBuffer(buf, data, size)` / `DestroyBuffer` | `Vertex` (20-byte `esia::Vertex`), `Index` (uint32), `FxInstances` (float4 rows, `FxStorage::Buffer` only). Updates replace the first `size` bytes, before the first pass; version them per frame in flight. |
+| `MapBuffer(buf, size)` / `UnmapBuffer(buf)` | `UpdateBuffer` written in place: the renderer writes the frame's vertices, indices and FX instances straight from the draw lists, one buffer at a time. The default stages them for `UpdateBuffer`; a backend whose buffers map hands out their memory (Direct3D 9 - 11: lock / map with discard; Direct3D 12: the buffer's copy for the ring). |
 | `CreatePipeline(desc)` | Program (vertex + pixel shader of `ShaderProgram`), vertex layout, topology, blend, target format, samples, and for `Fx`: `effect` / `effectSource` (user effects, only with `runtimeEffects`), `fxFeatures` (only with `fxFeatureVariants`) and `background` (only with `asyncPipelines`, below). May be called inside a pass. Return `{}` if the combination is impossible (a sample count the format cannot have, an effect that failed): the renderer falls back or skips - a refused FX variant is drawn with the full shader (`fxFeatures = 0`, counted in `RenderStats::fxFallbacks`). A user effect may return `{}` while it compiles in the background; the renderer asks again on a later frame. |
 | `GetPipelineStatus(p)` | Only with `asyncPipelines`: `Pending` while a `background` pipeline compiles, `Failed` when it could not be built, else `Ready` (the default implementation). The renderer never binds a pipeline that is not `Ready`. |
 
@@ -132,9 +133,10 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `SetConstants(slot, data, size)` | Frame (192 bytes), Pass (32), Draw (32); multiples of 16. Inline: each draw sees the latest values; version them (ring buffer, push / root constants, `setVertexBytes`). |
 | `SetTexture(slot, tex)` | t0..t7. Never the current pass target. Bind with the sampler the shader expects (section 4). |
 | `SetFxBuffer(buf)` | t7 as a structured / storage buffer (`FxStorage::Buffer`). |
-| `SetVertexBuffer` / `SetIndexBuffer` | The frame's merged buffers; indices are 32-bit and already rebased (no base vertex). |
+| `SetVertexBuffer` / `SetIndexBuffer` | The frame's buffers; indices are 32-bit. Without `baseVertex` they are rebased onto one merged vertex array; with it every draw list's are as the list wrote them (`DrawIndexedBase`). |
 | `Draw(3, 0)` | Full-screen triangle, no vertex buffer: `SV_VertexID` 0..2 (Downsample, LayerComposite, Clear). |
 | `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray). |
+| `DrawIndexedBase(count, first, base)` | Only with `baseVertex`: the same, `base` added to every index (a draw list's first vertex in the frame's vertex buffer). |
 | `DrawInstanced(4, n)` | Triangle strip, no vertex buffer, `SV_InstanceID` 0..n-1; the draw's first instance is in the Draw constants. |
 | `DrawInstancedFrom(4, n, first)` | Only with `drawFirstInstance`: the same, with the shaders' instance index starting at `first` (the Draw constants' first instance is 0). Direct3D 11 feeds it as an instance-rate attribute (`INSTANCEINDEX`, an immutable 0, 1, 2 ... buffer at slot 1, `ESIA_INSTANCE_ATTRIBUTE` in `FxVS`): `SV_InstanceID` does not count `StartInstanceLocation`. |
 | `CopyTexture(dst, x, y, src, rect)` | Outside passes; raw bits (`dst` is `src`'s format or `RawFormat(src)`); resolves a multisampled source. `(x, y)` may differ from `rect`'s position (the renderer copies captures in place, the conformance suite checks an offset): where the API resolves only whole subresources or identical rectangles (D3D11 `ResolveSubresource`, GLES blits), resolve into a temporary first. |
@@ -190,6 +192,7 @@ With `asyncPipelines`, `CreatePipeline` may return a handle at once and build it
 | `fxFeatureVariants` | one FX pipeline per batch feature mask (`PipelineDesc::fxFeatures`) | yes | optional | optional | optional | no | no | no | no |
 | `asyncPipelines` | variants build off the render thread; batches draw with a ready pipeline meanwhile (section 2) | recommended | optional | optional | optional | no | no | no | no |
 | `firstDrawCompiles` | the driver finishes a shader at its first draw: the renderer draws a ready user effect once where no pixel is written (an empty scissor) | yes (NVIDIA) | no | no | no (its debug layer warns about the empty scissor) | no | no | no | no |
+| `baseVertex` | `DrawIndexedBase` (above): every list's vertices and indices go to the GPU as they are, no merged copy and no rebasing | yes | yes | yes | yes | yes (3.2 core) | no | yes | no (not yet) |
 | `drawFirstInstance` | `DrawInstancedFrom` (above): the Draw constants then change only with the edge fade - each change is a buffer update, one per FX batch was most of Direct3D 11's submit | no | no | yes | no | no | no | no | no |
 | `maxTextureSize`, `maxFxDataWidth` | limits (the FX texture is `perRow * 24` wide) | device caps; `maxFxDataWidth` = 24 x a power of two | 8192 | 16384 | 16384 | `GL_MAX_TEXTURE_SIZE` | same | limits | 16384 |
 

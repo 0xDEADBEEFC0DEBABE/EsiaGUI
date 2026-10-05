@@ -2,7 +2,10 @@
 // frame (no text system: text measures as empty, the layout and the logic are what is tested).
 #include "esia/ui/ui.hpp"
 #include "esia_test.hpp"
+#include "ui_internal.hpp"
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
 #include <cmath>
 #include <functional>
 #include <string>
@@ -1093,4 +1096,44 @@ ESIA_TEST(UiLayout, AGroupThatFillsIsAFlexibleChild)
         });
     ESIA_CHECK(std::fabs(a.Width() - 294.0f) < 1.0f && std::fabs(b.Width() - 294.0f) < 1.0f);   // (600 - 12) / 2 each
     ESIA_CHECK(std::fabs(b.min.x - (a.max.x + 12.0f)) < 1.0f);
+}
+
+namespace
+{
+    std::string Formatted(const char* fmt, ...)
+    {
+        char buf[64];
+        va_list args;
+        va_start(args, fmt);
+        ui::detail::FormatV(buf, sizeof(buf), fmt, args);
+        va_end(args);
+        return buf;
+    }
+
+    std::string Vsnprintf(const char* fmt, ...)
+    {
+        char buf[64];
+        va_list args;
+        va_start(args, fmt);
+        std::vsnprintf(buf, sizeof(buf), fmt, args);
+        va_end(args);
+        return buf;
+    }
+}
+
+// The labels' formatter writes what vsnprintf writes: the conversions it handles itself, the others through
+// vsnprintf, cut at the same place.
+ESIA_TEST(UiText, FormattingIsVsnprintfs)
+{
+#define ESIA_SAME_FORMAT(...) ESIA_CHECK(Formatted(__VA_ARGS__) == Vsnprintf(__VA_ARGS__))
+    ESIA_SAME_FORMAT("Line %d: the quick brown fox", 42);
+    ESIA_SAME_FORMAT("%d %i %u %x %X %%", -7, 2147483647, 4000000000u, 0xbeefu, 0xbeefu);
+    ESIA_SAME_FORMAT("%ld %lld %zu %lu %zd", -5L, -9000000000LL, (std::size_t)123456789, 77UL, (std::ptrdiff_t)-3);
+    ESIA_SAME_FORMAT("[%s] [%c] [%s]", "text", 'Q', "");
+    ESIA_SAME_FORMAT("%5d|%-4s|%.2f|%08x", 12, "ab", 3.14159, 255u);   // flags, width, precision: vsnprintf's
+    ESIA_SAME_FORMAT("no conversions at all");
+    ESIA_SAME_FORMAT("%s", "a string longer than the sixty-three bytes of the buffer, cut where vsnprintf cuts it");
+    ESIA_SAME_FORMAT("%d%s", 1234567, " and a tail that runs past the end of the sixty-four byte buffer for sure");
+    ESIA_SAME_FORMAT("100%%");
+#undef ESIA_SAME_FORMAT
 }
