@@ -65,17 +65,50 @@ ESIA_TEST(FramePlan, FxInstancesBatchUntilTheStateChanges)
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::Hex(0xFF0000)).Radius(8));
     p.Circle(Vec2(100, 100), 20, Style().Fill(Color::Hex(0x00FF00)));
     p.Image(7, Rect(200, 10, 260, 70), 6);                       // another texture: a new batch
-    p.PushClip(Rect(0, 0, 200, 200));
-    p.Rect(Rect(10, 120, 50, 160), Style().Fill(Color::White()));   // another clip: a new batch
+    p.PushClip(Rect(0, 100, 200, 140));
+    p.Rect(Rect(10, 120, 50, 160), Style().Fill(Color::White()));   // cut by a clip the batch is not in: a new batch
     p.PopClip();
     FramePlan plan;
     plan.Build(Data({&dl}), {});
     ESIA_CHECK(plan.fxCount == 4 && plan.instances.size() == 4);
     ESIA_CHECK(Count(plan, RenderOp::FxBatch) == 3);
+    ESIA_CHECK(plan.ops.size() == 3);
+    if (!(plan.ops.size() == 3))
+        return;
     ESIA_CHECK(plan.ops[0].instStart == 0 && plan.ops[0].instCount == 2);
     ESIA_CHECK(plan.ops[1].texture == 7 && plan.ops[1].instStart == 2);
-    ESIA_CHECK(plan.ops[2].clip == (PxRect{0, 0, 200, 200}));
+    ESIA_CHECK(plan.ops[2].clip == (PxRect{0, 100, 200, 140}) && !plan.ops[2].clipFree);
     ESIA_CHECK(!plan.anyGlass && plan.plannedCaptures == 0);
+}
+
+// A clip that cuts nothing of what it holds (a control's own clip around its shadow) does not split a batch: the
+// shape joins the batch of the window's clip, whose scissor holds it whole - the same pixels.
+ESIA_TEST(FramePlan, ClipsThatCutNothingDoNotSplitBatches)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    Painter p(dl);
+    p.PushClip(Rect(0, 0, 300, 200));   // the window's body
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::Hex(0xFF0000)).Radius(8));
+    p.PushClip(Rect(60, 0, 140, 80), false);   // a control's own clip around it and its shadow
+    p.Rect(Rect(80, 20, 120, 60), Style().Fill(Color::Hex(0x00FF00)).Radius(8).Shadow(Color::Black(0.3f), 6.0f));
+    p.PopClip();
+    dl.AddRectFilled(Rect(20, 100, 60, 110), 0xFFFFFFFFu);   // a label clipped by the body, under its own text
+    p.PushClip(Rect(0, 90, 400, 130), false);
+    dl.AddRectFilled(Rect(80, 100, 120, 110), 0xFFFFFFFFu);
+    p.PopClip();
+    p.Rect(Rect(150, 150, 250, 250), Style().Fill(Color::Hex(0x0000FF)));   // cut by the body: fixes the batch's scissor
+    p.PopClip();
+    FramePlan plan;
+    plan.Build(Data({&dl}), {});
+    ESIA_CHECK(plan.ops.size() == 2);
+    if (!(plan.ops.size() == 2))
+        return;
+    ESIA_CHECK(plan.ops[0].type == RenderOp::FxBatch && plan.ops[0].instCount == 3);
+    ESIA_CHECK(plan.ops[0].clip == (PxRect{0, 0, 300, 200}) && !plan.ops[0].clipFree);
+    ESIA_CHECK(plan.ops[1].type == RenderOp::Draw && plan.ops[1].idxCount == 12);
+    // the labels keep the scissor before them, which holds them (no scissor change)
+    ESIA_CHECK(plan.ops[1].clipFree && plan.ops[1].clip == (PxRect{0, 0, 300, 200}));
 }
 
 ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)

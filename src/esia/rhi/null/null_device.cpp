@@ -538,6 +538,17 @@ namespace esia::rhi
             Record(Fmt("draw instanced %u x %u", vertexCount, instanceCount));
     }
 
+    void NullDevice::DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
+    {
+        if (!caps_.drawFirstInstance)
+            Error("DrawInstancedFrom without Caps::drawFirstInstance");
+        CheckDraw("DrawInstancedFrom", true);
+        ++stats_.draws;
+        ++stats_.instancedDraws;
+        if (record_)
+            Record(Fmt("draw instanced %u x %u from %u", vertexCount, instanceCount, firstInstance));
+    }
+
     void NullDevice::CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r)
     {
         if (!InFrame("CopyTexture"))

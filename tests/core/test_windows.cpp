@@ -518,6 +518,47 @@ ESIA_TEST(Context, StateStorage)
     h.End();
 }
 
+// The table directly: thousands of entries of two types, every third one left unused and collected (deletions in
+// the middle of probe chains), the others found again at the same address with their values.
+ESIA_TEST(Context, StateStorageTable)
+{
+    StateStorage st;
+    constexpr int kCount = 3000;
+    std::vector<int*> ints(kCount);
+    std::vector<Spring*> springs(kCount);
+    for (int i = 0; i < kCount; ++i)
+    {
+        const Id id = (Id)(i * 7919u + 1u);
+        ints[(std::size_t)i] = &st.Get<int>(id, 1);
+        *ints[(std::size_t)i] = i;
+        springs[(std::size_t)i] = &st.Get<Spring>(id, 1);
+        springs[(std::size_t)i]->frames = -i;
+    }
+    ESIA_CHECK(st.Size() == 2u * kCount);
+    for (int i = 0; i < kCount; ++i)
+        if (i % 3 != 0)
+        {
+            const Id id = (Id)(i * 7919u + 1u);
+            ESIA_CHECK(&st.Get<int>(id, 50) == ints[(std::size_t)i]);   // the entries never move
+            st.Get<Spring>(id, 50);
+        }
+    st.Collect(60, 20);   // drops what was last used at frame 1
+    ESIA_CHECK(st.Size() == 2u * (kCount - (kCount + 2) / 3));
+    bool same = true;
+    for (int i = 0; i < kCount; ++i)
+        if (i % 3 != 0)
+        {
+            const Id id = (Id)(i * 7919u + 1u);
+            same = same && &st.Get<int>(id, 60) == ints[(std::size_t)i] && st.Get<int>(id, 60) == i;
+            same = same && &st.Get<Spring>(id, 60) == springs[(std::size_t)i] && st.Get<Spring>(id, 60).frames == -i;
+        }
+    ESIA_CHECK(same);
+    ESIA_CHECK(st.Size() == 2u * (kCount - (kCount + 2) / 3));   // found, not added again
+    ESIA_CHECK(st.Get<int>((Id)1u, 60) == 0);   // collected (i = 0): a new, default entry
+    st.Clear();
+    ESIA_CHECK(st.Size() == 0u);
+}
+
 ESIA_TEST(Context, ScopeData)
 {
     Harness h;
