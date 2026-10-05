@@ -143,7 +143,13 @@ namespace esia::ui
 
     namespace detail
     {
-        Ui::Impl& M();   // the current Ui's state (asserts there is one)
+        // The current Ui's state (asserts there is one): read by nearly every function here, so inline.
+        extern thread_local Ui::Impl* g_impl;
+        inline Ui::Impl& M()
+        {
+            ESIA_ASSERT(g_impl && "ui:: functions need a current Ui (between Ui::NewFrame and Ui::EndFrame)");
+            return *g_impl;
+        }
         inline Context& Ctx() { return *M().ctx; }
         inline const Theme& T() { return M().theme.current; }
         inline const Palette& C() { return M().theme.current.colors; }

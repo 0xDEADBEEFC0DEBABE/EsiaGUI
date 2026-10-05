@@ -276,6 +276,11 @@ namespace esia::rhi
         // 4080). The renderer then draws a prewarmed user effect once where no pixel is written (an empty scissor)
         // in the first frames, not in the frame a shape first shows it. Optional.
         bool firstDrawCompiles = false;
+        // DrawInstancedFrom hands the shaders the draw's first instance (Direct3D 11: an instance-rate attribute counts
+        // it, which SV_InstanceID does not). The renderer then passes it there instead of in the Draw constants, which
+        // change only with the edge fade: every change is a buffer update (Direct3D 11: a map with discard), and one
+        // per FX batch was most of Direct3D 11's submit time. Optional.
+        bool drawFirstInstance = false;
         int maxTextureSize = 4096;
         int maxFxDataWidth = 4096;      // FxStorage::Texture: width of the instance texture in texels
     };
@@ -322,6 +327,13 @@ namespace esia::rhi
         virtual void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) = 0;
         // Instance ids start at 0 in every draw; the renderer passes the first instance in the Draw constants.
         virtual void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) = 0;
+        // Caps::drawFirstInstance: the shaders' instance ids start at `firstInstance` (the Draw constants' first
+        // instance is 0). The renderer calls it only on a device with the cap.
+        virtual void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
+        {
+            (void)firstInstance;
+            DrawInstanced(vertexCount, instanceCount);
+        }
         // Copies `srcRect` of `src` to (dstX, dstY) of `dst`. Outside passes. A multisampled source is resolved.
         // dst has src's format or its RawFormat (the bits are copied, never converted).
         virtual void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& srcRect) = 0;

@@ -83,7 +83,10 @@ namespace esia::ui
     Ui::~Ui()
     {
         if (g_current == this)
+        {
             g_current = nullptr;
+            detail::g_impl = nullptr;
+        }
     }
 
     void Ui::NewFrame()
@@ -114,6 +117,7 @@ namespace esia::ui
             m.text->NewFrame({m.ctx->FramebufferScale().x});
         m.inFrame = true;
         g_current = this;
+        detail::g_impl = impl_.get();
     }
 
     void Ui::EndFrame()
@@ -139,7 +143,10 @@ namespace esia::ui
         m.floats.clear();
         m.inFrame = false;
         if (g_current == this)
+        {
             g_current = nullptr;
+            detail::g_impl = nullptr;
+        }
     }
 
     Context& Ui::GetContext() const { return *impl_->ctx; }
@@ -320,11 +327,7 @@ namespace esia::ui
     // ========================================================= internals
     namespace detail
     {
-        Ui::Impl& M()
-        {
-            ESIA_ASSERT(g_current && "ui:: functions need a current Ui (between Ui::NewFrame and Ui::EndFrame)");
-            return g_current->GetImpl();
-        }
+        thread_local Ui::Impl* g_impl = nullptr;
 
         Interaction InteractImpl(Id id, const Rect& r, std::uint32_t flags)
         {

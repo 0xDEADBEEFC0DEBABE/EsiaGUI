@@ -350,7 +350,9 @@ bool BeginTooltip();    void EndTooltip();                  // WindowLayer::Tool
 
 * **`template <class T> T& State(Id id)`**: per-id storage (springs, editor state, scroll physics, layout caches),
   default-constructed on first use, kept while used, freed after `retainFrames` unused frames. Replaces WGT's
-  `impl.state.Get<T>(id)`.
+  `impl.state.Get<T>(id)`. Widgets look their springs up here several times each frame: the entries sit in a flat
+  table (open addressing, linear probing, backward-shift deletion when collected) of pointers to them, so a lookup
+  is one probe and an entry never moves while it exists.
 * **`SetScopeData(const void* key, const void* value)` / `FindScopeData(key)`**: data attached to the innermost
   container (window, child region, container), found by walking out to the window. It ends with its container, so
   `ui::BeginCard(..., style)` attaches the card's style and every widget inside resolves it without a
