@@ -338,6 +338,7 @@ namespace esia::text
                     return;
                 fallbacks_.push_back(face);
                 layouts_.clear();   // texts laid out before may pick other fonts now
+                lastLayout_ = nullptr;   // it was one of them
             }
 
             // ------------------------------------------------------------------ frame
