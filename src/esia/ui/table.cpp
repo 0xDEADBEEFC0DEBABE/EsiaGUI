@@ -17,8 +17,10 @@ namespace esia::ui
             bool ascending = true;
             std::vector<float> widths;   // columns resized by hand (UI units, unscaled), 0 = the column's own
             int anchor = -1;             // where a Shift range starts
+            std::uint64_t anchorKey = 0; // ... its key (TableOptions::rowKey): where it is now
             int resizing = -1;           // the column whose right edge is dragged
             float resizeStart = 0.0f, resizeWidth = 0.0f;
+            int rows = 0;                // last frame's row count (maxHeight without TableVisible)
         };
 
         struct TableFrame
@@ -34,6 +36,8 @@ namespace esia::ui
             double scroll = 0.0;         // the body's scroll (inner scrolling)
             Rect view;                   // what of the body is visible
             bool scrolls = false;        // rows scroll inside the table
+            bool fit = false;            // maxHeight: as tall as the rows up to it (the body opens at TableVisible)
+            bool bodyOpen = false;
             Id child = 0;
             bool edgeFade = false;
             int rowCount = 0;            // TableVisible's
@@ -64,6 +68,74 @@ namespace esia::ui
         Rect CellRect(const TableFrame& t, int column)
         {
             return Rect(t.x[(std::size_t)column], t.rowY, t.x[(std::size_t)column + 1], t.rowY + t.rowH);
+        }
+
+        // The body under the header: the rows scroll inside it (a fixed height, or a maxHeight they fill), or they
+        // are the table's own height. A maxHeight table opens it once it knows how many rows it has.
+        void OpenBody(TableFrame& t, int rows)
+        {
+            Context& c = Ctx();
+            t.bodyOpen = true;
+            if (t.fit)
+            {
+                const float body = std::min((float)std::max(rows, 0) * t.rowH, std::max(Sc(t.options.maxHeight) - t.headerH, t.rowH));
+                t.outer.max.y = t.outer.min.y + t.headerH + body;
+                t.scrolls = body >= 1.0f;   // no rows: nothing to scroll (a child of no height would take what is available)
+            }
+            if (t.scrolls)
+            {
+                const Rect body(t.outer.min.x, t.outer.min.y + t.headerH, t.outer.max.x, t.outer.max.y);
+                c.SetCursorPos(body.min);
+                ChildOptions ch;
+                ch.size = body.Size();
+                ch.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
+                t.child = c.GetId("##rows");   // in the table's id scope: every table scrolls on its own
+                ScrollBegin(t.child);
+                c.BeginChild("##rows", ch);
+                t.edgeFade = BeginScrollEdgeFade();
+                t.view = c.ViewRect().Intersect(c.WindowDrawList().ClipRect());
+                t.scroll = c.Scroll().y;
+                t.bodyTop = c.ViewRect().min.y;
+            }
+            else
+            {
+                // the rows run down from the header; what of them shows is what the clip shows
+                const float top = t.outer.min.y + t.headerH;
+                t.view = Rect(t.outer.min.x, top, t.outer.max.x, 1e30f).Intersect(c.WindowDrawList().ClipRect());
+                t.scroll = 0.0;
+                t.bodyTop = top;
+            }
+        }
+
+        // A click on a row in a selection of row indices or of row keys: `at(i)` is what row i is in it.
+        template <class T, class At>
+        void SelectClick(std::vector<T>& sel, TableState& st, int index, int anchor, std::uint32_t mods, const At& at)
+        {
+            if ((mods & Mod_Shift) && anchor >= 0)
+            {
+                const int a = std::min(anchor, index), z = std::max(anchor, index);
+                if (!(mods & Mod_Ctrl))
+                    sel.clear();
+                for (int i = a; i <= z; ++i)
+                    sel.push_back(at(i));
+            }
+            else
+            {
+                if (mods & (Mod_Ctrl | Mod_Super))
+                {
+                    const T v = at(index);
+                    auto it = std::lower_bound(sel.begin(), sel.end(), v);
+                    if (it != sel.end() && *it == v)
+                        sel.erase(it);
+                    else
+                        sel.insert(it, v);
+                }
+                else
+                    sel.assign(1, at(index));
+                st.anchor = index;
+            }
+            std::sort(sel.begin(), sel.end());
+            sel.erase(std::unique(sel.begin(), sel.end()), sel.end());
         }
 
         // ============================================================= trees
@@ -107,6 +179,7 @@ namespace esia::ui
         TableFrame t;
         t.stylePushed = TakeNextStyle();
         t.id = c.GetId(id);
+        c.PushId(id);   // the table's id scope (== t.id), until EndTable: two tables' rows and cells never share an id
         t.options = o;
         t.columns.assign(columns.begin(), columns.end());
         TableState& st = c.State<TableState>(t.id);
@@ -118,11 +191,12 @@ namespace esia::ui
         t.rowH = Sc(o.rowHeight > 0.0f ? o.rowHeight : 34.0f);
         const float width = AvailableWidth();
         const Vec2 pos = c.CursorPos();
-        t.scrolls = o.height > 0.0f;
-        // a fixed height, or as tall as the header and the rows (fitted at EndTable)
-        t.outer = Rect::FromSize(pos, Vec2(width, t.scrolls ? Sc(o.height) : t.headerH));
+        t.fit = o.height <= 0.0f && o.maxHeight > 0.0f;
+        t.scrolls = o.height > 0.0f || t.fit;
+        // a fixed height, or as tall as the header and the rows (fitted at EndTable; a maxHeight one at OpenBody)
+        t.outer = Rect::FromSize(pos, Vec2(width, o.height > 0.0f ? Sc(o.height) : t.headerH));
         ContainerOptions co;
-        co.size = Vec2(width, t.scrolls ? Sc(o.height) : 0.0f);
+        co.size = Vec2(width, o.height > 0.0f ? Sc(o.height) : 0.0f);
         c.BeginContainer(t.id, co);
 
         // ---- columns: the fixed ones first, the rest shares what is left by weight
@@ -222,30 +296,8 @@ namespace esia::ui
                 }
         }
 
-        // ---- the body: rows scroll inside it (a fixed height) or are the table's own height
-        if (t.scrolls)
-        {
-            const Rect body(t.outer.min.x, t.outer.min.y + t.headerH, t.outer.max.x, t.outer.max.y);
-            c.SetCursorPos(body.min);
-            ChildOptions ch;
-            ch.size = body.Size();
-            ch.flags = ChildFlags_ScrollY | ChildFlags_SmoothScroll;
-            t.child = c.GetId("##rows");
-            ScrollBegin(t.child);
-            c.BeginChild("##rows", ch);
-            t.edgeFade = BeginScrollEdgeFade();
-            t.view = c.ViewRect().Intersect(c.WindowDrawList().ClipRect());
-            t.scroll = c.Scroll().y;
-            t.bodyTop = c.ViewRect().min.y;
-        }
-        else
-        {
-            // the rows run down from the header; what of them shows is what the clip shows
-            const float top = t.outer.min.y + t.headerH;
-            t.view = Rect(t.outer.min.x, top, t.outer.max.x, 1e30f).Intersect(c.WindowDrawList().ClipRect());
-            t.scroll = 0.0;
-            t.bodyTop = top;
-        }
+        if (!t.fit)
+            OpenBody(t, 0);
         g_tables.push_back(std::move(t));
         return true;
     }
@@ -256,6 +308,8 @@ namespace esia::ui
     {
         TableFrame& t = CurrentTable();
         t.rowCount = std::max(rowCount, 0);
+        if (!t.bodyOpen)
+            OpenBody(t, t.rowCount);
         // rows in view, from the visible part of the body (the clip) and the scroll, in double: a long table's
         // offsets are past float's whole numbers
         const double top = (double)(t.view.min.y - t.bodyTop) + t.scroll;
@@ -273,6 +327,8 @@ namespace esia::ui
         Context& c = *m.ctx;
         const Palette& pc = C();
         CloseCell(t);
+        if (!t.bodyOpen)
+            OpenBody(t, c.State<TableState>(t.id).rows);   // no TableVisible: as many rows as last frame
         t.row = index;
         t.column = -1;
         t.rowsSeen = std::max(t.rowsSeen, index + 1);
@@ -280,7 +336,9 @@ namespace esia::ui
         const Rect rr(t.outer.min.x, t.rowY, t.outer.max.x, t.rowY + t.rowH);
         TableRowResult res;
         std::vector<int>* sel = t.options.selection;
-        res.selected = sel && std::binary_search(sel->begin(), sel->end(), index);
+        std::vector<std::uint64_t>* keys = t.options.rowKey ? t.options.selectedKeys : nullptr;
+        const std::uint64_t key = keys ? t.options.rowKey(index) : 0;
+        res.selected = keys ? std::binary_search(keys->begin(), keys->end(), key) : sel && std::binary_search(sel->begin(), sel->end(), index);
 
         // the row is hit below its cells' widgets
         const Id rid = Salt(t.id, 0x10000 + (std::uint32_t)index);
@@ -289,35 +347,32 @@ namespace esia::ui
             b = c.ButtonBehavior(rid, rr, ButtonFlags_None, ItemFlags_Background);
         res.clicked = b.pressed;
         res.doubleClicked = b.pressed && b.clicks >= 2;
-        if (b.pressed && (t.options.flags & TableFlags_Selectable) && sel)
+        if (b.pressed && (t.options.flags & TableFlags_Selectable) && (keys || sel))
         {
             TableState& st = c.State<TableState>(t.id);
             const std::uint32_t mods = c.Input().Mods();
-            if ((mods & Mod_Shift) && st.anchor >= 0)
+            if (keys)
             {
-                const int a = std::min(st.anchor, index), z = std::max(st.anchor, index);
-                if (!(mods & Mod_Ctrl))
-                    sel->clear();
-                for (int i = a; i <= z; ++i)
-                    sel->push_back(i);
-            }
-            else if (mods & (Mod_Ctrl | Mod_Super))
-            {
-                auto it = std::lower_bound(sel->begin(), sel->end(), index);
-                if (it != sel->end() && *it == index)
-                    sel->erase(it);
-                else
-                    sel->insert(it, index);
-                st.anchor = index;
+                // the Shift range starts where the anchor's row is now (the rows may have moved since)
+                const int rows = std::max(t.rowCount, t.rowsSeen);
+                int anchor = st.anchor;
+                if (anchor >= 0 && (anchor >= rows || t.options.rowKey(anchor) != st.anchorKey))
+                {
+                    anchor = -1;
+                    for (int i = 0; i < rows && anchor < 0; ++i)
+                        if (t.options.rowKey(i) == st.anchorKey)
+                            anchor = i;
+                }
+                SelectClick(*keys, st, index, anchor, mods, t.options.rowKey);
+                if (st.anchor == index)
+                    st.anchorKey = key;
+                res.selected = std::binary_search(keys->begin(), keys->end(), key);
             }
             else
             {
-                sel->assign(1, index);
-                st.anchor = index;
+                SelectClick(*sel, st, index, st.anchor, mods, [](int i) { return i; });
+                res.selected = std::binary_search(sel->begin(), sel->end(), index);
             }
-            std::sort(sel->begin(), sel->end());
-            sel->erase(std::unique(sel->begin(), sel->end()), sel->end());
-            res.selected = std::binary_search(sel->begin(), sel->end(), index);
         }
 
         Painter p = GetPainter();
@@ -391,7 +446,10 @@ namespace esia::ui
         TableFrame& t = CurrentTable();
         Context& c = Ctx();
         CloseCell(t);
+        if (!t.bodyOpen)
+            OpenBody(t, 0);   // neither TableVisible nor a row
         const int rows = std::max(t.rowCount, t.rowsSeen);
+        c.State<TableState>(t.id).rows = rows;
         const double rowsH = (double)rows * t.rowH;
         if (t.scrolls)
         {
@@ -412,6 +470,7 @@ namespace esia::ui
         c.SetCursorPos(t.outer.min);
         const float height = t.scrolls ? t.outer.Height() : t.headerH + (float)rowsH;
         c.ItemSize(Vec2(t.outer.Width(), height));
+        c.PopId();
         c.EndContainer();
         const bool pushed = t.stylePushed;
         g_tables.pop_back();

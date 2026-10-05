@@ -399,7 +399,7 @@ namespace esia::ui
         if (!L.visible)
             return false;
         const Rect r(L.accessory.min.x, L.accessory.Center().y - Sc(15), L.accessory.max.x, L.accessory.Center().y + Sc(15));
-        return PickerAt(Salt(L.id, 5), r, selected, items, true);
+        return PickerAt(Salt(L.id, 5), r, selected, items, true);   // at most 10 choices in view
     }
 
     void RowValue(std::string_view label, std::string_view value, RowIcon icon)

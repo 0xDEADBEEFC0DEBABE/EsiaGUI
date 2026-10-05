@@ -1,10 +1,12 @@
 # Continuous integration
 
 GitHub Actions runs three workflows (`.github/workflows`), one per host OS, on every push to `main` and every pull
-request into it that changes more than documentation, and on any branch by hand (section 5: the minutes are
-metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches (section 5); a fifth,
-`Backend branches`, commits `main` with one backend each to the branches `directx`, `opengl`, `vulkan` and `metal`
-after every push to `main` (`tools/branches/backend_branches.py`, seconds on Linux). Every job
+request into it that changes more than documentation (`docs/`, Markdown files, `LICENSE`), and on any branch by hand
+(section 5: the minutes are metered). A fourth, `Shaders`, only regenerates the shader library on `shaders/*` branches
+(section 5); a fifth, `Backend branches`, commits `main` with one backend each to the branches `directx`, `opengl`,
+`vulkan` and `metal` after every push to `main` (`tools/branches/backend_branches.py`, seconds on Linux), also after a
+documentation-only push. Leave those pushes to it: a push to the backend branches from a person's account makes GitHub
+offer that person "Compare & pull request" for each of them for an hour, and they are never merged back. Every job
 builds with `-DESIA_WERROR=ON`, runs `ctest`, writes a table of every test and every conformance scene to the job's
 summary (`.github/scripts/ctest_report.py`) and uploads the conformance images, the diff images of failures, the
 CTest JUnit file and the test logs as an artifact named after the job (kept 14 days).
