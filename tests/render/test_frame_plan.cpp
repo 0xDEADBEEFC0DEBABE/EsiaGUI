@@ -2,6 +2,8 @@
 #include "esia/render/frame_plan.hpp"
 #include "esia/render/painter.hpp"
 #include "esia_test.hpp"
+#include <algorithm>
+#include <vector>
 
 using namespace esia;
 using namespace esia::render;
@@ -55,6 +57,57 @@ ESIA_TEST(FramePlan, GeometryOfSeveralListsIsMergedAndRebased)
     ESIA_CHECK(p.ops[0].type == RenderOp::Draw && p.ops[0].idxOffset == 0 && p.ops[0].idxCount == 12);
     ESIA_CHECK(p.indices[6] == 4);   // b's first vertex follows a's four
     ESIA_CHECK(p.vertices[4].color == 0xFF0000FFu);
+}
+
+// A direct plan (a device with Caps::baseVertex) leaves the lists' vertices and indices as they are: each list at its
+// offsets, every draw a run of a list's indices with the list's first vertex as base - the same indices as the
+// rebased plan's, and the same instances, as runs.
+ESIA_TEST(FramePlan, DirectPlansDrawTheListsAsTheyAre)
+{
+    DrawList a, b;
+    a.Reset(Rect(0, 0, 400, 300));
+    b.Reset(Rect(0, 0, 400, 300));
+    Painter pa(a), pb(b);
+    a.AddRectFilled(Rect(0, 0, 10, 10), 0xFFFFFFFFu);
+    pa.Rect(Rect(100, 100, 150, 150), Style().Fill(Color::White()).Radius(4));
+    a.AddRectFilled(Rect(110, 120, 140, 130), 0xFF0000FFu);   // a label on the shape
+    b.AddRectFilled(Rect(20, 20, 30, 30), 0xFF00FF00u);
+    pb.Rect(Rect(200, 100, 250, 150), Style().Fill(Color::White()).Radius(4));
+    FramePlan rebased, direct;
+    rebased.Build(Data({&a, &b}), {});
+    direct.Build(Data({&a, &b}), {}, true);
+    ESIA_CHECK(direct.direct && direct.vertices.empty() && direct.indices.empty() && direct.instances.empty());
+    ESIA_CHECK(direct.totalVertices == 12 && direct.totalIndices == 18 && direct.lists.size() == 2);
+    ESIA_CHECK(direct.lists[1].list == &b && direct.lists[1].firstVertex == 8 && direct.lists[1].firstIndex == 12);
+    ESIA_CHECK(direct.ops.size() == rebased.ops.size());
+    bool same = direct.ops.size() == rebased.ops.size();
+    for (std::size_t k = 0; same && k < direct.ops.size(); ++k)
+    {
+        const RenderOp& d = direct.ops[k];
+        const RenderOp& r = rebased.ops[k];
+        same = d.type == r.type;
+        if (d.type == RenderOp::FxBatch)
+            same = same && d.instStart == r.instStart && d.instCount == r.instCount;
+        if (d.type != RenderOp::Draw)
+            continue;
+        std::vector<std::uint32_t> got;
+        for (std::uint32_t g = d.geometryFirst; g < d.geometryFirst + d.geometryCount; ++g)
+        {
+            const FramePlan::GeometryDraw& gd = direct.geometry[g];
+            for (const FramePlan::ListGeometry& l : direct.lists)
+                if (gd.firstIndex >= l.firstIndex && gd.firstIndex < l.firstIndex + l.list->Indices().size())
+                    for (std::uint32_t i = 0; i < gd.count; ++i)
+                        got.push_back(l.list->Indices()[gd.firstIndex - l.firstIndex + i] + gd.baseVertex);
+        }
+        same = same && got.size() == r.idxCount && std::equal(got.begin(), got.end(), rebased.indices.begin() + r.idxOffset);
+    }
+    ESIA_CHECK(same);
+    std::vector<float> left;
+    for (const FramePlan::InstanceRun& run : direct.instanceRuns)
+        for (std::uint32_t i = 0; i < run.count; ++i)
+            left.push_back(run.first[i].rect[0]);
+    ESIA_CHECK(left.size() == rebased.instances.size() && left.size() == 2 && left[0] == rebased.instances[0].rect[0] &&
+               left[1] == rebased.instances[1].rect[0]);
 }
 
 ESIA_TEST(FramePlan, FxInstancesBatchUntilTheStateChanges)

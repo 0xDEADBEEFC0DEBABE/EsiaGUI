@@ -1,6 +1,8 @@
 // Esia UI - what the widget files share: the Ui's state, style resolution, animation and drawing helpers.
 #pragma once
 #include "esia/ui/ui.hpp"
+#include <cstdarg>
+#include <cstddef>
 #include <mutex>
 #include <span>
 #include <string>
@@ -229,6 +231,11 @@ namespace esia::ui
         // A label without its "##id" suffix.
         std::string_view VisibleLabel(std::string_view label);
         void TextImpl(text::FontRef f, Color color, std::string_view text, bool wrap);
+        // vsnprintf into `buf` (truncated to size - 1, terminated), the length written. The formats labels use most -
+        // %d %i %u %x %X %s %c %% (with l, ll, z), no flags, width or precision - are written here: a C runtime's
+        // vsnprintf takes its locale lock first (Microsoft's: a sixth of a frame of labels). Anything else goes to
+        // vsnprintf. The output is the same.
+        std::size_t FormatV(char* buf, std::size_t size, const char* fmt, va_list args);
 
         // DrawList::MoveCommands for the widget layer (a card's background under its content): the floating blocks it
         // shifts are kept track of.

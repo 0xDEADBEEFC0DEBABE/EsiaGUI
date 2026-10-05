@@ -538,6 +538,19 @@ namespace esia::rhi
             Record(Fmt("draw instanced %u x %u", vertexCount, instanceCount));
     }
 
+    void NullDevice::DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex)
+    {
+        if (!caps_.baseVertex)
+            Error("DrawIndexedBase without Caps::baseVertex");
+        CheckDraw("DrawIndexedBase", false);
+        if (!vertexBuffer_ || !indexBuffer_)
+            Error("DrawIndexedBase without vertex / index buffers");
+        ++stats_.draws;
+        ++stats_.indexedDraws;
+        if (record_)
+            Record(Fmt("draw indexed %u from %u base %u", indexCount, firstIndex, baseVertex));
+    }
+
     void NullDevice::DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
     {
         if (!caps_.drawFirstInstance)
