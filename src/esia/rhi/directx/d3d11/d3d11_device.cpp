@@ -187,6 +187,7 @@ namespace esia::rhi::d3d11
             c.fxFeatureVariants = false;
             // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
             c.drawFirstInstance = true;
+            c.baseVertex = true;
             c.maxTextureSize = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             c.maxFxDataWidth = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             return c;
@@ -488,6 +489,26 @@ namespace esia::rhi::d3d11
             }
         }
 
+        void* MapBuffer(Buffer buf, std::size_t size) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (!b || size == 0 || size > b->desc.size)
+                return nullptr;
+            D3D11_MAPPED_SUBRESOURCE m;
+            if (!log_.Check(ctx_->Map(b->buf.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m), "Map (buffer)"))
+                return nullptr;
+            mappedBuffer_ = buf.id;
+            return m.pData;
+        }
+
+        void UnmapBuffer(Buffer buf) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (b && mappedBuffer_ == buf.id)
+                ctx_->Unmap(b->buf.Get(), 0);
+            mappedBuffer_ = 0;
+        }
+
         void DestroyBuffer(Buffer buf) override { buffers_.Remove(buf.id); }
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
@@ -695,6 +716,10 @@ namespace esia::rhi::d3d11
 
         void Draw(std::uint32_t vertexCount, std::uint32_t firstVertex) override { ctx_->Draw(vertexCount, firstVertex); }
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override { ctx_->DrawIndexed(indexCount, firstIndex, 0); }
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override
+        {
+            ctx_->DrawIndexed(indexCount, firstIndex, (INT)baseVertex);
+        }
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { DrawInstancedFrom(vertexCount, instanceCount, 0); }
 
         // The FX vertex shader reads the instance's index from an attribute (slot 1, one per instance): unlike
@@ -976,6 +1001,7 @@ namespace esia::rhi::d3d11
         ComPtr<ID3D11InputLayout> uiLayout_;
         ComPtr<ID3D11InputLayout> fxLayout_;
         ComPtr<ID3D11Buffer> instanceIndices_;   // 0, 1, 2 ... (DrawInstancedFrom)
+        std::uint32_t mappedBuffer_ = 0;         // MapBuffer's, until UnmapBuffer
         std::uint32_t instanceIndexCount_ = 0;
         bool instanceIndicesBound_ = false;
         ComPtr<ID3D11BlendState> blends_[3];   // per BlendMode

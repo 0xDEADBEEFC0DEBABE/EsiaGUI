@@ -31,6 +31,7 @@ target_link_libraries(esia_render_tests PRIVATE esia::render)
 
 esia_add_test(esia_ui_tests ui/test_ui.cpp ui/test_data_widgets.cpp)
 target_link_libraries(esia_ui_tests PRIVATE esia::ui)
+target_include_directories(esia_ui_tests PRIVATE ${ESIA_ROOT}/src/esia/ui)   # ui_internal.hpp (detail::FormatV)
 
 # test kit: PNG files and tolerant image comparison (the conformance suite's goldens)
 add_library(esia_testkit STATIC support/image.cpp)

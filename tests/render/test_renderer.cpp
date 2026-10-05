@@ -396,6 +396,30 @@ ESIA_TEST(Renderer, IndicesAreRebased)
     ESIA_CHECK(Lines(s.dev, "draw indexed 12 from 0") == 1);   // same clip and texture: one draw for both lists
 }
 
+// Caps::baseVertex: each list's indices go to the GPU as they are, drawn with the list's first vertex as base
+ESIA_TEST(Renderer, BaseVertexUploadsTheListsAsTheyAre)
+{
+    Caps caps;
+    caps.baseVertex = true;
+    Setup s(caps, Format::RGBA8_UNORM, true, 1, true);
+    DrawList a = MakeList(), b = MakeList();
+    a.AddRectFilled(Rect(0, 0, 10, 10), 0xFFFFFFFFu);
+    b.AddRectFilled(Rect(20, 0, 30, 10), 0xFFFFFFFFu);
+    Renderer r(s.dev);
+    r.Render(Data({&a, &b}), nullptr, s.target);
+    ESIA_CHECK(NoErrors(s.dev));
+    const std::vector<std::uint8_t>* ib = s.dev.Data(Buffer{4});
+    ESIA_CHECK(ib && ib->size() >= 12 * 4);
+    if (ib && ib->size() >= 12 * 4)
+    {
+        std::uint32_t idx[12];
+        std::memcpy(idx, ib->data(), sizeof(idx));
+        ESIA_CHECK(idx[0] == 0 && idx[6] == 0 && idx[8] == 2 && idx[11] == 3);   // b's as they are
+    }
+    ESIA_CHECK(Lines(s.dev, "draw indexed 6 from 0 base 0") == 1 && Lines(s.dev, "draw indexed 6 from 6 base 4") == 1);
+    ESIA_CHECK(r.Stats().vertices == 8 && r.Stats().indices == 12);
+}
+
 ESIA_TEST(Renderer, CallbacksGetTheNativeStateAndStateIsRebound)
 {
     Setup s;

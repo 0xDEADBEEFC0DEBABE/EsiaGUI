@@ -42,6 +42,10 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Text against Dear ImGui** (2026-10-05, later): frames of text as cheap as Dear ImGui's or cheaper - a text's glyph
+quads kept and copied in, bounds kept as the lists are written, every list's vertices and indices uploaded as they
+are (`Caps::baseVertex`, `Device::MapBuffer`), a formatter for the common label formats.
+
 **Frame cost against Dear ImGui** (2026-10-05): the showcase against WGT's demo (Dear ImGui 1.92.9 with the same
 glass) on the same scene, and plain widgets against a vanilla Dear ImGui; batches no longer split at clips that cut
 nothing, a solid-area path in the FX shader, a flat per-id state table, glyph runs, fewer timestamp reads.
@@ -51,6 +55,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Text against Dear ImGui](#text-against-dear-imgui)
 * [Frame cost against Dear ImGui](#frame-cost-against-dear-imgui)
 * [Scrolling, menus and tables in use](#scrolling-menus-and-tables-in-use)
 * [Data widgets, Android, color glyphs, touch](#data-widgets-android-color-glyphs-touch)
@@ -69,6 +74,66 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Text against Dear ImGui
+
+The same setup as below (section "Frame cost against Dear ImGui"), with two corrections to the plain-widget scene:
+the Esia side drew its paragraph in a transparent color (it was left out), and Dear ImGui's Segoe UI was 15 px of
+its height, which is an 11 px em - it is 20 px now, the 15 px em of Esia's body text. Both read their GPU timestamps
+inside the submit. Text: four windows of 30 lines (`"Line %d: The quick brown fox jumps"`, about 3300 glyphs a frame),
+with solid windows and without any window background.
+
+| Direct3D 11, ms per frame | Esia build + submit | Dear ImGui build + submit | CPU | GPU Esia / Dear ImGui |
+| --- | --- | --- | --- | --- |
+| text only | 0.042 + 0.025 = 0.068 | 0.055 + 0.021 = 0.076 | -11% | 0.033 / 0.032 |
+| text in solid windows | 0.049 + 0.028 = 0.077 | 0.055 + 0.022 = 0.077 | the same | 0.045 / 0.038 |
+| plain widgets | 0.060 + 0.033 = 0.092 | 0.040 + 0.012 = 0.052 | +77% | 0.051 / 0.024 |
+
+Before these changes text alone took Esia 0.083 + 0.047 ms (Dear ImGui 0.050 + 0.017). The glass scene against WGT's
+demo now: Direct3D 11 CPU 0.199 ms against 0.367 (-46%), GPU 0.401 against 0.440 (-9%); Direct3D 12 CPU 0.325
+against 0.477 (-32%), GPU 0.437 against 0.452 (-3%).
+
+### What changed
+
+* **A text's glyph quads are kept** (`ft_text_system.cpp`, `Layout::quads`): placed once in physical pixels from the
+  whole pixel at the text's origin, by the origin's sub-pixel offsets, and copied in at each draw while the atlases,
+  the em size, the scale, those offsets and the colors stay the same - the next frame, or the same string in another
+  row or window. A text inside its clip goes in as a block through local cursors (stores through the writer's members
+  kept the compiler from holding them in registers). Placing from the origin's whole pixel instead of the absolute
+  position gives the same pixels at 100%, 125% and 150% (the text and plain-widget scenes compared).
+* **Bounds kept as the lists are written** (`DrawCmd::vtxFirst`, `vtxEnd`, `vtxBounds`): every way of writing
+  vertices updates its command's, `Painter::PopScale` refreshes them after rewriting positions
+  (`DrawList::RefreshBounds`). The planner scanned every geometry command's vertices again (a third of the submit of
+  a frame of text).
+* **Lists without zeroing** (`UninitAllocator`, `VertexVector`, `IndexVector`): a run of quads is reserved and written
+  in place, and `std::vector`'s resize zeroed it first.
+* **Each list's geometry uploaded as it is** (`rhi::Caps::baseVertex`, `Device::DrawIndexedBase`, `Device::MapBuffer`
+  / `UnmapBuffer`, [backends/README.md](backends/README.md) sections 2 and 3): a direct plan
+  (`FramePlan::Build(..., direct)`) leaves the lists' vertices and indices where they are; the renderer writes them
+  into the mapped buffers at each list's offsets and draws every run with its list's first vertex as base vertex. FX
+  instances go from the lists into the mapped buffer too, the integer row converted on the way (they were copied
+  three times). Direct3D 9 - 12 map their buffers; Direct3D 9 - 12, Vulkan and desktop OpenGL draw with a base
+  vertex; GLES 3.0 and Metal keep the merged, rebased buffers (`MapBuffer`'s default stages for `UpdateBuffer`).
+* **The common label formats written without vsnprintf** (`ui::detail::FormatV`): `%d %i %u %x %X %s %c %%` with
+  `l`, `ll`, `z`, no flags, width or precision; anything else goes to vsnprintf. Microsoft's vsnprintf takes its locale
+  lock first: a sixth of building a frame of labels.
+
+### Verified (2026-10-05, later)
+
+* ctest 33 / 33 in Debug (clang-cl 22, every backend); new: `DrawList.CommandsKeepTheirVertexBounds`,
+  `FramePlan.DirectPlansDrawTheListsAsTheyAre` (the same indices and instances as the rebased plan's),
+  `Renderer.BaseVertexUploadsTheListsAsTheyAre`, `UiText.FormattingIsVsnprintfs`.
+* `esia_conformance --strict`, one frame and `--frames 3`, on Direct3D 9, 10, 11, 12, OpenGL, GLES, Vulkan and null:
+  17 / 17 each; the null command logs are the goldens unchanged. The showcase with `--debug` on all six APIs: no
+  validation or debug-layer messages.
+* The text, text-in-windows and plain scenes render pixel for pixel as before on Direct3D 11 at 100%, 125% and 150%,
+  and on Direct3D 12 the same with the base-vertex path on and off.
+* The changed portable sources pass the Linux / macOS warning flags.
+
+### Not verified
+
+* Metal (it keeps the merged buffers: `MapBuffer`'s default, no base vertex) and GLES 3.2's base vertex (unused).
+* Linux, macOS, iOS and Android after these changes: CI only.
 
 ## Frame cost against Dear ImGui
 

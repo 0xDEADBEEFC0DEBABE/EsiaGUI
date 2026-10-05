@@ -208,6 +208,7 @@ namespace esia::rhi::d3d12
             c.fxFeatureVariants = false;   // the whole FX shader fits SM5
             // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
             c.drawFirstInstance = true;
+            c.baseVertex = true;
             c.maxTextureSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             c.maxFxDataWidth = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             return c;
@@ -451,6 +452,19 @@ namespace esia::rhi::d3d12
             b->valid = std::max(b->valid, size);
             b->frame = 0;   // copy it into the ring again at the next bind
         }
+
+        // the buffer's CPU copy itself: one copy less on its way to the ring
+        void* MapBuffer(Buffer buf, std::size_t size) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (!b || size == 0 || size > b->desc.size)
+                return nullptr;
+            b->valid = std::max(b->valid, size);
+            b->frame = 0;
+            return b->data.data();
+        }
+
+        void UnmapBuffer(Buffer) override {}
 
         void DestroyBuffer(Buffer buf) override { buffers_.Remove(buf.id); }
 
@@ -731,6 +745,12 @@ namespace esia::rhi::d3d12
         {
             if (FlushTable())
                 cl_->DrawIndexedInstanced(indexCount, 1, firstIndex, 0, 0);
+        }
+
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override
+        {
+            if (FlushTable())
+                cl_->DrawIndexedInstanced(indexCount, 1, firstIndex, (INT)baseVertex, 0);
         }
 
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { DrawInstancedFrom(vertexCount, instanceCount, 0); }

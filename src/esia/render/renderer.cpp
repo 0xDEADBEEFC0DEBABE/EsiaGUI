@@ -270,21 +270,76 @@ namespace esia::render
             return (bool)buf;
         }
 
-        // Vertex, index and FX instance data, once per frame before the first pass. Instances go to the GPU with
-        // their integer row (flags) as float values: the shaders read every row as float4 (FxFetch).
+        // An instance as the GPU reads it: its integer row (flags) as float values (FxFetch reads every row as float4).
+        static void WriteInstance(float* dst, const fx::Instance& in)
+        {
+            std::memcpy(dst, &in, sizeof(fx::Instance));
+            for (int k = 0; k < 4; ++k)
+                dst[(fx::kInstanceVec4Count - 1) * 4 + (std::size_t)k] = (float)in.flags[k];
+        }
+
+        // The plan's instances, in op order, into `dst` (`plan.fxCount` of them)
+        void WriteInstances(float* dst) const
+        {
+            if (!plan.direct)
+            {
+                for (const fx::Instance& in : plan.instances)
+                {
+                    WriteInstance(dst, in);
+                    dst += fx::kInstanceVec4Count * 4;
+                }
+                return;
+            }
+            for (const FramePlan::InstanceRun& span : plan.instanceRuns)
+                for (std::uint32_t i = 0; i < span.count; ++i)
+                {
+                    WriteInstance(dst, span.first[i]);
+                    dst += fx::kInstanceVec4Count * 4;
+                }
+        }
+
+        // Vertex, index and FX instance data, once per frame before the first pass. A direct plan's (a device with
+        // Caps::baseVertex) go from the draw lists into the mapped buffers: each list's vertices and indices as
+        // they are, at its offsets.
         bool Upload(int maxPerRow)
         {
-            if (!plan.vertices.empty())
+            const std::size_t vcount = plan.direct ? plan.totalVertices : plan.vertices.size();
+            const std::size_t icount = plan.direct ? plan.totalIndices : plan.indices.size();
+            if (vcount > 0)
             {
-                const std::size_t vbytes = plan.vertices.size() * sizeof(Vertex), ibytes = plan.indices.size() * sizeof(std::uint32_t);
+                const std::size_t vbytes = vcount * sizeof(Vertex), ibytes = icount * sizeof(std::uint32_t);
                 if (!EnsureBuffer(vb, vbCap, vbytes, rhi::BufferKind::Vertex, "ui-vertices") ||
                     !EnsureBuffer(ib, ibCap, std::max<std::size_t>(ibytes, 4), rhi::BufferKind::Index, "ui-indices"))
                     return false;
-                dev.UpdateBuffer(vb, plan.vertices.data(), vbytes);
-                if (ibytes)
-                    dev.UpdateBuffer(ib, plan.indices.data(), ibytes);
+                if (plan.direct)
+                {
+                    auto* v = static_cast<unsigned char*>(dev.MapBuffer(vb, vbytes));
+                    if (!v)
+                        return false;
+                    for (const FramePlan::ListGeometry& l : plan.lists)
+                        if (!l.list->Vertices().empty())
+                            std::memcpy(v + (std::size_t)l.firstVertex * sizeof(Vertex), l.list->Vertices().data(), l.list->Vertices().size() * sizeof(Vertex));
+                    dev.UnmapBuffer(vb);
+                    if (ibytes)
+                    {
+                        auto* x = static_cast<unsigned char*>(dev.MapBuffer(ib, ibytes));
+                        if (!x)
+                            return false;
+                        for (const FramePlan::ListGeometry& l : plan.lists)
+                            if (!l.list->Indices().empty())
+                                std::memcpy(x + (std::size_t)l.firstIndex * sizeof(std::uint32_t), l.list->Indices().data(),
+                                            l.list->Indices().size() * sizeof(std::uint32_t));
+                        dev.UnmapBuffer(ib);
+                    }
+                }
+                else
+                {
+                    dev.UpdateBuffer(vb, plan.vertices.data(), vbytes);
+                    if (ibytes)
+                        dev.UpdateBuffer(ib, plan.indices.data(), ibytes);
+                }
             }
-            const std::size_t n = plan.instances.size();
+            const std::size_t n = (std::size_t)plan.fxCount;
             if (n == 0)
                 return true;
             const bool texture = caps.fxStorage == rhi::FxStorage::Texture;
@@ -292,22 +347,21 @@ namespace esia::render
             if (texture && maxPerRow > 0)
                 fxPerRow = std::min(fxPerRow, maxPerRow);
             const std::size_t rows = texture ? (n + (std::size_t)fxPerRow - 1) / (std::size_t)fxPerRow : 1;
-            staging.resize(n * fx::kInstanceVec4Count * 4);
-            for (std::size_t i = 0; i < n; ++i)
-            {
-                float* dst = staging.data() + i * fx::kInstanceVec4Count * 4;
-                std::memcpy(dst, &plan.instances[i], sizeof(fx::Instance));
-                for (int k = 0; k < 4; ++k)
-                    dst[(fx::kInstanceVec4Count - 1) * 4 + (std::size_t)k] = (float)plan.instances[i].flags[k];
-            }
             if (!texture)
             {
+                // written in place: one copy from the draw lists (or the plan) to the GPU
                 const std::size_t bytes = n * sizeof(fx::Instance);
                 if (!EnsureBuffer(fxBuf, fxCap, bytes, rhi::BufferKind::FxInstances, "fx-instances"))
                     return false;
-                dev.UpdateBuffer(fxBuf, staging.data(), bytes);
+                auto* dst = static_cast<float*>(dev.MapBuffer(fxBuf, bytes));
+                if (!dst)
+                    return false;
+                WriteInstances(dst);
+                dev.UnmapBuffer(fxBuf);
                 return true;
             }
+            staging.resize(n * fx::kInstanceVec4Count * 4);
+            WriteInstances(staging.data());
             const int w = fxPerRow * (int)fx::kInstanceVec4Count, h = (int)rows;
             if (!fxTex || fxTexW != w || fxTexH < h)
             {
@@ -730,6 +784,16 @@ namespace esia::render
                 dev.SetIndexBuffer(ib);
                 geometryBound = true;
             }
+            if (plan.direct)
+            {
+                for (std::uint32_t g = op.geometryFirst; g < op.geometryFirst + op.geometryCount; ++g)
+                {
+                    const FramePlan::GeometryDraw& d = plan.geometry[g];
+                    dev.DrawIndexedBase(d.count, d.firstIndex, d.baseVertex);
+                    ++stats.drawCalls;
+                }
+                return;
+            }
             dev.DrawIndexed(op.idxCount, op.idxOffset);
             ++stats.drawCalls;
         }
@@ -906,10 +970,10 @@ namespace esia::render
                     return false;
                 out = it->second.info;
                 return true;
-            });
+            }, caps.baseVertex);
             stats.fxInstances = plan.fxCount;
-            stats.vertices = (int)plan.vertices.size();
-            stats.indices = (int)plan.indices.size();
+            stats.vertices = (int)plan.totalVertices;
+            stats.indices = (int)plan.totalIndices;
 
             const bool glass = plan.anyGlass && (canCopy || canRead);
             const bool surfaces = (glass || plan.anyLayer) && EnsureSurfaces(glass && canCopy, plan.anyLayer);

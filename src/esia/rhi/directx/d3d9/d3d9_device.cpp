@@ -316,6 +316,7 @@ namespace esia::rhi::d3d9
             caps_.floatRenderTargets = Supports(D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING | D3DUSAGE_QUERY_FILTER, D3DFMT_A16B16G16R16F);
             caps_.sampleRenderTarget = true;
             caps_.readback = true;
+            caps_.baseVertex = true;   // DrawIndexedPrimitive's BaseVertexIndex
             caps_.runtimeEffects = true;
             // FX variants: a batch's variant is a fraction of the full shader (fill ~450 instruction slots, all ~3.8k),
             // compiled in the background: the first frames draw with the full shader, started below. Only where the
@@ -537,6 +538,28 @@ namespace esia::rhi::d3d9
             std::memcpy(p, data, size);
             b->vb ? b->vb->Unlock() : b->ib->Unlock();
             b->valid = size;
+        }
+
+        void* MapBuffer(Buffer buf, std::size_t size) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (!b || size == 0 || size > b->desc.size)
+                return nullptr;
+            void* p = nullptr;
+            const HRESULT hr = b->vb ? b->vb->Lock(0, (UINT)size, &p, D3DLOCK_DISCARD) : b->ib->Lock(0, (UINT)size, &p, D3DLOCK_DISCARD);
+            if (!log_.Check(hr, "Lock (buffer)"))
+                return nullptr;
+            b->valid = size;
+            mappedBuffer_ = buf.id;
+            return p;
+        }
+
+        void UnmapBuffer(Buffer buf) override
+        {
+            Buf* b = buffers_.Find(buf.id);
+            if (b && mappedBuffer_ == buf.id)
+                b->vb ? b->vb->Unlock() : b->ib->Unlock();
+            mappedBuffer_ = 0;
         }
 
         void DestroyBuffer(Buffer buf) override { buffers_.Remove(buf.id); }
@@ -793,6 +816,17 @@ namespace esia::rhi::d3d9
             dev_->SetStreamSource(0, vb->vb.Get(), 0, 20);   // sizeof(esia::Vertex)
             dev_->SetIndices(ib->ib.Get());
             dev_->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0, (UINT)(vb->valid / 20), firstIndex, indexCount / 3);
+        }
+
+        void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override
+        {
+            const Buf* vb = buffers_.Find(vertexBuffer_);
+            const Buf* ib = buffers_.Find(indexBuffer_);
+            if (!vb || !ib || !vb->vb || !ib->ib || vb->valid / 20 <= baseVertex || !PrepareDraw())
+                return;
+            dev_->SetStreamSource(0, vb->vb.Get(), 0, 20);   // sizeof(esia::Vertex)
+            dev_->SetIndices(ib->ib.Get());
+            dev_->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, (INT)baseVertex, 0, (UINT)(vb->valid / 20 - baseVertex), firstIndex, indexCount / 3);
         }
 
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override
@@ -1228,6 +1262,7 @@ namespace esia::rhi::d3d9
         bool dirty_[SrcCount] = {};
         std::uint32_t bound_[kTextureSlots] = {};
         std::uint32_t vertexBuffer_ = 0, indexBuffer_ = 0;
+        std::uint32_t mappedBuffer_ = 0;   // MapBuffer's, until UnmapBuffer
         ProfileSlot profile_[kProfileSlots];
         GpuProfile latest_;
     };
