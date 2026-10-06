@@ -41,13 +41,56 @@ namespace esia::ui
         }
     }
 
+    // ============================================================= density
+    namespace
+    {
+        // Regular: the design's sizes (iOS's). Compact: the controls 6 - 10 units shorter (WinUI: text fields
+        // 32 -> 24, list items 40 -> 32), their details 0.8 of theirs; every text as it is.
+        constexpr detail::ControlSizes kRegularSizes{
+            .detail = 1, .button = {28, 36, 48}, .buttonPad = {12, 18, 24}, .field = 32, .stepperWidth = 96, .rowControl = 30,
+            .textField = 38, .row = 34, .tableRow = 34, .tableHeader = 30, .tableCell = 30, .treeRow = 30,
+            .toggleWidth = 50, .toggleHeight = 30, .checkbox = 22, .sliderTrack = 6, .knobWidth = 34, .knobHeight = 22,
+            .heldKnobWidth = 46, .heldKnobHeight = 30, .colorBar = 26, .navigationBar = 44, .searchBar = 46, .tabBar = 60,
+            .dockTabs = 44, .closeButton = 30, .windowIcon = 26};
+        constexpr detail::ControlSizes kCompactSizes{
+            .detail = 0.8f, .button = {24, 30, 40}, .buttonPad = {10, 15, 20}, .field = 26,
+            .stepperWidth = 84, .rowControl = 26, .textField = 30, .row = 28, .tableRow = 28, .tableHeader = 26, .tableCell = 24, .treeRow = 26,
+            .toggleWidth = 40, .toggleHeight = 24, .checkbox = 18, .sliderTrack = 4, .knobWidth = 28, .knobHeight = 18,
+            .heldKnobWidth = 38, .heldKnobHeight = 24, .colorBar = 20, .navigationBar = 36, .searchBar = 36, .tabBar = 48,
+            .dockTabs = 34, .closeButton = 24, .windowIcon = 20};
+    }
+
+    void Ui::Impl::Refresh()
+    {
+        effective = theme.current;
+        effective.metrics = DensityMetrics(theme.current.metrics);
+        const float c = std::clamp(theme.current.metrics.compact, 0.0f, 1.0f);
+        if (c <= 0.0f)
+        {
+            sizes = kRegularSizes;   // the design's, exactly
+            return;
+        }
+        // a switch animates: every size on its way between the tables
+        constexpr int n = (int)(sizeof(detail::ControlSizes) / sizeof(float));
+        const float* a = reinterpret_cast<const float*>(&kRegularSizes);
+        const float* b = reinterpret_cast<const float*>(&kCompactSizes);
+        float* r = reinterpret_cast<float*>(&sizes);
+        for (int i = 0; i < n; ++i)
+            r[i] = a[i] + (b[i] - a[i]) * c;
+        // a smaller control's glass bends what is behind it less (bars keep theirs: they float over the content)
+        effective.materials.control.refraction *= sizes.detail;
+    }
+
     // ================================================================== Ui
     Ui::Ui(Context& context, const UiDesc& desc) : impl_(std::make_unique<Impl>())
     {
         Impl& m = *impl_;
         m.ctx = &context;
         m.text = desc.text;
-        m.theme.Set(desc.theme, false);
+        Theme theme = desc.theme;
+        theme.metrics.compact = desc.density == Density::Compact ? 1.0f : 0.0f;
+        m.theme.Set(theme, false);
+        m.Refresh();
         m.look = desc.glassLook;
         m.islandEnabled = desc.island;
         if (!m.text)
@@ -96,8 +139,9 @@ namespace esia::ui
         m.time = in.Time();
         m.dt = std::clamp(in.DeltaTime(), 0.0f, 0.1f);   // a hitch must not fling springs
         m.theme.Step(m.dt);
+        m.Refresh();
         // the core's spacing between items follows the theme (WGT's: the spacing across, 80 % of it down)
-        const float spacing = m.theme.current.metrics.spacing * m.theme.current.metrics.scale;
+        const float spacing = m.effective.metrics.spacing * m.effective.metrics.scale;
         m.ctx->Metrics().itemSpacing = Vec2(spacing, spacing * 0.8f);
         m.animating = m.theme.Animating();
         // containers left open last frame (a missing End) must not leak into this one
@@ -112,6 +156,7 @@ namespace esia::ui
         m.navs.clear();
         m.pages.clear();
         m.floats.clear();
+        m.edgeFades.clear();
         m.next = ItemStyle();
         m.decorationSerial = 0;
         if (m.text)
@@ -142,6 +187,7 @@ namespace esia::ui
                 }
         }
         m.floats.clear();
+        m.edgeFades.clear();
         m.inFrame = false;
         if (g_current == this)
         {
@@ -157,8 +203,22 @@ namespace esia::ui
     void Ui::SetTheme(const Theme& theme, bool animate)
     {
         Impl& m = *impl_;
-        m.theme.Set(ThemeWithAccent(theme, m.accentOverride), animate);
+        Theme t = ThemeWithAccent(theme, m.accentOverride);
+        t.metrics.compact = m.theme.to.metrics.compact;   // the density is the Ui's (SetDensity)
+        m.theme.Set(t, animate);
+        m.Refresh();
     }
+
+    void Ui::SetDensity(Density density, bool animate)
+    {
+        Impl& m = *impl_;
+        Theme t = m.theme.to;
+        t.metrics.compact = density == Density::Compact ? 1.0f : 0.0f;
+        m.theme.Set(t, animate);
+        m.Refresh();
+    }
+
+    Density Ui::GetDensity() const { return impl_->theme.to.metrics.compact >= 0.5f ? Density::Compact : Density::Regular; }
 
     void Ui::SetDarkMode(bool dark, bool animate)
     {
@@ -178,6 +238,7 @@ namespace esia::ui
         Theme t = m.theme.to;
         t.colors.accent = accent.a > 0.0f ? accent : (t.dark ? ThemeDark() : ThemeLight()).colors.accent;
         m.theme.Set(t, true);
+        m.Refresh();
     }
 
     void Ui::SetGlassLook(GlassLook look) { impl_->look = look; }
@@ -188,12 +249,12 @@ namespace esia::ui
     {
         const Impl& m = *impl_;
         // quarter units: sizes that differ by a hair share their glyphs
-        return {m.fonts[(int)weight], std::round(size * m.theme.current.metrics.scale * 4.0f) * 0.25f};
+        return {m.fonts[(int)weight], std::round(size * m.effective.metrics.scale * 4.0f) * 0.25f};
     }
 
     text::FontRef Ui::Font(TextStyle style) const
     {
-        const Typography& t = impl_->theme.current.type;
+        const Typography& t = impl_->effective.type;
         return Font(t.weight[(int)style], t.size[(int)style]);
     }
 
@@ -278,7 +339,7 @@ namespace esia::ui
     Painter GetPainter()
     {
         Ui::Impl& m = detail::M();
-        const Theme& t = m.theme.current;
+        const Theme& t = m.effective;
         PainterEnv env;
         env.metricsScale = t.metrics.scale;
         env.cornerSmoothing = t.metrics.cornerSmoothing;
@@ -628,7 +689,7 @@ namespace esia::ui
         {
             GlassMaterial m = T().materials.clear;
             m.blur = 0.0f;
-            m.refraction = 10.0f;
+            m.refraction = 10.0f * Sizes().detail;
             m.bezel = 40.0f;   // one rounded rod / dome
             m.dispersion = 1.0f;
             m.magnify = 0.28f;

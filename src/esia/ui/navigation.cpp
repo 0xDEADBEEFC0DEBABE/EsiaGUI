@@ -129,7 +129,7 @@ namespace esia::ui
         pco.size = pr.Size();
         c.BeginChild(pageId, pco);
         const Palette& pc = C();
-        const float barH = Sc(44);
+        const float barH = Sc(Sizes().navigationBar);
 
         // the navigation bar: the title, and a back button titled after the page below
         Painter p = GetPainter();
@@ -252,9 +252,10 @@ namespace esia::ui
         // the bar floats over the bottom of the area it is submitted in (iOS): the content scrolls under the glass
         // and shows through it, and the bar takes the clicks over its area
         const Rect vis = c.ViewRect();
-        const float barH = Sc(60);
+        const float barH = Sc(Sizes().tabBar);
         const float barW = std::max(std::min(vis.Width() - Sc(28), (float)count * Sc(88)), 1.0f);
         const Rect bar = Rect::FromCenter(Vec2(vis.Center().x, vis.max.y - Sc(14) - barH * 0.5f), Vec2(barW, barH));
+        FadeUnderBar(bar, barH + Sc(22));   // what scrolls under it fades out (the room is below, ItemSize)
         ChildOptions co;
         co.flags = ChildFlags_Floating;
         co.rect = bar;
@@ -315,8 +316,9 @@ namespace esia::ui
         const Palette& pc = t.colors;
         // floats over the bottom of its area like the tab bar: the list scrolls under the glass
         const Rect vis = c.ViewRect();
-        const float barH = Sc(46);
+        const float barH = Sc(Sizes().searchBar);
         const Rect bar(vis.min.x + Sc(14), vis.max.y - Sc(14) - barH, std::max(vis.max.x - Sc(14), vis.min.x + Sc(15)), vis.max.y - Sc(14));
+        FadeUnderBar(bar, barH + Sc(22));   // what scrolls under it fades out (the room is below, ItemSize)
         DrawList& dl = c.WindowDrawList();
         const std::size_t from = dl.Mark();
         ChildOptions co;
@@ -336,7 +338,7 @@ namespace esia::ui
             ScopedUnclip unclip(bar, ShadowExtent(Sc(18), Vec2(0, Sc(6))));
             DrawPill(p, bar, bs);
         }
-        const float fieldH = Sc(38);
+        const float fieldH = Sc(Sizes().textField);
         c.SetCursorPos(Vec2(bar.min.x + Sc(6), std::floor(bar.Center().y - fieldH * 0.5f)));
         TextFieldOptions o;
         o.icon = icons::Search;

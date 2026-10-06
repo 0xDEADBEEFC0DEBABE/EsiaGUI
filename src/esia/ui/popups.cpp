@@ -126,7 +126,7 @@ namespace esia::ui
         const Vec2 ts = MeasureText(f, shown);
         // The popup sizes itself to its widest row (what each measures: ItemSize); every row then spans the popup
         // (or the scroll area its rows are in) as wide as it is now.
-        const float natural = ts.x + Sc(64), h = Sc(34);
+        const float natural = ts.x + Sc(64), h = Sc(Sizes().row);
         const Vec2 pos = c.CursorPos();
         const float width = std::max(natural, c.WorkRect().max.x - pos.x);
         c.ItemSize(Vec2(natural, h));
@@ -189,12 +189,12 @@ namespace esia::ui
         Painter p = GetPainter();
         const text::FontRef f = Font(TextStyle::Body);
         const Vec2 ts = MeasureText(f, current);
-        const float chevron = Sc(10);
+        const float chevron = Dt(10);
         if (it.visible)
         {
             if (!plain)
             {
-                Style well = Style().Radius(ItemRadius(Sc(10)));
+                Style well = Style().Radius(ItemRadius(Dt(10)));
                 p.Rect(r, SurfaceFill(well, FillOr(pc.tertiaryFill).Fade(1.0f + 0.5f * it.hover)));
             }
             // plain (in a list row): the choice and the chevron at the right, in the secondary color
@@ -214,8 +214,9 @@ namespace esia::ui
         PopupOptions po;
         po.pos = Vec2(r.max.x, r.max.y + Sc(6));
         po.pivot = Vec2(1.0f, 0.0f);
-        const float rowH = Sc(34);   // PopupRow's
-        if (BeginGlassPopup(popupId, po, std::max(r.Width(), Sc(180)), maxRows > 0 ? 34.0f * (float)maxRows : 0.0f, sel >= 0 ? ((float)sel + 0.5f) * rowH : -1.0f))
+        const float rowH = Sc(Sizes().row);   // PopupRow's
+        if (BeginGlassPopup(popupId, po, std::max(r.Width(), Sc(180)), maxRows > 0 ? Sizes().row * (float)maxRows : 0.0f,
+                            sel >= 0 ? ((float)sel + 0.5f) * rowH : -1.0f))
         {
             for (int i = 0; i < count; ++i)
             {
@@ -249,7 +250,7 @@ namespace esia::ui
                 w = std::max(w, MeasureText(f, VisibleLabel(item)).x);
             w += Sc(44);
         }
-        const Vec2 size(w, Sc(34));
+        const Vec2 size(w, Sc(Sizes().row));
         const Vec2 pos = c.CursorPos();
         c.ItemSize(size);
         return PickerAt(c.GetId(id), Rect::FromSize(pos, size), selected, items, false, o.maxRows);

@@ -15,6 +15,7 @@
 //   --tab n         the Components panel's tab
 //   --page id       the Settings page shown first (accent, perf)
 //   --menu          the Components panel opens its menu (checks the popups)
+//   --compact       the compact density (Ui::SetDensity); Ctrl+Shift+D (Cmd+Shift+D) switches it while running
 // On a display smaller than the desktop layout (a phone) one panel shows at a time, as large as fits over the status bar
 // (then centered over the dock); the dock switches panels as between apps.
 // The app options (API, size, scale, frames, screenshot ...) are glass_window's (../glass_window/app.hpp).
@@ -121,6 +122,7 @@ float4 WgtEffect(WgtFx fx)
 
         // appearance
         bool darkMode = true;
+        bool compactSizes = false;   // --compact
         int accent = 0, textSize = 1, glassLook = 2;
         float frost = 10.0f, refraction = 14.0f, dispersion = 0.30f;
         bool glassEdited = false, specular = true, searchBase = true;
@@ -1072,6 +1074,13 @@ float4 WgtEffect(WgtFx fx)
             if (++frameCount == openLaterFrame && openLater >= 0)
                 open[openLater] = true;
             ui->NewFrame();
+            {
+                // Ctrl+Shift+D (Cmd+Shift+D): the other density, animated
+                const esia::InputState& in = ctx->Input();
+                const std::uint32_t mods = in.KeyMods(esia::Key::D);
+                if (in.KeyPressed(esia::Key::D, false) && (mods & esia::Mod_Shift) && (mods & (esia::Mod_Ctrl | esia::Mod_Super)))
+                    ui->SetDensity(ui->GetDensity() == ui::Density::Compact ? ui::Density::Regular : ui::Density::Compact);
+            }
             const bool compact = Compact();
             if (compact && frameCount == 1)
             {
@@ -1154,6 +1163,8 @@ int main(int argc, char** argv)
         }
         if (o == "--menu")
             return d.openMenu = true;
+        if (o == "--compact")
+            return d.compactSizes = true;
         if (!value)
             return false;
         usedValue = true;
@@ -1203,6 +1214,7 @@ int main(int argc, char** argv)
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
         desc.theme.metrics.scrollIndicatorAlways = 0.0f;   // as ApplyTheme
+        desc.density = d.compactSizes ? ui::Density::Compact : ui::Density::Regular;
         desc.glassLook = look;
 #if !defined(_WIN32)
         desc.iconFontFile = glass::kSystemSymbolsFont;   // SF Symbols, or the Linux desktop's icon theme, for the icons

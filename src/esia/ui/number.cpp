@@ -339,7 +339,7 @@ namespace esia::ui
             Context& c = Ctx();
             const float width = o.width > 0.0f ? Sc(o.width) : AvailableWidth();
             const Vec2 pos = c.CursorPos();
-            const Vec2 size(width, Sc(32));
+            const Vec2 size(width, Sc(Sizes().field));
             c.ItemSize(size);
             return Rect::FromSize(pos, size);
         }

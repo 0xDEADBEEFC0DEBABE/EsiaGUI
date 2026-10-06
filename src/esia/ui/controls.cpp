@@ -208,11 +208,13 @@ namespace esia::ui
 
         ButtonMetrics MetricsFor(ControlSize s)
         {
+            // height and padding from the density's table
+            const ControlSizes& z = Sizes();
             switch (s)
             {
-            case ControlSize::Small: return {28, 12, 13};
-            case ControlSize::Large: return {48, 24, 17};
-            default: return {36, 18, 15};
+            case ControlSize::Small: return {z.button[0], z.buttonPad[0], 13};
+            case ControlSize::Large: return {z.button[2], z.buttonPad[2], 17};
+            default: return {z.button[1], z.buttonPad[1], 15};
             }
         }
 
@@ -280,7 +282,7 @@ namespace esia::ui
                 GlassMaterial g = styledGlass ? surfaceGlass : LookMaterial(t.materials.control);
                 g.brightness += 0.05f * it.hover + 0.06f * it.press;
                 g.specular += 0.3f * it.press;
-                s.Glass(g).Shadow(C().shadow.Fade(0.8f), Sc(14 + 6 * it.press), Vec2(0, Sc(5)));
+                s.Glass(g).Shadow(C().shadow.Fade(0.8f), Dt(14 + 6 * it.press), Vec2(0, Dt(5)));
             }
             Color bg = bc.bg;
             if (bg.a > 0.0f)
@@ -294,11 +296,11 @@ namespace esia::ui
             else if (o.kind == ButtonKind::Plain && it.hover > 0.001f)
                 s.Fill(C().highlight.Fade(it.hover));
             if (o.glow)
-                s.Glow(Tint(o.tint), Sc(16), 0.55f + 0.45f * it.hover);
+                s.Glow(Tint(o.tint), Dt(16), 0.55f + 0.45f * it.hover);
             if (o.kind == ButtonKind::Filled && !bc.glass)
-                s.Shadow(Tint(o.tint).Fade(0.35f * (1.0f - it.press)), Sc(12), Vec2(0, Sc(4)));
+                s.Shadow(Tint(o.tint).Fade(0.35f * (1.0f - it.press)), Dt(12), Vec2(0, Dt(4)));
             {
-                ScopedUnclip unclip(r, ShadowExtent(Sc(20), Vec2(0, Sc(5))));
+                ScopedUnclip unclip(r, ShadowExtent(Dt(20), Vec2(0, Dt(5))));
                 if (circle && !HasItemRadius())
                     p.Circle(r.Center(), r.Height() * 0.5f, s);
                 else
@@ -312,7 +314,7 @@ namespace esia::ui
                 fg = fg.Fade(1.0f - 0.4f * it.press);
             const float iconSize = f.size * 1.1f;
             const Vec2 ts = MeasureText(f, label);
-            const float gap = (icon && !label.empty()) ? Sc(7) : 0.0f;
+            const float gap = (icon && !label.empty()) ? Dt(7) : 0.0f;
             const float iconW = icon ? iconSize : 0.0f;
             float x = r.Center().x - (iconW + gap + ts.x) * 0.5f;
             if (icon)
@@ -360,7 +362,7 @@ namespace esia::ui
     }
 
     // ================================================================ toggle
-    Vec2 detail::ToggleSize() { return Vec2(Sc(50), Sc(30)); }
+    Vec2 detail::ToggleSize() { return Vec2(Sc(Sizes().toggleWidth), Sc(Sizes().toggleHeight)); }
 
     bool detail::ToggleAt(Id id, const Rect& r, bool* value)
     {
@@ -384,17 +386,17 @@ namespace esia::ui
         const float colorT = Saturate(Anim(id, 0x11, *value ? 1.0f : 0.0f, Spring{0.30f, 1.0f}));
         const float lens = LiquidPulse(id, it.held, changed);
 
-        const float pad = Sc(2);
+        const float pad = Dt(2);
         const float kd = r.Height() - pad * 2.0f;
         const float travel = r.Width() - pad * 2.0f - kd;
         const float overshoot = pos - Saturate(pos);
         const float squash = std::fabs(overshoot) * travel * 1.4f;
         const float speed = std::min(std::fabs(vel) * travel * 0.045f, kd * 0.55f);
         const float dir = *value ? -1.0f : 1.0f;
-        const float elong = Sc(7) * it.press;
+        const float elong = Dt(7) * it.press;
 
-        float w = kd + speed + elong - squash + Sc(12) * lens;
-        const float h = kd - std::min(speed * 0.14f, kd * 0.12f) + squash * 0.3f + Sc(8) * lens;
+        float w = kd + speed + elong - squash + Dt(12) * lens;
+        const float h = kd - std::min(speed * 0.14f, kd * 0.12f) + squash * 0.3f + Dt(8) * lens;
         const float cx = r.min.x + pad + kd * 0.5f + travel * Saturate(pos) + dir * elong * 0.5f - (overshoot > 0 ? 1.0f : -1.0f) * squash * 0.5f;
         w = std::max(w, kd * 0.7f);
         const Rect knob = Rect::FromCenter(Vec2(cx, r.Center().y), Vec2(w, h));
@@ -405,7 +407,7 @@ namespace esia::ui
         if (GlassSurface() && colorT > 0.001f)
             DrawPill(p, r, Style().Fill(StateFill(onColor).Fade(colorT)));
         Style ks;
-        ks.Radius(knob.Height() * 0.5f).Shadow(Color::Black(0.18f + 0.12f * lens), Sc(5 + 10 * lens), Vec2(0, Sc(2 + 2.5f * lens)));
+        ks.Radius(knob.Height() * 0.5f).Shadow(Color::Black(0.18f + 0.12f * lens), Dt(5 + 10 * lens), Vec2(0, Dt(2 + 2.5f * lens)));
         if (lens > 0.02f)
         {
             GlassMaterial lm = LensMaterial();
@@ -414,7 +416,7 @@ namespace esia::ui
         }
         else
             ks.Fill(c.controlKnob);
-        ScopedUnclip unclip(knob, Sc(24));
+        ScopedUnclip unclip(knob, Dt(24));
         p.Rect(knob, ks);
         return changed;
     }
@@ -436,7 +438,7 @@ namespace esia::ui
         const std::string_view shown = VisibleLabel(label);
         const text::FontRef f = Font(TextStyle::Body);
         const Vec2 ts = MeasureText(f, shown);
-        const float d = Sc(22);
+        const float d = Sc(Sizes().checkbox);
         const Vec2 size(d + (ts.x > 0 ? Sc(10) + ts.x : 0), std::max(d, ts.y));
         const Interaction it = InteractImpl(c.GetId(label), Rect::FromSize(c.CursorPos(), size), InteractFlags_None);
         c.ItemSize(size);
@@ -561,7 +563,7 @@ namespace esia::ui
         if (!it.visible)
             return false;
 
-        const float kwRest = Sc(34), khRest = Sc(22);
+        const float kwRest = Sc(Sizes().knobWidth), khRest = Sc(Sizes().knobHeight);
         const float x0 = area.min.x + kwRest * 0.5f, x1 = std::max(area.max.x - kwRest * 0.5f, x0);   // never inverted
         bool changed = false;
         const InputState& in = Ctx().Input();
@@ -588,7 +590,7 @@ namespace esia::ui
 
         Painter p = GetPainter();
         const float cy = r.Center().y;
-        const float th = Sc(6);
+        const float th = Sc(Sizes().sliderTrack);
         const Rect track(area.min.x, cy - th * 0.5f, area.max.x, cy + th * 0.5f);
         const Color tint = Tint(o.tint);
         DrawPill(p, track, Surface(FillOr(pc.fill)));
@@ -602,16 +604,16 @@ namespace esia::ui
 
         // the lens swells when grabbed, stretches along fast motion and thins a little (a liquid drop)
         const float speed = std::min(std::fabs(vel) * (x1 - x0) * 0.03f, kwRest * 0.6f);
-        const float kw = Lerp(kwRest, Sc(46), press) + speed;
-        const float kh = Lerp(khRest, Sc(30), press) - std::min(speed * 0.12f, Sc(3));
+        const float kw = Lerp(kwRest, Sc(Sizes().heldKnobWidth), press) + speed;
+        const float kh = Lerp(khRest, Sc(Sizes().heldKnobHeight), press) - std::min(speed * 0.12f, Dt(3));
         const Rect knob = Rect::FromCenter(Vec2(kx, cy), Vec2(kw, kh));
         Style ks;
-        ks.Radius(kh * 0.5f).Shadow(Color::Black(0.18f + 0.1f * press), Sc(6 + 10 * press), Vec2(0, Sc(2 + 2 * press)));
+        ks.Radius(kh * 0.5f).Shadow(Color::Black(0.18f + 0.1f * press), Dt(6 + 10 * press), Vec2(0, Dt(2 + 2 * press)));
         if (press > 0.02f)
             ks.Glass(LensMaterial()).Fill(pc.controlKnob.Fade(1.0f - 0.9f * Saturate(press)));
         else
             ks.Fill(pc.controlKnob);
-        ScopedUnclip unclip(knob, Sc(28));
+        ScopedUnclip unclip(knob, Dt(28));
         p.Rect(knob, ks);
         return changed;
     }
@@ -621,20 +623,20 @@ namespace esia::ui
         ItemScope scope;
         Context& c = Ctx();
         const float width = o.width > 0.0f ? Sc(o.width) : AvailableWidth();
-        const Vec2 size(width, Sc(32));
+        const Vec2 size(width, Sc(Sizes().field));
         const Vec2 pos = c.CursorPos();
         c.ItemSize(size);
         return SliderAt(c.GetId(id), Rect::FromSize(pos, size), value, mn, mx, o);
     }
 
     // =============================================================== stepper
-    Vec2 detail::StepperSize() { return Vec2(Sc(96), Sc(32)); }
+    Vec2 detail::StepperSize() { return Vec2(Sc(Sizes().stepperWidth), Sc(Sizes().field)); }
 
     bool detail::StepperAt(Id id, const Rect& r, int* value, int mn, int mx, int step)
     {
         const Palette& pc = C();
         Painter p = GetPainter();
-        const float radius = ItemRadius(Sc(9));
+        const float radius = ItemRadius(Dt(9));
         Style well = Style().Radius(radius);
         p.Rect(r, SurfaceFill(well, FillOr(pc.tertiaryFill)));
         const Rect left(r.min.x, r.min.y, r.Center().x, r.max.y), right(r.Center().x, r.min.y, r.max.x, r.max.y);
