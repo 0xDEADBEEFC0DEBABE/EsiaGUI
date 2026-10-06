@@ -479,7 +479,7 @@ namespace esia::ui
             ws.Radius(radius);
             if (!(flags & WindowFlags_NoShadow))
                 ws.Shadow(pc.shadow.Fade(0.9f + 0.5f * focusT), Sc(34 + 14 * focusT), Vec2(0, Sc(14 + 6 * focusT)));
-            if ((o.flags & WindowFlags_Solid) && !LookClear())
+            if (((o.flags & WindowFlags_Solid) && !LookClear()) || m.flat)   // flat: every window is solid
                 ws.Fill(FillOr(t.dark ? Color::Hex(0x1C1C1E) : Color::Hex(0xF2F2F7))).Stroke(1.0f, pc.separator.Fade(0.6f));
             else
             {

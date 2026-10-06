@@ -155,6 +155,13 @@ namespace esia
         float alpha = 1.0f;             // opacity every shape and text starts from
         text::TextSystem* text = nullptr;
         GlowContainment* glow = nullptr;
+        // Flat drawing (ui::UiDesc::flat): shapes lose their shadows, glows and glass - glass becomes a solid surface,
+        // `flatSurface` under the glass's tint - and rounded rectangles, capsules and circles with a solid fill and
+        // stroke become a few quads on the text's texture: coverage tiles of their corners (TextSystem::FindTile,
+        // made once per kind of shape) stretched as nine-patches, the middle of a large one from the white texture.
+        // They batch with the text around them: a frame of plain widgets is a few draws of flat geometry.
+        bool flat = false;
+        Color flatSurface = Color(0.11f, 0.11f, 0.12f, 1.0f);
     };
 
     class ESIA_API Painter
@@ -235,6 +242,8 @@ namespace esia
 
     private:
         void EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra);
+        // Flat drawing: the shape as geometry when it can be, filled with `fill` (true: drawn, or nothing to draw).
+        bool FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill);
         void ApplyScale(fx::Instance& inst) const;
         void ExcludeFromScale(std::size_t vtxStart);
         float Pixel() const { return env_.pixelScale > 0.0f ? env_.pixelScale : 1.0f; }

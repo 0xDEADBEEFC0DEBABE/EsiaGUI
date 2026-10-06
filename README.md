@@ -43,7 +43,7 @@ from ImGui to Esia means writing it again with `esia::ui`.
 | Look | flat panels and one global style (`ImGuiStyle`, with push / pop of colors and variables) | liquid glass (backdrop blur, refraction, dispersion, specular rims), glow and shadows; a theme whose light and dark modes cross-fade; styles per widget or per block; three glass looks; two densities: iOS's sizes, or a compact one for tools (one line) |
 | Motion | none: a change shows on the next frame | springs on every control: the switch's knob, the segmented control's lens, momentum scrolling, panels, the island |
 | Rendering | hands the host triangles (`ImDrawData`), drawn in one pass by any renderer that can draw textured triangles with a scissor | its own renderer, several passes per frame (backdrop captures, a blur pyramid, glow layers), through its RHI on Direct3D 9 - 12, OpenGL / ES, Vulkan or Metal |
-| GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes about 0.8 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most |
+| GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes about 0.8 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most. Flat drawing (`UiDesc::flat`: no glass or shadows) halves a tool's: the workbench 0.20 -> 0.11 ms at 1600 x 1000 |
 | CPU cost | small: 0.05 - 0.08 ms to build and submit a frame of a few hundred widgets or 3300 glyphs (Direct3D 11, on the machine of the comparison) | text: less than Dear ImGui's (0.068 ms against 0.076 for 3300 glyphs); plain widgets: more (0.092 against 0.052 ms: shadows, springs); the glass scene: 0.20 ms against 0.37 for WGT, Dear ImGui with the same glass ([REWRITE_STATUS.md](docs/REWRITE_STATUS.md), "Text against Dear ImGui") |
 | Text | its font atlas (stb_truetype, or FreeType). Text is not shaped, so scripts that need shaping (Arabic, Devanagari and the other Indic scripts) do not come out right, and there is no right-to-left | FreeType + HarfBuzz shaping, the system's fonts with a fallback chain for every major script, editing by grapheme, IME composition in the field (Windows, macOS, iOS), color emoji (bitmap and COLR fonts: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji). A line in one direction is right; mixed directions wait for the bidi algorithm |
 | Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports; extensions add more (ImPlot, node editors) | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, text fields, a line chart, the island and the dock. For tools: number and vector fields (scrub, type an expression), a color picker, tables (only the rows in view are drawn: a million rows; sort, resize, select), trees, a multi-line editor, docking, plots (lines, areas, scatter, bars, histograms; a legend, a crosshair, pan and zoom) and a donut chart. Fewer plot kinds than ImPlot, no node editors, no multiple viewports |
@@ -70,9 +70,10 @@ from ImGui to Esia means writing it again with `esia::ui`.
 **Weaknesses of Esia:**
 
 * GPU time: the glass reads back and blurs what is behind it - about 0.8 ms for the seven-panel showcase at
-  2808 x 2100 on an RTX 4080 SUPER - and flat widgets alone take about twice Dear ImGui's (0.051 ms against 0.024);
-* plain widgets take more CPU than Dear ImGui's (0.092 ms against 0.052): shadows, springs, shapes drawn as distance
-  fields;
+  2808 x 2100 on an RTX 4080 SUPER - and plain widgets take about twice Dear ImGui's (0.054 ms against 0.025), 1.2
+  times with flat drawing (`UiDesc::flat`: no glass or shadows, 0.031 ms);
+* plain widgets take more CPU than Dear ImGui's, flat or not (0.095 ms against 0.052): springs, styles, hit
+  records, HarfBuzz text, shapes drawn as distance fields or nine-patches;
 * a smaller widget set: no node editors, no multiple viewports, and fewer plots than ImPlot (no log or time axes, no
   second y axis, no heatmaps or error bars);
 * integration: FreeType and HarfBuzz (downloaded and built with Esia when the system has none); platform layers for
@@ -136,6 +137,10 @@ The data widgets, in the same glass style as the rest (`esia::ui`, [UI_WIDGETS.m
   controls get shorter, their shadows and glass with them, so the glass does not outweigh them (buttons 36 -> 30, fields
   32 -> 26, table rows 34 -> 28, list rows 44 -> 34, window headers 54 -> 40; [UI_WIDGETS.md](docs/UI_WIDGETS.md)
   section 2). `workbench --compact`, or Ctrl+Shift+D while it runs.
+* **Flat drawing** where the GPU matters more than the glass: `desc.flat = true` (or `ui.SetFlat(true)`). No glass,
+  shadows or glows - windows and bars are solid - and rounded rectangles, capsules and circles become a few quads on
+  the text's texture, batched with the text: the workbench's GPU time at 1600 x 1000 goes from 0.20 to 0.11 ms, 68
+  draws to 53. `workbench --flat`, or Ctrl+Shift+F while it runs.
 * **On a desktop** scroll areas show their indicator at rest and the mouse scrolls with the wheel and the indicator;
   a finger drags the content, as on a phone.
 
@@ -144,6 +149,7 @@ workbench                                  # the docked layout (glass_window's o
 workbench --float Inspector --show Script  # a window floating, the editor's tab in front
 workbench --rows 1000000 --light           # a million rows, light theme
 workbench --compact                        # the compact density (Ctrl+Shift+D switches it while running)
+workbench --flat                           # no glass or shadows (Ctrl+Shift+F switches it while running)
 workbench --float Graphs                   # the plots in a floating window
 ```
 
