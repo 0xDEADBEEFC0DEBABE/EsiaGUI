@@ -56,27 +56,37 @@ from ImGui to Esia means writing it again with `esia::ui`.
 
 **Strengths of Esia:**
 
-* how the UI looks and moves;
-* correct text in every major script, with the system's fonts;
-* styling per component rather than one global style;
-* one renderer for Direct3D, OpenGL, Vulkan and Metal, tested against the same golden images on each;
-* the same UI on a desktop and a phone, touch included.
+* how the UI looks and moves: liquid glass, springs on every control, light and dark themes that cross-fade;
+* correct text in every major script, with the system's fonts and color emoji;
+* less CPU where frames are heavy: a frame of text costs less than Dear ImGui's (0.068 ms against 0.076), the glass
+  showcase about half of what WGT's Dear ImGui took (0.20 ms against 0.37), with less GPU time too (0.40 ms against
+  0.44, Direct3D 11);
+* appearance in one line each: dark or light, the glass look, the accent, a compact density for tools, styles per
+  widget or per block rather than one global style;
+* one renderer for Direct3D 9 - 12, OpenGL / ES, Vulkan and Metal, tested against the same golden images on each,
+  with the APIs' validation layers counted;
+* the same UI on a desktop and a phone: touch, the safe area, layouts for a phone, desktop scrolling with a mouse;
+* mistakes in UI code reported in a debug build: an id two items share, an item laid out where it cannot be seen.
 
 **Weaknesses of Esia:**
 
-* GPU cost, and more CPU than Dear ImGui for plain widgets;
-* a smaller widget set: the widgets for tools are new, and there are no plots (beyond a line chart), node editors or
-  multiple viewports;
-* heavier integration: FreeType and HarfBuzz, and no platform layer library on macOS and iOS yet;
+* GPU time: the glass reads back and blurs what is behind it - about 0.8 ms for the seven-panel showcase at
+  2808 x 2100 on an RTX 4080 SUPER - and flat widgets alone take about twice Dear ImGui's (0.051 ms against 0.024);
+* plain widgets take more CPU than Dear ImGui's (0.092 ms against 0.052): shadows, springs, shapes drawn as distance
+  fields;
+* a smaller widget set: no plots beyond a line chart, no node editors, no multiple viewports;
+* integration: FreeType and HarfBuzz (downloaded and built with Esia when the system has none); platform layers for
+  Win32, X11 and Android only - on macOS and iOS the host passes the input on itself, as the examples' frames do -
+  and no native Wayland window (XWayland);
 * no web and no consoles;
-* youth.
+* young: new in 2026, the API can still change, no package for `find_package` yet.
 
 **Use Esia** for the UI users see: a game's menus and overlays, a launcher, an application's settings, a tool that
-should look like a product. It fits where the glass, the motion and the text matter and about a millisecond of GPU
-time is affordable.
+should look like a product (tables of a million rows, docking, the compact density). It fits where the glass, the
+motion and the text matter and about a millisecond of GPU time is affordable.
 
 **Use Dear ImGui** for internal tools and debuggers that live on ImGui's ecosystem (plots, node editors, multiple
-viewports), the smallest integration and GPU cost, or a platform Esia does not run on (the web, consoles).
+viewports), for the smallest integration and GPU cost, or on a platform Esia does not run on (the web, consoles).
 
 ## Widgets for tools: the workbench
 
