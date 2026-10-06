@@ -9,18 +9,6 @@ namespace esia::ui
     {
         thread_local Ui* g_current = nullptr;
 
-        struct FloatAnim
-        {
-            SpringState s;
-            std::uint64_t lastFrame = 0;
-            bool init = false;
-        };
-        struct TimerAnim
-        {
-            float t = 1.0f;
-            std::uint64_t lastFrame = 0;
-        };
-
         int WeightOf(FontWeight w)
         {
             switch (w)
@@ -160,6 +148,9 @@ namespace esia::ui
         m.edgeFades.clear();
         m.next = ItemStyle();
         m.decorationSerial = 0;
+        const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+        if (frame % 64 == 0)
+            m.anims.Collect(frame, 600);   // as Context::State keeps its entries (ContextDesc::retainFrames)
         if (m.text)
             m.text->NewFrame({m.ctx->FramebufferScale().x});
         m.inFrame = true;
@@ -267,57 +258,189 @@ namespace esia::ui
     Ui* Current() { return g_current; }
 
     // ========================================================= animation
-    float Anim(Id id, float target, const Spring& spring, float initial)
+    namespace detail
     {
-        Ui::Impl& m = detail::M();
-        FloatAnim& a = m.ctx->State<FloatAnim>(id);
-        if (!a.init)
+        AnimTable::Entry& AnimTable::Get(Id id, std::uint32_t kind, std::uint32_t frame, bool& created)
         {
-            a.init = true;
-            a.s.value = std::isnan(initial) ? target : initial;
+            if (slots.empty())
+                Rehash(256);
+            std::size_t mask = slots.size() - 1;
+            for (std::size_t i = Home(id, kind, mask);; i = (i + 1) & mask)
+            {
+                Entry& e = slots[i];
+                if (e.id == id && e.kind == kind)
+                {
+                    e.used = frame;
+                    created = false;
+                    return e;
+                }
+                if (e.kind == kFree)
+                    break;
+            }
+            if ((count + 1) * 2 > slots.size())
+            {
+                Rehash(slots.size() * 2);
+                mask = slots.size() - 1;
+            }
+            std::size_t i = Home(id, kind, mask);
+            while (slots[i].kind != kFree)
+                i = (i + 1) & mask;
+            Entry& e = slots[i];
+            e = Entry();
+            e.id = id;
+            e.kind = kind;
+            e.used = frame;
+            ++count;
+            created = true;
+            return e;
         }
-        const std::uint64_t frame = m.ctx->FrameCount();
-        if (a.lastFrame != frame)
+
+        void AnimTable::Rehash(std::size_t size)
         {
-            a.lastFrame = frame;
-            a.s.Step(target, spring, m.dt);
+            std::vector<Entry> old;
+            old.swap(slots);
+            slots.assign(size, Entry());
+            count = 0;
+            const std::size_t mask = size - 1;
+            for (const Entry& e : old)
+                if (e.kind != kFree)
+                {
+                    std::size_t i = Home(e.id, e.kind, mask);
+                    while (slots[i].kind != kFree)
+                        i = (i + 1) & mask;
+                    slots[i] = e;
+                    ++count;
+                }
         }
-        if (a.s.value != target || a.s.velocity != 0.0f)
-            m.animating = true;
-        return a.s.value;
+
+        void AnimTable::Collect(std::uint32_t frame, std::uint32_t retain)
+        {
+            bool stale = false;
+            for (Entry& e : slots)
+                if (e.kind != kFree && frame - e.used > retain)
+                {
+                    e.kind = kFree;
+                    stale = true;
+                }
+            if (stale)
+                Rehash(slots.size());   // the probe chains closed again
+        }
     }
 
-    float AnimVelocity(Id id) { return detail::Ctx().State<FloatAnim>(id).s.velocity; }
+    namespace
+    {
+        // one step of a spring held as two floats (an AnimTable entry), and the Ui's `animating` while it moves
+        void StepSpring(float& value, float& velocity, float target, const Spring& spring, float dt, bool& animating)
+        {
+            if (value != target || velocity != 0.0f)
+            {
+                SpringState st;
+                st.value = value;
+                st.velocity = velocity;
+                st.Step(target, spring, dt);
+                value = st.value;
+                velocity = st.velocity;
+            }
+            if (value != target || velocity != 0.0f)
+                animating = true;
+        }
+    }
+
+    namespace detail
+    {
+        void AnimPair(Id id, float targetA, float targetB, const Spring& s, float& a, float& b)
+        {
+            Ui::Impl& m = M();
+            const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+            bool created;
+            AnimTable::Entry& e = m.anims.Get(id, AnimTable::kPair, frame, created);
+            if (created)
+            {
+                e.value = targetA;
+                e.value2 = targetB;
+                e.stepped = frame;
+            }
+            else if (e.stepped != frame)
+            {
+                e.stepped = frame;
+                StepSpring(e.value, e.velocity, targetA, s, m.dt, m.animating);
+                StepSpring(e.value2, e.velocity2, targetB, s, m.dt, m.animating);
+            }
+            a = e.value;
+            b = e.value2;
+        }
+
+        // Anim's entry, stepped
+        AnimTable::Entry& SpringOf(Id id, float target, const Spring& spring, float initial)
+        {
+            Ui::Impl& m = M();
+            const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+            bool created;
+            AnimTable::Entry& a = m.anims.Get(id, AnimTable::kSpring, frame, created);
+            if (created)
+                a.value = std::isnan(initial) ? target : initial;   // stepped 0: it steps this frame already
+            if (a.stepped != frame)
+            {
+                a.stepped = frame;
+                StepSpring(a.value, a.velocity, target, spring, m.dt, m.animating);
+            }
+            else if (a.value != target || a.velocity != 0.0f)
+                m.animating = true;
+            return a;
+        }
+
+        float AnimWithVelocity(Id id, float target, const Spring& s, float& velocity)
+        {
+            const AnimTable::Entry& a = SpringOf(id, target, s, NAN);
+            velocity = a.velocity;
+            return a.value;
+        }
+    }
+
+    float Anim(Id id, float target, const Spring& spring, float initial) { return detail::SpringOf(id, target, spring, initial).value; }
+
+    float AnimVelocity(Id id)
+    {
+        Ui::Impl& m = detail::M();
+        bool created;
+        return m.anims.Get(id, detail::AnimTable::kSpring, (std::uint32_t)m.ctx->FrameCount(), created).velocity;
+    }
 
     void AnimSet(Id id, float value, float velocity)
     {
-        FloatAnim& a = detail::Ctx().State<FloatAnim>(id);
-        a.init = true;
-        a.s.value = value;
-        a.s.velocity = velocity;
-        a.lastFrame = 0;   // the next Anim this frame steps from here
+        Ui::Impl& m = detail::M();
+        bool created;
+        detail::AnimTable::Entry& a = m.anims.Get(id, detail::AnimTable::kSpring, (std::uint32_t)m.ctx->FrameCount(), created);
+        a.value = value;
+        a.velocity = velocity;
+        a.stepped = 0;   // the next Anim this frame steps from here
     }
 
     void AnimKick(Id id, float velocity)
     {
-        FloatAnim& a = detail::Ctx().State<FloatAnim>(id);
-        a.s.velocity += velocity;
-        detail::M().animating = true;
+        Ui::Impl& m = detail::M();
+        bool created;
+        detail::AnimTable::Entry& a = m.anims.Get(id, detail::AnimTable::kSpring, (std::uint32_t)m.ctx->FrameCount(), created);
+        a.velocity += velocity;
+        m.animating = true;
     }
 
     float Timer(Id id, float duration, bool restart)
     {
         Ui::Impl& m = detail::M();
-        TimerAnim& t = m.ctx->State<TimerAnim>(id);
-        const std::uint64_t frame = m.ctx->FrameCount();
+        const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+        bool created;
+        detail::AnimTable::Entry& t = m.anims.Get(id, detail::AnimTable::kTimer, frame, created);
+        if (created)
+            t.value = 1.0f;   // done: a timer runs from its first restart
         if (restart)
-            t.t = 0.0f;
-        else if (t.t < 1.0f && t.lastFrame != frame)
-            t.t = std::min(1.0f, t.t + m.dt / std::max(duration, 1e-3f));
-        t.lastFrame = frame;
-        if (t.t < 1.0f)
+            t.value = 0.0f;
+        else if (t.value < 1.0f && t.stepped != frame)
+            t.value = std::min(1.0f, t.value + m.dt / std::max(duration, 1e-3f));
+        t.stepped = frame;
+        if (t.value < 1.0f)
             m.animating = true;
-        return t.t;
+        return t.value;
     }
 
     double Time() { return detail::M().time; }
@@ -377,7 +500,16 @@ namespace esia::ui
     Interaction InteractRect(Id id, const Rect& rect, std::uint32_t flags)
     {
         Ui::Impl& m = detail::M();
-        Interaction it = detail::InteractImpl(id, rect, flags);
+        const detail::InteractState s = detail::InteractImpl(id, rect, flags);
+        Interaction it;
+        it.id = s.id;
+        it.rect = s.rect;
+        it.visible = s.visible;
+        it.hovered = s.hovered;
+        it.held = s.held;
+        it.pressed = s.pressed;
+        it.hover = s.hover;
+        it.press = s.press;
         it.style = m.next;
         m.next = ItemStyle();
         return it;
@@ -402,10 +534,10 @@ namespace esia::ui
     {
         thread_local Ui::Impl* g_impl = nullptr;
 
-        Interaction InteractImpl(Id id, const Rect& r, std::uint32_t flags)
+        InteractState InteractImpl(Id id, const Rect& r, std::uint32_t flags)
         {
             Context& c = Ctx();
-            Interaction it;
+            InteractState it;
             it.id = id;
             it.rect = r;
             it.visible = c.ItemAdd(id, r, (flags & InteractFlags_Disabled) ? ItemFlags_Disabled : ItemFlags_None);
@@ -420,8 +552,7 @@ namespace esia::ui
             it.hovered = b.hovered;
             it.held = b.held;
             it.pressed = b.pressed;
-            it.hover = Anim(id, 0xA1, it.hovered ? 1.0f : 0.0f, SpringFast());
-            it.press = Anim(id, 0xA2, it.held ? 1.0f : 0.0f, SpringFast());
+            AnimPair(id, it.hovered ? 1.0f : 0.0f, it.held ? 1.0f : 0.0f, SpringFast(), it.hover, it.press);
             return it;
         }
 
@@ -437,8 +568,16 @@ namespace esia::ui
                 }
         }
 
-        ScopedUnclip::ScopedUnclip(const Rect& r, float extent) { Ctx().PushClipRect(r.Expanded(extent), false); }
-        ScopedUnclip::~ScopedUnclip() { Ctx().PopClipRect(); }
+        ScopedUnclip::ScopedUnclip(const Rect& r, float extent) : pushed_(!M().flat)
+        {
+            if (pushed_)
+                Ctx().PushClipRect(r.Expanded(extent), false);
+        }
+        ScopedUnclip::~ScopedUnclip()
+        {
+            if (pushed_)
+                Ctx().PopClipRect();
+        }
 
         // ---- text
         text::FontRef Font(FontWeight w, float size) { return g_current->Font(w, size); }
@@ -683,10 +822,13 @@ namespace esia::ui
 
         Color StateFill(Color c) { return LookClear() ? c.Fade(0.55f) : c; }
 
-        void DrawPill(Painter& p, const Rect& r, Style s)
+        void DrawPill(Painter& p, const Rect& r, const Style& s)
         {
             if (HasItemRadius())
-                p.Rect(r, s.Radius(std::min(ItemRadius(0.0f), std::min(r.Width(), r.Height()) * 0.5f)));
+            {
+                Style c = s;
+                p.Rect(r, c.Radius(std::min(ItemRadius(0.0f), std::min(r.Width(), r.Height()) * 0.5f)));
+            }
             else
                 p.Capsule(r, s);
         }
@@ -710,10 +852,31 @@ namespace esia::ui
 
         float LiquidPulse(Id id, bool held, bool activated, float bloomSeconds)
         {
-            const float since = Timer(Salt(id, 0xB100), bloomSeconds, activated);
-            const bool on = held || since < 1.0f;
+            // the bloom's timer and the lens's spring in one entry
+            Ui::Impl& m = M();
+            const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+            bool created;
+            AnimTable::Entry& e = m.anims.Get(Salt(id, 0xB100), AnimTable::kPulse, frame, created);
+            if (created)
+                e.value = 1.0f;   // no bloom until an activation
+            const bool step = !created && e.stepped != frame;
+            if (activated)
+                e.value = 0.0f;
+            else if (e.value < 1.0f && step)
+                e.value = std::min(1.0f, e.value + m.dt / std::max(bloomSeconds, 1e-3f));
+            if (e.value < 1.0f)
+                m.animating = true;
+            const bool on = held || e.value < 1.0f;
             static constexpr Spring kLens{0.34f, 0.62f};
-            return Clamp(ui::Anim(Salt(id, 0xB101), on ? 1.0f : 0.0f, kLens), 0.0f, 1.15f);
+            const float target = on ? 1.0f : 0.0f;
+            if (created)
+                e.value2 = target;
+            else if (step)
+                StepSpring(e.value2, e.velocity2, target, kLens, m.dt, m.animating);
+            else if (e.value2 != target || e.velocity2 != 0.0f)
+                m.animating = true;
+            e.stepped = frame;
+            return Clamp(e.value2, 0.0f, 1.15f);
         }
 
         Rect ContainLiquid(Rect pill, const Rect& track, float slack)

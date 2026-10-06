@@ -52,9 +52,8 @@ namespace esia
         return c;
     }
 
-    DrawCmd& DrawList::Geometry()
+    DrawCmd& DrawList::Geometry(TextureId tex)
     {
-        const TextureId tex = CurrentTexture();
         if (cmds_.size() > mergeBarrier_)
         {
             DrawCmd& last = cmds_.back();
@@ -82,13 +81,18 @@ namespace esia
     std::uint32_t DrawList::PrimBegin(std::uint32_t indexCount, std::uint32_t vertexCount)
     {
         Geometry();
+        Reserve(indexCount, vertexCount);
+        return (std::uint32_t)vtx_.size();
+    }
+
+    void DrawList::Reserve(std::uint32_t indexCount, std::uint32_t vertexCount)
+    {
         // grown geometrically: reserve(size + n) allocates exactly that, so a frame that outgrew the last one copied
         // the whole list at every primitive
         if (idx_.capacity() < idx_.size() + indexCount)
             idx_.reserve(std::max(idx_.size() + indexCount, idx_.capacity() * 2));
         if (vtx_.capacity() < vtx_.size() + vertexCount)
             vtx_.reserve(std::max(vtx_.size() + vertexCount, vtx_.capacity() * 2));
-        return (std::uint32_t)vtx_.size();
     }
 
     void DrawList::AddRectFilledUV(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
@@ -151,6 +155,21 @@ namespace esia
     {
         PrimWriter w;
         w.base = PrimBegin(indexCount, vertexCount);
+        const std::size_t i = idx_.size();
+        vtx_.resize(w.base + (std::size_t)vertexCount);
+        idx_.resize(i + indexCount);
+        w.vtx = vtx_.data() + w.base;
+        w.idx = idx_.data() + i;
+        return w;
+    }
+
+    DrawList::PrimWriter DrawList::PrimReserve(TextureId texture, std::uint32_t indexCount, std::uint32_t vertexCount)
+    {
+        DrawCmd* cmd = &Geometry(texture);
+        Reserve(indexCount, vertexCount);
+        PrimWriter w;
+        w.cmd = cmd;
+        w.base = (std::uint32_t)vtx_.size();
         const std::size_t i = idx_.size();
         vtx_.resize(w.base + (std::size_t)vertexCount);
         idx_.resize(i + indexCount);

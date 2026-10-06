@@ -42,7 +42,12 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
-**Flat drawing** (2026-10-06, last): `UiDesc::flat` / `Ui::SetFlat` - no glass, shadows or glows, and rounded
+**CPU of plain widgets** (2026-10-06, after flat drawing): springs and timers in a table of their own with fewer
+look-ups, Painters that cost nothing to make, flat shapes written in place, a front for the text layout cache, a
+Direct3D 11 host that owns its context: CPU 0.095 -> 0.079 ms regular and 0.072 flat, against Dear ImGui's 0.051. The
+widgets' own work takes 0.039 ms with nothing drawn: 20% under Dear ImGui needs a lighter widget layer.
+
+**Flat drawing** (2026-10-06, before the CPU round): `UiDesc::flat` / `Ui::SetFlat` - no glass, shadows or glows, and rounded
 shapes as nine-patches of coverage tiles in the text's texture, batched with the text: GPU time 0.054 -> 0.031 ms in
 the plain-widget scene (Dear ImGui 0.025), 0.20 -> 0.11 ms in the workbench.
 
@@ -80,6 +85,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [CPU of plain widgets](#cpu-of-plain-widgets)
 * [Flat drawing](#flat-drawing)
 * [Batching by what shadows show](#batching-by-what-shadows-show)
 * [Plots](#plots)
@@ -105,6 +111,64 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## CPU of plain widgets
+
+The owner's goal: plain widgets cheaper than Dear ImGui's. After flat drawing took the GPU time near Dear ImGui's,
+this round cut the CPU time a frame of plain widgets takes, in both looks, without changing what is drawn.
+
+### What changed
+
+* Springs and timers (`ui.cpp`, `ui_internal.hpp`): `detail::AnimTable`, an open-addressing table in the Ui (at most
+  half full), in place of two kinds of state in the context's per-id table. An interaction's hover and press share
+  an entry (`AnimPair`), Toggle and Slider read a spring and its velocity in one look-up (`AnimWithVelocity`),
+  LiquidPulse's timer and lens are one entry: the plain-widget scene looks up 267 a frame instead of 491. Entries
+  not asked for in 600 frames go, checked every 64 frames.
+* `InteractImpl` returns an `InteractState` (the id, the rect, the flags and the two springs) that the widgets use
+  as it is; the public `InteractRect` makes an `Interaction` from it.
+* `Painter`: its stacks are not initialized (`Stack<T, N>`; zeroing them was most of making a Painter, and every
+  widget makes one); capsules and circles pass their radius to `EmitShape` instead of a copy of the style; flat
+  drawing drops shadows, glows, glass, grain and shimmer with a flag instead of a copy of the style; `DrawPill`
+  copies the style only when an item radius is set.
+* Flat tiles: a trivially copyable entry, the key rounded without `lround`, its slot from four multiplies (every
+  field is still compared); vertices and indices written straight into the list (`PrimReserve` with the texture,
+  `PrimCommit` with the writer's command); the fill's tile is copied only when a stroke is drawn after it. Flat
+  drawing pushes no clip around a shadow it does not draw.
+* Layout: `Context::CurFrame` and `Scale` inline; `Snap` floors without the C runtime's call; a line's room is looked
+  for among the line's own keys only.
+* The FreeType text system: a 256-entry direct-mapped front for the layout cache, checked by text and parameters
+  before the hash map, cleared when a layout leaves or a fallback font is added.
+* Direct3D 11: `Desc::ownsContext` - a host that draws nothing else with the immediate context lets the device skip
+  saving, clearing and restoring its state (about 0.004 ms a frame); the examples' Direct3D 11 host sets it.
+
+### Measured (Direct3D 11, MSVC Release, RTX 4080 SUPER)
+
+Esia regular, Esia flat and Dear ImGui alternating, the median of seven runs of 2100 frames each (the runs vary by
+about 0.003 ms). Before: the table in "Flat drawing".
+
+| ms per frame | build | submit | CPU | GPU |
+| --- | --- | --- | --- | --- |
+| plain widgets, regular | 0.061 -> 0.050 | 0.034 -> 0.029 | 0.095 -> 0.079 | 0.051 |
+| plain widgets, flat | 0.070 -> 0.057 | 0.025 -> 0.015 | 0.095 -> 0.072 | 0.030 |
+| Dear ImGui, the same scene | 0.040 | 0.011 | 0.051 | 0.025 |
+
+Dear ImGui's Direct3D 11 backend always saves and restores the host's state; without `ownsContext` Esia's submit is
+about 0.004 ms more.
+
+### Not reached: 20% under Dear ImGui
+
+20% under Dear ImGui's 0.051 ms is 0.041. With nothing drawn (the Painter's shapes and the text skipped: a benchmark
+switch, not committed) the flat scene still takes 0.034 ms to build and 0.005 to submit: the widgets' own work -
+ids, springs, styles, layout, hit records, the plan of an empty frame - leaves 0.002 ms for drawing. A flat capsule
+takes about 50 ns to build against 23.5 for an FX instance (the call 14, the tile look-up 10, the grid 6, reserving
+9.5, writing 9.5). Getting there needs a lighter widget layer, not more tuning: fewer look-ups per control (id,
+state, springs), no styles merged in the hot path, layout and hit records in one pass.
+
+### Verified (2026-10-06)
+
+* `UiAnim.TableKeepsEntriesThroughGrowthAndForgetsUnused` (new), `UiAnim.SpringsStepOncePerFrameAndReportMotion`
+  and the other UI tests unchanged; ctest 34 / 34 with clang-cl (every backend, `ESIA_WERROR`) and MSVC (a new tree,
+  `ESIA_WERROR`); Ubuntu 24.04 (clang 18) Debug and Release, 20 / 20.
 
 ## Flat drawing
 

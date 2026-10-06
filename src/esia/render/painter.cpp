@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <optional>
 
 namespace esia
 {
@@ -144,19 +145,28 @@ namespace esia
 
         // A flat shape's tile and grid, for its size, corners and stroke: rows of widgets repeat a few of them, which
         // then cost a look-up and the vertices
+        // (no member initializers: a trivial type keeps the thread-local table zero-initialized without the guarded
+        // initialization MSVC checks on every access of one with a constructor)
         struct FlatTile
         {
-            std::int32_t in[10] = {};             // what it is for (pixels, in 1/64: shapes of a size at other places
+            std::int32_t in[10];                  // what it is for (pixels, in 1/64: shapes of a size at other places
                                                   // differ in the last bits of their widths)
-            const void* text = nullptr;
-            std::uint64_t generation = 0;         // TextSystem::TileGeneration when made
-            TextureId page = 0;
-            float offX[4] = {}, offY[4] = {};     // grid lines from the shape's start (0, 1) or end (2, 3) when stretched
-            float u[4] = {}, v[4] = {};
-            int nx = 0, ny = 0;
-            bool plainMiddle = false, skipMiddle = false;
+            const void* text;                     // null: an empty slot
+            std::uint64_t generation;             // TextSystem::TileGeneration when made
+            TextureId page;
+            float offX[4], offY[4];               // grid lines from the shape's start (0, 1) or end (2, 3) when stretched
+            float u[4], v[4];
+            int nx, ny;
+            bool plainMiddle, skipMiddle;
+            std::uint32_t indexCount;
+            std::uint32_t indices[54];            // the cells' triangles, from the grid's first vertex
         };
         thread_local FlatTile tFlatTiles[128];
+        bool SameInputs(const std::int32_t* a, const std::int32_t* b)
+        {
+            return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3] && a[4] == b[4] && a[5] == b[5] && a[6] == b[6] && a[7] == b[7] &&
+                   a[8] == b[8] && a[9] == b[9];
+        }
     }
 
     Painter::Painter(DrawList& drawList, const PainterEnv& env) : dl_(&drawList), env_(env), alpha_(env.alpha) {}
@@ -166,17 +176,13 @@ namespace esia
 
     void Painter::Capsule(const esia::Rect& r, const Style& s)
     {
-        Style c = s;
-        c.Radius(std::min(r.Width(), r.Height()) * 0.5f);
-        EmitShape(fx::ShapeKind::RoundRect, r, c, nullptr);
+        EmitShape(fx::ShapeKind::RoundRect, r, s, nullptr, std::min(r.Width(), r.Height()) * 0.5f);
     }
 
     void Painter::Circle(Vec2 center, float radius, const Style& s)
     {
-        Style c = s;
-        c.Radius(radius);
-        c.smoothing = 0.0f;
-        EmitShape(fx::ShapeKind::RoundRect, esia::Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), c, nullptr);
+        EmitShape(fx::ShapeKind::RoundRect, esia::Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius), s, nullptr,
+                  radius, 0.0f);
     }
 
     void Painter::Arc(Vec2 center, float radius, float thickness, float startRad, float sweepRad, const Style& s)
@@ -236,10 +242,13 @@ namespace esia
         Rect(r, s);
     }
 
-    void Painter::EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra)
+    void Painter::EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra, float radius, float smoothingOverride)
     {
         if (bounds.Empty() && kind == fx::ShapeKind::RoundRect)
             return;
+        const float radii[4] = {radius >= 0.0f ? radius : s.radii[0], radius >= 0.0f ? radius : s.radii[1], radius >= 0.0f ? radius : s.radii[2],
+                                radius >= 0.0f ? radius : s.radii[3]};
+        const float smoothing = smoothingOverride >= 0.0f ? smoothingOverride : s.smoothing >= 0.0f ? s.smoothing : env_.cornerSmoothing;
         // flat drawing: geometry when it can be; else the FX shape without its shadow, glow, glass (its surface instead),
         // shimmer and grain
         const bool flat = env_.flat;
@@ -258,7 +267,7 @@ namespace esia
                                  c.a + base.a * (1.0f - c.a));
                 flatGlass = true;
             }
-            if (kind == fx::ShapeKind::RoundRect && solidPaint && !(extra && mergeSmooth_ >= 0.0f) && FlatGeometry(bounds, s, flatFill))
+            if (kind == fx::ShapeKind::RoundRect && solidPaint && !(extra && mergeSmooth_ >= 0.0f) && FlatGeometry(bounds, s, flatFill, radii, smoothing))
                 return;
         }
         const float scale = env_.metricsScale;
@@ -275,13 +284,13 @@ namespace esia
         }
         else if (kind == fx::ShapeKind::Segment)
         {
-            Set4(inst.radii, s.radii[0], 0, 0, 0);
+            Set4(inst.radii, radii[0], 0, 0, 0);
             Set4(inst.shape2, extra[0], extra[1], extra[2], extra[3]);
         }
         else
         {
-            Set4(inst.radii, s.radii[0], s.radii[1], s.radii[2], s.radii[3]);
-            inst.shape[1] = s.smoothing >= 0.0f ? s.smoothing : env_.cornerSmoothing;
+            Set4(inst.radii, radii[0], radii[1], radii[2], radii[3]);
+            inst.shape[1] = smoothing;
             if (extra && mergeSmooth_ >= 0.0f)
             {
                 feat |= fx::kMerge;
@@ -447,7 +456,7 @@ namespace esia
         Emit(inst, s.effect, s.image);
     }
 
-    bool Painter::FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill)
+    bool Painter::FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill, const float* shapeRadii, float smoothing)
     {
         if (s.effect != 0 || s.image != 0 || !env_.text)
             return false;
@@ -460,7 +469,7 @@ namespace esia
 
         // the scale stack (press / pop animations)
         esia::Rect r = bounds;
-        float radii[4] = {s.radii[0], s.radii[1], s.radii[2], s.radii[3]};
+        float radii[4] = {shapeRadii[0], shapeRadii[1], shapeRadii[2], shapeRadii[3]};
         float strokeWidth = s.strokeWidth;
         for (int i = scaleDepth_ - 1; i >= 0; --i)
         {
@@ -497,19 +506,23 @@ namespace esia
 
         const float px = Pixel(), inv = 1.0f / px;
         const Vec2 p0 = r.min * px, p1 = r.max * px;
-        const float smoothing = s.smoothing >= 0.0f ? s.smoothing : env_.cornerSmoothing;
-        const std::uint64_t generation = env_.text->TileGeneration();
+        if (tileGeneration_ == 0)
+            tileGeneration_ = env_.text->TileGeneration();   // once a Painter (a widget's shapes)
+        const std::uint64_t generation = tileGeneration_;
 
         // the tile of a fill (ring = false) or of a stroke's ring, made or found again
         auto tileFor = [&](bool ring, float width, float align) -> const FlatTile* {
-            const std::int32_t in[10] = {RoundI((p1.x - p0.x) * 64.0f), RoundI((p1.y - p0.y) * 64.0f), RoundI(radii[0] * px * 64.0f),
-                                         RoundI(radii[1] * px * 64.0f), RoundI(radii[2] * px * 64.0f), RoundI(radii[3] * px * 64.0f),
-                                         RoundI(smoothing * 1024.0f), ring ? RoundI(width * 64.0f) : -1, RoundI(align * 64.0f), RoundI(px * 1024.0f)};
-            std::uint32_t hsh = 2166136261u;
-            for (const std::int32_t b : in)
-                hsh = (hsh ^ (std::uint32_t)b) * 16777619u;
-            FlatTile& t = tFlatTiles[(hsh ^ (hsh >> 15)) & 127u];
-            if (t.text == env_.text && t.generation == generation && std::memcmp(t.in, in, sizeof(in)) == 0)
+            // all of these are >= 0: rounding is adding a half and truncating
+            const float k64 = px * 64.0f;
+            const std::int32_t in[10] = {(std::int32_t)((p1.x - p0.x) * 64.0f + 0.5f), (std::int32_t)((p1.y - p0.y) * 64.0f + 0.5f),
+                                         (std::int32_t)(radii[0] * k64 + 0.5f), (std::int32_t)(radii[1] * k64 + 0.5f), (std::int32_t)(radii[2] * k64 + 0.5f),
+                                         (std::int32_t)(radii[3] * k64 + 0.5f), (std::int32_t)(smoothing * 1024.0f + 0.5f),
+                                         ring ? (std::int32_t)(width * 64.0f + 0.5f) : -1, (std::int32_t)(align * 64.0f + 0.5f), (std::int32_t)(px * 1024.0f + 0.5f)};
+            // the slot from the size and a corner (independent multiplies); everything is compared
+            const std::uint32_t hsh = (std::uint32_t)in[0] * 0x9E3779B1u ^ (std::uint32_t)in[1] * 0x85EBCA77u ^ (std::uint32_t)in[2] * 0xC2B2AE3Du ^
+                                      (std::uint32_t)in[7] * 0x27D4EB2Fu;
+            FlatTile& t = tFlatTiles[(hsh ^ (hsh >> 16)) & 127u];
+            if (t.text == env_.text && t.generation == generation && SameInputs(t.in, in))
                 return &t;
 
             // in pixels: the corners as SdRoundRect draws them
@@ -571,7 +584,7 @@ namespace esia
             }
             std::memcpy(t.in, in, sizeof(in));
             t.text = env_.text;
-            t.generation = env_.text->TileGeneration();   // after AddTile: a new page does not start the atlas over
+            t.generation = tileGeneration_ = env_.text->TileGeneration();   // after AddTile: a new page does not start the atlas over
             t.page = slot->page;
             const Vec2 duv((slot->uv1.x - slot->uv0.x) / (float)tw, (slot->uv1.y - slot->uv0.y) / (float)th);
             t.offX[0] = -(float)P;
@@ -599,20 +612,20 @@ namespace esia
             const bool middle = t.nx == 4 && t.ny == 4;
             t.plainMiddle = middle && !ring && (w - 2.0f * (float)(C - P)) * (h - 2.0f * (float)(C - P)) > 48.0f * 48.0f;
             t.skipMiddle = middle && (ring || t.plainMiddle);
+            t.indexCount = 0;
+            for (int yi = 0; yi + 1 < t.ny; ++yi)
+                for (int xi = 0; xi + 1 < t.nx; ++xi)
+                {
+                    if (t.skipMiddle && xi == 1 && yi == 1)
+                        continue;
+                    const int a = yi * t.nx + xi;
+                    const int q[6] = {a, a + 1, a + 1 + t.nx, a, a + 1 + t.nx, a + t.nx};
+                    for (const int k : q)
+                        t.indices[t.indexCount++] = (std::uint32_t)k;
+                }
             return &t;
         };
 
-        TextureId tex = 0;
-        bool pushed = false;
-        auto use = [&](TextureId id) {
-            if (pushed && tex == id)
-                return;
-            if (pushed)
-                dl_->PopTexture();
-            dl_->PushTexture(id);
-            tex = id;
-            pushed = true;
-        };
         auto emit = [&](const FlatTile& t, Color color) {
             float gx[4], gy[4];
             // a stretched axis: two lines from each end; a whole one: both from the start
@@ -623,8 +636,7 @@ namespace esia
             const std::uint32_t col = color.ToRgba8();
             if (t.plainMiddle)
             {
-                use(0);
-                DrawList::PrimWriter pw = dl_->PrimReserve(6, 4);
+                DrawList::PrimWriter pw = dl_->PrimReserve(0, 6, 4);
                 const Vec2 wuv(0.5f, 0.5f);
                 pw.vtx[0] = {Vec2(gx[1], gy[1]), wuv, col};
                 pw.vtx[1] = {Vec2(gx[2], gy[1]), wuv, col};
@@ -632,42 +644,47 @@ namespace esia
                 pw.vtx[3] = {Vec2(gx[1], gy[2]), wuv, col};
                 const std::uint32_t b = pw.base;
                 pw.idx[0] = b, pw.idx[1] = b + 1, pw.idx[2] = b + 2, pw.idx[3] = b, pw.idx[4] = b + 2, pw.idx[5] = b + 3;
-                dl_->PrimCommit(6, esia::Rect(gx[1], gy[1], gx[2], gy[2]));
+                dl_->PrimCommit(pw, 6, esia::Rect(gx[1], gy[1], gx[2], gy[2]));
             }
-            use(t.page);
-            const std::uint32_t cells = (std::uint32_t)((t.nx - 1) * (t.ny - 1)) - (t.skipMiddle ? 1u : 0u);
-            DrawList::PrimWriter pw = dl_->PrimReserve(cells * 6, (std::uint32_t)(t.nx * t.ny));
+            DrawList::PrimWriter pw = dl_->PrimReserve(t.page, t.indexCount, (std::uint32_t)(t.nx * t.ny));
             Vertex* v = pw.vtx;
             for (int yi = 0; yi < t.ny; ++yi)
-                for (int xi = 0; xi < t.nx; ++xi)
-                    *v++ = {Vec2(gx[xi], gy[yi]), Vec2(t.u[xi], t.v[yi]), col};
-            std::uint32_t* x = pw.idx;
-            const std::uint32_t un = (std::uint32_t)t.nx;
-            for (int yi = 0; yi + 1 < t.ny; ++yi)
-                for (int xi = 0; xi + 1 < t.nx; ++xi)
+            {
+                const float y = gy[yi], vv = t.v[yi];
+                for (int xi = 0; xi < t.nx; ++xi, ++v)
                 {
-                    if (t.skipMiddle && xi == 1 && yi == 1)
-                        continue;
-                    const std::uint32_t a = pw.base + (std::uint32_t)yi * un + (std::uint32_t)xi;
-                    x[0] = a, x[1] = a + 1, x[2] = a + 1 + un, x[3] = a, x[4] = a + 1 + un, x[5] = a + un;
-                    x += 6;
+                    v->pos.x = gx[xi];
+                    v->pos.y = y;
+                    v->uv.x = t.u[xi];
+                    v->uv.y = vv;
+                    v->color = col;
                 }
-            dl_->PrimCommit(cells * 6, esia::Rect(gx[0], gy[0], gx[t.nx - 1], gy[t.ny - 1]));
+            }
+            const std::uint32_t base = pw.base, n = t.indexCount;
+            std::uint32_t* x = pw.idx;
+            for (std::uint32_t k = 0; k < n; ++k)
+                x[k] = base + t.indices[k];
+            dl_->PrimCommit(pw, n, esia::Rect(gx[0], gy[0], gx[t.nx - 1], gy[t.ny - 1]));
         };
 
-        FlatTile fillTile;   // a copy: the stroke's tile may take the same slot
-        const FlatTile* ft = fill.a > 0.0f ? tileFor(false, 0.0f, 0.0f) : nullptr;
-        if (ft)
-            ft = &(fillTile = *ft);
-        const FlatTile* st = stroke.a > 0.0f && strokeWidth > 0.0f ? tileFor(true, strokeWidth * px, s.strokeAlign) : nullptr;
-        if ((fill.a > 0.0f && !ft) || (stroke.a > 0.0f && strokeWidth > 0.0f && !st))
+        const bool wantFill = fill.a > 0.0f, wantStroke = stroke.a > 0.0f && strokeWidth > 0.0f;
+        const FlatTile* ft = wantFill ? tileFor(false, 0.0f, 0.0f) : nullptr;
+        if (wantFill && !ft)
             return false;   // nothing drawn yet: the FX shape draws it all
+        if (!wantStroke)
+        {
+            emit(*ft, fill);
+            return true;
+        }
+        std::optional<FlatTile> fillTile;   // a copy: the stroke's tile may take the same slot
+        if (ft)
+            ft = &fillTile.emplace(*ft);
+        const FlatTile* st = tileFor(true, strokeWidth * px, s.strokeAlign);
+        if (!st)
+            return false;
         if (ft)
             emit(*ft, fill);
-        if (st)
-            emit(*st, stroke);
-        if (pushed)
-            dl_->PopTexture();
+        emit(*st, stroke);
         return true;
     }
 

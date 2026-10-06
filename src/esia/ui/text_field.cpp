@@ -456,7 +456,7 @@ namespace esia::ui
         if (showClear)
         {
             const Vec2 cc(r.max.x - padX - Sc(8), r.Center().y);
-            const Interaction it = InteractImpl(Salt(fid, 0xC1EA), Rect::FromCenter(cc, Vec2(Sc(22), Sc(22))), InteractFlags_None);
+            const InteractState it = InteractImpl(Salt(fid, 0xC1EA), Rect::FromCenter(cc, Vec2(Sc(22), Sc(22))), InteractFlags_None);
             p.Circle(cc, Sc(8.5f), Style().Fill(pc.tertiaryLabel.Fade(0.9f + 0.1f * it.hover)));
             DrawIcon(p, cc, icons::Close, Sc(8), T().dark ? Color::Black(0.8f) : Color::White());
             if (it.pressed)

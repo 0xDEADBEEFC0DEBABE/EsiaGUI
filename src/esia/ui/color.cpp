@@ -206,7 +206,7 @@ namespace esia::ui
             // ---- the spectrum: saturation left to right, brightness top to bottom
             const Rect spec = Rect::FromSize(Vec2(area.min.x, y), Vec2(w, std::round(w * 0.62f)));
             const float sr = Sc(12);
-            const Interaction si = InteractImpl(Salt(id, 1), spec, InteractFlags_PressOnClick);
+            const InteractState si = InteractImpl(Salt(id, 1), spec, InteractFlags_PressOnClick);
             if (si.held && in.MouseValid())
             {
                 h.s = Saturate((in.MousePos().x - spec.min.x) / spec.Width());
@@ -226,7 +226,7 @@ namespace esia::ui
             const float barH = Sc(Sizes().colorBar);
             const Rect hue = Rect::FromSize(Vec2(area.min.x, y), Vec2(w, barH));
             const float inset = barH * 0.5f;   // the handle's center stays inside the capsule's ends
-            const Interaction hi = InteractImpl(Salt(id, 2), hue, InteractFlags_PressOnClick);
+            const InteractState hi = InteractImpl(Salt(id, 2), hue, InteractFlags_PressOnClick);
             if (hi.held && in.MouseValid())
             {
                 h.h = std::min(Saturate((in.MousePos().x - hue.min.x - inset) / std::max(hue.Width() - inset * 2.0f, 1.0f)), 0.9999f);
@@ -254,7 +254,7 @@ namespace esia::ui
             if (o.alpha)
             {
                 const Rect bar = Rect::FromSize(Vec2(area.min.x, y), Vec2(w, barH));
-                const Interaction ai = InteractImpl(Salt(id, 3), bar, InteractFlags_PressOnClick);
+                const InteractState ai = InteractImpl(Salt(id, 3), bar, InteractFlags_PressOnClick);
                 if (ai.held && in.MouseValid())
                 {
                     color->a = Saturate((in.MousePos().x - bar.min.x - inset) / std::max(bar.Width() - inset * 2.0f, 1.0f));
@@ -322,7 +322,7 @@ namespace esia::ui
                 {
                     const int col = (int)i % perRow, row = (int)i / perRow;
                     const Vec2 cc(area.min.x + d * 0.5f + (float)col * (d + sg), y + d * 0.5f + (float)row * (d + sg));
-                    const Interaction it = InteractImpl(Salt(id, 0x100 + (std::uint32_t)i), Rect::FromCenter(cc, Vec2(d, d)), InteractFlags_None);
+                    const InteractState it = InteractImpl(Salt(id, 0x100 + (std::uint32_t)i), Rect::FromCenter(cc, Vec2(d, d)), InteractFlags_None);
                     const Color sc = o.swatches[i];
                     const bool current = ToHex(sc, true) == ToHex(*color, true);
                     p.PushScale(cc, 1.0f + 0.1f * it.hover - 0.08f * it.press);
@@ -361,7 +361,7 @@ namespace esia::ui
         c.ItemSize(Vec2(d, d));
         const Id wid = c.GetId(id);
         const Rect r = Rect::FromSize(pos, Vec2(d, d));
-        const Interaction it = InteractImpl(wid, r, InteractFlags_None);
+        const InteractState it = InteractImpl(wid, r, InteractFlags_None);
         if (!color)
             return false;
         Painter p = GetPainter();

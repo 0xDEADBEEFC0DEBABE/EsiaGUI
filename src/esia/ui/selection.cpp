@@ -40,7 +40,7 @@ namespace esia::ui
             s.init = true;
         }
 
-        const Interaction it = InteractImpl(Salt(id, 0x5E1), area, InteractFlags_PressOnClick);
+        const InteractState it = InteractImpl(Salt(id, 0x5E1), area, InteractFlags_PressOnClick);
         const float mx = c.Input().MousePos().x;
         const float under = Clamp((mx - area.min.x) / itemW - 0.5f, 0.0f, (float)(count - 1));   // pointer, item units
         if (it.hovered || it.held)

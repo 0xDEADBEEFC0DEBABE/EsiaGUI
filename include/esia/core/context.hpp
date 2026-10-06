@@ -288,6 +288,7 @@ namespace esia
             // the lines started in it, the items on the current line and the right edges of the first ones
             Id seq = 0;
             int line = -1, lineItems = 0;
+            std::size_t lineRoomFirst = 0;   // the window's lineRoom_ when the line started: its keys come after
             bool sameLine = false;        // SameLine: the next item continues the line
             float lineEdges[4] = {};
         };
@@ -384,7 +385,11 @@ namespace esia
         Vec2 FramebufferScale() const { return params_.framebufferScale; }
         void SetMonitors(std::vector<Monitor> monitors) { monitors_ = std::move(monitors); }
         // Physical pixels per UI unit of the current window (its monitor's): widget metrics and pixel snapping.
-        float Scale() const;
+        float Scale() const
+        {
+            const Window* w = CurrentWindow();
+            return w ? w->scale_ : params_.framebufferScale.x;
+        }
 
         // ---- windows
         void SetNextWindowPos(Vec2 pos, Cond cond = Cond::Always, Vec2 pivot = Vec2(0, 0));
@@ -593,9 +598,19 @@ namespace esia
         void ClosePopupsFrom(std::size_t index);
         int PopupIndex(Id id) const;
 
-        // layout helpers (layout.cpp)
-        Window::Frame& CurFrame();
-        const Window::Frame& CurFrame() const;
+        // layout helpers (layout.cpp); every item asks for the frame: inline
+        Window::Frame& CurFrame()
+        {
+            Window* w = CurrentWindow();
+            ESIA_ASSERT(w && !w->frames_.empty());
+            return w->frames_.back();
+        }
+        const Window::Frame& CurFrame() const
+        {
+            const Window* w = CurrentWindow();
+            ESIA_ASSERT(w && !w->frames_.empty());
+            return w->frames_.back();
+        }
         Window::Frame* ScrollFrame();
         const Window::Frame* ScrollFrame() const;
         void InitRootFrame(Window& w);

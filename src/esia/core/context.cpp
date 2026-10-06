@@ -39,12 +39,6 @@ namespace esia
         queued_.push_back(std::move(e));
     }
 
-    float Context::Scale() const
-    {
-        const Window* w = CurrentWindow();
-        return w ? w->scale_ : params_.framebufferScale.x;
-    }
-
     // ------------------------------------------------------------------ frame
     void Context::NewFrame(const FrameParams& params)
     {
