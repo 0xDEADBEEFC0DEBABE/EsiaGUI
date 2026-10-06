@@ -65,6 +65,7 @@ endfunction()
 # ------------------------------------------------------------------ core
 add_library(esia_core STATIC
     core/context.cpp
+    core/debug.cpp
     core/items.cpp
     core/layout.cpp
     core/state.cpp

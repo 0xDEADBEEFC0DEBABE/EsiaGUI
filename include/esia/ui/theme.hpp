@@ -90,7 +90,8 @@ namespace esia::ui
         float cornerSmoothing = 0.6f;  // 0 = circular corners, 1 = continuous (squircle) corners
         float padding = 16.0f;
         float spacing = 10.0f;
-        float rowHeight = 44.0f;
+        float rowHeight = 44.0f;       // a list row (Row*, ListRow)
+        // for custom widgets: the built-in controls are 32 - 34 tall (at scale 1) whatever it says
         float controlHeight = 34.0f;
         float iconTile = 28.0f;
         float headerHeight = 54.0f;
@@ -98,9 +99,10 @@ namespace esia::ui
         float hairline = 1.0f;
         float scrollIndicator = 5.0f;
         // 0: scroll indicators show while an area scrolls and hide at rest (iOS); 1: an area that scrolls always shows
-        // its indicator, dimmed at rest, on a faint track (desktop apps, where users look for a scroll bar). A float,
-        // as every metric: a theme transition blends it.
-        float scrollIndicatorAlways = 0.0f;
+        // its indicator, dimmed at rest, on a faint track (desktop apps, where users look for a scroll bar). It is 1
+        // in ThemeLight / ThemeDark on Windows, Linux and macOS, 0 on iOS and Android; after a finger's press the
+        // indicators hide at rest anyway. A float, as every metric: a theme transition blends it.
+        float scrollIndicatorAlways = 1.0f;
     };
 
     struct Typography
@@ -149,6 +151,9 @@ namespace esia::ui
 
     ESIA_API Theme ThemeLight();
     ESIA_API Theme ThemeDark();
+    // `base` at a desktop tool's density: everything at 0.87 of its size (body text 13 px, controls about 29),
+    // shorter list rows and headers, less padding and spacing, smaller corners. SetDarkMode keeps it.
+    ESIA_API Theme ThemeCompact(const Theme& base);
     // `base` with another accent (a Clear accent leaves it as it is).
     ESIA_API Theme ThemeWithAccent(const Theme& base, Color accent);
     // Component-wise interpolation (animated transitions): colors, materials, metrics and type sizes blend; `dark`,

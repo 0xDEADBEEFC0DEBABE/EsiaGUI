@@ -14,14 +14,14 @@ cmake --preset windows-msvc
 cmake --build --preset windows-msvc-release
 ```
 
-The examples are `build\windows-msvc\bin\Release\showcase.exe` and `glass_window.exe`. With LLVM instead (clang-cl
+The examples are `build\windows-msvc\bin\Release\showcase.exe`, `workbench.exe` and `glass_window.exe`. With LLVM instead (clang-cl
 and lld on PATH, from an "x64 Native Tools" prompt): `cmake --preset windows-clang-cl`, then
 `cmake --build --preset windows-clang-cl`. Keep the clone's path under about 140 characters: Visual Studio's build
 fails on paths over 260.
 
 ## About this branch
 
-It is generated from `main` (fb87497) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (4f92ce5) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.
 
 ## License

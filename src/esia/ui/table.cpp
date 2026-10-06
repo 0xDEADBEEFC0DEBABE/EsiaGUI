@@ -191,12 +191,14 @@ namespace esia::ui
         t.rowH = Sc(o.rowHeight > 0.0f ? o.rowHeight : 34.0f);
         const float width = AvailableWidth();
         const Vec2 pos = c.CursorPos();
-        t.fit = o.height <= 0.0f && o.maxHeight > 0.0f;
-        t.scrolls = o.height > 0.0f || t.fit;
+        // a height and a maxHeight: the smaller (no option is ignored for the other)
+        const float height = o.height > 0.0f && o.maxHeight > 0.0f ? std::min(o.height, o.maxHeight) : o.height;
+        t.fit = height <= 0.0f && o.maxHeight > 0.0f;
+        t.scrolls = height > 0.0f || t.fit;
         // a fixed height, or as tall as the header and the rows (fitted at EndTable; a maxHeight one at OpenBody)
-        t.outer = Rect::FromSize(pos, Vec2(width, o.height > 0.0f ? Sc(o.height) : t.headerH));
+        t.outer = Rect::FromSize(pos, Vec2(width, height > 0.0f ? Sc(height) : t.headerH));
         ContainerOptions co;
-        co.size = Vec2(width, o.height > 0.0f ? Sc(o.height) : 0.0f);
+        co.size = Vec2(width, height > 0.0f ? Sc(height) : 0.0f);
         c.BeginContainer(t.id, co);
 
         // ---- columns: the fixed ones first, the rest shares what is left by weight
