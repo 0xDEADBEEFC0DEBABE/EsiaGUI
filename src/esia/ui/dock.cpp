@@ -364,7 +364,7 @@ namespace esia::ui
                 // the splitter in the gap between the children
                 const Rect& a = d.nodes[(std::size_t)n.child[0]].rect;
                 const Rect sr = n.vertical ? Rect(n.rect.min.x, a.max.y, n.rect.max.x, a.max.y + gap) : Rect(a.max.x, n.rect.min.y, a.max.x + gap, n.rect.max.y);
-                const Interaction it = InteractImpl(Salt(sid, 0x5000 + (std::uint32_t)i), sr, InteractFlags_PressOnClick);
+                const InteractState it = InteractImpl(Salt(sid, 0x5000 + (std::uint32_t)i), sr, InteractFlags_PressOnClick);
                 if (it.held && in.MouseValid())
                 {
                     const float t = n.vertical ? (in.MousePos().y - gap * 0.5f - n.rect.min.y) / std::max(n.rect.Height() - gap, 1.0f)
@@ -667,7 +667,7 @@ namespace esia::ui
             const Rect tr = Rect::FromSize(Vec2(x, header.min.y + pad), Vec2(tw, h));
             x += tw + Sc(4);
             const Id tid = Salt(sid, HashLabel(w, 0x7AB5u));
-            const Interaction it = InteractImpl(tid, tr, InteractFlags_PressOnClick);
+            const InteractState it = InteractImpl(tid, tr, InteractFlags_PressOnClick);
             if (it.pressed)
             {
                 n.active = i;
@@ -697,7 +697,7 @@ namespace esia::ui
             if (closeShown)
             {
                 const Vec2 cc(tr.max.x - Sc(14), tr.Center().y);
-                const Interaction ci = InteractImpl(Salt(tid, 0xC1), Rect::FromCenter(cc, Vec2(Sc(18), Sc(18))), InteractFlags_None);
+                const InteractState ci = InteractImpl(Salt(tid, 0xC1), Rect::FromCenter(cc, Vec2(Sc(18), Sc(18))), InteractFlags_None);
                 if (ci.hover > 0.01f)
                     p.Circle(cc, Sc(9), Style().Fill(pc.highlight.Fade(ci.hover)));
                 DrawIcon(p, cc, icons::Close, Sc(8), pc.secondaryLabel);

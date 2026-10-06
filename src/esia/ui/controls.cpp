@@ -242,7 +242,7 @@ namespace esia::ui
             return {tint, c.onAccent};
         }
 
-        void DrawButton(const Interaction& it, const ButtonOptions& o, std::string_view label, Icon icon, bool circle)
+        void DrawButton(const InteractState& it, const ButtonOptions& o, std::string_view label, Icon icon, bool circle)
         {
             const ButtonMetrics bm = MetricsFor(o.size);
             ButtonColors bc = ColorsFor(o);
@@ -341,7 +341,7 @@ namespace esia::ui
             width = Sc(o.width);
         else if (o.width < 0.0f)
             width = AvailableWidth();
-        const Interaction it = InteractImpl(Ctx().GetId(label), Rect::FromSize(Ctx().CursorPos(), Vec2(width, Sc(bm.height))), InteractFlags_None);
+        const InteractState it = InteractImpl(Ctx().GetId(label), Rect::FromSize(Ctx().CursorPos(), Vec2(width, Sc(bm.height))), InteractFlags_None);
         Ctx().ItemSize(Vec2(width, Sc(bm.height)));
         if (!it.visible)
             return false;
@@ -353,7 +353,7 @@ namespace esia::ui
     {
         ItemScope scope;
         const float d = Sc(MetricsFor(o.size).height);
-        const Interaction it = InteractImpl(Ctx().GetId(id), Rect::FromSize(Ctx().CursorPos(), Vec2(d, d)), InteractFlags_None);
+        const InteractState it = InteractImpl(Ctx().GetId(id), Rect::FromSize(Ctx().CursorPos(), Vec2(d, d)), InteractFlags_None);
         Ctx().ItemSize(Vec2(d, d));
         if (!it.visible)
             return false;
@@ -366,7 +366,7 @@ namespace esia::ui
 
     bool detail::ToggleAt(Id id, const Rect& r, bool* value)
     {
-        const Interaction it = InteractImpl(id, r, InteractFlags_None);
+        const InteractState it = InteractImpl(id, r, InteractFlags_None);
         if (!it.visible)
             return false;
         bool changed = false;
@@ -381,8 +381,8 @@ namespace esia::ui
         // just toggled, it swells into a clear lens (iOS 26); color: its own critically damped spring (no bounce)
         const Id posId = Salt(id, 0x10);
         static constexpr Spring kKnob{0.42f, 0.60f};
-        const float pos = ui::Anim(posId, *value ? 1.0f : 0.0f, kKnob);
-        const float vel = AnimVelocity(posId);
+        float vel;
+        const float pos = AnimWithVelocity(posId, *value ? 1.0f : 0.0f, kKnob, vel);
         const float colorT = Saturate(Anim(id, 0x11, *value ? 1.0f : 0.0f, Spring{0.30f, 1.0f}));
         const float lens = LiquidPulse(id, it.held, changed);
 
@@ -440,7 +440,7 @@ namespace esia::ui
         const Vec2 ts = MeasureText(f, shown);
         const float d = Sc(Sizes().checkbox);
         const Vec2 size(d + (ts.x > 0 ? Sc(10) + ts.x : 0), std::max(d, ts.y));
-        const Interaction it = InteractImpl(c.GetId(label), Rect::FromSize(c.CursorPos(), size), InteractFlags_None);
+        const InteractState it = InteractImpl(c.GetId(label), Rect::FromSize(c.CursorPos(), size), InteractFlags_None);
         c.ItemSize(size);
         if (!it.visible)
             return false;
@@ -478,7 +478,7 @@ namespace esia::ui
         ItemScope scope;
         Context& c = Ctx();
         const float d = Sc(o.diameter);
-        const Interaction it = InteractImpl(c.GetId(id), Rect::FromSize(c.CursorPos(), Vec2(d, d)), InteractFlags_None);
+        const InteractState it = InteractImpl(c.GetId(id), Rect::FromSize(c.CursorPos(), Vec2(d, d)), InteractFlags_None);
         c.ItemSize(Vec2(d, d));
         if (!it.visible)
             return false;
@@ -559,7 +559,7 @@ namespace esia::ui
         if (o.maxIcon)
             area.max.x -= iconPad;
 
-        const Interaction it = InteractImpl(id, r, InteractFlags_PressOnClick);
+        const InteractState it = InteractImpl(id, r, InteractFlags_PressOnClick);
         if (!it.visible)
             return false;
 
@@ -584,8 +584,8 @@ namespace esia::ui
         // dragging follows the pointer tightly, jumps (a click on the track) glide on a softer spring
         const Id shownId = Salt(id, 0x20);
         static constexpr Spring kFollow{0.10f, 1.0f}, kGlide{0.38f, 0.78f};
-        const float shown = ui::Anim(shownId, frac, it.held ? kFollow : kGlide);
-        const float vel = AnimVelocity(shownId);
+        float vel;
+        const float shown = AnimWithVelocity(shownId, frac, it.held ? kFollow : kGlide, vel);
         const float press = LiquidPulse(id, it.held, it.pressed);
 
         Painter p = GetPainter();
@@ -641,8 +641,8 @@ namespace esia::ui
         p.Rect(r, SurfaceFill(well, FillOr(pc.tertiaryFill)));
         const Rect left(r.min.x, r.min.y, r.Center().x, r.max.y), right(r.Center().x, r.min.y, r.max.x, r.max.y);
         bool changed = false;
-        const Interaction a = InteractImpl(Salt(id, 1), left, InteractFlags_Repeat);
-        const Interaction b = InteractImpl(Salt(id, 2), right, InteractFlags_Repeat);
+        const InteractState a = InteractImpl(Salt(id, 1), left, InteractFlags_Repeat);
+        const InteractState b = InteractImpl(Salt(id, 2), right, InteractFlags_Repeat);
         const bool canDec = *value > mn, canInc = *value < mx;
         if (a.pressed && canDec)
         {
@@ -808,7 +808,7 @@ namespace esia::ui
         for (int i = 0; i < count; ++i)
         {
             const Vec2 center(pos.x + (float)i * (d + gap) + d * 0.5f, pos.y + size.y * 0.5f);
-            const Interaction it = InteractImpl(c.GetId(i), Rect::FromCenter(center, Vec2(d, d)), InteractFlags_None);
+            const InteractState it = InteractImpl(c.GetId(i), Rect::FromCenter(center, Vec2(d, d)), InteractFlags_None);
             if (it.pressed && *selected != i)
             {
                 *selected = i;

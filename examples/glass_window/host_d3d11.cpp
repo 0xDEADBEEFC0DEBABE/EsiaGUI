@@ -35,6 +35,7 @@ namespace glass
                 esia::rhi::d3d11::Desc d;
                 d.device = device_.Get();
                 d.context = context_.Get();
+                d.ownsContext = true;   // Esia draws everything here: no state of the host's to save, clear or put back
                 d.debug.debugLayer = o.debug;
                 esia_ = esia::rhi::d3d11::CreateDevice(d, &error);
                 return esia_ && CreateTarget();

@@ -197,7 +197,10 @@ namespace esia::rhi::d3d11
     class D3D11Device final : public Device
     {
     public:
-        D3D11Device(const Desc& d) : dev_(d.device), ctx_(d.context), restore_(d.restoreHostState), log_(d.debug), caps_(MakeCaps()) {}
+        D3D11Device(const Desc& d)
+            : dev_(d.device), ctx_(d.context), restore_(d.restoreHostState && !d.ownsContext), owned_(d.ownsContext), log_(d.debug), caps_(MakeCaps())
+        {
+        }
 
         bool Init(std::string& error)
         {
@@ -585,8 +588,8 @@ namespace esia::rhi::d3d11
             // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
             if (restore_)
                 host_.Capture(ctx_.Get());
-            else
-                ctx_->ClearState();
+            else if (!owned_)
+                ctx_->ClearState();   // what the host left bound must not reach Esia's draws
             if (caps_.timestampQueries)
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
@@ -618,9 +621,7 @@ namespace esia::rhi::d3d11
                 s.pending = s.frame.frameEnd > 0;
             }
             if (restore_)
-                host_.Restore(ctx_.Get());
-            else
-                ctx_->ClearState();
+                host_.Restore(ctx_.Get());   // without it the host relies on no state after the frame: left as it is
             DrainMessages();
         }
 
@@ -987,6 +988,7 @@ namespace esia::rhi::d3d11
         ComPtr<ID3D11Device> dev_;
         ComPtr<ID3D11DeviceContext> ctx_;
         bool restore_ = true;
+        bool owned_ = false;   // Desc::ownsContext: the state is what Esia's last frame left
         d3d::Logger log_;
         ComPtr<ID3D11InfoQueue> info_;
         Caps caps_;
