@@ -14,6 +14,8 @@
   for a test that fails without scene lines, e.g. a crash): those are listed with their reason and the scene's
   numbers, and a known failure that no longer fails is reported so its entry can go. The job's ctest step leaves
   the verdict to this script (it reads the JUnit file, which has every result);
+* for a test that failed without scene lines (a crash, a build in a test such as esia_package), its output's error
+  lines go into the summary and the job's annotation: both can be read without signing in, the log cannot;
 * lists the tests a job does not run at all (--not-run 'TEST_REGEX:REASON', the same regex as its ctest -E).
 """
 import argparse
@@ -23,6 +25,21 @@ import sys
 import xml.etree.ElementTree as ET
 
 SCENE = re.compile(r'^(PASS|FAIL|SKIP|NO GOLDEN)\s+(\S+)\s+(\S+)\s*(.*)$')
+ERROR_LINE = re.compile(r'error|fail|fatal|cannot|could not|not found|unresolved|exception|assert', re.I)
+
+
+def excerpt(out, limit=4000):
+    """The lines of a failed test's output around its errors (each with the four after it), else its last 20."""
+    lines = [l.rstrip() for l in out.splitlines()]
+    hits = [i for i, l in enumerate(lines) if ERROR_LINE.search(l)]
+    keep = sorted({j for i in hits for j in range(i, min(i + 5, len(lines)))}) if hits else range(max(0, len(lines) - 20), len(lines))
+    text = '\n'.join(lines[j] for j in keep)
+    return text if len(text) <= limit else text[:limit] + '\n...'
+
+
+def command_data(s):
+    """A workflow command's message: newlines and percent signs escaped."""
+    return s.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
 
 def main():
@@ -54,20 +71,20 @@ def main():
         if status == 'skipped':
             reasons = sorted({s[3] for s in scenes if s[0] == 'SKIP' and s[3]})
             reason = '; '.join(reasons) if reasons else (tc.find('skipped').get('message', '') if tc.find('skipped') is not None else '')
-        tests.append((name, status, float(tc.get('time') or 0), reason, scenes))
+        tests.append((name, status, float(tc.get('time') or 0), reason, scenes, out))
 
     lines = ['### %s: CTest' % args.title, '',
              '%d tests: %d passed, %d failed, %d skipped' % (
                  len(tests), sum(t[1] == 'passed' for t in tests), sum(t[1] == 'failed' for t in tests),
                  sum(t[1] == 'skipped' for t in tests)), '',
              '| Test | Status | Time (s) | Skip reason |', '| --- | --- | --- | --- |']
-    for name, status, time, reason, _ in tests:
+    for name, status, time, reason, _, _ in tests:
         lines.append('| `%s` | %s | %.1f | %s |' % (name, status, time, reason.replace('|', '/')))
     conf = [t for t in tests if t[4] and t[1] != 'skipped']
     if conf:
         lines += ['', '<details><summary>Conformance scenes</summary>', '', '| Test | Result | Scene | Detail |',
                   '| --- | --- | --- | --- |']
-        for name, _, _, _, scenes in conf:
+        for name, _, _, _, scenes, _ in conf:
             for result, backend, scene, detail in scenes:
                 lines.append('| `%s` | %s | %s | %s |' % (name, result, scene, detail.replace('|', '/')))
         lines += ['', '</details>']
@@ -93,7 +110,8 @@ def main():
 
     errors = []
     excused = []
-    for name, status, _, _, scenes in tests:
+    outputs = []   # (test, excerpt) of failures without scene lines
+    for name, status, _, _, scenes, out in tests:
         if status != 'failed':
             continue
         failed = [s for s in scenes if s[0] in ('FAIL', 'NO GOLDEN')]
@@ -103,6 +121,7 @@ def main():
                 excused.append((name, '*', reason, 'failed without a scene result (crash or abort)'))
             else:
                 errors.append('%s failed' % name)
+                outputs.append((name, excerpt(out)))
             continue
         for result, _, scene, detail in failed:
             reason = known_for(name, scene)
@@ -125,11 +144,14 @@ def main():
         matched = [t for t in tests if rx.fullmatch(t[0])]
         if not matched:
             errors.append('no test matches the required pattern %r' % pattern)
-        for name, status, _, reason, _ in matched:
+        for name, status, _, reason, _, _ in matched:
             if status == 'skipped':
                 errors.append('%s was skipped (%s): this job exists to run it' % (name, reason or 'no reason'))
     if errors:
         lines += ['', '**Failures:**', ''] + ['* %s' % e for e in errors]
+    for name, text in outputs:
+        lines += ['', '<details><summary>%s: output</summary>' % name, '', '```', text.replace('```', "'''"), '```', '',
+                  '</details>']
 
     text = '\n'.join(lines) + '\n'
     print(text)
@@ -144,6 +166,8 @@ def main():
     if errors:
         for e in errors:
             print('::error::%s' % e)
+        for name, text in outputs:
+            print('::error title=%s output::%s' % (name, command_data(text)))
         return 1
     return 0
 
