@@ -329,45 +329,80 @@ namespace esia::ui
 
     namespace
     {
-        // one step of a spring held as two floats (an AnimTable entry), and the Ui's `animating` while it moves
-        void StepSpring(float& value, float& velocity, float target, const Spring& spring, float dt, bool& animating)
+        void StepMovingSpring(float& value, float& velocity, float target, const Spring& spring, float dt, bool& animating)
         {
-            if (value != target || velocity != 0.0f)
-            {
-                SpringState st;
-                st.value = value;
-                st.velocity = velocity;
-                st.Step(target, spring, dt);
-                value = st.value;
-                velocity = st.velocity;
-            }
+            SpringState st;
+            st.value = value;
+            st.velocity = velocity;
+            st.Step(target, spring, dt);
+            value = st.value;
+            velocity = st.velocity;
             if (value != target || velocity != 0.0f)
                 animating = true;
+        }
+
+        // one step of a spring held as two floats (an AnimTable entry), and the Ui's `animating` while it moves; at
+        // rest (most springs, most frames) nothing but the test
+        inline void StepSpring(float& value, float& velocity, float target, const Spring& spring, float dt, bool& animating)
+        {
+            if (value != target || velocity != 0.0f)
+                StepMovingSpring(value, velocity, target, spring, dt, animating);
         }
     }
 
     namespace detail
     {
-        void AnimPair(Id id, float targetA, float targetB, const Spring& s, float& a, float& b)
+        float ControlSpring(const InteractState& it, int slot, float target, const Spring& s, float& velocity)
         {
             Ui::Impl& m = M();
-            const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
-            bool created;
-            AnimTable::Entry& e = m.anims.Get(id, AnimTable::kPair, frame, created);
-            if (created)
+            float& v = it.anim->more[slot];
+            float& vel = it.anim->more[slot + 1];
+            if (it.animNew)
             {
-                e.value = targetA;
-                e.value2 = targetB;
-                e.stepped = frame;
+                v = target;
+                vel = 0.0f;
             }
-            else if (e.stepped != frame)
+            else if (it.animStep)
+                StepSpring(v, vel, target, s, m.dt, m.animating);
+            else if (v != target || vel != 0.0f)
+                m.animating = true;
+            velocity = vel;
+            return v;
+        }
+
+        float ControlSpring(const InteractState& it, int slot, float target, const Spring& s)
+        {
+            float velocity;
+            return ControlSpring(it, slot, target, s, velocity);
+        }
+
+        float ControlPulse(const InteractState& it, int slot, bool held, bool activated, float bloomSeconds)
+        {
+            // LiquidPulse's timer (more[slot]) and lens spring (more[slot + 1], more[slot + 2])
+            Ui::Impl& m = M();
+            float& t = it.anim->more[slot];
+            float& lens = it.anim->more[slot + 1];
+            float& lensVel = it.anim->more[slot + 2];
+            if (it.animNew)
+                t = 1.0f;   // no bloom until an activation
+            if (activated)
+                t = 0.0f;
+            else if (t < 1.0f && it.animStep)
+                t = std::min(1.0f, t + m.dt / std::max(bloomSeconds, 1e-3f));
+            if (t < 1.0f)
+                m.animating = true;
+            static constexpr Spring kLens{0.34f, 0.62f};
+            const float target = held || t < 1.0f ? 1.0f : 0.0f;
+            if (it.animNew)
             {
-                e.stepped = frame;
-                StepSpring(e.value, e.velocity, targetA, s, m.dt, m.animating);
-                StepSpring(e.value2, e.velocity2, targetB, s, m.dt, m.animating);
+                lens = target;
+                lensVel = 0.0f;
             }
-            a = e.value;
-            b = e.value2;
+            else if (it.animStep)
+                StepSpring(lens, lensVel, target, kLens, m.dt, m.animating);
+            else if (lens != target || lensVel != 0.0f)
+                m.animating = true;
+            return Clamp(lens, 0.0f, 1.15f);
         }
 
         // Anim's entry, stepped
@@ -454,11 +489,7 @@ namespace esia::ui
     ItemStyle CurrentItemStyle() { return detail::ResolvedStyle(); }
     Color AccentColor() { return detail::Accent(); }
 
-    GlassLook CurrentGlassLook()
-    {
-        const ItemStyle& s = detail::ResolvedStyle();
-        return s.Has(ItemStyle::kLook) ? s.look : detail::M().look;
-    }
+    GlassLook CurrentGlassLook() { return detail::Look(); }
 
     GlassMaterial LookMaterial(const GlassMaterial& themed) { return detail::StyledMaterial(themed); }
 
@@ -552,7 +583,29 @@ namespace esia::ui
             it.hovered = b.hovered;
             it.held = b.held;
             it.pressed = b.pressed;
-            AnimPair(id, it.hovered ? 1.0f : 0.0f, it.held ? 1.0f : 0.0f, SpringFast(), it.hover, it.press);
+            // hover and press: two springs of one entry, which also holds the control's own (ControlSpring)
+            Ui::Impl& m = M();
+            const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
+            bool created;
+            AnimTable::Entry& e = m.anims.Get(id, AnimTable::kPair, frame, created);
+            const float hoverTarget = it.hovered ? 1.0f : 0.0f, pressTarget = it.held ? 1.0f : 0.0f;
+            it.anim = &e;
+            it.animNew = created;
+            it.animStep = !created && e.stepped != frame;
+            if (created)
+            {
+                e.value = hoverTarget;
+                e.value2 = pressTarget;
+            }
+            else if (it.animStep)
+            {
+                const Spring& s = m.effective.motion.fast;
+                StepSpring(e.value, e.velocity, hoverTarget, s, m.dt, m.animating);
+                StepSpring(e.value2, e.velocity2, pressTarget, s, m.dt, m.animating);
+            }
+            e.stepped = frame;
+            it.hover = e.value;
+            it.press = e.value2;
             return it;
         }
 
@@ -580,9 +633,6 @@ namespace esia::ui
         }
 
         // ---- text
-        text::FontRef Font(FontWeight w, float size) { return g_current->Font(w, size); }
-        text::FontRef Font(TextStyle s) { return g_current->Font(s); }
-
         Vec2 MeasureText(text::FontRef f, std::string_view text, float wrapWidth)
         {
             text::TextSystem* ts = M().text;
@@ -594,12 +644,6 @@ namespace esia::ui
             const Ui::Impl& m = M();
             if (icon != 0 && m.iconFont != 0)
                 p.Icon(center, {m.iconFont, size}, (char32_t)icon, color);
-        }
-
-        std::string_view VisibleLabel(std::string_view label)
-        {
-            const std::size_t hide = label.find("##");
-            return hide == std::string_view::npos ? label : label.substr(0, hide);
         }
 
         // ---- styles (WGT's look.cpp)
@@ -663,13 +707,6 @@ namespace esia::ui
 
         void MergeStyle(ItemStyle& into, const ItemStyle& s) { Merge(into, s); }
 
-        const ItemStyle& ResolvedStyle()
-        {
-            static const ItemStyle kNone;
-            const auto& st = M().styles;
-            return st.empty() ? kNone : st.back().resolved;   // merged once, when the scope was pushed
-        }
-
         void PushStyle(const ItemStyle& s)
         {
             Ui::Impl& m = M();
@@ -699,12 +736,6 @@ namespace esia::ui
             m.next = ItemStyle();
             PushStyle(s);
             return true;
-        }
-
-        float StyleAlpha()
-        {
-            const auto& st = M().styles;
-            return st.empty() ? 1.0f : st.back().alpha;
         }
 
         GlassMaterial ApplyLook(GlassLook look, GlassMaterial m)
@@ -750,50 +781,6 @@ namespace esia::ui
             return Override(m, s);
         }
 
-        bool LookClear() { return CurrentGlassLook() == GlassLook::Clear; }
-
-        bool GlassSurface()
-        {
-            const ItemStyle& s = ResolvedStyle();
-            if (s.Has(ItemStyle::kLook))
-                return s.look != GlassLook::Theme;
-            if (s.set & ItemStyle::kGlassFields)
-                return true;
-            return M().look == GlassLook::Clear;
-        }
-
-        Color Accent()
-        {
-            const ItemStyle& s = ResolvedStyle();
-            return s.Has(ItemStyle::kTint) ? s.tint : C().accent;
-        }
-
-        Color AccentOr(Color themed)
-        {
-            const ItemStyle& s = ResolvedStyle();
-            return s.Has(ItemStyle::kTint) ? s.tint : themed;
-        }
-
-        Color FillOr(Color themed)
-        {
-            const ItemStyle& s = ResolvedStyle();
-            return s.Has(ItemStyle::kFill) ? s.fill : themed;
-        }
-
-        Color LabelOr(Color themed)
-        {
-            const ItemStyle& s = ResolvedStyle();
-            return s.Has(ItemStyle::kLabel) ? s.label : themed;
-        }
-
-        bool HasItemRadius() { return ResolvedStyle().Has(ItemStyle::kRadius); }
-
-        float ItemRadius(float themed)
-        {
-            const ItemStyle& s = ResolvedStyle();
-            return s.Has(ItemStyle::kRadius) ? Sc(s.radius) : themed;
-        }
-
         GlassMaterial SurfaceGlass(Color fill)
         {
             // clear: nothing but the glass; frosted / custom glass: the surface color tints it, see-through
@@ -819,8 +806,6 @@ namespace esia::ui
             SurfaceFill(s, fill);
             return s;
         }
-
-        Color StateFill(Color c) { return LookClear() ? c.Fade(0.55f) : c; }
 
         void DrawPill(Painter& p, const Rect& r, const Style& s)
         {

@@ -174,6 +174,10 @@ namespace esia
 
         // ---------------------------------------------------------- SDF shapes
         void Rect(const esia::Rect& r, const Style& s);
+        // A solid rounded rectangle, `radius` on every corner: Rect(r, Style().Radius(radius).Fill(color)) without
+        // building a Style (flat drawing: its geometry directly). `smoothing` < 0: the environment's (0: circular
+        // corners, as Circle draws).
+        void FillRound(const esia::Rect& r, float radius, Color color, float smoothing = -1.0f);
         void Capsule(const esia::Rect& r, const Style& s);
         void Circle(Vec2 center, float radius, const Style& s);
         // Arc along a circle of `radius` (centerline) with round caps. Angles in radians, clockwise, 0 = +x.
@@ -247,6 +251,9 @@ namespace esia
                        float smoothing = -1.0f);
         // Flat drawing: the shape as geometry when it can be, filled with `fill` (true: drawn, or nothing to draw).
         bool FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill, const float* radii, float smoothing);
+        // its core: colors with their opacity applied
+        bool FlatShape(const esia::Rect& bounds, Color fill, Color stroke, float strokeWidth, float strokeAlign, const float* shapeRadii,
+                       float smoothing);
         void ApplyScale(fx::Instance& inst) const;
         void ExcludeFromScale(std::size_t vtxStart);
         float Pixel() const { return env_.pixelScale > 0.0f ? env_.pixelScale : 1.0f; }

@@ -16,6 +16,8 @@
 //   --page id       the Settings page shown first (accent, perf)
 //   --menu          the Components panel opens its menu (checks the popups)
 //   --compact       the compact density (Ui::SetDensity); Ctrl+Shift+D (Cmd+Shift+D) switches it while running
+//   --font f [--font b]  the UI font instead of the platform's: the regular face, then the bold one (semibold and
+//                   bold text; without it they draw with the regular face)
 // On a display smaller than the desktop layout (a phone) one panel shows at a time, as large as fits over the status bar
 // (then centered over the dock); the dock switches panels as between apps.
 // The app options (API, size, scale, frames, screenshot ...) are glass_window's (../glass_window/app.hpp).
@@ -1211,7 +1213,13 @@ int main(int argc, char** argv)
         ui::UiDesc desc;
         desc.text = text;
         if (!fonts.empty())
-            desc.fontFiles[0] = fonts[0];
+        {
+            // a font of one's own: its bold face (a second --font) for semibold and bold, else the regular for all
+            desc.fontFiles[(int)ui::FontWeight::Regular] = fonts[0];
+            const std::string& bold = fonts.size() > 1 ? fonts[1] : fonts[0];
+            desc.fontFiles[(int)ui::FontWeight::Semibold] = bold;
+            desc.fontFiles[(int)ui::FontWeight::Bold] = bold;
+        }
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
         desc.theme.metrics.scrollIndicatorAlways = 0.0f;   // as ApplyTheme
         desc.density = d.compactSizes ? ui::Density::Compact : ui::Density::Regular;

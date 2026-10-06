@@ -21,6 +21,8 @@
 #include "esia/core/layout.hpp"
 #include "esia/core/state.hpp"
 #include "esia/core/texture.hpp"
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -315,6 +317,9 @@ namespace esia
             int layer;
             std::uint32_t flags;
             Vec2 outer;                   // its parents' scroll offsets when recorded
+            // the offsets that move its items (ScrollOffsets from it), fixed from its BeginChild to its EndChild:
+            // what each of their hit records takes, instead of walking its parents
+            Vec2 total{0.0f, 0.0f}, own{0.0f, 0.0f};
         };
         struct ChildState
         {
@@ -616,7 +621,23 @@ namespace esia
         void InitRootFrame(Window& w);
         void LayOut(Window& w, const Rect& r, float baseline, bool childReport);
         void AdvanceCursor(Window::Frame& f, const Rect& r, float baseline);
-        float Snap(float v) const;
+        float Snap(float v) const
+        {
+            // layout positions land on physical pixels: text and hairlines stay crisp at fractional scales. Down, as
+            // Dear ImGui truncates its cursor (WGT's layouts, pixel for pixel); the epsilon keeps a whole pixel whole.
+            // Inline: two per item.
+            const float s = Scale();
+            if (!(s > 0.0f))
+                return v;
+            // floor without the C runtime's call (MSVC does not inline floorf for SSE2)
+            const float x = v * s + 1e-3f;
+            if (!(std::fabs(x) < 2.0e9f))
+                return std::floor(x) / s;
+            float f = (float)(std::int64_t)x;
+            if (f > x)
+                f -= 1.0f;
+            return f / s;
+        }
         void BeginScroll(Window::ScrollState& s, bool smooth);
         void SnapScroll(Window::ScrollState& s, float scale) const;
         void EndScroll(Window::ScrollState& s, bool smooth);

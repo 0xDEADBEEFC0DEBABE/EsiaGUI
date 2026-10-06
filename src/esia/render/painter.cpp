@@ -174,6 +174,25 @@ namespace esia
     // ------------------------------------------------------------ shapes
     void Painter::Rect(const esia::Rect& r, const Style& s) { EmitShape(fx::ShapeKind::RoundRect, r, s, nullptr); }
 
+    void Painter::FillRound(const esia::Rect& r, float radius, Color color, float smoothing)
+    {
+        if (env_.flat && env_.text)
+        {
+            if (r.Empty())
+                return;
+            const float radii[4] = {radius, radius, radius, radius};
+            Color c = color;
+            c.a *= Saturate(alpha_);
+            if (FlatShape(r, c, Color::Clear(), 0.0f, 0.0f, radii, smoothing >= 0.0f ? smoothing : env_.cornerSmoothing))
+                return;
+        }
+        Style s;
+        s.Radius(radius).Fill(color);
+        if (smoothing >= 0.0f)
+            s.smoothing = smoothing;
+        EmitShape(fx::ShapeKind::RoundRect, r, s, nullptr);
+    }
+
     void Painter::Capsule(const esia::Rect& r, const Style& s)
     {
         EmitShape(fx::ShapeKind::RoundRect, r, s, nullptr, std::min(r.Width(), r.Height()) * 0.5f);
@@ -464,13 +483,19 @@ namespace esia
         Color stroke = s.strokeWidth > 0.0f ? s.strokeColor : Color::Clear();
         fill.a *= opacity;
         stroke.a *= opacity;
+        return FlatShape(bounds, fill, stroke, s.strokeWidth, s.strokeAlign, shapeRadii, smoothing);
+    }
+
+    bool Painter::FlatShape(const esia::Rect& bounds, Color fill, Color stroke, float strokeWidthUi, float strokeAlign, const float* shapeRadii,
+                            float smoothing)
+    {
         if (fill.a <= 0.0f && stroke.a <= 0.0f)
             return true;
 
         // the scale stack (press / pop animations)
         esia::Rect r = bounds;
         float radii[4] = {shapeRadii[0], shapeRadii[1], shapeRadii[2], shapeRadii[3]};
-        float strokeWidth = s.strokeWidth;
+        float strokeWidth = strokeWidthUi;
         for (int i = scaleDepth_ - 1; i >= 0; --i)
         {
             const float k = scaleValue_[i];
@@ -483,7 +508,7 @@ namespace esia
         }
         if (r.Empty())
             return true;
-        const float outsetUi = stroke.a > 0.0f ? strokeWidth * s.strokeAlign : 0.0f;
+        const float outsetUi = stroke.a > 0.0f ? strokeWidth * strokeAlign : 0.0f;
         const esia::Rect& clip = dl_->ClipRect();
         if (r.max.x + outsetUi + 2.0f <= clip.min.x || r.min.x - outsetUi - 2.0f >= clip.max.x || r.max.y + outsetUi + 2.0f <= clip.min.y ||
             r.min.y - outsetUi - 2.0f >= clip.max.y)
@@ -514,10 +539,18 @@ namespace esia
         auto tileFor = [&](bool ring, float width, float align) -> const FlatTile* {
             // all of these are >= 0: rounding is adding a half and truncating
             const float k64 = px * 64.0f;
-            const std::int32_t in[10] = {(std::int32_t)((p1.x - p0.x) * 64.0f + 0.5f), (std::int32_t)((p1.y - p0.y) * 64.0f + 0.5f),
-                                         (std::int32_t)(radii[0] * k64 + 0.5f), (std::int32_t)(radii[1] * k64 + 0.5f), (std::int32_t)(radii[2] * k64 + 0.5f),
-                                         (std::int32_t)(radii[3] * k64 + 0.5f), (std::int32_t)(smoothing * 1024.0f + 0.5f),
-                                         ring ? (std::int32_t)(width * 64.0f + 0.5f) : -1, (std::int32_t)(align * 64.0f + 0.5f), (std::int32_t)(px * 1024.0f + 0.5f)};
+            std::int32_t in[10] = {(std::int32_t)((p1.x - p0.x) * 64.0f + 0.5f), (std::int32_t)((p1.y - p0.y) * 64.0f + 0.5f),
+                                   (std::int32_t)(radii[0] * k64 + 0.5f), (std::int32_t)(radii[1] * k64 + 0.5f), (std::int32_t)(radii[2] * k64 + 0.5f),
+                                   (std::int32_t)(radii[3] * k64 + 0.5f), (std::int32_t)(smoothing * 1024.0f + 0.5f),
+                                   ring ? (std::int32_t)(width * 64.0f + 0.5f) : -1, (std::int32_t)(align * 64.0f + 0.5f), (std::int32_t)(px * 1024.0f + 0.5f)};
+            // A capsule's length does not change its tile: every corner at least half the short side caps them at
+            // that half (CornerOf), so the short axis is never stretched and the long one always is when it is 4 px or
+            // more longer - one entry for every length (a slider's fill, list rows), -1 in its place
+            const std::int32_t minR2 = 2 * std::min(std::min(in[2], in[3]), std::min(in[4], in[5]));
+            if (minR2 >= in[1] && in[0] >= in[1] + 4 * 64)
+                in[0] = -1;
+            else if (minR2 >= in[0] && in[1] >= in[0] + 4 * 64)
+                in[1] = -1;
             // the slot from the size and a corner (independent multiplies); everything is compared
             const std::uint32_t hsh = (std::uint32_t)in[0] * 0x9E3779B1u ^ (std::uint32_t)in[1] * 0x85EBCA77u ^ (std::uint32_t)in[2] * 0xC2B2AE3Du ^
                                       (std::uint32_t)in[7] * 0x27D4EB2Fu;
@@ -525,8 +558,10 @@ namespace esia
             if (t.text == env_.text && t.generation == generation && SameInputs(t.in, in))
                 return &t;
 
-            // in pixels: the corners as SdRoundRect draws them
-            const float w = (float)in[0] * (1.0f / 64.0f), h = (float)in[1] * (1.0f / 64.0f), maxR = 0.5f * std::min(w, h);
+            // in pixels: the corners as SdRoundRect draws them (a capsule's long axis at its length: the tile is the same
+            // at any)
+            const float w = in[0] >= 0 ? (float)in[0] * (1.0f / 64.0f) : p1.x - p0.x, h = in[1] >= 0 ? (float)in[1] * (1.0f / 64.0f) : p1.y - p0.y;
+            const float maxR = 0.5f * std::min(w, h);
             float R[4], n[4], bigR = 0.0f;
             for (int c = 0; c < 4; ++c)
             {
@@ -679,7 +714,7 @@ namespace esia
         std::optional<FlatTile> fillTile;   // a copy: the stroke's tile may take the same slot
         if (ft)
             ft = &fillTile.emplace(*ft);
-        const FlatTile* st = tileFor(true, strokeWidth * px, s.strokeAlign);
+        const FlatTile* st = tileFor(true, strokeWidth * px, strokeAlign);
         if (!st)
             return false;
         if (ft)

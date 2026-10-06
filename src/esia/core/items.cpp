@@ -91,7 +91,14 @@ namespace esia
         h.child = w.childStack_.empty() ? -1 : w.childStack_.back();
         h.fixed = fixed;
         h.item = itemSerial_;
-        ScrollOffsets(w, w.children_, h.child, h.total, h.own);
+        if (h.child >= 0)
+        {
+            const Window::ChildRecord& c = w.children_[(std::size_t)h.child];   // its region's offsets (BeginChild)
+            h.total = c.total;
+            h.own = c.own;
+        }
+        else
+            h.total = h.own = w.scroll_.scroll;
         if (!w.hits_.empty() && w.hits_.back().id == id)
         {
             // the item's own record again - or the next item with its id (a debug check reports it)
@@ -108,10 +115,10 @@ namespace esia
         Window* w = CurrentWindow();
         ESIA_ASSERT(w);
         ++itemSerial_;
-        lastItem_ = LastItem();
         lastItem_.id = id;
         lastItem_.rect = bb;
         lastItem_.flags = itemFlags;
+        lastItem_.hovered = lastItem_.pressed = false;
         if (outOfViewLast_ >= 0)
         {
             // the item the debug checks found out of view as it was laid out (ItemSize just before, the same rect)
