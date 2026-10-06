@@ -69,6 +69,9 @@ namespace esia
         ItemFlags_Disabled = 1u << 0,     // claims the hover (nothing below gets it) but never hovers or activates
         ItemFlags_Focusable = 1u << 1,    // takes part in Tab navigation of keyboard focus
         ItemFlags_Background = 1u << 2,   // hit below the other items of its window / child, whenever it is submitted
+        // takes the wheel while it is the item under the mouse: no scroll area around it scrolls (a plot that zooms
+        // reads InputState::Wheel itself). A wheel already scrolling an area keeps it (the latch).
+        ItemFlags_Wheel = 1u << 3,
     };
 
     enum ButtonFlags_ : std::uint32_t

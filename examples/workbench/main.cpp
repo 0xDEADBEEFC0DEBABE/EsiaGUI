@@ -1,11 +1,12 @@
 // workbench - a tool's layout on Esia's data widgets: a dock space holding an outline (a tree), an inspector (number,
-// vector and color fields), a table of 100 000 assets (sorted, filtered, selected), a script editor and a scene view.
-// Drag a tab out of its panel to float it, drag a floating panel over the dock space to dock it again; the lines
-// between the panels resize them. On a phone the six panels are tabs of two panels, one above the other (side by side
-// in landscape), in the display's safe area.
+// vector and color fields), a table of 100 000 assets (sorted, filtered, selected), a script editor, plots of a profiler
+// capture and a scene view. Drag a tab out of its panel to float it, drag a floating panel over the dock space to dock
+// it again; the lines between the panels resize them. On a phone the seven panels are tabs of two panels, one above the
+// other (side by side in landscape), in the display's safe area.
 //
-//   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--rows N]
+//   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--rows N] [--hover X,Y]
 //             and glass_window's options (../glass_window/app.hpp)
+// --hover: the mouse rests at X,Y (UI units) every frame - for pictures of what hovering shows.
 // Ctrl+Shift+D (Cmd+Shift+D on a Mac) switches between the regular and the compact sizes (Ui::SetDensity).
 #include "app.hpp"
 #include "esia/render/painter.hpp"
@@ -54,6 +55,7 @@ namespace
     };
     constexpr const char* kTypes[] = {"Texture", "Mesh", "Material", "Audio", "Script", "Prefab", "Animation", "Shader"};
     constexpr ui::Icon kTypeIcons[] = {icon::Photo, icon::Apps, icon::Palette, icon::Music, icon::Code, icon::Document, icon::Video, icon::Lightning};
+    constexpr std::string_view kTypeNames[] = {"Texture", "Mesh", "Material", "Audio", "Script", "Prefab", "Animation", "Shader"};
 
     struct Demo
     {
@@ -63,6 +65,7 @@ namespace
         bool compactSizes = false;   // --compact
         bool laidOut = false;
         std::string floatPanel, showPanel;
+        Vec2 hover = Vec2(-1, -1);   // --hover: the mouse rests there (pictures of what hovering shows)
         int frame = 0;
 
         std::vector<Object> objects;
@@ -78,6 +81,11 @@ namespace
         std::string script;
         std::string notes = "Panels dock into this space.\nDrag a tab out to float its panel.";
         bool openScene = true, openOutline = true, openInspector = true, openAssets = true, openScript = true, openNotes = true;
+        bool openGraphs = true;
+
+        // the Graphs panel: a profiler capture (deterministic) and the assets by type
+        std::vector<float> cpuMs, gpuMs, drawCalls;
+        float typeGB[8] = {}, typePackedGB[8] = {};
 
         int Add(std::string name, ui::Icon ic, int parent, bool shape = false)
         {
@@ -145,6 +153,20 @@ namespace
                 a.name = n;
                 a.size = 4 + (int)(rng() % 40000);
                 a.modified = (int)(rng() % 900);
+                typeGB[a.type] += (float)a.size / (1024.0f * 1024.0f);
+            }
+            for (int t = 0; t < 8; ++t)
+                typePackedGB[t] = typeGB[t] * (0.32f + 0.05f * (float)((t * 5) % 8));   // what each type compresses to
+
+            // 240 frames of a capture: the CPU with a hitch every second or so, the GPU following the draw calls
+            std::mt19937 frames(11);
+            std::uniform_real_distribution<float> noise(0.0f, 1.0f);
+            for (int i = 0; i < 240; ++i)
+            {
+                const float calls = 1400.0f + 500.0f * std::sin((float)i * 0.045f) + 260.0f * noise(frames);
+                drawCalls.push_back(std::round(calls));
+                gpuMs.push_back(1.2f + calls * 0.0021f + 0.35f * noise(frames));
+                cpuMs.push_back(5.4f + 0.7f * std::sin((float)i * 0.08f + 1.0f) + 0.8f * noise(frames) + (i % 57 == 40 ? 4.5f : 0.0f));
             }
 
             script =
@@ -241,6 +263,8 @@ namespace
         void Frame()
         {
             ++frame;
+            if (hover.x >= 0.0f)
+                ctx->QueueInput(InputEvent::MouseMove(hover));
             ui->NewFrame();
             // Ctrl+Shift+D (Cmd+Shift+D): the other density, animated
             const InputState& in = ctx->Input();
@@ -263,6 +287,7 @@ namespace
                     ui::DockWindow("Assets", "workbench", portrait ? ui::DockSide::Bottom : ui::DockSide::Right, 0.5f, "Scene");
                     ui::DockWindow("Script", "workbench", ui::DockSide::Center, 0.5f, "Assets");
                     ui::DockWindow("Notes", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::DockWindow("Graphs", "workbench", ui::DockSide::Center, 0.5f, "Assets");
                     ui::FocusDockedWindow("Scene");
                     ui::FocusDockedWindow("Assets");
                 }
@@ -274,6 +299,7 @@ namespace
                     ui::DockWindow("Assets", "workbench", ui::DockSide::Bottom, 0.36f, "Scene");
                     ui::DockWindow("Script", "workbench", ui::DockSide::Center, 0.5f, "Assets");
                     ui::DockWindow("Notes", "workbench", ui::DockSide::Center, 0.5f, "Assets");
+                    ui::DockWindow("Graphs", "workbench", ui::DockSide::Center, 0.5f, "Assets");
                     ui::FocusDockedWindow("Assets");
                 }
                 if (!showPanel.empty())
@@ -289,6 +315,7 @@ namespace
             AssetsPanel();
             ScriptPanel();
             NotesPanel();
+            GraphsPanel();
             ui->EndFrame();
         }
 
@@ -472,6 +499,70 @@ namespace
             ui::TextEditor("notes", &notes, {.size = Vec2(0, std::max(80.0f, AvailableHeight() - 8.0f))});
             ui::EndWindow();
         }
+
+        void GraphsPanel()
+        {
+            ui::WindowOptions wo;
+            wo.icon = icon::Diagnostic;
+            wo.size = Vec2(1000, 600);
+            if (!ui::BeginWindow("Graphs", &openGraphs, wo))
+                return;
+            // as tall as the panel leaves: two rows when they fit, else the first
+            const float room = AvailableHeight();
+            const float h = std::clamp(room >= 440.0f ? room * 0.5f - 46.0f : room - 40.0f, 160.0f, 260.0f);
+            ui::BeginGrid("graphs", {.minColumnWidth = 300, .maxColumns = 4, .spacing = 20, .rowSpacing = 16, .align = ui::Align::Start});
+
+            ui::LayoutSpan(2);
+            ui::BeginVStack("frame", {.align = ui::Align::Stretch});
+            ui::Text(ui::TextStyle::Headline, "Frame time");
+            if (ui::BeginPlot("frame time", {.height = h, .yFormat = "%.1f ms"}))
+            {
+                ui::PlotLine("CPU", cpuMs);
+                ui::PlotLine("GPU", gpuMs, {.fill = true});
+                ui::EndPlot();
+            }
+            ui::EndStack();
+
+            ui::BeginVStack("spread", {.align = ui::Align::Stretch});
+            ui::Text(ui::TextStyle::Headline, "CPU time spread");
+            if (ui::BeginPlot("cpu spread", {.height = h, .flags = ui::PlotFlags_NoLegend, .xFormat = "%g ms"}))
+            {
+                ui::PlotHistogram("Frames", cpuMs, 0, {.color = ui::Current()->GetTheme().colors.indigo});
+                ui::EndPlot();
+            }
+            ui::EndStack();
+
+            ui::BeginVStack("budget", {.align = ui::Align::Start});
+            ui::Text(ui::TextStyle::Headline, "CPU frame budget");
+            static const float kBudget[] = {2.1f, 1.2f, 0.9f, 0.7f, 0.4f, 0.3f, 0.3f};
+            static const std::string_view kSystems[] = {"Render", "Physics", "Animation", "Scripts", "UI", "Audio", "Other"};
+            ui::PieChart("budget", kBudget, kSystems, {.size = std::min(h, 170.0f), .center = "5.9 ms", .format = "%.1f ms"});
+            ui::EndStack();
+
+            ui::LayoutSpan(2);
+            ui::BeginVStack("size", {.align = ui::Align::Stretch});
+            ui::Text(ui::TextStyle::Headline, "Size by type");
+            if (ui::BeginPlot("size by type", {.height = h, .yFormat = "%.0f GB", .categories = kTypeNames}))
+            {
+                ui::PlotBars("On disk", typeGB);
+                ui::PlotBars("Packed", typePackedGB);
+                ui::EndPlot();
+            }
+            ui::EndStack();
+
+            ui::LayoutSpan(2);
+            ui::BeginVStack("calls", {.align = ui::Align::Stretch});
+            ui::Text(ui::TextStyle::Headline, "GPU time by draw calls");
+            if (ui::BeginPlot("gpu by calls", {.height = h, .flags = ui::PlotFlags_NoLegend, .yFormat = "%.1f ms"}))
+            {
+                ui::PlotScatter("Frames", drawCalls, gpuMs, {.color = ui::Current()->GetTheme().colors.teal});
+                ui::EndPlot();
+            }
+            ui::EndStack();
+
+            ui::EndGrid();
+            ui::EndWindow();
+        }
     };
 }
 
@@ -500,6 +591,8 @@ int main(int argc, char** argv)
             d.showPanel = value;
             return true;
         }
+        if (o == "--hover")
+            return std::sscanf(value, "%f,%f", &d.hover.x, &d.hover.y) == 2;
         if (o == "--rows")
         {
             rows = std::max(0, std::atoi(value));

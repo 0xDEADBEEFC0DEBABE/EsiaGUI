@@ -46,7 +46,7 @@ from ImGui to Esia means writing it again with `esia::ui`.
 | GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes about 0.8 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most |
 | CPU cost | small: 0.05 - 0.08 ms to build and submit a frame of a few hundred widgets or 3300 glyphs (Direct3D 11, on the machine of the comparison) | text: less than Dear ImGui's (0.068 ms against 0.076 for 3300 glyphs); plain widgets: more (0.092 against 0.052 ms: shadows, springs); the glass scene: 0.20 ms against 0.37 for WGT, Dear ImGui with the same glass ([REWRITE_STATUS.md](docs/REWRITE_STATUS.md), "Text against Dear ImGui") |
 | Text | its font atlas (stb_truetype, or FreeType). Text is not shaped, so scripts that need shaping (Arabic, Devanagari and the other Indic scripts) do not come out right, and there is no right-to-left | FreeType + HarfBuzz shaping, the system's fonts with a fallback chain for every major script, editing by grapheme, IME composition in the field (Windows, macOS, iOS), color emoji (bitmap and COLR fonts: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji). A line in one direction is right; mixed directions wait for the bidi algorithm |
-| Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports; extensions add more (ImPlot, node editors) | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, text fields, a line chart, the island and the dock. For tools: number and vector fields (scrub, type an expression), a color picker, tables (only the rows in view are drawn: a million rows; sort, resize, select), trees, a multi-line editor, docking. No plots beyond the line chart, no node editors, no multiple viewports |
+| Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports; extensions add more (ImPlot, node editors) | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, text fields, a line chart, the island and the dock. For tools: number and vector fields (scrub, type an expression), a color picker, tables (only the rows in view are drawn: a million rows; sort, resize, select), trees, a multi-line editor, docking, plots (lines, areas, scatter, bars, histograms; a legend, a crosshair, pan and zoom) and a donut chart. Fewer plot kinds than ImPlot, no node editors, no multiple viewports |
 | Debugging UI code | items with one id highlighted, with a message, under the mouse (`io.ConfigDebugHighlightIdConflicts`, on by default); the Metrics / Debugger window (windows, draw commands, internal state), the ID Stack Tool, the Item Picker, a debug log, error recovery | a debug build reports, once each and outlined in red: two items with one id, two scroll areas with one id, an item laid out where it cannot be seen ([UI_CORE.md](docs/UI_CORE.md) section 16); no debugger windows |
 | Integration | copy a few files; platform and renderer backends exist for almost everything (Win32, GLFW, SDL, Android, Emscripten ...) | a CMake project that needs FreeType and HarfBuzz (found, or downloaded and built with it). The host creates an Esia device on its own device or context and passes a render target each frame. Windows, Linux (X11) and Android have platform layers; on macOS and iOS the host queues the input events itself, as the examples' frames do |
 | Touch | touch arrives as the mouse; dragging content does not scroll it | a phone's behavior: a finger scrolls a list from anywhere, a row or a slider included, without pressing them; a tap presses, a sideways drag moves a slider. A mouse keeps a desktop's: the wheel and the scroll indicator scroll. The showcase lays itself out for a phone |
@@ -73,7 +73,8 @@ from ImGui to Esia means writing it again with `esia::ui`.
   2808 x 2100 on an RTX 4080 SUPER - and flat widgets alone take about twice Dear ImGui's (0.051 ms against 0.024);
 * plain widgets take more CPU than Dear ImGui's (0.092 ms against 0.052): shadows, springs, shapes drawn as distance
   fields;
-* a smaller widget set: no plots beyond a line chart, no node editors, no multiple viewports;
+* a smaller widget set: no node editors, no multiple viewports, and fewer plots than ImPlot (no log or time axes, no
+  second y axis, no heatmaps or error bars);
 * integration: FreeType and HarfBuzz (downloaded and built with Esia when the system has none); platform layers for
   Win32, X11 and Android only - on macOS and iOS the host passes the input on itself, as the examples' frames do -
   and no native Wayland window (XWayland);
@@ -84,8 +85,8 @@ from ImGui to Esia means writing it again with `esia::ui`.
 should look like a product (tables of a million rows, docking, the compact density). It fits where the glass, the
 motion and the text matter and about a millisecond of GPU time is affordable.
 
-**Use Dear ImGui** for internal tools and debuggers that live on ImGui's ecosystem (plots, node editors, multiple
-viewports), for the smallest integration and GPU cost, or on a platform Esia does not run on (the web, consoles).
+**Use Dear ImGui** for internal tools and debuggers that live on ImGui's ecosystem (ImPlot's range of plots, node
+editors, multiple viewports), for the smallest integration and GPU cost, or on a platform Esia does not run on (the web, consoles).
 
 ## Widgets for tools: the workbench
 
@@ -117,6 +118,19 @@ The data widgets, in the same glass style as the rest (`esia::ui`, [UI_WIDGETS.m
   Down to step; a field with limits fills in proportion to its value.
 * **Color picker**: a spectrum, hue and opacity bars, the hex value and swatches, or a round color well that opens it.
 * **Multi-line editor**: wrapping, line numbers, the monospace font, Tab, undo, the clipboard and IME composition.
+* **Plots**: lines (with the area under them, straight or smooth), scatter, grouped bars and histograms over axes
+  with round ticks and a grid; a legend under the plot whose entries hide and show their series; a crosshair and a
+  readout of every series under the mouse; drag to pan, the wheel to zoom around the mouse, a double click to fit the
+  data again. A line of a million points draws what its pixels show. `PieChart` is a donut whose segment under the
+  mouse grows and shows its value in the hole.
+
+  ```cpp
+  if (ui::BeginPlot("frame time", {.height = 220, .yFormat = "%.1f ms"})) {
+      ui::PlotLine("CPU", cpu);
+      ui::PlotLine("GPU", gpu, {.fill = true});
+      ui::EndPlot();
+  }
+  ```
 * **Compact density** for tools, in one line: `desc.density = ui::Density::Compact` when creating the `Ui`, or
   `ui.SetDensity(ui::Density::Compact)` (animated; kept across theme and dark-mode changes). The text keeps its size;
   controls get shorter, their shadows and glass with them, so the glass does not outweigh them (buttons 36 -> 30, fields
@@ -130,14 +144,22 @@ workbench                                  # the docked layout (glass_window's o
 workbench --float Inspector --show Script  # a window floating, the editor's tab in front
 workbench --rows 1000000 --light           # a million rows, light theme
 workbench --compact                        # the compact density (Ctrl+Shift+D switches it while running)
+workbench --float Graphs                   # the plots in a floating window
 ```
+
+<p align="center">
+  <img src="docs/images/workbench-graphs.jpg" width="80%"
+       alt="The workbench's Graphs panel floating: a frame-time plot of CPU and GPU lines with the readout under the mouse, a histogram of CPU times, a donut of the CPU frame budget and grouped bars of asset sizes by type">
+</p>
+<p align="center"><sub>The Graphs panel floating, the mouse over the frame times (<code>workbench --size 1600x1000
+--scale 1.5 --float Graphs --hover 700,400</code>).</sub></p>
 
 ## Status
 
 | Part | State |
 | --- | --- |
 | UI core (`src/esia/core`) | second version ([UI_CORE.md](docs/UI_CORE.md)): ids, input (touch included), windows with per-window DPI, front-to-back hit testing, press and key ownership, containers and layout providers, child scroll regions, popups and tooltips, per-id state, draw lists, texture registry, debug checks for mistakes in UI code |
-| Widgets (`src/esia/ui`, `esia::ui`) | WGT's liquid-glass widgets on the core ([UI_WIDGETS.md](docs/UI_WIDGETS.md)): themes, per-widget styles, springs, auto layout, controls, lists, navigation, popups, text fields, charts, the island; and widgets for tools: number, vector and color fields, tables, trees, a multi-line editor, docking |
+| Widgets (`src/esia/ui`, `esia::ui`) | WGT's liquid-glass widgets on the core ([UI_WIDGETS.md](docs/UI_WIDGETS.md)): themes, per-widget styles, springs, auto layout, controls, lists, navigation, popups, text fields, charts, the island; and widgets for tools: number, vector and color fields, tables, trees, a multi-line editor, docking, plots |
 | Renderer (`src/esia/render`) | Painter, frame planner, liquid glass (backdrop captures, blur pyramid, refraction), glow layers, edge fades, GPU profiling |
 | Text (`src/esia/text`) | analytic glyph rasterizer, glyph atlas, FreeType + HarfBuzz text system (bundled or the system's), system font lookup with fallback chains for every major script, color emoji from bitmap strikes (sbix, CBDT) and COLR fonts (gradients, transforms, composite modes), grayscale antialiasing |
 | Backends (`src/esia/rhi/<name>`) | DirectX (Direct3D 9 / 10 / 11 / 12, in `rhi/directx`), OpenGL 3.3 / OpenGL ES 3.0, Vulkan 1.1+, Metal; and `rhi/null`, a device without a GPU that records the command stream and checks the call rules (the tests' and the golden logs') |
@@ -446,7 +468,7 @@ The simulator needs no signing: `cmake --preset ios-simulator && cmake --build -
   keyboard works.
 * **Layout.** The examples keep to the safe area the frame passes on (`FrameParams::safeArea`: clear of the camera
   housing and the home indicator), and lay themselves out for a phone: the showcase shows one panel at a time, as large
-  as fits, and the dock switches between them; the workbench docks its six panels as tabs of two (one above the other,
+  as fits, and the dock switches between them; the workbench docks its seven panels as tabs of two (one above the other,
   side by side in landscape), with the asset table's type column left out; glass_window stacks its windows. The island
   grows out of the Dynamic Island: a notification's card shows below the camera, the resident pill only its icon and
   progress beside it.

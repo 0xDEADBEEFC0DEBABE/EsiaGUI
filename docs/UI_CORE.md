@@ -309,7 +309,9 @@ The wheel goes to the innermost scroll area under the mouse (from last frame's r
 direction, else outward to its parents and the window; Shift+wheel scrolls horizontally. While it keeps turning it
 stays with the area it scrolled (per axis), as a browser latches it: the window scrolling a table in under the mouse
 does not hand the table the rest of the turn, and an area at its end does not pass it on to its parent halfway. A
-pause of 0.3 s, moving the mouse or leaving the window ends that. With
+pause of 0.3 s, moving the mouse or leaving the window ends that. An item submitted with `ItemFlags_Wheel` (a plot
+that zooms) keeps the wheel from every scroll area while it is under the mouse - it reads `InputState::Wheel` itself -
+unless a turn is already latched to an area: a page scrolled onto a plot keeps scrolling. With
 `ChildFlags_SmoothScroll` the offset follows its target (exponentially, time constant
 `LayoutMetrics::scrollSmoothing` seconds, at least one physical pixel per frame so the tail never stalls) on whole
 physical pixels, ending on the pixel nearest the target; the glide steps in `NewFrame`, before the hit test; `PlatformRequests::animating` is set while it moves. Drag-to-scroll, rubber
@@ -530,7 +532,7 @@ Against `main` before this work (`81ce5dc`):
 * **Removed**: `ItemFlags_AllowOverlap`, `ButtonFlags_AllowOverlap`; `AppendUtf8(std::u32string&, const
   std::string&)` and `AppendUtf32(std::string&, char32_t)` (use `DecodeUtf8` / `EncodeUtf8` from
   `base/utf8.hpp`); `InputEvent::MousePos` with a negative position as "no mouse" (use `MouseLeave()`).
-* **Changed**: `ItemFlags_` values (`Disabled` 1, `Focusable` 2, `Background` 4); `ItemSize(Vec2, float baseline =
+* **Changed**: `ItemFlags_` values (`Disabled` 1, `Focusable` 2, `Background` 4, `Wheel` 8); `ItemSize(Vec2, float baseline =
   -1)`; `ButtonBehavior(id, bb, buttonFlags, itemFlags = 0)`; `ButtonResult` gains `clicks`; `SetScrollX/Y` are
   deferred; `Begin` pushes the content clip; `RequestTextInput` leaves the cursor alone; `MouseDoubleClicked` is
   "clicked with count 2" (a third click is count 3, not a new pair); Tab navigation runs in `EndFrame`;

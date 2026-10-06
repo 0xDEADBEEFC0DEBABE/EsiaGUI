@@ -198,6 +198,9 @@ namespace esia
         void Polyline(const Vec2* points, int count, float thickness, const Style& s, std::uint32_t flags = PolylineFlags_None);
         // Fills between the same path and the horizontal line y = `baseline` (area charts). Solid or linear paint.
         void Area(const Vec2* points, int count, float baseline, const Paint& paint, std::uint32_t flags = PolylineFlags_None);
+        // A segment of a ring (a donut chart's) between two radii: flat ends, each moved `inset` in along the ring, so
+        // neighbours keep a gap of the same width from the hole to the rim. Angles as Arc's. Solid, anti-aliased.
+        void Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, Color color, float inset = 0.0f);
 
         // ------------------------------------------------------------- state
         // Rounded mask applied to subsequent SDF shapes (max depth 8, innermost wins).

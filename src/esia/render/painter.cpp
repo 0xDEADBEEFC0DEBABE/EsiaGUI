@@ -1,6 +1,8 @@
 // Esia - Painter (see esia/render/painter.hpp): encodes SDF shapes as fx::Instances in the draw list's FX stream.
 // Ported from WGT's src/render/painter.cpp; the instance encoding must stay identical (the shaders read it).
 #include "esia/render/painter.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace esia
@@ -668,6 +670,73 @@ namespace esia
                 const std::uint32_t a = base + (std::uint32_t)(i - 1) * 2, b = base + (std::uint32_t)i * 2;
                 dl_->WriteTriangle(a, b, b + 1);
                 dl_->WriteTriangle(a, b + 1, a + 1);
+            }
+        }
+    }
+
+    void Painter::Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, Color color, float inset)
+    {
+        if (sweepRad < 0.0f)
+        {
+            startRad += sweepRad;
+            sweepRad = -sweepRad;
+        }
+        sweepRad = std::min(sweepRad, kTau);
+        innerRadius = std::max(innerRadius, 0.0f);
+        color.a *= alpha_;
+        if (sweepRad < 1e-4f || outerRadius <= innerRadius || color.a <= 0.0f)
+            return;
+        // half a pixel in from the edges full color, half a pixel out transparent: the anti-aliasing
+        const float h = 0.5f / Pixel();
+        const bool ring = sweepRad >= kTau - 1e-4f && inset <= 0.0f;
+        // the ends: a line parallel to the radius at `inset` (+ h inside), so each radius has its own angles
+        auto ends = [&](float r, float pad, float& a0, float& a1) {
+            const float off = r > 1e-4f ? std::asin(std::min((inset + pad) / r, 1.0f)) : 0.0f;
+            a0 = startRad + off;
+            a1 = startRad + sweepRad - off;
+        };
+        float ia0, ia1, oa0, oa1, ifa0, ifa1, ofa0, ofa1;   // inner / outer, core / fringe
+        const float rIn = innerRadius + h, rOut = outerRadius - h, rInF = std::max(innerRadius - h, 0.0f), rOutF = outerRadius + h;
+        ends(rIn, ring ? -inset : h, ia0, ia1);
+        ends(rOut, ring ? -inset : h, oa0, oa1);
+        ends(rInF, ring ? -inset : -h, ifa0, ifa1);
+        ends(rOutF, ring ? -inset : -h, ofa0, ofa1);
+        if (oa1 <= oa0)
+            return;   // narrower than its gap
+        ia1 = std::max(ia1, ia0);
+        ifa1 = std::max(ifa1, ifa0);
+        // segments: the chord within a quarter pixel of the rim
+        const float px = 1.0f / Pixel();
+        const float step = 2.0f * std::acos(std::max(1.0f - 0.25f * px / std::max(rOutF, px), -1.0f));
+        const int n = std::clamp((int)std::ceil((ofa1 - ofa0) / std::max(step, 1e-3f)), 2, 512);
+        const std::uint32_t core = color.ToRgba8(), clear = color.WithAlpha(0.0f).ToRgba8();
+        // per step: inner fringe, inner, outer, outer fringe
+        const std::uint32_t base = dl_->PrimBegin((std::uint32_t)n * 18 + (ring ? 0u : 12u), (std::uint32_t)(n + 1) * 4);
+        for (int i = 0; i <= n; ++i)
+        {
+            const float t = (float)i / (float)n;
+            auto at = [&](float a0, float a1, float r) { const float a = a0 + (a1 - a0) * t; return center + Vec2(std::cos(a), std::sin(a)) * r; };
+            dl_->WriteVertex(at(ifa0, ifa1, rInF), Vec2(0, 0), clear);
+            dl_->WriteVertex(at(ia0, ia1, rIn), Vec2(0, 0), core);
+            dl_->WriteVertex(at(oa0, oa1, rOut), Vec2(0, 0), core);
+            dl_->WriteVertex(at(ofa0, ofa1, rOutF), Vec2(0, 0), clear);
+            if (i == 0)
+                continue;
+            const std::uint32_t a = base + (std::uint32_t)(i - 1) * 4, b = a + 4;
+            for (std::uint32_t k = 0; k < 3; ++k)   // the inner fringe, the body, the outer fringe
+            {
+                dl_->WriteTriangle(a + k, b + k, b + k + 1);
+                dl_->WriteTriangle(a + k, b + k + 1, a + k + 1);
+            }
+        }
+        if (!ring)
+        {
+            // the ends' fringes: from the first and last core edges out to the fringe's
+            const std::uint32_t first = base, last = base + (std::uint32_t)n * 4;
+            for (const std::uint32_t e : {first, last})
+            {
+                dl_->WriteTriangle(e + 0, e + 1, e + 2);
+                dl_->WriteTriangle(e + 0, e + 2, e + 3);
             }
         }
     }
