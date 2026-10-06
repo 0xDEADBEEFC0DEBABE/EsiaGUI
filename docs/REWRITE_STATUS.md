@@ -42,6 +42,9 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Bitmap fonts** (2026-10-07): BDF, PCF and Windows FNT / FON draw pixel for pixel, sizes snapped to a strike's whole
+multiples; a .fon's sizes are one font.
+
 **Text outlines** (2026-10-07): `ItemStyle::TextOutline` / `Painter::SetTextOutline` - every glyph grown by exact
 distance (round corners), cached in the atlas beside it and drawn under it in the same command.
 
@@ -90,6 +93,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Bitmap fonts](#bitmap-fonts)
 * [Text outlines](#text-outlines)
 * [CPU of plain widgets](#cpu-of-plain-widgets)
 * [Flat drawing](#flat-drawing)
@@ -117,6 +121,33 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Bitmap fonts
+
+Fonts without outlines - BDF, PCF, Windows FNT / FON (MS Sans Serif, the console fonts), bitmap-only sfnt - were
+refused at load. They draw now, pixel for pixel.
+
+### What changed
+
+* The bundled FreeType compiles its BDF, PCF and Windows FNT drivers (`cmake/EsiaTextDeps.cmake`); zlib and LZW stay
+  off, so a compressed PCF (.pcf.gz) is unpacked before loading. A system FreeType has them already.
+* A bitmap face is a list of strikes; a Windows .fon's faces of one family and style (a face per size) join as one
+  font's strikes, and its one character map (not marked Unicode: the font's code page) is selected.
+* Sizes snap: a size takes the strike and whole multiple of it nearest in physical pixels (`Snapped`), and the face's
+  metrics, units per em and HarfBuzz font become that strike's. HarfBuzz shapes it through callbacks into FreeType
+  (characters, advances in the strike's pixels, its ascent and descent) on a face of its own without tables -
+  HarfBuzz's empty face is inert and shapes nothing. Layouts are made again when the pixel density changes.
+* Glyphs: the strike's bitmap as 8-bit coverage (monochrome: 0 or 255), each pixel repeated `times` x `times`, on
+  whole pixels with no pen phases. An outline (`TextOutline`) is the pixels grown by whole pixels, a square around
+  each: crisp as the font.
+
+### Verified (2026-10-07)
+
+* `FreeType.BitmapFontsDrawPixelForPixelAtTheirStrikes` (a BDF font made in the test: sizes 8, 11, 13, 16, the
+  glyphs texel for pixel, twice the strike, an outline, twice the density),
+  `FreeType.WindowsFonFilesJoinTheirSizes` (MS Sans Serif's sizes, whole pixels, the system's fallback chain beside
+  it; Windows only); the showcase with `--font %WINDIR%\Fonts\sserife.fon`, with and without `--text-outline 1`,
+  looked at.
 
 ## Text outlines
 

@@ -118,15 +118,19 @@ function(_esia_build_text_deps)
 
     # FreeType: its configuration headers are replaced through the include order (the generated directory comes
     # first). ftmodule.h lists the modules compiled below; ftoption.h is FreeType's own with the internal zlib and
-    # LZW readers off (they only unpack WOFF 1 and compressed PCF, which Esia never loads).
+    # LZW readers off (they only unpack WOFF 1 and compressed PCF: a .pcf.gz is unpacked before loading).
     set(cfg ${esia_freetype_BINARY_DIR}/esia-config)
     file(READ ${ft}/include/freetype/config/ftoption.h _options)
     string(REGEX REPLACE "\n#define +(FT_CONFIG_OPTION_USE_ZLIB|FT_CONFIG_OPTION_USE_LZW)\n" "\n/* #undef \\1 (Esia) */\n" _options "${_options}")
     _esia_write_if_changed(${cfg}/freetype/config/ftoption.h "${_options}")
     _esia_write_if_changed(${cfg}/freetype/config/ftmodule.h
-"/* Esia: the FreeType modules compiled in (cmake/EsiaTextDeps.cmake) - TrueType and OpenType / CFF outlines */
+"/* Esia: the FreeType modules compiled in (cmake/EsiaTextDeps.cmake) - TrueType and OpenType / CFF outlines, and the
+   bitmap fonts: BDF, PCF and Windows FNT / FON */
 FT_USE_MODULE( FT_Driver_ClassRec, tt_driver_class )
 FT_USE_MODULE( FT_Driver_ClassRec, cff_driver_class )
+FT_USE_MODULE( FT_Driver_ClassRec, bdf_driver_class )
+FT_USE_MODULE( FT_Driver_ClassRec, pcf_driver_class )
+FT_USE_MODULE( FT_Driver_ClassRec, winfnt_driver_class )
 FT_USE_MODULE( FT_Module_Class, psaux_module_class )
 FT_USE_MODULE( FT_Module_Class, psnames_module_class )
 FT_USE_MODULE( FT_Module_Class, pshinter_module_class )
@@ -146,7 +150,10 @@ FT_USE_MODULE( FT_Module_Class, sfnt_module_class )
         ${ft}/src/cff/cff.c
         ${ft}/src/psaux/psaux.c
         ${ft}/src/psnames/psnames.c
-        ${ft}/src/pshinter/pshinter.c)
+        ${ft}/src/pshinter/pshinter.c
+        ${ft}/src/bdf/bdf.c
+        ${ft}/src/pcf/pcf.c
+        ${ft}/src/winfonts/winfnt.c)
     target_include_directories(esia_freetype SYSTEM BEFORE PUBLIC ${cfg} ${ft}/include)
     target_compile_definitions(esia_freetype PRIVATE FT2_BUILD_LIBRARY)
     _esia_third_party_defaults(esia_freetype)

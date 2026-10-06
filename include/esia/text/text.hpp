@@ -6,7 +6,8 @@
 // A TextSystem shapes UTF-8 text, rasterizes glyphs into atlas pages it owns in the TextureRegistry and emits
 // glyph quads into a DrawList (Geometry commands on those pages). Glyph pages are Alpha8 coverage, which the renderer
 // recognizes from the page's TextureInfo and draws with its text pipeline, so text needs no special draw commands.
-// Text is antialiased in grayscale on every platform: there is no sub-pixel (LCD / ClearType) text.
+// Text is antialiased in grayscale on every platform: there is no sub-pixel (LCD / ClearType) text. Bitmap fonts draw
+// their own pixels (freetype.hpp).
 //
 // Threading: a TextSystem belongs to one UI thread (like the Context that uses it).
 #pragma once
