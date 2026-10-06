@@ -1,0 +1,35 @@
+# Esia's CMake package (cmake/EsiaInstall.cmake): find_package(Esia CONFIG REQUIRED), then link esia::ui,
+# esia::text_ft, esia::backends, esia::platform_win32 / platform_x11 / platform_android ...
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+if(@ESIA_PACKAGE_FONTCONFIG@)
+    find_dependency(Fontconfig)
+endif()
+if(@ESIA_PACKAGE_X11@)
+    find_dependency(X11)
+endif()
+if(@ESIA_PACKAGE_SYSTEM_TEXT_DEPS@)
+    # the system's FreeType and HarfBuzz, found as Esia's build found them (cmake/EsiaTextDeps.cmake)
+    find_package(harfbuzz CONFIG QUIET)
+    if(NOT TARGET Freetype::Freetype)
+        find_dependency(Freetype)
+    endif()
+    if(NOT TARGET harfbuzz::harfbuzz)
+        find_path(ESIA_HARFBUZZ_INCLUDE_DIR hb.h PATH_SUFFIXES harfbuzz)
+        find_library(ESIA_HARFBUZZ_LIBRARY harfbuzz)
+        if(NOT ESIA_HARFBUZZ_INCLUDE_DIR OR NOT ESIA_HARFBUZZ_LIBRARY)
+            set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+            set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "Esia was built with the system's HarfBuzz, which was not found")
+            return()
+        endif()
+        add_library(harfbuzz::harfbuzz UNKNOWN IMPORTED)
+        set_target_properties(harfbuzz::harfbuzz PROPERTIES
+            IMPORTED_LOCATION ${ESIA_HARFBUZZ_LIBRARY}
+            INTERFACE_INCLUDE_DIRECTORIES ${ESIA_HARFBUZZ_INCLUDE_DIR})
+    endif()
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/EsiaTargets.cmake")
+check_required_components(Esia)

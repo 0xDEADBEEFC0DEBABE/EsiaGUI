@@ -17,7 +17,7 @@ the core, and what of WGT is ported so far.
 * [9. Custom widgets and animation](#9-custom-widgets-and-animation)
 * [10. The island, notifications and the dock](#10-the-island-notifications-and-the-dock)
 * [11. The showcase: WGT's demo](#11-the-showcase-wgts-demo)
-* [12. Data widgets: numbers, colors, tables, trees, the editor, docking](#12-data-widgets-numbers-colors-tables-trees-the-editor-docking)
+* [12. Data widgets: numbers, colors, tables, trees, the editor, docking, plots](#12-data-widgets-numbers-colors-tables-trees-the-editor-docking-plots)
 * [13. Status: what of WGT is ported](#13-status-what-of-wgt-is-ported)
 * [14. Pitfalls](#14-pitfalls)
 
@@ -496,15 +496,16 @@ What still differs, and why:
 * At 1.5: a few buttons sit a pixel apart horizontally.
 * Texts reworded for Esia (the Telemetry note, the Settings footer, the version).
 
-## 12. Data widgets: numbers, colors, tables, trees, the editor, docking
+## 12. Data widgets: numbers, colors, tables, trees, the editor, docking, plots
 
 What tools need beyond WGT's set, in the same glass style. The `workbench` example puts all of them in one dock space
-(an outline, a scene, an inspector, a table of 100 000 assets, a script editor):
+(an outline, a scene, an inspector, a table of 100 000 assets, a script editor, plots of a profiler capture):
 
 ```
 workbench                                  # the docked layout
 workbench --float Inspector --show Script  # one window floating, the editor's tab in front
 workbench --rows 1000000 --light           # a million rows, light theme
+workbench --float Graphs --hover 700,400   # the plots, the mouse resting over the frame times
 ```
 
 ```cpp
@@ -536,6 +537,14 @@ if (first) {
     ui::DockWindow("Outline", "main", ui::DockSide::Left, 0.22f);
     ui::DockWindow("Assets", "main", ui::DockSide::Bottom, 0.35f, "Scene");
 }
+
+static const std::string_view kTypes[] = {"Texture", "Mesh", "Audio"};
+if (ui::BeginPlot("sizes", {.height = 200, .yFormat = "%.0f GB", .categories = kTypes})) {
+    ui::PlotBars("On disk", onDisk);                      // bar i at x = i, the series side by side
+    ui::PlotBars("Packed", packed);
+    ui::EndPlot();
+}
+ui::PieChart("budget", ms, systems, {.center = "5.9 ms", .format = "%.1f ms"});
 ```
 
 * **`NumberField`** (`float`, `double`, `int`): drag it sideways to scrub the value (Shift: a tenth of the speed);
@@ -576,6 +585,26 @@ if (first) {
   floats the window again, still under the pointer. The splitters between nodes resize them. Docked windows fill their
   node under a glass tab bar, stay behind floating windows, and are ordinary `BeginWindow` code. `SaveDockLayout` /
   `LoadDockLayout` keep the layout as text with the application's settings.
+* **Plots** (`BeginPlot` / `EndPlot`, what ImPlot gives Dear ImGui): between them the series - `PlotLine` (ys at x =
+  `xStart + i * xStep`, or xs and ys; `fill` the area under it fading down, `smooth` a curve), `PlotScatter`,
+  `PlotBars` (bar i of every bars series at x = i, side by side; `PlotOptions::categories` labels them) and
+  `PlotHistogram` (the samples counted into bins between their smallest and largest; 0 bins: about the square root of
+  their count). Colors come in the system palette's order unless a series gives its own.
+  * The view fits the data (bars and histograms from zero, a little room above and below) and eases when the data
+    changes; `xMin`/`xMax`, `yMin`/`yMax` fix an axis. Ticks fall on 1, 2 or 5 times a power of ten, labeled with
+    `xFormat` / `yFormat` (printf, one float: `"%.1f ms"`).
+  * The mouse: a drag pans, the wheel zooms around the mouse, a double click fits the data again
+    (`PlotFlags_NoPanZoom` keeps the fit). Over a plot the wheel is the plot's, not the scroll area's around it
+    (`ItemFlags_Wheel`, [UI_CORE.md](UI_CORE.md)) - but a wheel already scrolling the page keeps scrolling it across a
+    plot. A crosshair and a readout show every series' value at the mouse (`PlotFlags_NoHover`).
+  * The legend sits under the x axis, where Swift Charts puts it, so it never covers the data; a click on an entry
+    hides or shows its series and the view fits what is left. `GetPlotLimits()` (inside the plot) is last frame's
+    view: to submit only the points in it.
+  * A sorted line denser than four points per pixel column keeps each column's first, lowest, highest and last point,
+    so a million points cost what the plot's width costs and keep their shape at any zoom.
+  * **`PieChart`**: a donut, segments in the palette's order with a gap of the same width between them; the segment
+    under the mouse (or its row in the legend beside it) grows and shows its label, value and share in the hole
+    (`center`: the hole's text otherwise). `Painter::Sector` draws its segments.
 
 ## 13. Status: what of WGT is ported
 

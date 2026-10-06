@@ -42,6 +42,12 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Plots** (2026-10-06, last): lines, areas, scatter, bars and histograms over axes with a legend, a crosshair, pan
+and zoom, and a donut chart, in the `workbench`'s new Graphs panel.
+
+**Packaging** (2026-10-06, later still): `cmake --install` puts the libraries, their headers and a CMake package in a prefix;
+`find_package(Esia CONFIG)` gives an application the targets `add_subdirectory` gives it (`esia::ui` ...).
+
 **Density** (2026-10-06, later): `UiDesc::density` / `Ui::SetDensity` - Regular (iOS's sizes) or Compact, as WinUI's
 compact sizing and Material's density: the text keeps its size, controls, rows, headers, padding and spacing get
 smaller, and a control's shadows and glass with it, so the glass does not outweigh it. Under a floating bar (the tab
@@ -66,6 +72,8 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Plots](#plots)
+* [Packaging](#packaging)
 * [Density](#density)
 * [Debug checks, desktop defaults, the README audited](#debug-checks-desktop-defaults-the-readme-audited)
 * [Text against Dear ImGui](#text-against-dear-imgui)
@@ -87,6 +95,70 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Plots
+
+The README listed "no plots beyond a line chart" against Dear ImGui with ImPlot.
+
+### What changed
+
+* `src/esia/ui/plot.cpp`, declared in `ui.hpp` ([UI_WIDGETS.md](UI_WIDGETS.md) section 12): `BeginPlot` /
+  `EndPlot` with `PlotLine` (an area under it, smooth or straight), `PlotScatter`, `PlotBars` (grouped, category
+  labels), `PlotHistogram`; the view fitted to the data and eased, or fixed limits; ticks at 1, 2 or 5 times a power of
+  ten; a legend under the axis whose entries hide their series; a crosshair and a readout of every series; drag to pan,
+  the wheel to zoom around the mouse, a double click to fit again; `GetPlotLimits`. Dense sorted lines keep four points
+  per pixel column. `PieChart`: a donut whose hovered segment grows and shows its value in the hole.
+* The core: `ItemFlags_Wheel` - over such an item no scroll area takes the wheel, unless a turn is already latched
+  to one (`UpdateWheel`).
+* `Painter::Sector`: a ring's segment with flat ends and a gap of constant width, as anti-aliased geometry. No shader
+  changed: the distance-field arc has round caps, which made short, thick segments look like beans.
+* `examples/workbench`: a Graphs panel (a deterministic profiler capture: frame times, their spread, a frame budget,
+  asset sizes by type, GPU time by draw calls) docked with the assets; `--hover X,Y` rests the mouse for pictures.
+* Tests (`tests/ui/test_plot.cpp`): the ticks; the fitted view of lines, bars and histograms; fixed limits and empty or
+  non-finite series; the legend hiding a series; pan, zoom and the double click; the wheel taken from the window over a
+  plot and left to it with `PlotFlags_NoPanZoom`; the donut's room with any values. All under the strict debug checks.
+
+### Verified (2026-10-06)
+
+* Windows: clang-cl (8 backends, `ESIA_WERROR`), all 34 tests; MSVC (Visual Studio 17 2022, `ESIA_WERROR`) builds.
+  Ubuntu 24.04 (clang 18): Debug and Release, 20 tests each.
+* The workbench's Graphs panel on Direct3D 11, docked and floating, dark and light, with the mouse over a plot
+  (`docs/images/workbench-graphs.jpg`).
+
+### Not verified
+
+* macOS, iOS and Android: CI builds only.
+
+## Packaging
+
+Esia could only be used from its source tree (`add_subdirectory`): a weakness the README listed ("no package for
+`find_package`").
+
+### What changed
+
+* `cmake/EsiaInstall.cmake`, included last by the top-level CMakeLists.txt when `ESIA_INSTALL` is on (the default
+  when Esia is the top-level project): every library target (the core, RHI, shaders, renderer, text, the FreeType
+  text system, the widgets, the backends this build has, the platform layers, the bundled FreeType and HarfBuzz) is
+  installed and exported as `esia::<name>` - the names of the aliases. Their include directories in the source and
+  build trees are marked as the build's only there, so no backend's CMakeLists.txt changed, and every `include`
+  directory among them is installed.
+* `cmake/EsiaConfig.cmake.in`: the package finds again what the static libraries link against - Threads, fontconfig
+  and X11 when this build used them, the system's FreeType and HarfBuzz the way `cmake/EsiaTextDeps.cmake` found
+  them; a version file (same minor version: 0.x).
+* `tests/package`: an application of its own (`find_package(Esia)`, a window with a button rendered on the null
+  device, the FreeType text system, the compact density). The `esia_package` test installs the build into a
+  prefix, configures it with the same generator and compilers (and what found the dependencies: vcpkg's toolchain and
+  triplet in CI), builds and runs it.
+
+### Verified (2026-10-06)
+
+* `esia_package` on Windows with clang-cl (Ninja, the bundled FreeType and HarfBuzz) and with MSVC (Visual Studio
+  17 2022, `ESIA_WERROR`), and on Ubuntu 24.04 (clang 18, the system's FreeType 2.13.2 and HarfBuzz): the
+  application builds and renders, with 8 backends on Windows and 4 on Linux.
+
+### Not verified
+
+* macOS and the vcpkg packages of Windows CI: CI only.
 
 ## Density
 
@@ -1246,5 +1318,5 @@ tag `wgt-1.1-final`). What comes next:
    debug APKs.
 4. **Core follow-ups**: device loss (section 6, item 7), empty-pixel creates (item 6), splitting heavy SM3 glass
    batches, DXBC generated and checked in.
-5. **Packaging** (`find_package(esia)`) and an API reference; a measurement against WGT's legacy D3D11 backend on the
-   same UI.
+5. An API reference and vcpkg / Conan ports (the CMake package exists: section "Packaging"); a measurement against
+   WGT's legacy D3D11 backend on the same UI.
