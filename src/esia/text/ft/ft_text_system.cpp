@@ -233,14 +233,20 @@ namespace esia::text
             {
                 TextureId page = 0;
                 std::uint32_t first = 0, count = 0;   // quads
-                Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};   // pixels, as quadBounds
+                Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};   // pixels, as QuadSet::bounds
             };
-            std::vector<Vertex> quads;   // 4 per drawn glyph, as QuadWriter writes them
-            std::vector<QuadRun> runs;   // one per change of atlas page
-            Rect quadBounds;             // pixels from the origin's whole pixel
-            std::uint64_t quadGeneration = 0;   // 0 = none
-            float quadEm = 0.0f, quadScale = 0.0f, quadFx = -1.0f, quadFy = -1.0f;
-            std::uint32_t quadRgba = 0, quadColorRgba = 0;
+            struct QuadSet
+            {
+                std::vector<Vertex> quads;   // 4 per drawn glyph, as QuadWriter writes them
+                std::vector<QuadRun> runs;   // one per change of atlas page
+                Rect bounds;                 // pixels from the origin's whole pixel
+                std::uint64_t generation = 0;   // 0 = none
+                float em = 0.0f, scale = 0.0f, fx = -1.0f, fy = -1.0f;
+                std::uint32_t rgba = 0, colorRgba = 0;
+                std::uint32_t outline = 0;   // an outline's set: its width in 1/8 px
+            };
+            QuadSet fill;      // Draw's
+            QuadSet outline;   // DrawOutline's (TextOutline): the glyphs grown, in the outline's color
         };
 
         // FreeType outline (design units, y up) -> Outline (pixels, y down)
@@ -524,23 +530,52 @@ namespace esia::text
                 const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
                 const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
                 const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
-                if (layout->quadGeneration != generation || layout->quadEm != em || layout->quadScale != scale || layout->quadFx != fx ||
-                    layout->quadFy != fy || layout->quadRgba != rgba || layout->quadColorRgba != colorGlyphRgba)
-                    PlaceQuads(*layout, em, scale, fx, fy, rgba, colorGlyphRgba, generation);
-                EmitQuads(dl, *layout, ox, oy, inv);
+                Layout::QuadSet& set = layout->fill;
+                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.rgba != rgba ||
+                    set.colorRgba != colorGlyphRgba)
+                    PlaceQuads(*layout, set, em, scale, fx, fy, rgba, colorGlyphRgba, generation, 0);
+                EmitQuads(dl, set, ox, oy, inv);
                 return layout->metrics.size;
             }
 
+            void DrawOutline(DrawList& dl, FontRef font, Vec2 pos, const TextOutline& outline, std::string_view text, float wrapWidth, std::uint32_t flags,
+                             float scale) override
+            {
+                if (!outline.Visible() || !(scale > 0.0f))
+                    return;
+                Layout* layout = GetLayout(font, text, wrapWidth, flags);
+                if (!layout)
+                    return;
+                // the placement Draw uses (the same em, origin and sub-pixel offsets), the glyphs grown
+                const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
+                const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
+                const std::uint32_t width = OutlineQ(outline.width * scale * rs);
+                const std::uint32_t rgba = outline.color.ToRgba8();
+                const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
+                const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
+                const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
+                Layout::QuadSet& set = layout->outline;
+                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.rgba != rgba ||
+                    set.outline != width)
+                    PlaceQuads(*layout, set, em, scale, fx, fy, rgba, 0, generation, width);
+                EmitQuads(dl, set, ox, oy, inv);
+            }
+
+            // An outline's width in physical pixels as OutlineGlyph keys it: 1/8 px, at most 255 (31.875 px), 1 for any
+            // width above 0
+            static std::uint32_t OutlineQ(float pixels) { return pixels > 0.0f ? (std::uint32_t)std::clamp(pixels * 8.0f + 0.5f, 1.0f, 255.0f) : 0u; }
+
             // The layout's quads for these sub-pixel offsets (Draw): physical-pixel placement, the baseline on a whole
             // pixel, the pen at a quarter-pixel phase; glyphs without ink or color left out.
-            void PlaceQuads(Layout& layout, float em, float scale, float fx, float fy, std::uint32_t rgba, std::uint32_t colorGlyphRgba,
-                            std::uint64_t generation)
+            // An outline's set (outlineQ > 0): every glyph grown by that width (OutlineGlyph), color glyphs left out.
+            void PlaceQuads(Layout& layout, Layout::QuadSet& set, float em, float scale, float fx, float fy, std::uint32_t rgba,
+                            std::uint32_t colorGlyphRgba, std::uint64_t generation, std::uint32_t outlineQ)
             {
                 const float rs = params_.pixelsPerUnit;
                 const bool rgbaShown = (rgba >> 24) != 0, colorShown = (colorGlyphRgba >> 24) != 0;
-                layout.quads.clear();
-                layout.runs.clear();
-                layout.quadBounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
+                set.quads.clear();
+                set.runs.clear();
+                set.bounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
                 for (const PlacedGlyph& g : layout.glyphs)
                 {
                     const float px = fx + g.pos.x * scale * rs, py = fy + g.pos.y * scale * rs;
@@ -553,46 +588,52 @@ namespace esia::text
                     }
                     const float yi = FloorPx(py + 0.5f);
                     const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase);
+                    if (outlineQ > 0)
+                    {
+                        if (!s || s->color || !rgbaShown)
+                            continue;   // a color glyph (emoji) has no outline
+                        s = OutlineGlyph(g.face, g.glyph, em, phase, outlineQ);
+                    }
                     if (!s || !s->page || s->width <= 0 || s->height <= 0 || !(s->color ? colorShown : rgbaShown))
                         continue;
-                    if (layout.runs.empty() || layout.runs.back().page != s->page)
-                        layout.runs.push_back({s->page, (std::uint32_t)(layout.quads.size() / 4), 0});
-                    ++layout.runs.back().count;
+                    if (set.runs.empty() || set.runs.back().page != s->page)
+                        set.runs.push_back({s->page, (std::uint32_t)(set.quads.size() / 4), 0});
+                    ++set.runs.back().count;
                     const Rect r(xi + (float)s->left, yi + (float)s->top, xi + (float)(s->left + s->width), yi + (float)(s->top + s->height));
                     const std::uint32_t c = s->color ? colorGlyphRgba : rgba;
-                    layout.quads.push_back({r.min, s->uv0, c});
-                    layout.quads.push_back({Vec2(r.max.x, r.min.y), Vec2(s->uv1.x, s->uv0.y), c});
-                    layout.quads.push_back({r.max, s->uv1, c});
-                    layout.quads.push_back({Vec2(r.min.x, r.max.y), Vec2(s->uv0.x, s->uv1.y), c});
-                    layout.quadBounds = layout.quadBounds.Union(r);
-                    layout.runs.back().bounds = layout.runs.back().bounds.Union(r);
+                    set.quads.push_back({r.min, s->uv0, c});
+                    set.quads.push_back({Vec2(r.max.x, r.min.y), Vec2(s->uv1.x, s->uv0.y), c});
+                    set.quads.push_back({r.max, s->uv1, c});
+                    set.quads.push_back({Vec2(r.min.x, r.max.y), Vec2(s->uv0.x, s->uv1.y), c});
+                    set.bounds = set.bounds.Union(r);
+                    set.runs.back().bounds = set.runs.back().bounds.Union(r);
                 }
-                layout.quadGeneration = generation;
-                layout.quadEm = em;
-                layout.quadScale = scale;
-                layout.quadFx = fx;
-                layout.quadFy = fy;
-                layout.quadRgba = rgba;
-                layout.quadColorRgba = colorGlyphRgba;
+                set.generation = generation;
+                set.em = em;
+                set.scale = scale;
+                set.fx = fx;
+                set.fy = fy;
+                set.rgba = rgba;
+                set.colorRgba = colorGlyphRgba;
+                set.outline = outlineQ;
             }
 
             // The quads at the whole pixel (ox, oy), in UI units; the ones outside the clip left out (none to test when
             // the text lies inside it).
-            static void EmitQuads(DrawList& dl, const Layout& layout, float ox, float oy, float inv)
+            static void EmitQuads(DrawList& dl, const Layout::QuadSet& set, float ox, float oy, float inv)
             {
                 const Rect clip = dl.ClipRect();
-                const Rect all((layout.quadBounds.min.x + ox) * inv, (layout.quadBounds.min.y + oy) * inv, (layout.quadBounds.max.x + ox) * inv,
-                               (layout.quadBounds.max.y + oy) * inv);
-                if (layout.runs.empty() || !all.Overlaps(clip))
+                const Rect all((set.bounds.min.x + ox) * inv, (set.bounds.min.y + oy) * inv, (set.bounds.max.x + ox) * inv, (set.bounds.max.y + oy) * inv);
+                if (set.runs.empty() || !all.Overlaps(clip))
                     return;
                 if (clip.Contains(all))
                 {
                     // all in view: the quads go in as a block, through local cursors (stores through the writer's
                     // members kept the compiler from keeping them in registers), with the bounds of their run
-                    for (const Layout::QuadRun& run : layout.runs)
+                    for (const Layout::QuadRun& run : set.runs)
                     {
                         DrawList::QuadWriter w = dl.BeginQuads(run.page, run.count);
-                        const Vertex* q = layout.quads.data() + (std::size_t)run.first * 4;
+                        const Vertex* q = set.quads.data() + (std::size_t)run.first * 4;
                         Vertex* v = w.vtx;
                         std::uint32_t* x = w.idx;
                         std::uint32_t b = w.base;
@@ -618,11 +659,11 @@ namespace esia::text
                     }
                     return;
                 }
-                for (const Layout::QuadRun& run : layout.runs)
+                for (const Layout::QuadRun& run : set.runs)
                 {
                     DrawList::QuadWriter w;
                     bool open = false;
-                    const Vertex* q = layout.quads.data() + (std::size_t)run.first * 4;
+                    const Vertex* q = set.quads.data() + (std::size_t)run.first * 4;
                     for (std::uint32_t i = 0; i < run.count; ++i, q += 4)
                     {
                         const Rect r((q[0].pos.x + ox) * inv, (q[0].pos.y + oy) * inv, (q[2].pos.x + ox) * inv, (q[2].pos.y + oy) * inv);
@@ -638,6 +679,31 @@ namespace esia::text
                     if (open)
                         dl.EndQuads(w);
                 }
+            }
+
+            void DrawGlyphOutline(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, const TextOutline& outline) override
+            {
+                if (font.id == 0 || font.id > faces_.size() || !(font.size > 0.0f) || !outline.Visible())
+                    return;
+                const std::uint16_t face = PickFace((std::uint16_t)(font.id - 1), codepoint, -1);
+                hb_codepoint_t glyph = 0;
+                if (!hb_font_get_nominal_glyph(faces_[face]->hb, codepoint, &glyph))
+                    return;
+                const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
+                const float em = std::floor(font.size * rs * 4.0f + 0.5f) * 0.25f;
+                const GlyphSlot* s = Glyph(face, (std::uint16_t)glyph, em, 0);
+                if (!s || !s->page || s->color)
+                    return;   // nothing drawn, or a color glyph: no outline
+                // placed as DrawGlyph places the glyph (the glyph's ink box on `center`), grown around it
+                const float ox = std::floor(center.x * rs - (s->ink.min.x + s->ink.max.x) * 0.5f + 0.5f);
+                const float oy = std::floor(center.y * rs - (s->ink.min.y + s->ink.max.y) * 0.5f + 0.5f);
+                const GlyphSlot* o = OutlineGlyph(face, (std::uint16_t)glyph, em, 0, OutlineQ(outline.width * rs));
+                if (!o || !o->page || o->width <= 0 || o->height <= 0)
+                    return;
+                dl.AddImage(o->page,
+                            Rect((ox + (float)o->left) * inv, (oy + (float)o->top) * inv, (ox + (float)(o->left + o->width)) * inv,
+                                 (oy + (float)(o->top + o->height)) * inv),
+                            o->uv0, o->uv1, outline.color.ToRgba8());
             }
 
             void DrawGlyph(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, Color color) override
@@ -902,7 +968,7 @@ namespace esia::text
                     std::memcpy(layout.params, params, sizeof(params));
                     layout.glyphs.clear();
                     layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
-                    layout.quadGeneration = 0;   // other glyphs: placed again
+                    layout.fill.generation = layout.outline.generation = 0;   // other glyphs: placed again
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
@@ -1332,11 +1398,22 @@ namespace esia::text
                         return s;
                 if (const GlyphSlot* s = atlas_.Find(key))
                     return s;
+                LoadOutline(face, glyph, (float)q / 16.0f);
+                const float offsetX = 0.25f * (float)phase;
+                if (!RasterizeGray(outline_, offsetX, bitmap_))
+                    bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
+                const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
+                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
+            }
+
+            // The glyph's outline at `emPixels` into outline_: design units, no hinting, no embedded bitmaps (color
+            // strikes: ColorGlyph)
+            void LoadOutline(std::uint16_t face, std::uint16_t glyph, float emPixels)
+            {
                 Face& f = *faces_[face];
                 outline_.Clear();
-                // design units, no hinting, no embedded bitmaps (color strikes: ColorGlyph)
                 if (f.platform)
-                    f.platform->GlyphOutline(glyph, ((float)q / 16.0f) / f.upem, outline_);
+                    f.platform->GlyphOutline(glyph, emPixels / f.upem, outline_);
                 else if (FT_Load_Glyph(f.ft, glyph, FT_LOAD_NO_SCALE) == 0 && f.ft->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
                 {
                     FT_Outline_Funcs funcs{};
@@ -1344,14 +1421,26 @@ namespace esia::text
                     funcs.line_to = &SinkLineTo;
                     funcs.conic_to = &SinkConicTo;
                     funcs.cubic_to = &SinkCubicTo;
-                    OutlineSink sink{&outline_, ((float)q / 16.0f) / f.upem};
+                    OutlineSink sink{&outline_, emPixels / f.upem};
                     FT_Outline_Decompose(&f.ft->glyph->outline, &funcs, &sink);
                 }
-                const float offsetX = 0.25f * (float)phase;
-                if (!RasterizeGray(outline_, offsetX, bitmap_))
-                    bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
+            }
+
+            // A glyph grown by an outline's width (`widthQ`, 1/8 px: OutlineQ), in the gray atlas beside the glyphs. Its
+            // key is a glyph's with bit 31 set and the width in bits 22 .. 29 (a glyph's em takes bits 2 .. 28 only up
+            // to 2^20 / 16 px, which no outline reaches: the em is capped there).
+            const GlyphSlot* OutlineGlyph(std::uint16_t face, std::uint16_t glyph, float emPixels, int phase, std::uint32_t widthQ)
+            {
+                const std::uint64_t q = (std::uint64_t)std::min(emPixels * 16.0f + 0.5f, 1048575.0f);   // 1/16 px, 20 bits
+                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (1ull << 31) |
+                                          ((std::uint64_t)(widthQ & 0xFF) << 22) | (q << 2) | (std::uint64_t)(phase & 3);
+                if (const GlyphSlot* s = atlas_.Find(key))
+                    return s;
+                LoadOutline(face, glyph, (float)q / 16.0f);
+                if (!RasterizeGrown(outline_, 0.25f * (float)phase, (float)widthQ / 8.0f, bitmap_))
+                    bitmap_ = GlyphBitmap{};
                 const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
-                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
+                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());
             }
 
             // A COLR color glyph (a vector emoji) under the gray glyph's `key` (size and phase), painted on first use; null

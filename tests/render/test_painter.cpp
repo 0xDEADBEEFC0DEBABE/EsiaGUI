@@ -15,6 +15,21 @@ namespace
     {
         float lastScale = 0.0f;
         Vec2 lastPos;
+        // the outlines asked for, and what was drawn after them (DrawOutline / DrawGlyphOutline, then Draw / DrawGlyph)
+        std::string calls;
+        text::TextOutline lastOutline;
+        float lastOutlineScale = 0.0f;
+        void DrawOutline(DrawList&, text::FontRef, Vec2, const text::TextOutline& o, std::string_view, float, std::uint32_t, float scale) override
+        {
+            calls += 'o';
+            lastOutline = o;
+            lastOutlineScale = scale;
+        }
+        void DrawGlyphOutline(DrawList&, text::FontRef, char32_t, Vec2, const text::TextOutline& o) override
+        {
+            calls += 'O';
+            lastOutline = o;
+        }
         text::FontId AddFontFile(const char*, int) override { return 1; }
         text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
         void AddFallback(text::FontId) override {}
@@ -25,6 +40,7 @@ namespace
         }
         Vec2 Draw(DrawList& dl, text::FontRef f, Vec2 pos, Color c, std::string_view s, float, std::uint32_t, float scale) override
         {
+            calls += 't';
             lastScale = scale;
             lastPos = pos;
             dl.PushTexture(42);
@@ -35,6 +51,7 @@ namespace
         }
         void DrawGlyph(DrawList& dl, text::FontRef f, char32_t, Vec2 center, Color c) override
         {
+            calls += 'g';
             lastScale = f.size;
             dl.AddRectFilled(Rect::FromCenter(center, Vec2(f.size, f.size)), c.ToRgba8());
         }
@@ -174,6 +191,42 @@ ESIA_TEST(Painter, TextUnderScaleIsRasterizedScaledNotStretched)
     ESIA_CHECK(box == Vec2(24, 10) && text.lastPos == Vec2(38, 115));
     p.Icon(Vec2(50, 50), text::FontRef{2, 16}, U'\xE700', Color::White());
     ESIA_CHECK(text.lastScale == 16.0f);
+}
+
+ESIA_TEST(Painter, TextOutlinesGoUnderTheirTextAndIcons)
+{
+    DrawList dl = MakeList();
+    FakeText text;
+    PainterEnv env;
+    env.text = &text;
+    env.alpha = 0.5f;
+    Painter p(dl, env);
+    // none by default
+    p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::White(), "ab");
+    p.Icon(Vec2(50, 50), text::FontRef{2, 16}, U'\xE700', Color::White());
+    ESIA_CHECK(text.calls == "tg");
+    // set: before the text, the icon and a TextBox's text, with the Painter's opacity
+    text.calls.clear();
+    p.SetTextOutline({2.0f, Color(1.0f, 0.0f, 0.0f, 0.8f)});
+    p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::White(), "ab");
+    ESIA_CHECK(text.lastOutline.width == 2.0f && text.lastOutline.color.a == 0.4f);
+    p.Icon(Vec2(50, 50), text::FontRef{2, 16}, U'\xE700', Color::White());
+    p.TextBox(Rect(0, 100, 100, 140), Vec2(0.5f, 0.5f), text::FontRef{1, 10}, Color::White(), "abcd");
+    ESIA_CHECK(text.calls == "otOgot");
+    // under a scale: the text's scale, an icon's outline grown with it
+    text.calls.clear();
+    p.PushScale(Vec2(0, 0), 2.0f);
+    p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::White(), "ab");
+    ESIA_CHECK(text.lastOutlineScale == 2.0f);
+    p.Icon(Vec2(50, 50), text::FontRef{2, 16}, U'\xE700', Color::White());
+    ESIA_CHECK(text.lastOutline.width == 4.0f);
+    p.PopScale();
+    ESIA_CHECK(text.calls == "otOg");
+    // invisible text: no outline either
+    text.calls.clear();
+    p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::Clear(), "ab");
+    ESIA_CHECK(text.calls.empty());
+    ESIA_CHECK(p.GetTextOutline().width == 2.0f);
 }
 
 ESIA_TEST(Painter, GlowContainmentReportsRestGeometryAndHalo)

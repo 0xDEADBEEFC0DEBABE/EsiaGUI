@@ -42,6 +42,9 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Text outlines** (2026-10-07): `ItemStyle::TextOutline` / `Painter::SetTextOutline` - every glyph grown by exact
+distance (round corners), cached in the atlas beside it and drawn under it in the same command.
+
 **CPU of plain widgets** (2026-10-06, after flat drawing): springs and timers in a table of their own with fewer
 look-ups, Painters that cost nothing to make, flat shapes written in place, a front for the text layout cache, a
 Direct3D 11 host that owns its context: CPU 0.095 -> 0.079 ms regular and 0.072 flat, against Dear ImGui's 0.051. The
@@ -87,6 +90,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Text outlines](#text-outlines)
 * [CPU of plain widgets](#cpu-of-plain-widgets)
 * [Flat drawing](#flat-drawing)
 * [Batching by what shadows show](#batching-by-what-shadows-show)
@@ -113,6 +117,36 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Text outlines
+
+Outlined text and symbols, natively: `ui::ItemStyle::TextOutline(width, color)` (a widget, a container or a
+`StyleScope`), `Painter::SetTextOutline` / `PainterEnv::textOutline` for custom drawing, `text::TextOutline` in the
+text interface.
+
+### What changed
+
+* `RasterizeGrown` (`glyph_raster.hpp`): a glyph's coverage grown by a radius - a pixel is covered as much as the glyph
+  covers it, or by how far its center lies within radius + 1/2 of the glyph's edge, from the exact distance to the
+  flattened contours (each edge visits the pixels around it: the cost follows the perimeter). Round at the corners,
+  zero borders as `RasterizeGray`'s.
+* `TextSystem::DrawOutline` / `DrawGlyphOutline`: what `Draw` / `DrawGlyph` would draw, every glyph grown, in the
+  outline's color - to be drawn just before them. The default draws none; the FreeType system keeps the grown glyphs
+  in the gray atlas beside the glyphs (bit 31 of the key, the width in 1/8 px: up to 32 px) and their quads with the
+  layout beside the text's, so an outlined label is copied in as a plain one is. Color glyphs (emoji) get none.
+* `Painter::Text`, `TextBox` and `Icon` draw the outline first when the environment has one (under a scale too, at
+  the scaled size); the glyphs share the outline's page, so the two are one draw command.
+* `ItemStyle::TextOutline` (field `kTextOutline`): `GetPainter` gives every Painter of the scope the outline at the
+  metrics scale, so every widget's labels and symbols get it.
+* showcase: `--text-outline w`, `--outline-color RRGGBB[AA]`.
+
+The text's box does not grow (as CSS's text shadows do not): the outline reaches past it by its width.
+
+### Verified (2026-10-07)
+
+* `Raster.GrownCoverageReachesTheRadiusRoundAtTheCorners`, `FreeType.OutlinesGrowEveryGlyphUnderTheText`,
+  `Painter.TextOutlinesGoUnderTheirTextAndIcons`, `UiStyle.TextOutlineReachesTheLabelsOfItsScope`; the showcase with
+  `--text-outline 1.5` (dark) and `--text-outline 2 --outline-color FFFFFF` (light), looked at.
 
 ## CPU of plain widgets
 

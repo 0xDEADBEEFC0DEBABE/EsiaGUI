@@ -507,6 +507,9 @@ namespace esia::ui
         env.glow = detail::ItemMapGlow();
         env.flat = m.flat;
         env.flatSurface = t.colors.secondaryBackground;
+        const ItemStyle& style = detail::ResolvedStyle();
+        if (style.Has(ItemStyle::kTextOutline))
+            env.textOutline = {style.textOutline.width * t.metrics.scale, style.textOutline.color};
         return Painter(m.ctx->WindowDrawList(), env);
     }
 
@@ -673,6 +676,7 @@ namespace esia::ui
                 if (f & ItemStyle::kSelectedFill) into.selectedFill = s.selectedFill;
                 if (f & ItemStyle::kMovingFill) into.movingFill = s.movingFill;
                 if (f & ItemStyle::kSelectedLabel) into.selectedLabel = s.selectedLabel;
+                if (f & ItemStyle::kTextOutline) into.textOutline = s.textOutline;
                 into.set |= f;
             }
 

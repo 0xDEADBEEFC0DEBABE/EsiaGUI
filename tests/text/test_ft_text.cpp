@@ -284,6 +284,49 @@ ESIA_TEST(FreeType, ScaledTextIsRasterizedAtItsSize)
     }
 }
 
+ESIA_TEST(FreeType, OutlinesGrowEveryGlyphUnderTheText)
+{
+    Fixture f;
+    const text::FontRef fr{f.droid, 16.0f};
+    const Vec2 at(10.3f, 20.6f);
+    DrawList plain = NewList(), dl = NewList();
+    f.ts->Draw(plain, fr, at, Color::White(), "Esia");
+    const text::TextOutline outline{2.0f, Color(1.0f, 0.0f, 0.0f, 1.0f)};
+    f.ts->DrawOutline(dl, fr, at, outline, "Esia");
+    f.ts->Draw(dl, fr, at, Color::White(), "Esia");
+    const std::vector<Quad> g = Quads(plain), q = Quads(dl);
+    ESIA_CHECK(g.size() == 4 && q.size() == 8);
+    if (g.size() == 4 && q.size() == 8)
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            // the outline first, in its color, each glyph's grown by ceil(2) + 1 px on every side, on the glyph's page
+            ESIA_CHECK(q[i].color == outline.color.ToRgba8());
+            ESIA_CHECK(q[i].r.min == g[i].r.min - Vec2(3, 3) && q[i].r.max == g[i].r.max + Vec2(3, 3));
+            ESIA_CHECK(q[i].texture == q[4 + i].texture);
+            // then the text, as without an outline
+            ESIA_CHECK(q[4 + i].r.min == g[i].r.min && q[4 + i].r.max == g[i].r.max && q[4 + i].color == g[i].color);
+        }
+    // again: the same quads (the outline's are cached with the layout beside the text's)
+    DrawList again = NewList();
+    f.ts->DrawOutline(again, fr, at, outline, "Esia");
+    const std::vector<Quad> q2 = Quads(again);
+    ESIA_CHECK(q2.size() == 4 && !q.empty() && q2.at(0).r.min == q.at(0).r.min);
+    // no width or no color: nothing
+    DrawList none = NewList();
+    f.ts->DrawOutline(none, fr, at, text::TextOutline{0.0f, Color::Black()}, "Esia");
+    f.ts->DrawOutline(none, fr, at, text::TextOutline{2.0f, Color::Clear()}, "Esia");
+    ESIA_CHECK(none.Empty());
+
+    // an icon's outline: grown around the glyph DrawGlyph places
+    DrawList icon = NewList();
+    f.ts->DrawGlyphOutline(icon, {f.droid, 24.0f}, U'O', Vec2(50.0f, 40.0f), outline);
+    f.ts->DrawGlyph(icon, {f.droid, 24.0f}, U'O', Vec2(50.0f, 40.0f), Color::Black());
+    const std::vector<Quad> iq = Quads(icon);
+    ESIA_CHECK(iq.size() == 2);
+    if (iq.size() == 2)
+        ESIA_CHECK(iq[0].r.min == iq[1].r.min - Vec2(3, 3) && iq[0].r.max == iq[1].r.max + Vec2(3, 3) && iq[0].color == outline.color.ToRgba8());
+}
+
 ESIA_TEST(FreeType, IconGlyphsAreOpticallyCentered)
 {
     Fixture f;

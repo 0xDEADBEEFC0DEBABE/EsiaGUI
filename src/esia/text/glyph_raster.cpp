@@ -218,6 +218,66 @@ namespace esia::text
         }
     }
 
+    bool RasterizeGrown(const Outline& outline, float offsetX, float radius, GlyphBitmap& out)
+    {
+        out = {};
+        PixelBox box;
+        if (!InkBox(outline, offsetX, box))
+            return true;
+        radius = std::max(radius, 0.0f);
+        const int grow = (int)std::ceil(radius) + 1;
+        box.left -= grow;
+        box.top -= grow;
+        box.width += 2 * grow;
+        box.height += 2 * grow;
+        if (box.width > kMaxGlyphPixels || box.height > kMaxGlyphPixels)
+            return false;
+        Accumulator acc(box.width, box.height);
+        Accumulate(outline, offsetX, box, acc);
+        std::vector<std::uint8_t> coverage;
+        acc.Resolve(coverage);
+
+        // the squared distance from each pixel's center to the nearest edge, where it can matter (within radius + 1):
+        // every edge visits the pixels around it only, so the cost follows the glyph's perimeter, not its area
+        const float reach = radius + 1.0f, reach2 = reach * reach;
+        std::vector<float> d2((std::size_t)box.width * (std::size_t)box.height, reach2);
+        const auto map = [&](Vec2 p) { return Vec2(p.x + offsetX - (float)box.left, p.y - (float)box.top); };
+        for (std::size_t c = 0; c < outline.ContourCount(); ++c)
+        {
+            const std::span<const Vec2> pts = outline.Contour(c);
+            for (std::size_t i = 0; i < pts.size(); ++i)
+            {
+                const Vec2 a = map(pts[i]), b = map(pts[(i + 1) % pts.size()]);
+                const Vec2 ab = b - a;
+                const float len2 = Dot(ab, ab);
+                const int x0 = std::max(0, (int)std::floor(std::min(a.x, b.x) - reach)), x1 = std::min(box.width - 1, (int)std::ceil(std::max(a.x, b.x) + reach));
+                const int y0 = std::max(0, (int)std::floor(std::min(a.y, b.y) - reach)), y1 = std::min(box.height - 1, (int)std::ceil(std::max(a.y, b.y) + reach));
+                for (int y = y0; y <= y1; ++y)
+                {
+                    float* row = d2.data() + (std::size_t)y * (std::size_t)box.width;
+                    for (int x = x0; x <= x1; ++x)
+                    {
+                        const Vec2 ap = Vec2((float)x + 0.5f, (float)y + 0.5f) - a;
+                        const float t = len2 > 0.0f ? Clamp(Dot(ap, ab) / len2, 0.0f, 1.0f) : 0.0f;
+                        const Vec2 d = ap - ab * t;
+                        row[x] = std::min(row[x], Dot(d, d));
+                    }
+                }
+            }
+        }
+        out.pixels.resize(coverage.size());
+        for (std::size_t i = 0; i < coverage.size(); ++i)
+        {
+            const float grown = Saturate(radius + 0.5f - std::sqrt(d2[i]));
+            out.pixels[i] = std::max(coverage[i], (std::uint8_t)(grown * 255.0f + 0.5f));
+        }
+        out.left = box.left;
+        out.top = box.top;
+        out.width = box.width;
+        out.height = box.height;
+        return true;
+    }
+
     bool RasterizeGray(const Outline& outline, float offsetX, GlyphBitmap& out)
     {
         out = {};

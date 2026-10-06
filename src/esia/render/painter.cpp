@@ -800,6 +800,10 @@ namespace esia
         color.a *= alpha_;
         if (color.a <= 0.0f)
             return env_.text->Measure(font, text, wrapWidth, flags).size;
+        // the outline first: the glyphs go over it (one command when they share their atlas page)
+        text::TextOutline outline = env_.textOutline;
+        outline.color.a *= alpha_;
+        const bool outlined = outline.Visible();
         if (scaleDepth_ > 0)
         {
             // under PushScale: drawn at the final (scaled) geometry, rasterized at the scaled size; PopScale skips it
@@ -811,10 +815,14 @@ namespace esia
                 k *= scaleValue_[i];
             }
             const std::size_t start = dl_->Vertices().size();
+            if (outlined)
+                env_.text->DrawOutline(*dl_, font, at, outline, text, wrapWidth, flags, k);
             const Vec2 size = env_.text->Draw(*dl_, font, at, color, text, wrapWidth, flags, k);
             ExcludeFromScale(start);
             return size;
         }
+        if (outlined)
+            env_.text->DrawOutline(*dl_, font, pos, outline, text, wrapWidth, flags, 1.0f);
         return env_.text->Draw(*dl_, font, pos, color, text, wrapWidth, flags, 1.0f);
     }
 
@@ -835,6 +843,9 @@ namespace esia
         color.a *= alpha_;
         if (icon == 0 || color.a <= 0.0f || !env_.text)
             return;
+        text::TextOutline outline = env_.textOutline;
+        outline.color.a *= alpha_;
+        const bool outlined = outline.Visible();
         if (scaleDepth_ > 0)
         {
             float k = 1.0f;
@@ -845,10 +856,17 @@ namespace esia
                 k *= scaleValue_[i];
             }
             const std::size_t start = dl_->Vertices().size();
+            if (outlined)
+            {
+                outline.width *= k;
+                env_.text->DrawGlyphOutline(*dl_, text::FontRef{font.id, font.size * k}, icon, at, outline);
+            }
             env_.text->DrawGlyph(*dl_, text::FontRef{font.id, font.size * k}, icon, at, color);
             ExcludeFromScale(start);
             return;
         }
+        if (outlined)
+            env_.text->DrawGlyphOutline(*dl_, font, icon, center, outline);
         env_.text->DrawGlyph(*dl_, font, icon, center, color);
     }
 

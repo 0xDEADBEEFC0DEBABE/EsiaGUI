@@ -162,6 +162,8 @@ namespace esia
         // They batch with the text around them: a frame of plain widgets is a few draws of flat geometry.
         bool flat = false;
         Color flatSurface = Color(0.11f, 0.11f, 0.12f, 1.0f);
+        // An outline under every text and icon this Painter draws (text::TextOutline; none by default).
+        text::TextOutline textOutline;
     };
 
     class ESIA_API Painter
@@ -170,6 +172,10 @@ namespace esia
         explicit Painter(DrawList& drawList, const PainterEnv& env = {});
 
         DrawList& GetDrawList() const { return *dl_; }
+        // The outline Text, TextBox and Icon draw under their glyphs (PainterEnv::textOutline): `width` UI units of its
+        // color around every glyph; a width of 0 draws none.
+        void SetTextOutline(const text::TextOutline& outline) { env_.textOutline = outline; }
+        const text::TextOutline& GetTextOutline() const { return env_.textOutline; }
         const PainterEnv& Env() const { return env_; }
 
         // ---------------------------------------------------------- SDF shapes
