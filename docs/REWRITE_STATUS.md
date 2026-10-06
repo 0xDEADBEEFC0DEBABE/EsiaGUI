@@ -344,6 +344,12 @@ Esia could only be used from its source tree (`add_subdirectory`): a weakness th
   the test forwarded them, and a second `-DCMAKE_PREFIX_PATH` replaced the one with the install prefix, so the
   application did not find Esia. `run_package_test.cmake` now passes one list, the prefix first; reproduced and
   checked locally with a build configured with two prefix paths.
+* That fixed the clang-cl job; the MSVC one still failed: Visual Studio generates every configuration of the
+  application's project, the test installs one (Debug), and vcpkg's toolchain maps MinSizeRel and RelWithDebInfo to
+  Release and then to no configuration, which `esia::ui` does not have ("IMPORTED_LOCATION not set ... MinSizeRel"); a
+  single-config generator (Ninja) generates only Debug. The application's project now gets
+  `CMAKE_CONFIGURATION_TYPES` set to the configuration installed. Reproduced and checked locally with the CI job's
+  configuration: Visual Studio 2022, vcpkg's FreeType and HarfBuzz (x64-windows), Debug.
 
 ## Density
 
