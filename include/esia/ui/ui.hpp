@@ -668,6 +668,74 @@ namespace esia::ui
     };
     ESIA_API void LineChart(std::string_view id, std::span<const float> values, const LineChartOptions& options = {});
 
+    // ============================================================== plots
+    // Plots for tools (what ImPlot gives Dear ImGui, in the glass style): lines, areas, scatter, bars and histograms
+    // over axes with ticks and a grid. The legend's entries hide and show their series; under the mouse a crosshair
+    // reads the values. A drag pans, the wheel zooms around the mouse (it takes the wheel from the scroll areas
+    // around), a double click fits the data again.
+    //
+    //   if (ui::BeginPlot("frame times", {.height = 200, .yFormat = "%.1f ms"})) {
+    //       ui::PlotLine("CPU", cpu);                         // x = the index
+    //       ui::PlotLine("GPU", gpu, {.fill = true});
+    //       ui::EndPlot();
+    //   }
+    enum PlotFlags_ : std::uint32_t
+    {
+        PlotFlags_None = 0,
+        PlotFlags_NoLegend = 1u << 0,
+        PlotFlags_NoGrid = 1u << 1,
+        PlotFlags_NoHover = 1u << 2,     // no crosshair and no readout
+        PlotFlags_NoPanZoom = 1u << 3,   // the view stays fitted (or at the given limits)
+    };
+    struct PlotOptions
+    {
+        float height = 220.0f;           // UI units
+        float width = -1.0f;             // < 0 = the available width
+        std::uint32_t flags = PlotFlags_None;
+        float xMin = 0.0f, xMax = 0.0f;  // min == max: fitted to the data
+        float yMin = 0.0f, yMax = 0.0f;
+        const char* xFormat = "%g";      // the tick labels and the readout (printf, one float)
+        const char* yFormat = "%g";
+        std::span<const std::string_view> categories;   // labels under the x axis at 0, 1, 2 ... (PlotBars' bars)
+    };
+    struct PlotStyle
+    {
+        Color color = Color::Clear();    // Clear: the plot's next color
+        float thickness = 2.0f;          // a line's
+        float size = 3.5f;               // a scatter point's radius
+        bool fill = false;               // a line: the area under it, fading down
+        bool smooth = false;             // a line: a curve through the points
+        float xStart = 0.0f, xStep = 1.0f;   // a line without xs: x = xStart + i * xStep
+    };
+    ESIA_API bool BeginPlot(std::string_view id, const PlotOptions& options = {});   // true: series, then EndPlot
+    ESIA_API void PlotLine(std::string_view label, std::span<const float> ys, const PlotStyle& style = {});
+    ESIA_API void PlotLine(std::string_view label, std::span<const float> xs, std::span<const float> ys, const PlotStyle& style = {});
+    ESIA_API void PlotScatter(std::string_view label, std::span<const float> xs, std::span<const float> ys, const PlotStyle& style = {});
+    // Bar i of every PlotBars series at x = i (PlotOptions::categories names them); the series side by side.
+    ESIA_API void PlotBars(std::string_view label, std::span<const float> values, const PlotStyle& style = {});
+    // The samples counted into `bins` bars between their smallest and largest (0: about the square root of their count).
+    ESIA_API void PlotHistogram(std::string_view label, std::span<const float> samples, int bins = 0, const PlotStyle& style = {});
+    ESIA_API void EndPlot();
+    struct PlotLimits
+    {
+        float xMin = 0.0f, xMax = 1.0f, yMin = 0.0f, yMax = 1.0f;
+    };
+    // Between BeginPlot and EndPlot: the view the plot showed last frame - fitted, panned or zoomed (the first frame:
+    // the given limits, else 0..1). To submit only what is in view.
+    ESIA_API PlotLimits GetPlotLimits();
+
+    // A donut of shares (iOS's activity rings, cut into segments): the value under the mouse shows in the hole.
+    struct PieChartOptions
+    {
+        float size = 170.0f;             // the donut's diameter, UI units
+        float thickness = 0.36f;         // the ring's width, of the radius (0.15 .. 0.7)
+        bool legend = true;              // the labels and their shares beside it
+        std::string_view center;         // the hole's text when nothing is hovered (a total ...)
+        const char* format = "%.0f";     // the values in the hole
+    };
+    ESIA_API void PieChart(std::string_view id, std::span<const float> values, std::span<const std::string_view> labels = {},
+                           const PieChartOptions& options = {});
+
     // ============================================================= windows
     enum WindowFlags_ : std::uint32_t
     {

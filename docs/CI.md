@@ -107,7 +107,9 @@ from a clean checkout.
 * the D3D10 / 11 / 12 backends render them on WARP with the debug layers counting messages (D3D12's `glow_layer`
   excepted, section 4), and every D3D backend's unit tests pass there;
 * the Metal backend renders them on the macOS runner's Metal device with Metal's API and shader validation;
-* the checked-in shader library matches its sources.
+* the checked-in shader library matches its sources;
+* the build installs as a CMake package that an application of its own finds, builds against and runs
+  (`esia_package`, tests/package).
 
 **Does not prove:**
 
