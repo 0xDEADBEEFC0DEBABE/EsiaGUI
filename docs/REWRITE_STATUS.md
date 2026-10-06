@@ -42,6 +42,10 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Batching by what shadows show** (2026-10-06, after the plots): the planner lets a shape move to an earlier batch
+past text its shadow's faint tail reaches, and keeps the pixels each batch draws as a few rects: the plain-widget
+scene draws in 7 draws instead of 69 (submit: Vulkan -48%, Direct3D 12 -17%, OpenGL -24%; Direct3D 11 the same).
+
 **Plots** (2026-10-06, last): lines, areas, scatter, bars and histograms over axes with a legend, a crosshair, pan
 and zoom, and a donut chart, in the `workbench`'s new Graphs panel.
 
@@ -72,6 +76,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Batching by what shadows show](#batching-by-what-shadows-show)
 * [Plots](#plots)
 * [Packaging](#packaging)
 * [Density](#density)
@@ -95,6 +100,54 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Batching by what shadows show
+
+The plain-widget scene (section "Frame cost against Dear ImGui": four windows of 8 rows of a label, a button, a switch
+and a slider) drew in 69 draws: per row a batch of shapes and a batch of text. The planner moves a draw to an earlier
+batch only across draws whose pixels it does not touch, and each button's shadow (blur 12, offset 4) reaches 25 px
+around it - over the label beside it, drawn before it. So the button could not join the shapes above it, and its title
+not the text above it.
+
+### What changed (`src/esia/render/frame_plan.cpp`)
+
+* **What a shape may not cross** (`InstanceJoinReach`): the shape, and its shadow or glow only as far as it is visible
+  (> 4%, the measure capture planning uses: half the blur beyond the shape for a shadow), in the shadow's own box (its
+  offset only the way it is drawn, not on every side). Past that a shadow's tail changes a pixel by a few levels; a
+  label drawn before or after it shows no difference. Glass keeps its place as before.
+* **What a batch touches** (`FramePlan::Region`): up to 16 rects - each draw's own, the next one along a row merged
+  into the last while that adds little, merged pairwise in drawing order when full - instead of the union of the
+  batch's bounds alone. A batch holding a button's title and the next row's label no longer claims the gap between
+  them, where the next button lies.
+* The glass-only work per FX instance (blur radius, level-0 reads) only for glass.
+
+### Verified (2026-10-06)
+
+* The plain-widget scene: 69 -> 7 draws. Submit time (MSVC Release, 1600 x 1000, the median of three): Direct3D 11
+  0.036 ms both ways; Direct3D 12 0.054 -> 0.045; Vulkan 0.065 -> 0.034; OpenGL 0.085 -> 0.065. GPU time within the
+  noise (Direct3D 12 0.051 -> 0.047).
+* The showcase (`--spread` at 1.5) and the workbench, docked and with the Graphs panel: the same pixels but for the
+  statistics line (214 draws instead of 226) and 2 pixels off by 1.
+* `FramePlan.ShadowsBatchByWhatTheyShow`: a form's shapes batch past the labels their shadows' tails reach, a button
+  right beside its label keeps its order; ctest 34 / 34 (clang-cl, every backend), MSVC with `ESIA_WERROR`, Ubuntu
+  24.04 Debug and Release.
+
+### Found on the way
+
+* The Visual Studio generator's trees missed header changes: MSBuild's file tracker ignores files under `%TEMP%`, where
+  the scratch worktree lives, so objects compiled against an old header linked with new ones (a crash in a Release
+  benchmark, an unresolved symbol in another). Benchmarks now build with Ninja and MSVC's `cl` (Ninja reads
+  `/showIncludes`); a Visual Studio tree under `%TEMP%` needs `--clean-first`.
+
+### Where the plain-widget frame still goes (Direct3D 11)
+
+Against Dear ImGui's 0.040 + 0.012 ms CPU and 0.025 ms GPU, Esia's 0.060 + 0.035 and 0.051:
+* submit: the plan 0.016 ms (196 FX instances: extents, reach, joins), the upload 0.006, saving and restoring the
+  host's Direct3D 11 state 0.004 (Dear ImGui's backend does the same), the draws 0.004;
+* build (a sampling profile): text 15% (emitting quads, layout lookups), springs and timers 13% (a state lookup per
+  spring), shapes 10% (384-byte instances), layout 8%;
+* GPU: the window backgrounds through the FX shader cost 0.006 ms more than flat quads would, shadows 0.010 (their
+  quads reach 1.6 x the blur plus the offset on every side), the controls' distance fields most of the rest.
 
 ## Plots
 
