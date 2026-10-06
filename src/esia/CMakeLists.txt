@@ -154,6 +154,7 @@ add_library(esia_ui STATIC
     ui/dock.cpp
     ui/popups.cpp
     ui/charts.cpp
+    ui/plot.cpp
     ui/overlays.cpp)
 target_link_libraries(esia_ui PUBLIC esia_render esia_text)
 esia_target_defaults(esia_ui)

@@ -645,6 +645,11 @@ namespace esia
         Window* w = hoveredWindow_;
         if ((wheel.x == 0.0f && wheel.y == 0.0f) || !w || activeId_ != 0 || PressBlocked())
             return;
+        // an item that takes the wheel (ItemFlags_Wheel) is under the mouse - unless the wheel is still turning an area
+        // it scrolled, which content moving under the mouse does not take over
+        const double since = params_.time - std::max(wheelLatch_[0].time, wheelLatch_[1].time);
+        if (hitId_ != 0 && (hitFlags_ & ItemFlags_Wheel) && since > kWheelLatchSeconds)
+            return;
         const float step = desc_.layout.scrollStep;
         // shift + wheel scrolls horizontally, as on every desktop platform
         const bool shift = (input_.Mods() & Mod_Shift) != 0;
