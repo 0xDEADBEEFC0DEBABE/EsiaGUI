@@ -76,6 +76,57 @@ namespace esia::render
             return pad;
         }
 
+        // What of an FX instance other draws may not cross while batching: the shape, and its shadow / glow as far as
+        // they are visible (> 4%, InstanceCoreExtent's measure; the shadow in its own box, offset only the way it is
+        // drawn). Past it a shadow's tail changes a pixel by a few levels at most, which drawing a neighbouring label
+        // before or after it does not show - and a label beside a button would otherwise split every row of a form
+        // into a batch of shapes and a batch of text.
+        void InstanceJoinReach(const fx::Instance& in, float out[4])
+        {
+            const std::uint32_t feat = in.flags[0];
+            float x0 = in.rect[0], y0 = in.rect[1], x1 = in.rect[2], y1 = in.rect[3];
+            if (feat & fx::kMerge)
+            {
+                x0 = std::min(x0, in.shape2[0]);
+                y0 = std::min(y0, in.shape2[1]);
+                x1 = std::max(x1, in.shape2[2]);
+                y1 = std::max(y1, in.shape2[3]);
+            }
+            const float sx0 = x0, sy0 = y0, sx1 = x1, sy1 = y1;
+            float pad = 1.0f;
+            if (feat & fx::kStroke)
+                pad = std::max(pad, in.strokeParams[0] * in.strokeParams[1] + 1.0f);
+            if (feat & fx::kGlow)
+            {
+                const float peak = in.glowParams[1] * in.glow[3];
+                if (peak > 0.04f)
+                    pad = std::max(pad, in.glowParams[0] * std::sqrt(std::log(peak / 0.04f) / 2.2f));
+            }
+            x0 -= pad;
+            y0 -= pad;
+            x1 += pad;
+            y1 += pad;
+            if ((feat & fx::kShadow) && !(feat & fx::kInnerShadow) && in.shadow[3] > 0.04f)
+            {
+                const float r = in.shadowParams[0] * 0.5f + std::max(in.shadowParams[1], 0.0f);
+                x0 = std::min(x0, sx0 + in.shadowParams[2] - r);
+                y0 = std::min(y0, sy0 + in.shadowParams[3] - r);
+                x1 = std::max(x1, sx1 + in.shadowParams[2] + r);
+                y1 = std::max(y1, sy1 + in.shadowParams[3] + r);
+            }
+            if (feat & fx::kMask)
+            {
+                x0 = std::max(x0, in.mask[0] - 1.0f);
+                y0 = std::max(y0, in.mask[1] - 1.0f);
+                x1 = std::min(x1, in.mask[2] + 1.0f);
+                y1 = std::min(y1, in.mask[3] + 1.0f);
+            }
+            out[0] = x0;
+            out[1] = y0;
+            out[2] = x1;
+            out[3] = y1;
+        }
+
         // The pixels a geometry command touches: its vertices' bounds, which the list keeps as they are written
         // (DrawCmd::vtxBounds), plus a pixel
         PxRect VertexBounds(const DrawCmd& cmd, const Mapper& map)
@@ -99,6 +150,42 @@ namespace esia::render
 
         constexpr int kJoinLookBack = 64;                         // ops searched for a batch to join
         constexpr std::uint32_t kNoPiece = 0xFFFFFFFFu;
+
+        float AreaOf(const PxRect& r) { return r.Empty() ? 0.0f : (r.x1 - r.x0) * (r.y1 - r.y0); }
+    }
+
+    void FramePlan::Region::Add(const PxRect& r)
+    {
+        if (r.Empty())
+            return;
+        if (count > 0)
+        {
+            // the next glyph run or shape along a row: one rect with the last while that adds little - a label and
+            // a button title with a gap between them stay two
+            PxRect& last = rects[count - 1];
+            const PxRect u = last.Union(r);
+            if (AreaOf(u) <= (AreaOf(last) + AreaOf(r)) * 1.25f)
+            {
+                last = u;
+                return;
+            }
+        }
+        if (count == kMax)
+        {
+            // full: neighbours in drawing order merge pairwise (they lie near each other; the newest stay apart)
+            for (int i = 0; i < kMax / 2; ++i)
+                rects[i] = rects[2 * i].Union(rects[2 * i + 1]);
+            count = kMax / 2;
+        }
+        rects[count++] = r;
+    }
+
+    bool FramePlan::Region::Overlaps(const PxRect& r) const
+    {
+        for (int i = 0; i < count; ++i)
+            if (rects[i].Overlaps(r))
+                return true;
+        return false;
     }
 
     void FramePlan::Build(const DrawData& dd, const TextureInfoFn& textureInfo, bool directGeometry)
@@ -116,6 +203,7 @@ namespace esia::render
         opFirst_.clear();
         opLast_.clear();
         layerStack_.clear();
+        regions_.clear();
         anyGlass = false;
         anyLayer = false;
         fxCount = 0;
@@ -190,10 +278,19 @@ namespace esia::render
                 const RenderOp& o = ops[(std::size_t)k];
                 if (compatible(o) && (k == n - 1 || !o.glass))
                     return k;
-                if (glass || o.glass || o.bounds.Overlaps(reach))
+                if (glass || o.glass)
+                    return -1;
+                // the batch's bounds first (cheap), then the rects of what it draws
+                if (o.bounds.Overlaps(reach) && ((std::size_t)k >= regions_.size() || regions_[(std::size_t)k].Overlaps(reach)))
                     return -1;
             }
             return -1;
+        };
+        // what op k touches: its draws' rects (ops other than draws and FX batches have none and are never passed)
+        auto touch = [&](int k, const PxRect& r) {
+            if (regions_.size() <= (std::size_t)k)
+                regions_.resize((std::size_t)k + 1);
+            regions_[(std::size_t)k].Add(r);
         };
 
         for (const DrawList* dl : dd.lists)
@@ -243,14 +340,16 @@ namespace esia::render
                         // user effects may sample any blur level: -1 = build the whole pyramid. Glass reads its frost, the
                         // blurred surroundings its rim reflects and, with legibility, a wide neighbourhood (the exposure
                         // reads exactly one level: the smallest radius whose LevelsForBlur builds it)
-                        const float glassBlurPx = std::max(in.glass[0], kGlassEnvBlur) * map.scale.x;
-                        const float ambientPx = in.shape[0] > 0.0f ? (float)(1 << AmbientLevel(map.scale.x)) : 0.0f;
-                        const float blurPx = (in.flags[0] & fx::kCustom) ? -1.0f : std::max(glassBlurPx, ambientPx);
-                        // WgtSampleBackdrop reads level 0 below a 4 px frost (the rim reflection and the exposure always
-                        // read blurred levels)
-                        const bool reads0 = (in.flags[0] & fx::kCustom) || ((in.flags[0] & fx::kGlass) && in.glass[0] * map.scale.x < 4.0f);
+                        float blurPx = 0.0f;
+                        bool reads0 = false;
                         if (glass)
                         {
+                            const float glassBlurPx = std::max(in.glass[0], kGlassEnvBlur) * map.scale.x;
+                            const float ambientPx = in.shape[0] > 0.0f ? (float)(1 << AmbientLevel(map.scale.x)) : 0.0f;
+                            blurPx = (in.flags[0] & fx::kCustom) ? -1.0f : std::max(glassBlurPx, ambientPx);
+                            // WgtSampleBackdrop reads level 0 below a 4 px frost (the rim reflection and the exposure
+                            // always read blurred levels)
+                            reads0 = (in.flags[0] & fx::kCustom) || ((in.flags[0] & fx::kGlass) && in.glass[0] * map.scale.x < 4.0f);
                             const bool isGlass = (in.flags[0] & fx::kGlass) != 0;
                             // frost footprint, plus the rim reflection sampled just outside the edge (GlassEnvReach)
                             const float halfMin = 0.5f * std::min(in.rect[2] - in.rect[0], in.rect[3] - in.rect[1]);
@@ -267,7 +366,14 @@ namespace esia::render
                             anyGlass = true;
                         }
 
-                        int k = findJoin(b, glass, [&](const RenderOp& o) {
+                        // what it may not cross (glass keeps its place: its whole reach)
+                        PxRect jr = b;
+                        if (!glass)
+                        {
+                            InstanceJoinReach(in, e);
+                            jr = map(e[0], e[1], e[2], e[3]).Intersect(b);
+                        }
+                        int k = findJoin(jr, glass, [&](const RenderOp& o) {
                             return o.type == RenderOp::FxBatch && clipJoins(o, clip, full, cut) && o.texture == cmd.texture && o.effect == cmd.effect &&
                                    std::equal(fade, fade + 4, o.fade) &&
                                    // a glass shape must see what the batch already drew under it -> new batch (new capture)
@@ -317,6 +423,7 @@ namespace esia::render
                             k = (int)ops.size() - 1;
                         }
                         link(k, Piece{&in, nullptr, 1, 0, kNoPiece});
+                        touch(k, jr);
                         ++fxCount;
                         addToLayers(b);
                     }
@@ -401,6 +508,7 @@ namespace esia::render
                         k = (int)ops.size() - 1;
                     }
                     link(k, Piece{nullptr, dl->Indices().data() + cmd.first, cmd.count, vtxBase, kNoPiece, idxBase + cmd.first});
+                    touch(k, o.bounds);
                     addToLayers(o.bounds);
                     break;
                 }

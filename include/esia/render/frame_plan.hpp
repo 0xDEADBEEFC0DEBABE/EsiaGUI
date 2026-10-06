@@ -149,5 +149,19 @@ namespace esia::render
         std::vector<Piece> pieces_;
         std::vector<std::uint32_t> opFirst_, opLast_;
         std::vector<int> layerStack_;   // the layers open while Build walks the lists
+
+        // Build's scratch: the pixels each op touches as a few rects (its draws' own, merged once there are too many),
+        // which a draw moving to an earlier batch must miss. A batch's bounds alone are too coarse for that: the label
+        // of one row and the button title of the row above, in one batch, span the gap between them, where the next
+        // button's shadow lies.
+        struct Region
+        {
+            static constexpr int kMax = 16;
+            PxRect rects[kMax];
+            int count = 0;
+            void Add(const PxRect& r);
+            bool Overlaps(const PxRect& r) const;
+        };
+        std::vector<Region> regions_;
     };
 }
