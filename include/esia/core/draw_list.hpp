@@ -141,6 +141,17 @@ namespace esia
         };
         QuadWriter BeginQuads(TextureId texture, std::uint32_t maxQuads);
         void EndQuads(const QuadWriter& w);
+        // Room for `vertexCount` vertices and `indexCount` indices written in place (the indices count from `base`),
+        // then PrimCommit with their bounds: what WriteVertex / WriteIndex do one at a time. The current clip and
+        // texture; nothing else may be added in between.
+        struct PrimWriter
+        {
+            Vertex* vtx = nullptr;
+            std::uint32_t* idx = nullptr;
+            std::uint32_t base = 0;
+        };
+        PrimWriter PrimReserve(std::uint32_t indexCount, std::uint32_t vertexCount);
+        void PrimCommit(std::uint32_t indexCount, const Rect& bounds);
 
         // ---- FX command stream
         void AddFx(const fx::Instance& instance, EffectId effect = 0, TextureId texture = 0);

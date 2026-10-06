@@ -22,6 +22,9 @@ namespace esia
 
 namespace esia::text
 {
+    struct GlyphSlot;
+    struct GlyphBitmap;
+
     // Handle of a loaded font face (a file / memory blob + face index, or a system family). 0 = none.
     using FontId = std::uint32_t;
 
@@ -86,6 +89,23 @@ namespace esia::text
                           std::uint32_t flags = 0, float scale = 1.0f) = 0;
         // One glyph (icon fonts) optically centered on `center`; `size` = em size in UI units.
         virtual void DrawGlyph(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, Color color) = 0;
+        // Coverage tiles other than glyphs, in the texture text is drawn with (the corners of Painter's flat shapes, so
+        // they batch with the text) and kept apart from the glyphs: the tile cached under `key`, else null; AddTile packs
+        // one the caller rasterized (8-bit coverage). Gone when the glyph pages start over. Null from both: no tiles.
+        virtual const GlyphSlot* FindTile(std::uint64_t key)
+        {
+            (void)key;
+            return nullptr;
+        }
+        virtual const GlyphSlot* AddTile(std::uint64_t key, const GlyphBitmap& bitmap)
+        {
+            (void)key;
+            (void)bitmap;
+            return nullptr;
+        }
+        // Changes when the tiles found so far are gone (the pages started over), and differs between text systems (one
+        // made where another was): a caller may keep their slots while it stays.
+        virtual std::uint64_t TileGeneration() { return 0; }
 
         // ---- editing
         // The caret stops of `text` laid out as one line (line breaks are not honored: single-line fields), in logical

@@ -52,6 +52,7 @@ namespace esia::ui
         detail::ControlSizes sizes;   // the controls' sizes at that density (Sizes())
         Color accentOverride = Color::Clear();
         GlassLook look = GlassLook::Frosted;
+        bool flat = false;   // UiDesc::flat
 
         void Refresh();   // effective and sizes from theme.current (ui.cpp)
 

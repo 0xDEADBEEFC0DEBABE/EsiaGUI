@@ -4,10 +4,11 @@
 // it again; the lines between the panels resize them. On a phone the seven panels are tabs of two panels, one above the
 // other (side by side in landscape), in the display's safe area.
 //
-//   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--rows N] [--hover X,Y]
+//   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--flat] [--rows N] [--hover X,Y]
 //             and glass_window's options (../glass_window/app.hpp)
 // --hover: the mouse rests at X,Y (UI units) every frame - for pictures of what hovering shows.
-// Ctrl+Shift+D (Cmd+Shift+D on a Mac) switches between the regular and the compact sizes (Ui::SetDensity).
+// Ctrl+Shift+D (Cmd+Shift+D on a Mac) switches between the regular and the compact sizes (Ui::SetDensity), Ctrl+Shift+F
+// flat drawing on and off (Ui::SetFlat).
 #include "app.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/ui/ui.hpp"
@@ -63,6 +64,7 @@ namespace
         std::unique_ptr<ui::Ui> ui;
         bool dark = true;
         bool compactSizes = false;   // --compact
+        bool flat = false;           // --flat
         bool laidOut = false;
         std::string floatPanel, showPanel;
         Vec2 hover = Vec2(-1, -1);   // --hover: the mouse rests there (pictures of what hovering shows)
@@ -271,6 +273,10 @@ namespace
             const std::uint32_t mods = in.KeyMods(Key::D);
             if (in.KeyPressed(Key::D, false) && (mods & Mod_Shift) && (mods & (Mod_Ctrl | Mod_Super)))
                 ui->SetDensity(ui->GetDensity() == ui::Density::Compact ? ui::Density::Regular : ui::Density::Compact);
+            // Ctrl+Shift+F (Cmd+Shift+F): flat drawing on or off
+            const std::uint32_t fmods = in.KeyMods(Key::F);
+            if (in.KeyPressed(Key::F, false) && (fmods & Mod_Shift) && (fmods & (Mod_Ctrl | Mod_Super)))
+                ui->SetFlat(!ui->GetFlat());
             Background();
             const Rect safe = ctx->SafeArea();   // clear of a phone's camera housing and home indicator
             const float m = ui::S(12);
@@ -578,6 +584,8 @@ int main(int argc, char** argv)
             return !(d.dark = false);
         if (o == "--compact")
             return d.compactSizes = true;
+        if (o == "--flat")
+            return d.flat = true;
         if (!value)
             return false;
         usedValue = true;
@@ -609,6 +617,7 @@ int main(int argc, char** argv)
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.dark ? ui::ThemeDark() : ui::ThemeLight();
         desc.density = d.compactSizes ? ui::Density::Compact : ui::Density::Regular;   // a desktop tool's sizes
+        desc.flat = d.flat;   // no glass or shadows: the cheapest frames
         desc.island = false;
 #if !defined(_WIN32)
         desc.iconFontFile = glass::kSystemSymbolsFont;

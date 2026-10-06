@@ -72,6 +72,10 @@ namespace esia::ui
         Theme theme = ThemeLight();
         Density density = Density::Regular;   // Compact: a desktop tool's sizes (one line: .density = Density::Compact)
         GlassLook glassLook = GlassLook::Frosted;
+        // Flat: no glass, shadows or glows - solid windows and surfaces - and the shapes drawn as geometry that
+        // batches with the text (PainterEnv::flat). The cheapest frames: for a tool on a weak GPU, or where the UI
+        // is not what users look at.
+        bool flat = false;
         // Draw the island (notifications, live activities) at the top of the display at EndFrame.
         bool island = true;
     };
@@ -103,6 +107,8 @@ namespace esia::ui
         void SetAccent(Color accent);                       // Clear: the theme's own
         void SetGlassLook(GlassLook look);
         GlassLook GetGlassLook() const;
+        void SetFlat(bool flat);   // UiDesc::flat
+        bool GetFlat() const;
 
         text::FontRef Font(TextStyle style) const;
         text::FontRef Font(FontWeight weight, float size) const;   // size in UI units at metrics scale 1
