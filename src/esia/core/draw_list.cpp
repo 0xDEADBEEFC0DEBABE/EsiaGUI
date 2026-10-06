@@ -147,6 +147,26 @@ namespace esia
         PopTexture();
     }
 
+    DrawList::PrimWriter DrawList::PrimReserve(std::uint32_t indexCount, std::uint32_t vertexCount)
+    {
+        PrimWriter w;
+        w.base = PrimBegin(indexCount, vertexCount);
+        const std::size_t i = idx_.size();
+        vtx_.resize(w.base + (std::size_t)vertexCount);
+        idx_.resize(i + indexCount);
+        w.vtx = vtx_.data() + w.base;
+        w.idx = idx_.data() + i;
+        return w;
+    }
+
+    void DrawList::PrimCommit(std::uint32_t indexCount, const Rect& bounds)
+    {
+        DrawCmd& c = cmds_.back();
+        c.count += indexCount;
+        c.vtxEnd = (std::uint32_t)vtx_.size();
+        c.vtxBounds = c.vtxBounds.Union(bounds);
+    }
+
     void DrawList::RefreshBounds(std::size_t fromVertex)
     {
         for (DrawCmd& c : cmds_)

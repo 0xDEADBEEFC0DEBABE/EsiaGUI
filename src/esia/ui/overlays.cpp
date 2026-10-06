@@ -208,6 +208,8 @@ namespace esia::ui
         env.cornerSmoothing = t.metrics.cornerSmoothing;
         env.pixelScale = c.FramebufferScale().x;
         env.text = m.text;
+        env.flat = m.flat;
+        env.flatSurface = t.colors.secondaryBackground;
         Painter p(c.ForegroundDrawList(), env);
         p.SetAlpha(alpha);
         const Color tint = notif ? (rt.item.tint.a > 0 ? rt.item.tint : t.colors.accent) : (activity && acts[0].tint.a > 0 ? acts[0].tint : t.colors.accent);

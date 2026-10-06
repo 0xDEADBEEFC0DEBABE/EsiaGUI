@@ -42,6 +42,10 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Flat drawing** (2026-10-06, last): `UiDesc::flat` / `Ui::SetFlat` - no glass, shadows or glows, and rounded
+shapes as nine-patches of coverage tiles in the text's texture, batched with the text: GPU time 0.054 -> 0.031 ms in
+the plain-widget scene (Dear ImGui 0.025), 0.20 -> 0.11 ms in the workbench.
+
 **Batching by what shadows show** (2026-10-06, after the plots): the planner lets a shape move to an earlier batch
 past text its shadow's faint tail reaches, and keeps the pixels each batch draws as a few rects: the plain-widget
 scene draws in 7 draws instead of 69 (submit: Vulkan -48%, Direct3D 12 -17%, OpenGL -24%; Direct3D 11 the same).
@@ -76,6 +80,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Flat drawing](#flat-drawing)
 * [Batching by what shadows show](#batching-by-what-shadows-show)
 * [Plots](#plots)
 * [Packaging](#packaging)
@@ -100,6 +105,62 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Flat drawing
+
+The owner's goal: plain widgets cheaper than Dear ImGui's. Esia's draw a soft shadow under every button and knob and
+every shape as a distance field; Dear ImGui's are flat triangles. Flat drawing is the option that drops what costs the
+GPU, for tools where the GPU matters more than the glass.
+
+### What changed
+
+* `UiDesc::flat`, `Ui::SetFlat` / `GetFlat` (`ui.hpp`): every Painter the Ui makes gets `PainterEnv::flat` and
+  `flatSurface` (the theme's `secondaryBackground`); windows are solid, as with `WindowFlags_Solid`.
+* `Painter` (`painter.cpp`), when flat: shapes lose their shadow, glow, shimmer and grain; glass becomes a solid
+  surface (`flatSurface` under its tint, the fill over it). A rounded rectangle, capsule or circle with a solid fill
+  and stroke is geometry: the coverage of its corners rasterized once as a tile (`saturate(0.5 - d)` with
+  `SdRoundRect`'s distance: the radius grown by the smoothing, the superellipse's exponent), stretched as a nine-patch
+  along an axis with a pixel or more between its corners, whole along a shorter one; bilinear sampling fades its
+  edges over a pixel wherever it lies. 1 to 9 quads a shape (a button 3, a knob 1, a window 9); the middle of a fill
+  larger than 48 x 48 pixels is a quad of the white texture (the UI geometry program: the cheapest pixels), the rim
+  stays on the tile. A stroke is a ring tile drawn the same way. Tiles are found again through a 128-entry table keyed
+  by the shape's size, corners and stroke (in 1/64 pixel); a mask that cannot cut the shape (all of it inside, clear
+  of the mask's corners) is ignored.
+* `TextSystem::FindTile` / `AddTile` / `TileGeneration` (`text.hpp`): tiles in the glyph atlas under keys with the
+  top bit set, gone when the pages start over (the generation changes, and differs between text systems); the
+  FreeType system implements them. Shapes on the text's texture batch with the text: the plain-widget scene draws in
+  8 draws (4 windows: the white middles, then the rims, shapes and text).
+* `DrawList::PrimReserve` / `PrimCommit`: vertices and indices written in place.
+* `examples/workbench`: `--flat`, Ctrl+Shift+F.
+
+### Measured (Direct3D 11, MSVC Release, RTX 4080 SUPER, median of three)
+
+| ms per frame | build | submit | GPU | draws |
+| --- | --- | --- | --- | --- |
+| plain widgets, regular | 0.061 | 0.034 | 0.054 | 7 |
+| plain widgets, flat | 0.070 | 0.025 | 0.031 | 8 |
+| Dear ImGui, the same scene | 0.042 | 0.012 | 0.025 | 8 |
+| the workbench at 1600 x 1000, regular | 0.082 | 0.045 | 0.202 | 68 |
+| the workbench, flat | 0.093 | 0.035 | 0.110 | 53 |
+
+Along the way: the GPU time of flat geometry follows its vertex and index bytes (dynamic buffers are read across the
+bus) - tessellated outlines with quarter-pixel arcs took 0.041 ms, one segment a corner 0.022 - which is why the
+corners are tiles. The coverage program costs 0.002 ms more than the UI geometry program over 1.37 megapixels.
+
+### Not reached
+
+The CPU: a frame of plain widgets builds in 0.061 - 0.070 ms against Dear ImGui's 0.042, and a flat shape takes about
+twice an FX instance to build (a tile look-up, a texture switch, 4 - 16 vertices). The rest of the build is the
+widgets: per slider 6 spring look-ups, a Painter and three 300-byte Styles, a clip pushed around its shadow; per frame
+text layout look-ups, hit records, layout. Each is a few percent: no single change halves it.
+
+### Verified (2026-10-06)
+
+* `Painter.FlatShapesAreGeometryThatBatchesWithText` (one command with the text, a tile per kind of shape, the white
+  middle, FX for a gradient without shadow or glow, glass as its surface, tiles made again after the pages start
+  over), `Painter.FlatTilesCoverAsTheShaderDoes`, `UiFlat.NoShadowsGlowsOrGlass`; ctest 34 / 34 (clang-cl, every
+  backend), MSVC with `ESIA_WERROR`, Ubuntu 24.04 Debug and Release.
+* The workbench flat, docked and with the Graphs panel floating, compared by eye with the regular one.
 
 ## Batching by what shadows show
 
@@ -212,6 +273,13 @@ Esia could only be used from its source tree (`add_subdirectory`): a weakness th
 ### Not verified
 
 * macOS and the vcpkg packages of Windows CI: CI only.
+
+### Found by CI (2026-10-06)
+
+* `esia_package` failed in both Windows jobs: vcpkg's toolchain adds its own directories to `CMAKE_PREFIX_PATH`,
+  the test forwarded them, and a second `-DCMAKE_PREFIX_PATH` replaced the one with the install prefix, so the
+  application did not find Esia. `run_package_test.cmake` now passes one list, the prefix first; reproduced and
+  checked locally with a build configured with two prefix paths.
 
 ## Density
 
