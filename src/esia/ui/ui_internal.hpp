@@ -1,6 +1,7 @@
 // Esia UI - what the widget files share: the Ui's state, style resolution, animation and drawing helpers.
 #pragma once
 #include "esia/ui/ui.hpp"
+#include <algorithm>
 #include <cstdarg>
 #include <cstddef>
 #include <mutex>
@@ -65,6 +66,7 @@ namespace esia::ui
                 float value = 0.0f;          // a timer: 0 .. 1
                 float velocity = 0.0f;
                 float value2 = 0.0f, velocity2 = 0.0f;   // kPair, kPulse
+                float more[8] = {};          // kPair: the control's own springs and timers (ControlSpring, ControlPulse)
             };
             // The entry of `id` and `kind`, made when there is none (`created`: its value is the caller's to set).
             Entry& Get(Id id, std::uint32_t kind, std::uint32_t frame, bool& created);
@@ -114,6 +116,7 @@ namespace esia::ui
             float alpha = 1.0f;
         };
         std::vector<StyleEntry> styles;
+        const ItemStyle noStyle{};   // ResolvedStyle outside every scope
 
         // auto-layout containers being submitted, with the core depth of their direct children
         struct LayoutEntry
@@ -250,14 +253,38 @@ namespace esia::ui
         {
             return ui::Anim(Salt(id, salt), target, s, initial);
         }
-        // Two springs of one id in one look-up (an interaction's hover and press): `a` toward `targetA`, `b` toward
-        // `targetB`, both starting at their targets.
-        void AnimPair(Id id, float targetA, float targetB, const Spring& s, float& a, float& b);
         // A spring and its velocity in one look-up (Anim, then AnimVelocity).
         float AnimWithVelocity(Id id, float target, const Spring& s, float& velocity);
 
+        // ---- text (inline: every label asks)
+        inline text::FontRef Font(FontWeight w, float size)
+        {
+            const Ui::Impl& m = M();
+            // quarter units (Ui::Font): sizes > 0, so adding a half and truncating rounds
+            return {m.fonts[(int)w], (float)(int)(size * m.effective.metrics.scale * 4.0f + 0.5f) * 0.25f};
+        }
+        inline text::FontRef Font(TextStyle s)
+        {
+            const Typography& t = M().effective.type;
+            return Font(t.weight[(int)s], t.size[(int)s]);
+        }
+        // the label before "##" (the rest is only its id)
+        inline std::string_view VisibleLabel(std::string_view label)
+        {
+            const char* p = label.data();
+            for (std::size_t i = 0; i + 1 < label.size(); ++i)
+                if (p[i] == '#' && p[i + 1] == '#')
+                    return label.substr(0, i);
+            return label;
+        }
+
         // ---- styles
-        const ItemStyle& ResolvedStyle();   // every scope merged
+        // every scope merged (inline: the widgets ask for it a dozen times each)
+        inline const ItemStyle& ResolvedStyle()
+        {
+            const Ui::Impl& m = M();
+            return m.styles.empty() ? m.noStyle : m.styles.back().resolved;
+        }
         void MergeStyle(ItemStyle& into, const ItemStyle& s);
         void PushStyle(const ItemStyle& s);
         void PopStyle();
@@ -276,26 +303,73 @@ namespace esia::ui
             ItemScope(const ItemScope&) = delete;
             ItemScope& operator=(const ItemScope&) = delete;
         };
-        float StyleAlpha();
+        inline float StyleAlpha()
+        {
+            const Ui::Impl& m = M();
+            return m.styles.empty() ? 1.0f : m.styles.back().alpha;
+        }
 
-        Color Accent();                      // the style's tint, or the theme accent
+        // the style's tint, or the theme accent
+        inline Color Accent()
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kTint) ? s.tint : C().accent;
+        }
         inline Color Tint(Color c) { return c.a > 0.0f ? c : Accent(); }
-        Color AccentOr(Color themed);        // the style's tint, else `themed` (a switch's green)
-        Color FillOr(Color themed);
-        Color LabelOr(Color themed);
-        bool HasItemRadius();
-        float ItemRadius(float themed);
+        // the style's tint, else `themed` (a switch's green)
+        inline Color AccentOr(Color themed)
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kTint) ? s.tint : themed;
+        }
+        inline Color FillOr(Color themed)
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kFill) ? s.fill : themed;
+        }
+        inline Color LabelOr(Color themed)
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kLabel) ? s.label : themed;
+        }
+        inline bool HasItemRadius() { return ResolvedStyle().Has(ItemStyle::kRadius); }
+        inline float ItemRadius(float themed)
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kRadius) ? Sc(s.radius) : themed;
+        }
         GlassMaterial ApplyLook(GlassLook look, GlassMaterial m);
         GlassMaterial StyledMaterial(const GlassMaterial& themed);                 // look + glass fields
         GlassMaterial GlassFieldsOver(const GlassMaterial& m);                     // the glass fields only
         GlassMaterial SurfaceMaterial(const GlassMaterial& themed, Color surface);  // a glass surface with a color of its own
-        bool LookClear();
-        bool GlassSurface();                 // flat surfaces render as glass (Clear / Frosted / glass fields)
+        // the look of the current scope (CurrentGlassLook)
+        inline GlassLook Look()
+        {
+            const ItemStyle& s = ResolvedStyle();
+            return s.Has(ItemStyle::kLook) ? s.look : M().look;
+        }
+        inline bool LookClear() { return Look() == GlassLook::Clear; }
+        // flat surfaces render as glass (Clear / Frosted / glass fields)
+        inline bool GlassSurface()
+        {
+            const ItemStyle& s = ResolvedStyle();
+            if (s.Has(ItemStyle::kLook))
+                return s.look != GlassLook::Theme;
+            if (s.set & ItemStyle::kGlassFields)
+                return true;
+            return M().look == GlassLook::Clear;
+        }
         GlassMaterial SurfaceGlass(Color fill);
         Style& SurfaceFill(Style& s, Color fill);
         Style Surface(Color fill);
-        Color StateFill(Color c);            // "on" / selection / progress colors: see-through under Clear
+        inline Color StateFill(Color c) { return LookClear() ? c.Fade(0.55f) : c; }   // "on" / selection / progress colors: see-through under Clear
         void DrawPill(Painter& p, const Rect& r, const Style& s);   // a capsule, or a rounded rect with the style's radius
+        // DrawPill(p, r, Style().Fill(fill)) without a Style
+        inline void FillPill(Painter& p, const Rect& r, Color fill)
+        {
+            const float half = std::min(r.Width(), r.Height()) * 0.5f;
+            p.FillRound(r, HasItemRadius() ? std::min(ItemRadius(0.0f), half) : half, fill);
+        }
 
         // The clear lens a knob or selection becomes while pressed (iOS 26): no frost, no tint, magnified content.
         GlassMaterial LensMaterial();
@@ -318,13 +392,9 @@ namespace esia::ui
             bool pushed_;
         };
 
-        // ---- text and icons
-        text::FontRef Font(FontWeight w, float size);
-        text::FontRef Font(TextStyle s);
+        // ---- text and icons (Font, VisibleLabel: above)
         Vec2 MeasureText(text::FontRef f, std::string_view text, float wrapWidth = 0.0f);
         void DrawIcon(Painter& p, Vec2 center, Icon icon, float size, Color color);
-        // A label without its "##id" suffix.
-        std::string_view VisibleLabel(std::string_view label);
         void TextImpl(text::FontRef f, Color color, std::string_view text, bool wrap);
         // vsnprintf into `buf` (truncated to size - 1, terminated), the length written. The formats labels use most -
         // %d %i %u %x %X %s %c %% (with l, ll, z), no flags, width or precision - are written here: a C runtime's
@@ -382,8 +452,19 @@ namespace esia::ui
             bool pressed = false;
             float hover = 0.0f;
             float press = 0.0f;
+            // the interaction's entry (visible items): its hover and press, and the control's own springs and timers
+            AnimTable::Entry* anim = nullptr;
+            bool animNew = false;    // made this call: its springs start at their targets
+            bool animStep = false;   // not stepped yet this frame
         };
         InteractState InteractImpl(Id id, const Rect& r, std::uint32_t flags);
+        // A control's own springs and timers, in its interaction's entry (Entry::more) beside the hover and press: one
+        // look-up for all of them. `slot` indexes Entry::more. Call them right after InteractImpl, before anything else
+        // animates (an entry made in between may move the table).
+        float ControlSpring(const InteractState& it, int slot, float target, const Spring& s);   // more[slot], more[slot + 1]
+        float ControlSpring(const InteractState& it, int slot, float target, const Spring& s, float& velocity);
+        // LiquidPulse in more[slot .. slot + 2]
+        float ControlPulse(const InteractState& it, int slot, bool held, bool activated, float bloomSeconds = 0.20f);
         // controls at explicit rects (list rows use them)
         Vec2 ToggleSize();
         Vec2 StepperSize();

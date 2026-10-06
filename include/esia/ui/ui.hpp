@@ -178,12 +178,14 @@ namespace esia::ui
             kGlassFields = 0x0FFEu,   // blur .. rim
             kTint = 1u << 16, kFill = 1u << 17, kRadius = 1u << 18, kOpacity = 1u << 19,
             kLabel = 1u << 20, kSelectedFill = 1u << 21, kMovingFill = 1u << 22, kSelectedLabel = 1u << 23,
+            kTextOutline = 1u << 24,
         };
         std::uint32_t set = 0;       // which fields are set
         GlassLook look = GlassLook::Theme;
         GlassMaterial glass;         // the glass fields that are set (see `set`)
         Color tint, fill, label, selectedFill, movingFill, selectedLabel;
         float radius = 0.0f, opacity = 1.0f;
+        text::TextOutline textOutline;   // width in UI units at metrics scale 1
 
         // ---- glass. On a flat widget, Clear, Frosted or any glass field turns its surface into that glass (its fill
         // color tints the glass).
@@ -206,6 +208,13 @@ namespace esia::ui
         ItemStyle& Radius(float r) { radius = r; set |= kRadius; return *this; }  // corner radius (UI units)
         ItemStyle& Opacity(float o) { opacity = o; set |= kOpacity; return *this; }
         ItemStyle& Label(Color c) { label = c; set |= kLabel; return *this; }    // its text and symbols
+        // an outline around its text and symbols: `width` UI units of `color` (text::TextOutline); 0 for none
+        ItemStyle& TextOutline(float width, Color c = Color::Black())
+        {
+            textOutline = {width, c};
+            set |= kTextOutline;
+            return *this;
+        }
         // ---- selections (segmented controls, tab bars): the selected item's background, the moving lens, its text
         ItemStyle& SelectedFill(Color c) { selectedFill = c; set |= kSelectedFill; return *this; }
         ItemStyle& MovingFill(Color c) { movingFill = c; set |= kMovingFill; return *this; }

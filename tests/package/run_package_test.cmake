@@ -23,6 +23,11 @@ set(_args -S ${SOURCE} -B ${_build} -G ${GENERATOR} -DCMAKE_BUILD_TYPE=${CONFIG}
 if(PLATFORM)
     list(APPEND _args -A ${PLATFORM})
 endif()
+# a multi-config generator (Visual Studio, Xcode, Ninja Multi-Config) generates every configuration; only the one
+# installed has imported locations (vcpkg's toolchain maps MinSizeRel and RelWithDebInfo to Release, then to none)
+if(GENERATOR MATCHES "^Visual Studio|^Xcode|Multi-Config")
+    list(APPEND _args -DCMAKE_CONFIGURATION_TYPES=${CONFIG})
+endif()
 if(TOOLCHAIN)
     list(APPEND _args -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN})
 endif()

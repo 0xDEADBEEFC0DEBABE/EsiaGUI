@@ -15,6 +15,11 @@
 //
 // Color glyphs: bitmap strikes (CBDT, sbix) and COLR fonts, painted with their gradients and composite modes.
 //
+// Bitmap fonts (BDF, PCF, Windows FNT / FON, bitmap-only sfnt): drawn from their strikes pixel for pixel - a size
+// takes the strike and whole multiple of it nearest in physical pixels (repeated pixels, no smoothing), its glyphs on
+// whole pixels; its metrics and advances are the strike's, so Measure gives that size's box. A .fon's sizes of one
+// family and style are one font. The bundled FreeType reads no compressed PCF (.pcf.gz: unpack it first).
+//
 // Not yet (docs/REWRITE.md, phase 2): the Unicode bidi algorithm - right-to-left runs are shaped and drawn right
 // to left, but the runs of a line are laid out left to right.
 #pragma once
