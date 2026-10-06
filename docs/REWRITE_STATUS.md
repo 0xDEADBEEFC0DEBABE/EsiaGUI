@@ -42,6 +42,12 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Debug checks, desktop defaults, the README audited** (2026-10-06): the core reports two items with one id, two
+scroll areas with one id and items laid out out of view, and outlines them; a mouse no longer drags content and
+desktops show scroll indicators at rest; `ThemeCompact`, `ui::IdScope`; sections without a header keep their state
+apart, a table's `maxHeight` caps a `height`; the Control Center modules shrank since 2026-10-05 (`LineRoom`), fixed;
+the README checked claim by claim against the code, the Windows pictures taken again.
+
 **Text against Dear ImGui** (2026-10-05, later): frames of text as cheap as Dear ImGui's or cheaper - a text's glyph
 quads kept and copied in, bounds kept as the lists are written, every list's vertices and indices uploaded as they
 are (`Caps::baseVertex`, `Device::MapBuffer`), a formatter for the common label formats.
@@ -55,6 +61,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Debug checks, desktop defaults, the README audited](#debug-checks-desktop-defaults-the-readme-audited)
 * [Text against Dear ImGui](#text-against-dear-imgui)
 * [Frame cost against Dear ImGui](#frame-cost-against-dear-imgui)
 * [Scrolling, menus and tables in use](#scrolling-menus-and-tables-in-use)
@@ -74,6 +81,66 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Debug checks, desktop defaults, the README audited
+
+What an application built on the widgets ran into, again: a button that vanished (laid out past its window's edge),
+two tables that shared their scroll state (an id conflict), defaults made for a phone, options whose rules were only
+in the headers. The causes of the first two were fixed on 2026-10-05; nothing told the developer what was wrong.
+
+### What changed
+
+* **Debug checks** ([UI_CORE.md](UI_CORE.md) section 16; `ContextDesc::debugChecks`, `diagnostics`, `Diagnostic`):
+  two items of a window with one id in a frame (from the hit lists; `HitRecord::item` tells an item's own records
+  from the next item with its id, which `RecordHit` used to fold into one), two child regions begun with one id, and
+  an item wholly past the edge of its layout region and of the clip, on an axis nothing scrolls, for a second. Each is
+  reported once with the window, the id and its label (`GetId` keeps the frame's labels while the checks are on), to
+  a callback or stderr and the debugger, and outlined in red in the foreground list while it lasts. `Auto` turns them
+  on in debug builds; the release benchmarks run without them.
+* **The UI tests run the checks in every build** and fail on any report (the widgets themselves trip none: every UI
+  and data-widget test, the showcase, the workbench and glass_window at many sizes and layouts in a debug build).
+* **`ui::IdScope`** for widgets made in a loop; `Context::PushId("literal")` hashes the label (a literal took the
+  `const void*` overload and pushed its address); `PushId` / `GetId` take any integer type.
+* **Sections keep apart**: a section is its header's id scope, and sections without a header or with the same one in
+  a scope are told apart by their order. Two headerless sections shared their card's state (the mask of its rows).
+* **Tables**: `maxHeight` with a `height` caps it (it was ignored); the header comment no longer says `TableVisible`
+  is required (without it a table takes last frame's row count).
+* **Desktop defaults.** A mouse press on a scroll area's empty space no longer drags the content (a finger's still
+  does; `InputConfig::mouseDragScrolls` for the old way): on a desktop it moves the window, as in Dear ImGui. `metrics.scrollIndicatorAlways` is 1 in the built-in themes on Windows, Linux and macOS (0 on iOS and Android)
+  and the indicators hide at rest after a finger's press; the showcase keeps WGT's hidden indicators.
+  `ThemeCompact(theme)`: a desktop tool's density (`workbench --compact`). `metrics.controlHeight` is documented as
+  what it is: for custom widgets (the built-in controls do not read it).
+* **The Control Center modules shrank** (since `e8c4ff4`, 2026-10-05): the groups of an auto-layout container had one
+  layout sequence (their parent's lines do not move under a provider), so one module's `SameLine` buttons gave every
+  module their room, and a module's own buttons, placed with `SetCursorPos`, gave it theirs. A frame's sequence is now
+  its place among its parent's items, and `SetCursorPos` starts a line. Found by comparing the README pictures taken
+  again with the old ones.
+* **The README audited** against the code and the other documents: the options (`--font`, `--spread`, the showcase's
+  and workbench's lists), the bundle ids and packages, what each preset builds and tests, what ran under Wine, iOS
+  tests, the threads row, measured numbers dated or measured again, a section on using Esia in a project. The Windows
+  pictures were taken again (scroll indicators at rest in the workbench; the showcase at 0.74 ms of GPU time, was
+  0.86). Stale statements in CI.md, REWRITE.md, `freetype.hpp` and the backends' STATUS files corrected or dated;
+  the branch READMEs list the workbench.
+
+### Verified (2026-10-06)
+
+* ctest 33 / 33 in Debug (clang-cl 22, every backend); new: `DebugChecks.TwoItemsWithOneIdAreReportedOnce`,
+  `TwoChildRegionsWithOneIdAreReported`, `AnItemLaidOutOutOfViewIsReported`, `OffChecksNothing`,
+  `Context.PushIdTakesLiteralsAsLabels`, `Layout.LineRoomKeepsToItsGroup` (it failed before the fix),
+  `UiLists.SectionsWithOneHeaderKeepTheirRowsApart`, `UiIds.IdScopeKeepsALoopsWidgetsApart`,
+  `UiTable.MaxHeightCapsAHeight`; `UiScroll.DragTheContentOrTheIndicator` with a mouse, a finger and
+  `mouseDragScrolls`.
+* The examples in a debug build (Direct3D 11): showcase (every panel, spread, each Components tab, a Settings page, a
+  phone's size), workbench (docked, floating, compact, narrow), glass_window, also at sizes too small for them: no
+  report. Two buttons with one label put in the workbench for the test: reported once, both outlined. The default
+  sink (stderr) checked by hand with a temporary test.
+* The showcase and workbench captures against the README's old pictures: the same pixels but for the moving content,
+  the status bar and the workbench's indicators, once the Control Center was fixed.
+
+### Not verified
+
+* Linux, macOS, iOS and Android after these changes: CI only.
+* A real touch screen on Windows (the indicators hiding after a finger's press, the drag).
 
 ## Text against Dear ImGui
 
@@ -475,7 +542,8 @@ Branch from `main` at `7a2f6e2`, written by the local session. The widgets and t
 
 ### Not verified
 
-* Linux and macOS: as for the first part, the showcase needs the Win32 platform layer.
+* Linux and macOS: as for the first part, the showcase needs the Win32 platform layer. (Since 2026-10-01 / 02 the
+  macOS and X11 frames run it: section "Examples on Linux", and the README's macOS section.)
 * By hand: the dock's magnification and the island's animations were looked at in captures and fixed-clock frames,
   not used at a real frame rate.
 
@@ -506,7 +574,8 @@ is left: [UI_WIDGETS.md](UI_WIDGETS.md), section 13.
 ### Not verified
 
 * Linux and macOS: `esia_ui` has no platform code and builds with the core there, but `showcase` needs the Win32
-  platform layer (`glass_app`), so nothing of it renders in CI.
+  platform layer (`glass_app`), so nothing of it renders in CI. (Since 2026-10-01 / 02 the macOS and X11 frames run
+  it; CI still renders none of it.)
 * Use by hand: the tests drive input by script, and the screenshots are of fixed frames. Dragging windows and
   sliders, and the springs at a real frame rate, were only looked at, not checked.
 

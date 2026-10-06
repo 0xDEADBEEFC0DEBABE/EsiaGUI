@@ -107,6 +107,7 @@ namespace esia::ui
         m.layouts.clear();
         m.containers.clear();
         m.sections.clear();
+        m.sectionScopes.clear();
         m.rowStyles.clear();
         m.navs.clear();
         m.pages.clear();
@@ -289,6 +290,11 @@ namespace esia::ui
     }
 
     float S(float value) { return detail::Sc(value); }
+
+    IdScope::IdScope(std::string_view key) { detail::Ctx().PushId(key); }
+    IdScope::IdScope(std::int64_t key) { detail::Ctx().PushId(key); }
+    IdScope::IdScope(const void* key) { detail::Ctx().PushId(key); }
+    IdScope::~IdScope() { detail::Ctx().PopId(); }
 
     float AvailableWidth()
     {

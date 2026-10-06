@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <vector>
@@ -34,6 +35,12 @@ namespace
             ContextDesc d;
             d.getClipboard = [&clip] { return clip; };
             d.setClipboard = [&clip](const std::string& v) { clip = v; };
+            // the debug checks in every build, failing on any report: the data widgets never share an id
+            d.debugChecks = DebugChecks::On;
+            d.diagnostics = [](const Diagnostic& x) {
+                std::fprintf(stderr, "  %s\n", x.message.c_str());
+                ::esia::test::Fail(__FILE__, __LINE__, "a debug check reported something");
+            };
             return d;
         }
         void Step()
@@ -250,6 +257,32 @@ ESIA_TEST(UiTable, MaxHeightFitsTheRows)
     rows = 0;
     h.Step();
     ESIA_CHECK(table.Height() == 30.0f);   // the header
+}
+
+// A height and a maxHeight: the smaller of the two (neither is ignored for the other)
+ESIA_TEST(UiTable, MaxHeightCapsAHeight)
+{
+    Harness h;
+    float height = 300.0f;
+    Rect table;
+    h.body = [&] {
+        if (ui::BeginTable("t", {{"Name"}}, {.height = height, .maxHeight = 120.0f}))
+        {
+            const ui::TableRange r = ui::TableVisible(40);
+            for (int i = r.first; i < r.last; ++i)
+            {
+                ui::TableRow(i);
+                ui::TableCell("row");
+            }
+            ui::EndTable();
+            table = h.ctx.LastItemRect();
+        }
+    };
+    h.Step();
+    ESIA_CHECK(table.Height() == 120.0f);
+    height = 100.0f;
+    h.Step();
+    ESIA_CHECK(table.Height() == 100.0f);
 }
 
 // The selection kept as keys follows its rows when they move; Shift runs from where the anchor's row is now

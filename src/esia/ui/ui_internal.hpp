@@ -82,8 +82,10 @@ namespace esia::ui
             Rect mask;                     // last frame's card at this frame's top: row highlights stay inside
             std::size_t mark = 0;          // where the card's background goes in the draw list
             bool stylePushed = false;
+            bool counted = false;          // a second id scope: the section's place among those with its header
         };
         std::vector<SectionEntry> sections;
+        std::vector<std::pair<Id, int>> sectionScopes;   // this frame: per section scope, the sections that had it
         std::vector<std::string> sectionFooters;   // per depth of sections: copies kept from frame to frame
         std::vector<std::uint8_t> rowStyles;   // BeginRow: whether the row took a Next() style
 

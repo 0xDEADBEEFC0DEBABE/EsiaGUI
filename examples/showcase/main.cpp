@@ -173,6 +173,7 @@ float4 WgtEffect(WgtFx fx)
             const ui::Theme base = darkMode ? ui::ThemeDark() : ui::ThemeLight();
             ui::Theme t = base;
             t.metrics.scale = kScales[std::clamp(textSize, 0, 2)];
+            t.metrics.scrollIndicatorAlways = 0.0f;   // iOS's: WGT's demo hid them at rest everywhere
             if (glassEdited)
             {
                 t.materials.window.blur = frost;
@@ -1201,6 +1202,7 @@ int main(int argc, char** argv)
         if (!fonts.empty())
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
+        desc.theme.metrics.scrollIndicatorAlways = 0.0f;   // as ApplyTheme
         desc.glassLook = look;
 #if !defined(_WIN32)
         desc.iconFontFile = glass::kSystemSymbolsFont;   // SF Symbols, or the Linux desktop's icon theme, for the icons

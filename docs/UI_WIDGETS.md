@@ -19,6 +19,7 @@ the core, and what of WGT is ported so far.
 * [11. The showcase: WGT's demo](#11-the-showcase-wgts-demo)
 * [12. Data widgets: numbers, colors, tables, trees, the editor, docking](#12-data-widgets-numbers-colors-tables-trees-the-editor-docking)
 * [13. Status: what of WGT is ported](#13-status-what-of-wgt-is-ported)
+* [14. Pitfalls](#14-pitfalls)
 
 ## 1. Setting up
 
@@ -36,7 +37,7 @@ if (ui::BeginWindow("Settings", &open)) {
 }
 ui.EndFrame();
 ctx.EndFrame();
-textSystem.NewFrame(...);   // the host, as without the Ui
+// the host renders ctx.GetDrawData() (the Ui steps the text system in its NewFrame)
 ```
 
 * **Fonts.** The `Ui` loads its fonts into the text system it is given (`UiDesc::text`). By default:
@@ -51,6 +52,8 @@ textSystem.NewFrame(...);   // the host, as without the Ui
   free `ui::` functions act on it. One `Ui` per `Context`.
 * **Event-driven hosts.** `Ui::Animating()` is true when something moved this frame (a spring, the theme
   cross-fade): render another frame.
+* **Debug checks.** In a debug build the core reports two widgets with one id and a widget laid out where it cannot
+  be seen, and outlines them in red ([UI_CORE.md](UI_CORE.md) section 16). What else trips people up: section 14.
 
 ## 2. The theme
 
@@ -60,12 +63,18 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
 | --- | --- |
 | `Palette colors` | accent, labels (4 levels), backgrounds, fills, separators, the 13 system colors, and surfaces: window tint, card, knob, shadow, highlight |
 | `Materials materials` | glass materials: `window`, `bar`, `control`, `popover`, `clear` |
-| `Metrics metrics` | `scale` (every size goes through `ui::S`), radii, paddings, spacing, control heights |
+| `Metrics metrics` | `scale` (every size goes through `ui::S`), radii, paddings, spacing, row and header heights, the scroll indicator (the built-in controls are 32 - 34 tall whatever `controlHeight` says: it is for custom widgets) |
 | `Typography type` | a size and weight per `TextStyle` (Apple's type ramp, LargeTitle .. Caption2, Mono) |
 | `Motion motion` | the springs widgets use (hover, press, toggle, layout ...) |
 
 * **Built-in themes.** `ThemeLight()` and `ThemeDark()` hold WGT's values. `ThemeWithAccent(theme, color)` changes
   the accent and what derives from it.
+* **A desktop tool's density.** The sizes are iOS's (44-unit rows, 34-unit controls, 15-unit body text).
+  `ThemeCompact(theme)` sets everything at 0.87 of its size (body text 13, controls about 29), with shorter rows
+  and headers, less padding and spacing and smaller corners: `workbench --compact`. `SetDarkMode` keeps it.
+* **Scroll indicators.** `metrics.scrollIndicatorAlways` is 1 in the built-in themes on Windows, Linux and macOS
+  (an area that scrolls shows its indicator, dimmed, at rest) and 0 on iOS and Android (hidden at rest); after a
+  finger's press they hide at rest anyway (section 5).
 * **Spacing.** Every frame the Ui sets the core's item spacing (`Context::Metrics().itemSpacing`) from the theme:
   `metrics.spacing` across and 0.8 of it down, times the scale, as WGT set Dear ImGui's `ItemSpacing`.
 * **Changing the theme.** `Ui::SetTheme(theme, animate)`, `SetDarkMode(dark)` and `SetAccent(color)` cross-fade over
@@ -221,19 +230,23 @@ around it, and the light stops short of its neighbors:
   stops being visible: a window reaching past the display fades at the display's edge.
 * **Scrolling** is the same in a window's body, a scroll area and a navigation page:
   * the wheel and the core's scroll calls glide (`ChildFlags_SmoothScroll`);
-  * pressed on empty space, the content follows the pointer, and let go it glides on with the drag's speed (no
-    rubber band past the ends: the core keeps the offset in range - WGT's rubber band did nothing either);
+  * pressed on empty space by a finger, the content follows it, and let go it glides on with the drag's speed (no
+    rubber band past the ends: the core keeps the offset in range - WGT's rubber band did nothing either). A mouse
+    does that only with `InputConfig::mouseDragScrolls` (as WGT's did): on a desktop the wheel and the indicator
+    scroll, and a mouse drag on empty space moves the window;
   * the indicator shows while the content moves and for 0.9 s after, and when the mouse comes near. It also flashes
     when an area appears with more than it shows, or grows past it (iOS's `flashScrollIndicators`). It widens under
     the mouse and can be dragged. It runs in a lane in the window's right padding (also for a page or scroll area
     flush with the window's content), else over the content at the right edge. It shows, and takes clicks, only
     where its area shows: a table scrolled half out of its window has its indicator in the window;
   * `Theme::metrics.scrollIndicatorAlways = 1` keeps the indicator of every area that scrolls, dimmed at rest, on a
-    faint track: for desktop apps, where users look for a scroll bar. The default (0) hides it at rest, as iOS;
+    faint track: for desktop apps, where users look for a scroll bar - the built-in themes' value on Windows, Linux
+    and macOS. 0 hides it at rest, as iOS (the themes' value on iOS and Android; the showcase sets it everywhere, as
+    WGT's demo). After a finger's press it hides at rest whatever the theme says, until a mouse presses again;
   * the wheel stays with the area it scrolls while it turns: a table the window scrolls in under the mouse does not
     take the rest of the turn ([UI_CORE.md](UI_CORE.md) section 8);
-  * a drag on empty space scrolls instead of moving the window; the header, and content that cannot scroll, still
-    move it (the core moves a window only when no widget took the click);
+  * a finger's drag on empty space scrolls instead of moving the window; the header, and content that cannot
+    scroll, still move it (the core moves a window only when no widget took the click);
   * a finger scrolls from anywhere, as on a phone (presses marked `InputEvent::touch`: Android, iOS, Windows touch
     screens). From a row or a button, the content follows once the finger has moved 8 units along the area
     (`InputConfig::touchSlop`), and the row does not press. A control that acts on the press (a slider, a segmented
@@ -257,6 +270,8 @@ ui::EndSection();
 
 * **A section** is one item of its parent: the header, the card with its rows, and the footer. Inside an auto-layout
   container it is one child, and it takes the width it is offered.
+  * It is an id scope: its header's. Sections without a header, or with the same header, in one scope are told
+    apart by their order, so the same row label in each is a row of its own.
   * The rows sit in the core's `StackLayout` without gaps, so they need no measuring frame.
   * The card is drawn at `EndSection` and moved under the rows, as a card's background is.
   * A row's hover highlight is masked by the card's rounded corners (last frame's height).
@@ -506,8 +521,10 @@ if (first) {
   text, or any widget after `TableNextColumn`. Row offsets are kept in doubles, so the last of a million rows lands on
   its pixel.
   * Height: `height` fixes it (the rows scroll inside); `maxHeight` makes it as tall as its rows up to that height,
-    then they scroll. It takes the height from the count given to `TableVisible`, in the same frame;
-    0 of both: as tall as all the rows.
+    then they scroll. It takes the height from the count given to `TableVisible`, in the same frame (without
+    `TableVisible`, from the rows submitted last frame); both given, the smaller; 0 of both: as tall as all the rows.
+  * `TableVisible` is what keeps a big table cheap: it tells the rows in view, and only those are submitted. Without
+    it every row is submitted and laid out (fine for a few dozen).
   * Selection: `selection` holds row indices. Rows that move (sorted, filtered, a list refreshed under the table)
     keep the selection as keys instead: `selectedKeys` with `rowKey(i)`, the key of row i now (an id of your data).
     A selected item stays selected wherever its row goes, and Shift selects the rows between in their order now.
@@ -602,3 +619,38 @@ Beyond WGT: the data widgets of section 12, and scrolling by touch from anywhere
 * springs stepping once per frame.
 
 What renders is checked in the showcase's screenshots on every backend.
+
+## 14. Pitfalls
+
+What applications built on the widgets ran into, and what now catches it.
+
+* **Ids come from labels.** Two widgets with one label in one id scope are one widget to the core: they share the
+  hover, their presses and their state (an animation, a field's text, a scroll offset). Buttons made in a loop are
+  the usual case. Give each pass a scope, or the label a hidden suffix:
+
+  ```cpp
+  for (int i = 0; i < (int)items.size(); ++i) {
+      ui::IdScope scope(i);                       // or an object's address, a name
+      if (ui::Button("Set value")) items[i].Set();
+  }
+  ui::Button("Apply##left");  ui::Button("Apply##right");   // "##": the rest is the id, not shown
+  ```
+
+  Windows, tables, the multi-line editor and sections are scopes of their own. A debug build reports two items with
+  one id, with the window, the id and its label, and outlines both in red ([UI_CORE.md](UI_CORE.md) section 16).
+  `ui::IdScope` lives inside one window.
+* **A widget pushed out of view is not drawn, and nothing says so.** An item laid out past its window's right edge
+  is clipped away. A widget that fills the width (`AvailableWidth()`) leaves the items after it on its line (`SameLine`)
+  the room they took last frame, so a field no longer pushes its button out; a row that is simply too wide still does.
+  A debug build reports an item that stays out of view for a second, on an axis nothing scrolls.
+* **Tables.** Call `TableVisible(rowCount)` before the rows: it returns the rows in view, and with it a million rows
+  cost what the visible ones cost. `maxHeight` fits the table to its rows up to that height; with `height` too, the
+  smaller wins.
+* **Phone defaults on a desktop.** The sizes are iOS's: `ThemeCompact` for a denser tool (section 2). Scroll
+  indicators show at rest on desktops and hide on phones (`metrics.scrollIndicatorAlways`); a mouse scrolls with the
+  wheel and the indicator, a finger drags the content (`InputConfig::mouseDragScrolls` lets a mouse drag it too).
+* **The frame.** `Ui::NewFrame` after `Context::NewFrame`, `Ui::EndFrame` before `Context::EndFrame`; the `ui::`
+  functions act on the thread's current `Ui` in between. An event-driven host renders again while
+  `Ui::Animating()` or `Context::InputPending()` is true.
+* **Auto-sized windows** (`WindowFlags_AutoSize`: menus, tooltips) measure their content in the frame they appear and
+  show from the next one.
