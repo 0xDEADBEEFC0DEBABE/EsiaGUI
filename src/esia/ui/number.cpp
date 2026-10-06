@@ -315,15 +315,15 @@ namespace esia::ui
             if (o.buttons)
             {
                 const Rect left(r.min.x, r.min.y, r.min.x + bw, r.max.y), right(r.max.x - bw, r.min.y, r.max.x, r.max.y);
-                const Interaction a = InteractImpl(Salt(id, 1), left, InteractFlags_Repeat);
-                const Interaction b = InteractImpl(Salt(id, 2), right, InteractFlags_Repeat);
+                const InteractState a = InteractImpl(Salt(id, 1), left, InteractFlags_Repeat);
+                const InteractState b = InteractImpl(Salt(id, 2), right, InteractFlags_Repeat);
                 const double mul = (in.Mods() & Mod_Shift) ? 10.0 : 1.0;
                 if (a.pressed)
                     set(*value - step * mul);
                 if (b.pressed)
                     set(*value + step * mul);
                 const Color fg = LabelOr(pc.label);
-                for (const Interaction* it : {&a, &b})
+                for (const InteractState* it : {&a, &b})
                 {
                     const Rect br = it->rect.Expanded(-Sc(2));
                     p.Circle(br.Center(), br.Height() * 0.5f, Surface(pc.fill.Fade(0.6f + 0.5f * it->hover + 0.6f * it->press)));

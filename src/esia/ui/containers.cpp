@@ -154,7 +154,7 @@ namespace esia::ui
             const float thumbH = std::min(std::max(Sc(36), trackH * view.Height() / (view.Height() + max)), trackH);
             const float thumbY = view.min.y + trackPad + (trackH - thumbH) * (max > 0.0f ? Saturate(scroll / max) : 0.0f);
             const Rect hit(x - lane * 0.5f, view.min.y, x + lane * 0.5f, view.max.y);
-            Interaction it;
+            InteractState it;
             // The lane may lie in a parent's padding (outside its clip), but not past what shows of the area: one
             // its window scrolls half out of view shows its indicator, and is hit there, only in the window.
             const Rect shown = c.VisibleViewRect();
@@ -517,7 +517,7 @@ namespace esia::ui
             {
                 const float d = Sc(Sizes().closeButton);
                 closeR = Rect::FromCenter(Vec2(wr.max.x - pad - d * 0.5f + Sc(4), cy), Vec2(d, d));
-                const Interaction ci = InteractImpl(Salt(id, 0xC105E), closeR, InteractFlags_None);
+                const InteractState ci = InteractImpl(Salt(id, 0xC105E), closeR, InteractFlags_None);
                 p.PushScale(closeR.Center(), 1.0f + 0.08f * ci.press);
                 p.Circle(closeR.Center(), d * 0.5f, Surface(pc.fill.Fade(0.8f + 0.6f * ci.hover)));
                 DrawIcon(p, closeR.Center(), icons::Close, Sc(11), pc.secondaryLabel.Fade(1.0f + 0.4f * ci.hover));

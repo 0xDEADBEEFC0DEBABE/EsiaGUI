@@ -255,7 +255,8 @@ each, no debug-layer message.
 16. **D3D10 / 11 host state**: `restoreHostState` covers what the frame changes (input assembler, shaders, VS / PS
     resources, constants and samplers, rasterizer, blend, depth-stencil, viewports, scissors, render targets and
     D3D11's output-merger UAVs, predication - the frame runs unpredicated). Stream-output targets the host leaves
-    bound are not unbound and would capture the frame's geometry.
+    bound are not unbound and would capture the frame's geometry. D3D11's `Desc::ownsContext` (a host that draws
+    nothing else with the context) skips saving, clearing and restoring altogether.
 
 ## 6. Core change requests
 

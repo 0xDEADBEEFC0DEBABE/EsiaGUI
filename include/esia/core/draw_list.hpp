@@ -149,9 +149,23 @@ namespace esia
             Vertex* vtx = nullptr;
             std::uint32_t* idx = nullptr;
             std::uint32_t base = 0;
+            DrawCmd* cmd = nullptr;
         };
         PrimWriter PrimReserve(std::uint32_t indexCount, std::uint32_t vertexCount);
+        // The same on `texture` (not the current one: nothing pushed or popped)
+        PrimWriter PrimReserve(TextureId texture, std::uint32_t indexCount, std::uint32_t vertexCount);
         void PrimCommit(std::uint32_t indexCount, const Rect& bounds);
+        void PrimCommit(const PrimWriter& w, std::uint32_t indexCount, const Rect& bounds)
+        {
+            DrawCmd& c = *w.cmd;
+            c.count += indexCount;
+            c.vtxEnd = (std::uint32_t)vtx_.size();
+            Rect& b = c.vtxBounds;
+            b.min.x = bounds.min.x < b.min.x ? bounds.min.x : b.min.x;
+            b.min.y = bounds.min.y < b.min.y ? bounds.min.y : b.min.y;
+            b.max.x = bounds.max.x > b.max.x ? bounds.max.x : b.max.x;
+            b.max.y = bounds.max.y > b.max.y ? bounds.max.y : b.max.y;
+        }
 
         // ---- FX command stream
         void AddFx(const fx::Instance& instance, EffectId effect = 0, TextureId texture = 0);
@@ -186,7 +200,9 @@ namespace esia
         bool Empty() const { return cmds_.empty(); }
 
     private:
-        DrawCmd& Geometry();   // current geometry command (opens one when the state changed)
+        DrawCmd& Geometry() { return Geometry(CurrentTexture()); }   // current geometry command (opens one when the state changed)
+        DrawCmd& Geometry(TextureId texture);
+        void Reserve(std::uint32_t indexCount, std::uint32_t vertexCount);
         DrawCmd& Push(DrawCmdKind kind);
 
         VertexVector vtx_;

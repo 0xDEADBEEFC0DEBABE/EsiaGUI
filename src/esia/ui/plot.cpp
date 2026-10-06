@@ -633,7 +633,7 @@ namespace esia::ui
                     y += legendRowH;
                 }
                 const Rect entry(std::max(x - Sc(4), outer.min.x), y, x + w + Sc(4), y + legendRowH);
-                const Interaction it = InteractImpl(Salt(f.id, 0x4C00u + (std::uint32_t)i), entry, InteractFlags_None);
+                const InteractState it = InteractImpl(Salt(f.id, 0x4C00u + (std::uint32_t)i), entry, InteractFlags_None);
                 if (it.pressed)
                 {
                     auto h = std::find(st.hidden.begin(), st.hidden.end(), s.key);

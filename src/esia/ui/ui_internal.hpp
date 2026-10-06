@@ -41,6 +41,48 @@ namespace esia::ui
         static_assert(sizeof(ControlSizes) % sizeof(float) == 0, "ControlSizes holds floats only (Refresh blends them)");
     }
 
+    namespace detail
+    {
+        // Springs (Anim) and timers (Timer) by id, held in one open-addressing table: every widget steps a few of them
+        // each frame, and a probe here finds the value in the slot itself (Context::State keeps an entry apart from
+        // its slot, a second memory access).
+        struct AnimTable
+        {
+            enum Kind : std::uint32_t
+            {
+                kFree = 0,
+                kSpring = 1,
+                kTimer = 2,
+                kPair = 3,    // two springs (an interaction's hover and press)
+                kPulse = 4,   // a timer (value) and a spring (value2, velocity2): LiquidPulse
+            };
+            struct Entry
+            {
+                Id id = 0;
+                std::uint32_t kind = kFree;
+                std::uint32_t used = 0;      // the frame it was last asked for (its low 32 bits)
+                std::uint32_t stepped = 0;   // the frame it last stepped; 0: at the next ask
+                float value = 0.0f;          // a timer: 0 .. 1
+                float velocity = 0.0f;
+                float value2 = 0.0f, velocity2 = 0.0f;   // kPair, kPulse
+            };
+            // The entry of `id` and `kind`, made when there is none (`created`: its value is the caller's to set).
+            Entry& Get(Id id, std::uint32_t kind, std::uint32_t frame, bool& created);
+            // Drops the entries not asked for in `retain` frames.
+            void Collect(std::uint32_t frame, std::uint32_t retain);
+
+            std::vector<Entry> slots;   // a power of two in size, at most half full
+            std::size_t count = 0;
+
+        private:
+            static std::size_t Home(Id id, std::uint32_t kind, std::size_t mask)
+            {
+                return (std::size_t)((((std::uint64_t)id << 2 | kind) * 0x9E3779B97F4A7C15ull) >> 40) & mask;
+            }
+            void Rehash(std::size_t size);
+        };
+    }
+
     struct Ui::Impl
     {
         Context* ctx = nullptr;
@@ -53,6 +95,7 @@ namespace esia::ui
         Color accentOverride = Color::Clear();
         GlassLook look = GlassLook::Frosted;
         bool flat = false;   // UiDesc::flat
+        detail::AnimTable anims;   // Anim, Timer
 
         void Refresh();   // effective and sizes from theme.current (ui.cpp)
 
@@ -207,6 +250,11 @@ namespace esia::ui
         {
             return ui::Anim(Salt(id, salt), target, s, initial);
         }
+        // Two springs of one id in one look-up (an interaction's hover and press): `a` toward `targetA`, `b` toward
+        // `targetB`, both starting at their targets.
+        void AnimPair(Id id, float targetA, float targetB, const Spring& s, float& a, float& b);
+        // A spring and its velocity in one look-up (Anim, then AnimVelocity).
+        float AnimWithVelocity(Id id, float target, const Spring& s, float& velocity);
 
         // ---- styles
         const ItemStyle& ResolvedStyle();   // every scope merged
@@ -247,7 +295,7 @@ namespace esia::ui
         Style& SurfaceFill(Style& s, Color fill);
         Style Surface(Color fill);
         Color StateFill(Color c);            // "on" / selection / progress colors: see-through under Clear
-        void DrawPill(Painter& p, const Rect& r, Style s);   // a capsule, or a rounded rect with the style's radius
+        void DrawPill(Painter& p, const Rect& r, const Style& s);   // a capsule, or a rounded rect with the style's radius
 
         // The clear lens a knob or selection becomes while pressed (iOS 26): no frost, no tint, magnified content.
         GlassMaterial LensMaterial();
@@ -257,13 +305,17 @@ namespace esia::ui
         Rect ContainLiquid(Rect pill, const Rect& track, float slack);
         // How far a drop shadow reaches beyond its shape.
         inline float ShadowExtent(float blur, Vec2 offset) { return blur * 1.6f + std::max(std::fabs(offset.x), std::fabs(offset.y)) + 4.0f; }
-        // Widens the clip while it lives (shadows and glows reach past their window / container).
+        // Widens the clip while it lives (shadows and glows reach past their window / container); flat drawing has
+        // neither, and keeps the clip.
         struct ScopedUnclip
         {
             ScopedUnclip(const Rect& r, float extent);
             ~ScopedUnclip();
             ScopedUnclip(const ScopedUnclip&) = delete;
             ScopedUnclip& operator=(const ScopedUnclip&) = delete;
+
+        private:
+            bool pushed_;
         };
 
         // ---- text and icons
@@ -318,7 +370,20 @@ namespace esia::ui
         void IslandFrame();   // Ui::EndFrame: the island on the foreground draw list
 
         // ---- interaction
-        Interaction InteractImpl(Id id, const Rect& r, std::uint32_t flags);
+        // What InteractImpl tells: an Interaction without its style (a widget takes its own; an ItemStyle made for
+        // every control cost what the rest of this does)
+        struct InteractState
+        {
+            Id id = 0;
+            Rect rect;
+            bool visible = false;
+            bool hovered = false;
+            bool held = false;
+            bool pressed = false;
+            float hover = 0.0f;
+            float press = 0.0f;
+        };
+        InteractState InteractImpl(Id id, const Rect& r, std::uint32_t flags);
         // controls at explicit rects (list rows use them)
         Vec2 ToggleSize();
         Vec2 StepperSize();

@@ -18,6 +18,7 @@
 #include "esia/core/draw_list.hpp"
 #include "esia/text/glyph_atlas.hpp"
 
+#include <array>
 #include <atomic>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -346,6 +347,7 @@ namespace esia::text
                 fallbacks_.push_back(face);
                 layouts_.clear();   // texts laid out before may pick other fonts now
                 lastLayout_ = nullptr;   // it was one of them
+                layoutFront_.fill(nullptr);
             }
 
             // ------------------------------------------------------------------ frame
@@ -369,6 +371,8 @@ namespace esia::text
                 // layouts unused for a while leave the cache, and wait (with their storage) to hold the next new texts:
                 // text that changes every frame (a frame rate, a timer) does not allocate once the cache is warm
                 if (layouts_.size() > kLayoutCacheLimit)
+                {
+                    layoutFront_.fill(nullptr);   // it may point at what leaves
                     for (auto it = layouts_.begin(); it != layouts_.end();)
                     {
                         auto next = std::next(it);
@@ -381,6 +385,7 @@ namespace esia::text
                         }
                         it = next;
                     }
+                }
             }
 
             // ------------------------------------------------------------------ editing
@@ -866,6 +871,14 @@ namespace esia::text
                     return lastLayout_;
                 }
                 const std::uint64_t key = LayoutKey(params, text);
+                // the front: a layout found here without the map's buckets (most texts of a frame)
+                Layout*& front = layoutFront_[(std::size_t)(key ^ (key >> 32)) & (kLayoutFront - 1)];
+                if (front && front->text == text && std::memcmp(front->params, params, sizeof(params)) == 0)
+                {
+                    front->lastFrame = frame_;
+                    lastLayout_ = front;
+                    return front;
+                }
                 auto it = layouts_.find(key);
                 if (it == layouts_.end())
                 {
@@ -894,6 +907,7 @@ namespace esia::text
                 }
                 layout.lastFrame = frame_;
                 lastLayout_ = &layout;
+                front = &layout;
                 return &layout;
             }
 
@@ -1513,6 +1527,8 @@ namespace esia::text
             std::uint64_t frame_ = 0;
             std::unordered_map<std::uint64_t, Layout, IntHash> layouts_;
             Layout* lastLayout_ = nullptr;   // the last GetLayout's (a measure is followed by the draw)
+            static constexpr std::size_t kLayoutFront = 256;
+            std::array<Layout*, kLayoutFront> layoutFront_{};   // layouts_ by key, direct-mapped (cleared when any leaves)
             std::vector<std::unordered_map<std::uint64_t, Layout, IntHash>::node_type> spareLayouts_;   // evicted, to be reused
 
             // scratch, reused by every layout

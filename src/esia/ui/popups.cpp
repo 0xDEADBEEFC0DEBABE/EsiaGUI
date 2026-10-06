@@ -130,7 +130,7 @@ namespace esia::ui
         const Vec2 pos = c.CursorPos();
         const float width = std::max(natural, c.WorkRect().max.x - pos.x);
         c.ItemSize(Vec2(natural, h));
-        const Interaction it = InteractImpl(c.GetId(label), Rect::FromSize(pos, Vec2(width, h)), InteractFlags_None);
+        const InteractState it = InteractImpl(c.GetId(label), Rect::FromSize(pos, Vec2(width, h)), InteractFlags_None);
         if (!it.visible)
             return false;
         const Palette& pc = C();
@@ -185,7 +185,7 @@ namespace esia::ui
         const int count = (int)items.size();
         const int sel = count > 0 ? std::clamp(*selected, 0, count - 1) : -1;
         const std::string_view current = sel >= 0 ? VisibleLabel(items[(std::size_t)sel]) : std::string_view();
-        const Interaction it = InteractImpl(id, r, InteractFlags_None);
+        const InteractState it = InteractImpl(id, r, InteractFlags_None);
         Painter p = GetPainter();
         const text::FontRef f = Font(TextStyle::Body);
         const Vec2 ts = MeasureText(f, current);

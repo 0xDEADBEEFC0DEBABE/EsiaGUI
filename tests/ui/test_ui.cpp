@@ -236,6 +236,39 @@ ESIA_TEST(UiAnim, SpringsStepOncePerFrameAndReportMotion)
     ESIA_CHECK(v1 == 1.0f && !h.ui.Animating());
 }
 
+ESIA_TEST(UiAnim, TableKeepsEntriesThroughGrowthAndForgetsUnused)
+{
+    using Table = ui::detail::AnimTable;
+    Table t;
+    bool created = false, allCreated = true, allFound = true;
+    // a spring and a timer for each of 2500 ids: their own entries, through every growth of the table
+    for (Id id = 1; id <= 2500; ++id)
+    {
+        t.Get(id, Table::kSpring, 1, created).value = (float)id;
+        allCreated = allCreated && created;
+        t.Get(id, Table::kTimer, 1, created).value = -(float)id;
+        allCreated = allCreated && created;
+    }
+    ESIA_CHECK(allCreated && t.count == 5000 && t.slots.size() >= 10000);
+    for (Id id = 1; id <= 2500; ++id)
+    {
+        allFound = allFound && t.Get(id, Table::kSpring, 2, created).value == (float)id && !created;
+        allFound = allFound && t.Get(id, Table::kTimer, 2, created).value == -(float)id && !created;
+    }
+    ESIA_CHECK(allFound);
+    // entries not asked for in `retain` frames go; the others are still found
+    for (Id id = 1; id <= 100; ++id)
+        t.Get(id, Table::kSpring, 700, created);
+    t.Collect(700, 600);
+    ESIA_CHECK(t.count == 100);
+    allFound = true;
+    for (Id id = 1; id <= 100; ++id)
+        allFound = allFound && t.Get(id, Table::kSpring, 701, created).value == (float)id && !created;
+    ESIA_CHECK(allFound);
+    ESIA_CHECK(t.Get(101, Table::kSpring, 701, created).value == 0.0f && created);
+    ESIA_CHECK(t.Get(1, Table::kTimer, 701, created).value == 0.0f && created);
+}
+
 ESIA_TEST(UiLists, RowsAbutInTheirSectionAndSectionsStack)
 {
     UiHarness h;

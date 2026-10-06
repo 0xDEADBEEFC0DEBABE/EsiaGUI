@@ -8,7 +8,9 @@
 //
 // * The device draws with the host's immediate context (FrameDesc::nativeContext stays null). With
 //   restoreHostState (the default) the context's pipeline state is saved at BeginFrame and restored at EndFrame, as
-//   WGT's D3D11 backend did; without it the host must not rely on any state after Renderer::Render.
+//   WGT's D3D11 backend did; without it the context is cleared at BeginFrame and the host must not rely on any state
+//   after Renderer::Render. ownsContext: the host draws nothing else with the context - no state is saved, cleared or
+//   put back (a frame's few microseconds of state calls).
 // * Needs feature level 11_0 (shader model 5) and d3dcompiler_47.dll: the shaders are compiled at runtime from the
 //   embedded HLSL (cached per process) until DXBC is generated on Windows.
 // * WrapRenderTarget returns the same texture for the same view (swap-chain buffers are wrapped every frame at no
@@ -33,6 +35,7 @@ namespace esia::rhi::d3d11
         ID3D11Device* device = nullptr;
         ID3D11DeviceContext* context = nullptr;   // the immediate context
         bool restoreHostState = true;
+        bool ownsContext = false;   // the context is Esia's alone (overrides restoreHostState)
         d3d::DebugDesc debug;
     };
 

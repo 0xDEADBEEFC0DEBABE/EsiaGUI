@@ -158,7 +158,7 @@ namespace esia::ui
             const Vec2 bs = MeasureText(bf, backTitle);
             const float maxW = pr.Width() * 0.5f - ts.x * 0.5f - Sc(28);
             const Rect br(pr.min.x, pr.min.y, pr.min.x + std::min(bs.x, std::max(maxW, 0.0f)) + Sc(30), pr.min.y + barH);
-            const Interaction it = InteractImpl(c.GetId("##back"), br, InteractFlags_None);
+            const InteractState it = InteractImpl(c.GetId("##back"), br, InteractFlags_None);
             const Color accent = Accent().Fade(1.0f - 0.4f * it.press);
             DrawIcon(p, Vec2(br.min.x + Sc(8), br.Center().y), icons::ChevronLeft, Sc(15), accent);
             p.TextBox(Rect(br.min.x + Sc(22), br.min.y, br.max.x, br.max.y), Vec2(0.0f, 0.5f), bf, accent, backTitle, text::TextFlags_Ellipsis);
