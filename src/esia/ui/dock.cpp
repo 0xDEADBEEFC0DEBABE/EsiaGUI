@@ -244,6 +244,8 @@ namespace esia::ui
             env.cornerSmoothing = T().metrics.cornerSmoothing;
             env.pixelScale = m.ctx->Scale();
             env.text = m.text;
+            env.flat = m.flat;
+            env.flatSurface = T().colors.secondaryBackground;
             return Painter(m.ctx->ForegroundDrawList(), env);
         }
 

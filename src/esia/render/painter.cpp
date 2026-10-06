@@ -1,6 +1,7 @@
 // Esia - Painter (see esia/render/painter.hpp): encodes SDF shapes as fx::Instances in the draw list's FX stream.
 // Ported from WGT's src/render/painter.cpp; the instance encoding must stay identical (the shaders read it).
 #include "esia/render/painter.hpp"
+#include "esia/text/glyph_atlas.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -90,6 +91,72 @@ namespace esia
         }
 
         thread_local std::vector<Vec2> tPath;
+
+        // A flat shape's corners as SdRoundRect draws them, per corner: the radius grown by the smoothing (R) and the
+        // superellipse's exponent (n), for a box of half size `maxR` at the smallest
+        void CornerOf(float r, float maxR, float smoothing, float& R, float& n)
+        {
+            r = std::min(std::max(r, 0.0f), maxR);
+            float s = smoothing;
+            R = r * (1.0f + 0.6f * s);
+            if (R > maxR)
+            {
+                s *= Saturate((maxR - r) / std::max(0.6f * r, 1e-4f));
+                R = r * (1.0f + 0.6f * s);
+            }
+            n = s > 0.001f && R > 1e-4f ? 2.0f + 2.0f * s : 2.0f;
+        }
+
+        // SdRoundRect's distance at `p` (pixels) from a box [b0, b1] whose corners (tl, tr, br, bl) are R / n
+        float BoxDistance(Vec2 p, Vec2 b0, Vec2 b1, const float* R, const float* n)
+        {
+            const Vec2 c = (b0 + b1) * 0.5f, hs = (b1 - b0) * 0.5f, d = p - c;
+            const int k = d.x > 0.0f ? (d.y > 0.0f ? 2 : 1) : (d.y > 0.0f ? 3 : 0);
+            const float r = R[k];
+            const float qx = std::fabs(d.x) - hs.x + r, qy = std::fabs(d.y) - hs.y + r;
+            const float mx = std::max(qx, 0.0f), my = std::max(qy, 0.0f);
+            float corner;
+            if (mx > 0.0f && my > 0.0f)
+                corner = n[k] > 2.0f ? std::pow(std::pow(mx / r, n[k]) + std::pow(my / r, n[k]), 1.0f / n[k]) * r : std::sqrt(mx * mx + my * my);
+            else
+                corner = std::max(mx, my);
+            return std::min(std::max(qx, qy), 0.0f) + corner - r;
+        }
+
+        // A tile's key: what it holds, quantized (an eighth of a pixel, the exponent in 1/64)
+        std::uint64_t TileKey(const std::uint32_t* v, int count)
+        {
+            std::uint64_t h = 0x9E3779B97F4A7C15ull;
+            for (int i = 0; i < count; ++i)
+                h = (h ^ v[i]) * 0x100000001B3ull + (h >> 29);
+            return h & ~(1ull << 63);
+        }
+        // rounding without the C runtime's calls (MSVC does not inline roundf / lroundf / ceilf for SSE2)
+        std::int32_t RoundI(float v) { return (std::int32_t)(v + (v >= 0.0f ? 0.5f : -0.5f)); }
+        std::uint32_t Q(float v, float steps) { return (std::uint32_t)RoundI(v * steps); }
+        int CeilI(float v)
+        {
+            const int i = (int)v;
+            return i + ((float)i < v ? 1 : 0);
+        }
+
+        thread_local text::GlyphBitmap tTile;
+
+        // A flat shape's tile and grid, for its size, corners and stroke: rows of widgets repeat a few of them, which
+        // then cost a look-up and the vertices
+        struct FlatTile
+        {
+            std::int32_t in[10] = {};             // what it is for (pixels, in 1/64: shapes of a size at other places
+                                                  // differ in the last bits of their widths)
+            const void* text = nullptr;
+            std::uint64_t generation = 0;         // TextSystem::TileGeneration when made
+            TextureId page = 0;
+            float offX[4] = {}, offY[4] = {};     // grid lines from the shape's start (0, 1) or end (2, 3) when stretched
+            float u[4] = {}, v[4] = {};
+            int nx = 0, ny = 0;
+            bool plainMiddle = false, skipMiddle = false;
+        };
+        thread_local FlatTile tFlatTiles[128];
     }
 
     Painter::Painter(DrawList& drawList, const PainterEnv& env) : dl_(&drawList), env_(env), alpha_(env.alpha) {}
@@ -173,6 +240,27 @@ namespace esia
     {
         if (bounds.Empty() && kind == fx::ShapeKind::RoundRect)
             return;
+        // flat drawing: geometry when it can be; else the FX shape without its shadow, glow, glass (its surface instead),
+        // shimmer and grain
+        const bool flat = env_.flat;
+        bool flatGlass = false;   // the glass's surface replaces the fill
+        Color flatFill;
+        if (flat)
+        {
+            // glass becomes its surface: flatSurface under the tint, a solid fill over it
+            const bool solidPaint = !s.hasFill || s.fill.kind == fx::PaintKind::Solid;
+            flatFill = s.hasFill ? s.fill.a : Color::Clear();
+            if (s.hasGlass && solidPaint)
+            {
+                const Color tint = s.glass.tint, c = flatFill;
+                const Color base = Lerp(env_.flatSurface, tint.WithAlpha(env_.flatSurface.a), tint.a);
+                flatFill = Color(c.r * c.a + base.r * (1.0f - c.a), c.g * c.a + base.g * (1.0f - c.a), c.b * c.a + base.b * (1.0f - c.a),
+                                 c.a + base.a * (1.0f - c.a));
+                flatGlass = true;
+            }
+            if (kind == fx::ShapeKind::RoundRect && solidPaint && !(extra && mergeSmooth_ >= 0.0f) && FlatGeometry(bounds, s, flatFill))
+                return;
+        }
         const float scale = env_.metricsScale;
 
         fx::Instance inst;
@@ -203,7 +291,17 @@ namespace esia
         }
 
         // paint
-        if (s.hasFill && (s.fill.a.a > 0.0f || s.fill.b.a > 0.0f || s.image != 0))
+        if (flatGlass)
+        {
+            if (flatFill.a > 0.0f)
+            {
+                feat |= fx::kFill;
+                SetColor(inst.fill0, flatFill);
+                SetColor(inst.fill1, flatFill);
+                inst.flags[1] = (std::uint32_t)fx::PaintKind::Solid;
+            }
+        }
+        else if (s.hasFill && (s.fill.a.a > 0.0f || s.fill.b.a > 0.0f || s.image != 0))
         {
             feat |= fx::kFill;
             SetColor(inst.fill0, s.fill.a);
@@ -228,7 +326,7 @@ namespace esia
         float strokeWidth = s.strokeWidth;
         Color strokeColor = s.strokeColor;
         float strokeAlign = s.strokeAlign, fadeTo = s.strokeFadeTo, fadeAngle = s.strokeFadeAngle;
-        if (s.hasGlass && strokeWidth <= 0.0f && s.glass.rim.a > 0.0f)
+        if (s.hasGlass && !flat && strokeWidth <= 0.0f && s.glass.rim.a > 0.0f)
         {
             strokeWidth = std::max(1.0f, 1.0f * scale);
             strokeColor = s.glass.rim;
@@ -247,7 +345,7 @@ namespace esia
         }
 
         // shadow
-        if (s.shadowColor.a > 0.0f && (s.shadowBlur > 0.0f || s.shadowSpread != 0.0f || s.shadowOffset.x != 0.0f || s.shadowOffset.y != 0.0f))
+        if (!flat && s.shadowColor.a > 0.0f && (s.shadowBlur > 0.0f || s.shadowSpread != 0.0f || s.shadowOffset.x != 0.0f || s.shadowOffset.y != 0.0f))
         {
             feat |= fx::kShadow;
             if (s.shadowInset)
@@ -257,7 +355,7 @@ namespace esia
         }
 
         // glow
-        if (s.glowColor.a > 0.0f)
+        if (!flat && s.glowColor.a > 0.0f)
         {
             SetColor(inst.glow, s.glowColor);
             if (s.glowRadius > 0.0f && s.glowIntensity > 0.0f)
@@ -268,7 +366,7 @@ namespace esia
         }
 
         // glass
-        if (s.hasGlass)
+        if (s.hasGlass && !flat)
         {
             feat |= fx::kGlass;
             const GlassMaterial& g = s.glass;
@@ -278,13 +376,14 @@ namespace esia
             inst.shape[0] = g.legibility;
             inst.shape2Params[2] = std::max(g.magnify, 0.0f);
         }
-        const float noise = s.noise >= 0.0f ? s.noise : (s.hasGlass ? s.glass.noise : 0.0f);
+        const float noise = flat ? 0.0f : s.noise >= 0.0f ? s.noise : (s.hasGlass ? s.glass.noise : 0.0f);
         if (noise > 0.0f)
             feat |= fx::kNoise;
 
-        if (s.shimmer > 0.0f)
+        const float shimmer = flat ? 0.0f : s.shimmer;
+        if (shimmer > 0.0f)
             feat |= fx::kShimmer;
-        Set4(inst.misc, Saturate(s.opacity * alpha_), noise, s.shimmer, s.shimmerSpeed);
+        Set4(inst.misc, Saturate(s.opacity * alpha_), noise, shimmer, s.shimmerSpeed);
 
         if (s.effect != 0)
         {
@@ -346,6 +445,230 @@ namespace esia
             return;
 
         Emit(inst, s.effect, s.image);
+    }
+
+    bool Painter::FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill)
+    {
+        if (s.effect != 0 || s.image != 0 || !env_.text)
+            return false;
+        const float opacity = Saturate(s.opacity * alpha_);
+        Color stroke = s.strokeWidth > 0.0f ? s.strokeColor : Color::Clear();
+        fill.a *= opacity;
+        stroke.a *= opacity;
+        if (fill.a <= 0.0f && stroke.a <= 0.0f)
+            return true;
+
+        // the scale stack (press / pop animations)
+        esia::Rect r = bounds;
+        float radii[4] = {s.radii[0], s.radii[1], s.radii[2], s.radii[3]};
+        float strokeWidth = s.strokeWidth;
+        for (int i = scaleDepth_ - 1; i >= 0; --i)
+        {
+            const float k = scaleValue_[i];
+            if (k == 1.0f)
+                continue;
+            r = esia::Rect(ScalePoint(r.min, scaleOrigin_[i], k), ScalePoint(r.max, scaleOrigin_[i], k));
+            for (float& v : radii)
+                v *= k;
+            strokeWidth *= k;
+        }
+        if (r.Empty())
+            return true;
+        const float outsetUi = stroke.a > 0.0f ? strokeWidth * s.strokeAlign : 0.0f;
+        const esia::Rect& clip = dl_->ClipRect();
+        if (r.max.x + outsetUi + 2.0f <= clip.min.x || r.min.x - outsetUi - 2.0f >= clip.max.x || r.max.y + outsetUi + 2.0f <= clip.min.y ||
+            r.min.y - outsetUi - 2.0f >= clip.max.y)
+            return true;
+        if (maskDepth_ > 0)
+        {
+            // the innermost mask (the one the FX shader applies) changes nothing when the shape lies inside it, a pixel
+            // in from its edges and clear of its corners (a window's rounded content mask around its widgets); else the
+            // FX shape
+            const esia::Rect& m = masks_[maskDepth_ - 1];
+            const float edge = 1.0f / Pixel(), reach = outsetUi + edge;
+            const esia::Rect b(r.min.x - reach, r.min.y - reach, r.max.x + reach, r.max.y + reach);
+            const float R = maskRadius_[maskDepth_ - 1] * (1.0f + 0.6f * env_.cornerSmoothing) + edge;
+            if (b.min.x < m.min.x + edge || b.min.y < m.min.y + edge || b.max.x > m.max.x - edge || b.max.y > m.max.y - edge)
+                return false;
+            const bool left = b.min.x < m.min.x + R, right = b.max.x > m.max.x - R, top = b.min.y < m.min.y + R, bottom = b.max.y > m.max.y - R;
+            if ((left || right) && (top || bottom))
+                return false;
+        }
+
+        const float px = Pixel(), inv = 1.0f / px;
+        const Vec2 p0 = r.min * px, p1 = r.max * px;
+        const float smoothing = s.smoothing >= 0.0f ? s.smoothing : env_.cornerSmoothing;
+        const std::uint64_t generation = env_.text->TileGeneration();
+
+        // the tile of a fill (ring = false) or of a stroke's ring, made or found again
+        auto tileFor = [&](bool ring, float width, float align) -> const FlatTile* {
+            const std::int32_t in[10] = {RoundI((p1.x - p0.x) * 64.0f), RoundI((p1.y - p0.y) * 64.0f), RoundI(radii[0] * px * 64.0f),
+                                         RoundI(radii[1] * px * 64.0f), RoundI(radii[2] * px * 64.0f), RoundI(radii[3] * px * 64.0f),
+                                         RoundI(smoothing * 1024.0f), ring ? RoundI(width * 64.0f) : -1, RoundI(align * 64.0f), RoundI(px * 1024.0f)};
+            std::uint32_t hsh = 2166136261u;
+            for (const std::int32_t b : in)
+                hsh = (hsh ^ (std::uint32_t)b) * 16777619u;
+            FlatTile& t = tFlatTiles[(hsh ^ (hsh >> 15)) & 127u];
+            if (t.text == env_.text && t.generation == generation && std::memcmp(t.in, in, sizeof(in)) == 0)
+                return &t;
+
+            // in pixels: the corners as SdRoundRect draws them
+            const float w = (float)in[0] * (1.0f / 64.0f), h = (float)in[1] * (1.0f / 64.0f), maxR = 0.5f * std::min(w, h);
+            float R[4], n[4], bigR = 0.0f;
+            for (int c = 0; c < 4; ++c)
+            {
+                CornerOf((float)in[2 + c] * (1.0f / 64.0f), maxR, smoothing, R[c], n[c]);
+                R[c] = (float)RoundI(R[c] * 8.0f) * 0.125f;
+                n[c] = (float)RoundI(n[c] * 64.0f) * (1.0f / 64.0f);
+                bigR = std::max(bigR, R[c]);
+            }
+            if (bigR > 96.0f)
+                return nullptr;   // a tile too large for the atlas to hold many: the FX shape
+            const int corner = CeilI(bigR);
+            // an axis is stretched when there is a pixel or more between its corners; else its tile is its whole length
+            const bool stretchX = w > (float)(2 * corner + 1), stretchY = h > (float)(2 * corner + 1);
+            const float wq = stretchX ? 0.0f : (float)RoundI(w * 4.0f) * 0.25f, hq = stretchY ? 0.0f : (float)RoundI(h * 4.0f) * 0.25f;
+            // corner cells of C texels and one texel between them that the edges and the middle stretch (a nine-patch)
+            // along a stretched axis, else the whole length (a knob, a dot); P texels of nothing around the shape, so
+            // bilinear sampling fades its edges out over a pixel wherever it lies
+            const float outset = ring ? width * align : 0.0f;
+            const int P = 1 + CeilI(outset);
+            const int C = P + corner;
+            const int tw = stretchX ? 2 * C + 1 : CeilI(wq) + 2 * P, th = stretchY ? 2 * C + 1 : CeilI(hq) + 2 * P;
+            std::uint32_t kv[16] = {ring ? 2u : 1u, (std::uint32_t)P, (std::uint32_t)C, Q(wq, 4.0f), Q(hq, 4.0f), Q(width, 8.0f), Q(align, 8.0f),
+                                    stretchX ? 1u : 0u, stretchY ? 1u : 0u};
+            for (int c = 0; c < 4; ++c)
+            {
+                kv[9 + c] = Q(R[c], 8.0f);
+                kv[13 + (c & 1)] ^= Q(n[c], 64.0f) << (c * 8);
+            }
+            kv[15] = (std::uint32_t)tw << 16 | (std::uint32_t)th;
+            const std::uint64_t key = TileKey(kv, 16);
+            const text::GlyphSlot* slot = env_.text->FindTile(key);
+            if (!slot)
+            {
+                // rasterized as the FX shader covers pixels: saturate(0.5 - distance)
+                text::GlyphBitmap& b = tTile;
+                b.width = tw;
+                b.height = th;
+                b.left = b.top = 0;
+                b.channels = 1;
+                b.pixels.assign((std::size_t)tw * th, 0);
+                const Vec2 b0((float)P, (float)P);
+                const Vec2 b1(stretchX ? (float)(tw - P) : (float)P + wq, stretchY ? (float)(th - P) : (float)P + hq);
+                for (int y = 0; y < th; ++y)
+                    for (int x = 0; x < tw; ++x)
+                    {
+                        const float d = BoxDistance(Vec2((float)x + 0.5f, (float)y + 0.5f), b0, b1, R, n);
+                        float cov = Saturate(0.5f - d);
+                        if (ring)
+                            cov = Saturate(0.5f - (d - width * align)) - Saturate(0.5f - (d + width * (1.0f - align)));
+                        b.pixels[(std::size_t)y * tw + x] = (std::uint8_t)RoundI(Saturate(cov) * 255.0f);
+                    }
+                slot = env_.text->AddTile(key, b);
+                if (!slot || !slot->page)
+                    return nullptr;
+            }
+            std::memcpy(t.in, in, sizeof(in));
+            t.text = env_.text;
+            t.generation = env_.text->TileGeneration();   // after AddTile: a new page does not start the atlas over
+            t.page = slot->page;
+            const Vec2 duv((slot->uv1.x - slot->uv0.x) / (float)tw, (slot->uv1.y - slot->uv0.y) / (float)th);
+            t.offX[0] = -(float)P;
+            t.u[0] = slot->uv0.x;
+            if (stretchX)
+            {
+                t.offX[1] = (float)(C - P), t.offX[2] = (float)(P - C), t.offX[3] = (float)P;
+                t.u[1] = slot->uv0.x + (float)C * duv.x, t.u[2] = slot->uv0.x + (float)(C + 1) * duv.x, t.u[3] = slot->uv1.x;
+                t.nx = 4;
+            }
+            else
+                t.offX[1] = (float)(tw - P), t.u[1] = slot->uv1.x, t.nx = 2;
+            t.offY[0] = -(float)P;
+            t.v[0] = slot->uv0.y;
+            if (stretchY)
+            {
+                t.offY[1] = (float)(C - P), t.offY[2] = (float)(P - C), t.offY[3] = (float)P;
+                t.v[1] = slot->uv0.y + (float)C * duv.y, t.v[2] = slot->uv0.y + (float)(C + 1) * duv.y, t.v[3] = slot->uv1.y;
+                t.ny = 4;
+            }
+            else
+                t.offY[1] = (float)(th - P), t.v[1] = slot->uv1.y, t.ny = 2;
+            // a fill's middle larger than 48 x 48 pixels: a quad of the white texture (the UI geometry program: the
+            // cheapest pixels; the coverage program also composes text), the rim around it from the tile
+            const bool middle = t.nx == 4 && t.ny == 4;
+            t.plainMiddle = middle && !ring && (w - 2.0f * (float)(C - P)) * (h - 2.0f * (float)(C - P)) > 48.0f * 48.0f;
+            t.skipMiddle = middle && (ring || t.plainMiddle);
+            return &t;
+        };
+
+        TextureId tex = 0;
+        bool pushed = false;
+        auto use = [&](TextureId id) {
+            if (pushed && tex == id)
+                return;
+            if (pushed)
+                dl_->PopTexture();
+            dl_->PushTexture(id);
+            tex = id;
+            pushed = true;
+        };
+        auto emit = [&](const FlatTile& t, Color color) {
+            float gx[4], gy[4];
+            // a stretched axis: two lines from each end; a whole one: both from the start
+            for (int k = 0; k < t.nx; ++k)
+                gx[k] = ((t.nx == 4 && k >= 2 ? p1.x : p0.x) + t.offX[k]) * inv;
+            for (int k = 0; k < t.ny; ++k)
+                gy[k] = ((t.ny == 4 && k >= 2 ? p1.y : p0.y) + t.offY[k]) * inv;
+            const std::uint32_t col = color.ToRgba8();
+            if (t.plainMiddle)
+            {
+                use(0);
+                DrawList::PrimWriter pw = dl_->PrimReserve(6, 4);
+                const Vec2 wuv(0.5f, 0.5f);
+                pw.vtx[0] = {Vec2(gx[1], gy[1]), wuv, col};
+                pw.vtx[1] = {Vec2(gx[2], gy[1]), wuv, col};
+                pw.vtx[2] = {Vec2(gx[2], gy[2]), wuv, col};
+                pw.vtx[3] = {Vec2(gx[1], gy[2]), wuv, col};
+                const std::uint32_t b = pw.base;
+                pw.idx[0] = b, pw.idx[1] = b + 1, pw.idx[2] = b + 2, pw.idx[3] = b, pw.idx[4] = b + 2, pw.idx[5] = b + 3;
+                dl_->PrimCommit(6, esia::Rect(gx[1], gy[1], gx[2], gy[2]));
+            }
+            use(t.page);
+            const std::uint32_t cells = (std::uint32_t)((t.nx - 1) * (t.ny - 1)) - (t.skipMiddle ? 1u : 0u);
+            DrawList::PrimWriter pw = dl_->PrimReserve(cells * 6, (std::uint32_t)(t.nx * t.ny));
+            Vertex* v = pw.vtx;
+            for (int yi = 0; yi < t.ny; ++yi)
+                for (int xi = 0; xi < t.nx; ++xi)
+                    *v++ = {Vec2(gx[xi], gy[yi]), Vec2(t.u[xi], t.v[yi]), col};
+            std::uint32_t* x = pw.idx;
+            const std::uint32_t un = (std::uint32_t)t.nx;
+            for (int yi = 0; yi + 1 < t.ny; ++yi)
+                for (int xi = 0; xi + 1 < t.nx; ++xi)
+                {
+                    if (t.skipMiddle && xi == 1 && yi == 1)
+                        continue;
+                    const std::uint32_t a = pw.base + (std::uint32_t)yi * un + (std::uint32_t)xi;
+                    x[0] = a, x[1] = a + 1, x[2] = a + 1 + un, x[3] = a, x[4] = a + 1 + un, x[5] = a + un;
+                    x += 6;
+                }
+            dl_->PrimCommit(cells * 6, esia::Rect(gx[0], gy[0], gx[t.nx - 1], gy[t.ny - 1]));
+        };
+
+        FlatTile fillTile;   // a copy: the stroke's tile may take the same slot
+        const FlatTile* ft = fill.a > 0.0f ? tileFor(false, 0.0f, 0.0f) : nullptr;
+        if (ft)
+            ft = &(fillTile = *ft);
+        const FlatTile* st = stroke.a > 0.0f && strokeWidth > 0.0f ? tileFor(true, strokeWidth * px, s.strokeAlign) : nullptr;
+        if ((fill.a > 0.0f && !ft) || (stroke.a > 0.0f && strokeWidth > 0.0f && !st))
+            return false;   // nothing drawn yet: the FX shape draws it all
+        if (ft)
+            emit(*ft, fill);
+        if (st)
+            emit(*st, stroke);
+        if (pushed)
+            dl_->PopTexture();
+        return true;
     }
 
     void Painter::ApplyScale(fx::Instance& inst) const

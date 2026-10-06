@@ -1,8 +1,10 @@
 // Painter: the fx::Instance encoding (it must stay WGT's: the shaders read it), culling, masks, scale, glow
 // containment, geometry primitives, layers and fades.
 #include "esia/render/painter.hpp"
+#include "esia/text/glyph_atlas.hpp"
 #include "esia_test.hpp"
 #include <string>
+#include <unordered_map>
 
 using namespace esia;
 
@@ -290,4 +292,137 @@ ESIA_TEST(Painter, LayersFadesAndStreaks)
     ESIA_CHECK(dl.Fades().size() == 1 && dl.Fades()[0].y0 == 40 && dl.Fades()[0].y1 == 240 && dl.Fades()[0].top == 12 && dl.Fades()[0].bottom == 0);
     const fx::Instance& s = dl.FxInstances()[0];
     ESIA_CHECK(s.flags[0] == fx::kCaustic && s.fill0[3] == 1.0f && s.fill1[0] == -1.0f && s.misc[0] == 0.5f);
+}
+
+namespace
+{
+    // FakeText with the coverage tiles of flat drawing: they sit on the text's texture (42), as in the FreeType system
+    struct TileText final : text::TextSystem
+    {
+        FakeText base;
+        std::unordered_map<std::uint64_t, text::GlyphSlot> tiles;
+        std::unordered_map<std::uint64_t, text::GlyphBitmap> bitmaps;
+        int added = 0;
+        std::uint64_t generation = NextGeneration();   // every text system its own (the tile memo keys on it)
+        static std::uint64_t NextGeneration()
+        {
+            static std::uint64_t n = 0;
+            return (++n) << 32;
+        }
+        text::FontId AddFontFile(const char* p, int i) override { return base.AddFontFile(p, i); }
+        text::FontId AddFontMemory(const void* d, std::size_t s, int i) override { return base.AddFontMemory(d, s, i); }
+        void AddFallback(text::FontId f) override { base.AddFallback(f); }
+        void NewFrame(const text::RasterParams& r) override { base.NewFrame(r); }
+        text::TextMetrics Measure(text::FontRef f, std::string_view s, float w, std::uint32_t fl) override { return base.Measure(f, s, w, fl); }
+        Vec2 Draw(DrawList& dl, text::FontRef f, Vec2 pos, Color c, std::string_view s, float w, std::uint32_t fl, float k) override
+        {
+            return base.Draw(dl, f, pos, c, s, w, fl, k);
+        }
+        void DrawGlyph(DrawList& dl, text::FontRef f, char32_t cp, Vec2 center, Color c) override { base.DrawGlyph(dl, f, cp, center, c); }
+        const text::GlyphSlot* FindTile(std::uint64_t key) override
+        {
+            const auto it = tiles.find(key);
+            return it != tiles.end() ? &it->second : nullptr;
+        }
+        const text::GlyphSlot* AddTile(std::uint64_t key, const text::GlyphBitmap& b) override
+        {
+            ++added;
+            bitmaps[key] = b;
+            text::GlyphSlot s;
+            s.page = 42;
+            s.uv0 = Vec2(0.0f, 0.0f);
+            s.uv1 = Vec2((float)b.width / 1024.0f, (float)b.height / 1024.0f);
+            s.width = b.width;
+            s.height = b.height;
+            return &(tiles[key] = s);
+        }
+        std::uint64_t TileGeneration() override { return generation; }
+    };
+
+    int GeometryCommands(const DrawList& dl, TextureId texture)
+    {
+        int n = 0;
+        for (const DrawCmd& c : dl.Commands())
+            n += c.kind == DrawCmdKind::Geometry && c.count > 0 && c.texture == texture ? 1 : 0;
+        return n;
+    }
+}
+
+// Flat drawing: rounded rectangles, capsules and circles are geometry on the text's texture - one command with the
+// text around them - from coverage tiles made once per kind of shape; no shadows; glass a solid surface
+ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
+{
+    TileText tt;
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.text = &tt;
+    env.flat = true;
+    env.flatSurface = Color(0.1f, 0.1f, 0.1f, 1.0f);
+    Painter p(dl, env);
+    const Style button = Style().Radius(18).Fill(Color::Hex(0x0A84FF)).Shadow(Color::Black(0.3f), 12, Vec2(0, 4));
+    p.Text(Vec2(10, 10), text::FontRef{1, 10.0f}, Color::White(), "Label");
+    p.Rect(Rect(80, 4, 160, 40), button);
+    p.Text(Vec2(100, 15), text::FontRef{1, 10.0f}, Color::White(), "OK");
+    p.Capsule(Rect(80, 60, 160, 96), Style().Fill(Color::Hex(0x0A84FF)));   // the same shape elsewhere: the same tile
+    p.Circle(Vec2(200, 20), 10, Style().Fill(Color::White()));
+    ESIA_CHECK(dl.FxInstances().empty());
+    ESIA_CHECK(GeometryCommands(dl, 42) == 1);   // the text and the shapes: one command
+    ESIA_CHECK(tt.added == 2);                  // the button's tile and the circle's
+    // a capsule 80 x 36: stretched along x (3 cells), whole along y; a circle: one quad
+    ESIA_CHECK(dl.Vertices().size() == (std::size_t)(5 * 4 + 8 + 2 * 4 + 8 + 4));
+
+    // a large fill: its middle from the white texture, the rim from the tile; a stroke's ring around it
+    DrawList d2 = MakeList();
+    Painter q(d2, env);
+    q.Rect(Rect(10, 10, 310, 210), Style().Radius(20).Fill(Color(0.2f, 0.2f, 0.2f, 1)).Stroke(1.0f, Color::White(0.3f)));
+    ESIA_CHECK(d2.FxInstances().empty() && GeometryCommands(d2, 0) == 1 && GeometryCommands(d2, 42) >= 1);
+    ESIA_CHECK(tt.added == 4);
+
+    // what geometry cannot do stays an FX shape, without the shadow and glow flat drawing leaves out
+    DrawList d3 = MakeList();
+    Painter r(d3, env);
+    r.Rect(Rect(10, 10, 60, 60), Style().Radius(8).Fill(Paint::Linear(Color::White(), Color::Black())).Shadow(Color::Black(0.3f), 8).Glow(Color::White(), 6));
+    ESIA_CHECK(d3.FxInstances().size() == 1 && !(d3.FxInstances()[0].flags[0] & (fx::kShadow | fx::kGlow)));
+
+    // glass: a solid surface, flatSurface under its tint
+    DrawList d4 = MakeList();
+    Painter g(d4, env);
+    GlassMaterial m;
+    m.tint = Color(1, 1, 1, 0.5f);
+    g.Rect(Rect(10, 10, 60, 60), Style().Radius(8).Glass(m));
+    ESIA_CHECK(d4.FxInstances().empty() && !d4.Vertices().empty());
+    if (!d4.Vertices().empty())
+        ESIA_CHECK(d4.Vertices()[0].color == Color(0.55f, 0.55f, 0.55f, 1.0f).ToRgba8());
+
+    // the tiles are gone when the text system starts its pages over: made again
+    ++tt.generation;
+    tt.tiles.clear();
+    const int before = tt.added;
+    DrawList d5 = MakeList();
+    Painter h(d5, env);
+    h.Rect(Rect(80, 4, 160, 40), button);
+    ESIA_CHECK(tt.added == before + 1 && d5.FxInstances().empty());
+}
+
+// A tile covers pixels as the FX shader does: saturate(0.5 - distance), the middle full, the margin empty
+ESIA_TEST(Painter, FlatTilesCoverAsTheShaderDoes)
+{
+    TileText tt;
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.text = &tt;
+    env.flat = true;
+    Painter p(dl, env);
+    p.Circle(Vec2(50, 50), 10, Style().Fill(Color::White()));
+    ESIA_CHECK(tt.bitmaps.size() == 1);
+    if (tt.bitmaps.size() != 1)
+        return;
+    const text::GlyphBitmap& b = tt.bitmaps.begin()->second;
+    ESIA_CHECK(b.width == 22 && b.height == 22);   // 20 pixels and one of nothing around
+    auto at = [&](int x, int y) { return (int)b.pixels[(std::size_t)y * b.width + x]; };
+    ESIA_CHECK(at(11, 11) == 255 && at(0, 0) == 0 && at(0, 11) == 0);
+    // the circle of radius 10 around (11, 11): its left end on pixel 1's left edge (that pixel nearly full), and
+    // pixel (3, 4) a little past half covered (its middle 0.08 inside the edge)
+    ESIA_CHECK(at(1, 11) >= 250);
+    ESIA_CHECK(at(3, 3) == 0 && at(3, 4) > 120 && at(3, 4) < 180);
 }

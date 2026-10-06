@@ -92,6 +92,7 @@ namespace esia::ui
         m.theme.Set(theme, false);
         m.Refresh();
         m.look = desc.glassLook;
+        m.flat = desc.flat;
         m.islandEnabled = desc.island;
         if (!m.text)
             return;
@@ -220,6 +221,9 @@ namespace esia::ui
 
     Density Ui::GetDensity() const { return impl_->theme.to.metrics.compact >= 0.5f ? Density::Compact : Density::Regular; }
 
+    void Ui::SetFlat(bool flat) { impl_->flat = flat; }
+    bool Ui::GetFlat() const { return impl_->flat; }
+
     void Ui::SetDarkMode(bool dark, bool animate)
     {
         // the built-in colors and materials of that mode; the metrics (the scale), type and motion stay as they were set
@@ -347,6 +351,8 @@ namespace esia::ui
         env.alpha = detail::StyleAlpha();
         env.text = m.text;
         env.glow = detail::ItemMapGlow();
+        env.flat = m.flat;
+        env.flatSurface = t.colors.secondaryBackground;
         return Painter(m.ctx->WindowDrawList(), env);
     }
 

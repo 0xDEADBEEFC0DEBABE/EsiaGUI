@@ -18,6 +18,7 @@
 #include "esia/core/draw_list.hpp"
 #include "esia/text/glyph_atlas.hpp"
 
+#include <atomic>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
@@ -277,6 +278,12 @@ namespace esia::text
             return 0;
         }
 
+        std::uint64_t NextSerial()
+        {
+            static std::atomic<std::uint64_t> next{0};
+            return ++next;
+        }
+
         class FreeTypeTextSystem final : public TextSystem
         {
         public:
@@ -342,6 +349,14 @@ namespace esia::text
             }
 
             // ------------------------------------------------------------------ frame
+            // tiles under keys with the top bit set: a glyph's key never has it (faces stay far below 2^15)
+            const GlyphSlot* FindTile(std::uint64_t key) override { return atlas_.Find(key | (1ull << 63)); }
+            const GlyphSlot* AddTile(std::uint64_t key, const GlyphBitmap& bitmap) override
+            {
+                return atlas_.Add(key | (1ull << 63), bitmap, Rect());
+            }
+            std::uint64_t TileGeneration() override { return serial_ << 32 | ((std::uint64_t)atlas_.Resets() + 1u); }
+
             void NewFrame(const RasterParams& params) override
             {
                 params_ = params;
@@ -1493,6 +1508,7 @@ namespace esia::text
             std::vector<std::uint16_t> fallbacks_;
             GlyphAtlas atlas_;
             GlyphAtlas colorAtlas_;   // RGBA8: color glyphs
+            const std::uint64_t serial_ = NextSerial();   // TileGeneration: this text system's
             RasterParams params_;
             std::uint64_t frame_ = 0;
             std::unordered_map<std::uint64_t, Layout, IntHash> layouts_;

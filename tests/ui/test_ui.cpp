@@ -1241,6 +1241,36 @@ ESIA_TEST(UiIds, IdScopeKeepsALoopsWidgetsApart)
 
 // One line for a desktop tool's sizes (UiDesc::density or Ui::SetDensity), as WinUI's compact sizing and Material's
 // density do it: the text keeps its size, the controls and rows get shorter; the regular sizes are the design's
+// Flat (UiDesc::flat, Ui::SetFlat): no shadow, glow or glass on any shape (without a text system the shapes stay FX
+// instances; with one, most become geometry: tests/render "Painter.Flat...")
+ESIA_TEST(UiFlat, NoShadowsGlowsOrGlass)
+{
+    const auto count = [](bool flat) {
+        UiHarness h;
+        h.ui.SetFlat(flat);
+        bool on = true;
+        float v = 0.5f;
+        for (int i = 0; i < 2; ++i)
+            h.Frame([&] {
+                ui::Button("Apply");
+                ui::Toggle("t", &on);
+                ui::Slider("s", &v, 0.0f, 1.0f);
+            });
+        int shapes = 0, effects = 0;
+        for (const DrawList* dl : h.ctx.GetDrawData().lists)
+            for (const fx::Instance& in : dl->FxInstances())
+            {
+                ++shapes;
+                effects += (in.flags[0] & (fx::kShadow | fx::kGlow | fx::kGlass)) ? 1 : 0;
+            }
+        ESIA_CHECK(h.ui.GetFlat() == flat);
+        return std::pair<int, int>(shapes, effects);
+    };
+    const std::pair<int, int> regular = count(false), flat = count(true);
+    ESIA_CHECK(regular.second > 0);
+    ESIA_CHECK(flat.first > 0 && flat.second == 0);
+}
+
 ESIA_TEST(UiDensity, CompactKeepsTheTextAndShrinksTheControls)
 {
     struct Sizes
