@@ -4,6 +4,7 @@
 #include "esia/core/context.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace esia
 {
@@ -30,20 +31,6 @@ namespace esia
     }
 
     // ------------------------------------------------------------------ frames
-    Window::Frame& Context::CurFrame()
-    {
-        Window* w = CurrentWindow();
-        ESIA_ASSERT(w && !w->frames_.empty());
-        return w->frames_.back();
-    }
-
-    const Window::Frame& Context::CurFrame() const
-    {
-        const Window* w = CurrentWindow();
-        ESIA_ASSERT(w && !w->frames_.empty());
-        return w->frames_.back();
-    }
-
     Window::Frame* Context::ScrollFrame()
     {
         Window* w = CurrentWindow();
@@ -60,7 +47,16 @@ namespace esia
         // layout positions land on physical pixels: text and hairlines stay crisp at fractional scales. Down, as
         // Dear ImGui truncates its cursor (WGT's layouts, pixel for pixel); the epsilon keeps a whole pixel whole
         const float s = Scale();
-        return s > 0.0f ? std::floor(v * s + 1e-3f) / s : v;
+        if (!(s > 0.0f))
+            return v;
+        // floor without the C runtime's call (MSVC does not inline floorf for SSE2)
+        const float x = v * s + 1e-3f;
+        if (!(std::fabs(x) < 2.0e9f))
+            return std::floor(x) / s;
+        float f = (float)(std::int64_t)x;
+        if (f > x)
+            f -= 1.0f;
+        return f / s;
     }
 
     void Context::InitRootFrame(Window& w)
@@ -119,20 +115,23 @@ namespace esia
         {
             // the line: SameLine continues it, any other item starts the next one. Each item continuing it tells
             // the items before it how far the line now reaches past them (LineRoom, next frame).
+            std::vector<std::pair<Id, float>>& rooms = CurrentWindow()->lineRoom_;
             if (!f.sameLine)
             {
                 ++f.line;
                 f.lineItems = 0;
+                f.lineRoomFirst = rooms.size();
             }
             f.sameLine = false;
             const int k = f.lineItems++;
-            std::vector<std::pair<Id, float>>& rooms = CurrentWindow()->lineRoom_;
+            // a line's keys are added while it lasts: looked for among those
+            const std::size_t first = std::min(f.lineRoomFirst, rooms.size());
             for (int i = 0; i < std::min(k, kLineEdges); ++i)
             {
                 const Id key = LineKey(f.seq, f.line, i);
                 const float room = r.max.x - f.lineEdges[i];
-                auto it = std::find_if(rooms.rbegin(), rooms.rend(), [key](const std::pair<Id, float>& e) { return e.first == key; });
-                if (it != rooms.rend())
+                auto it = std::find_if(rooms.begin() + (std::ptrdiff_t)first, rooms.end(), [key](const std::pair<Id, float>& e) { return e.first == key; });
+                if (it != rooms.end())
                     it->second = std::max(it->second, room);
                 else
                     rooms.emplace_back(key, room);

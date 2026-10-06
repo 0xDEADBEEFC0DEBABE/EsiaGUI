@@ -29,7 +29,7 @@ namespace esia::ui
             float labelWidth = 0.0f;
             bool stacked = false;
             bool visible = false;
-            Interaction it;
+            InteractState it;
         };
 
         // What a row's accessory needs. The label gets whatever is left; when even a short label and the accessory's
