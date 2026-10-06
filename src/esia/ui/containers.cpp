@@ -25,25 +25,57 @@ namespace esia::ui
         // iOS's scroll edge effect, adding no color. The fades grow with the distance left to scroll: nothing fades at
         // the very top or end. They are at the edges of what is visible: a window reaching past the display fades
         // at the display's edge (as WGT's, whose Dear ImGui clip rects stayed on the display).
-        bool BeginScrollEdgeFade()
+        bool BeginScrollEdgeFade(bool allowed)
         {
-            Context& c = Ctx();
+            Ui::Impl& m = M();
+            Context& c = *m.ctx;
+            DrawList& dl = c.WindowDrawList();
+            m.edgeFades.push_back({&dl, -1});
+            if (!allowed)
+                return false;
             const Vec2 scroll = c.Scroll(), max = c.ScrollMax();
             const float top = std::min(std::max(scroll.y, 0.0f), Sc(22));
             const float bottom = std::min(std::max(max.y - scroll.y, 0.0f), Sc(30));
             if (top <= 0.5f && bottom <= 0.5f)
                 return false;
             Painter p = GetPainter();
-            p.BeginEdgeFade(c.WindowDrawList().ClipRect().Intersect(Rect(Vec2(0.0f, 0.0f), c.DisplaySize())), top, bottom);
+            p.BeginEdgeFade(dl.ClipRect().Intersect(Rect(Vec2(0.0f, 0.0f), c.DisplaySize())), top, bottom);
+            m.edgeFades.back().fade = (int)dl.Fades().size() - 1;
             return true;
         }
 
         void EndScrollEdgeFade(bool started)
         {
+            Ui::Impl& m = M();
+            ESIA_ASSERT(!m.edgeFades.empty() && "EndScrollEdgeFade without BeginScrollEdgeFade");
+            if (!m.edgeFades.empty())
+                m.edgeFades.pop_back();
             if (!started)
                 return;
             Painter p = GetPainter();
             p.EndEdgeFade();
+        }
+
+        // iOS's scroll edge effect under a floating bar. The content under the bar showed through its glass at full
+        // strength over the upper half of it (the area's own fade is 30 units, the bar and its margin twice that):
+        // rows ran into the bar's own text (the search field's placeholder). Now the area's fade ends at the bar's
+        // middle and starts a little above the bar - as much as there is left to scroll past it: at the end the
+        // room below the content keeps the content clear of the bar, and nothing fades.
+        void FadeUnderBar(const Rect& bar, float room)
+        {
+            Ui::Impl& m = M();
+            if (m.edgeFades.empty() || m.edgeFades.back().fade < 0)
+                return;
+            Context& c = *m.ctx;
+            const float left = std::max(c.ScrollMax().y - c.Scroll().y, 0.0f);
+            const float s = Saturate(left / std::max(room, 1.0f));
+            fx::FadeParams& f = m.edgeFades.back().list->Fades()[(std::size_t)m.edgeFades.back().fade];
+            const float edge = bar.Center().y;
+            if (s <= 0.0f || edge >= f.y1 || edge <= f.y0)
+                return;   // nothing left to scroll under it, or the bar is not over the area's visible bottom
+            const float width = edge - (bar.min.y - Sc(16));
+            f.y1 = Lerp(f.y1, edge, s);
+            f.bottom = Lerp(f.bottom, width, s);
         }
 
         namespace
@@ -61,7 +93,7 @@ namespace esia::ui
                 bool scrolled = false;       // it had something to scroll last frame
             };
 
-            float IndicatorLane() { return Sc(12); }
+            float IndicatorLane() { return Sc(T().metrics.padding * 0.75f); }   // in a window's right padding
         }
 
         void ScrollBegin(Id child)
@@ -322,7 +354,7 @@ namespace esia::ui
     {
         Ui::Impl& m = M();
         Context& c = *m.ctx;
-        const Theme& t = m.theme.current;
+        const Theme& t = T();
         const Palette& pc = t.colors;
         const Id id = c.GetId(title);
 
@@ -469,7 +501,7 @@ namespace esia::ui
         // ----------------------------------------------------------- header
         float headerH = 0.0f;
         if (docked)
-            headerH = DockTabBar(title, Rect(wr.min.x, wr.min.y, wr.max.x, wr.min.y + Sc(44)));   // its node's tabs
+            headerH = DockTabBar(title, Rect(wr.min.x, wr.min.y, wr.max.x, wr.min.y + Sc(Sizes().dockTabs)));   // its node's tabs
         else if (!(o.flags & WindowFlags_NoHeader))
         {
             headerH = Sc(t.metrics.headerHeight) + (!o.subtitle.empty() ? Sc(12) : 0.0f);
@@ -483,7 +515,7 @@ namespace esia::ui
             Rect closeR;
             if (closable)
             {
-                const float d = Sc(30);
+                const float d = Sc(Sizes().closeButton);
                 closeR = Rect::FromCenter(Vec2(wr.max.x - pad - d * 0.5f + Sc(4), cy), Vec2(d, d));
                 const Interaction ci = InteractImpl(Salt(id, 0xC105E), closeR, InteractFlags_None);
                 p.PushScale(closeR.Center(), 1.0f + 0.08f * ci.press);
@@ -497,8 +529,9 @@ namespace esia::ui
             float tx = wr.min.x + pad;
             if (o.icon)
             {
-                IconTile(p, Rect::FromCenter(Vec2(tx + Sc(13), cy), Vec2(Sc(26), Sc(26))), o.icon, Accent());
-                tx += Sc(36);
+                const float tile = Sc(Sizes().windowIcon);
+                IconTile(p, Rect::FromCenter(Vec2(tx + tile * 0.5f, cy), Vec2(tile, tile)), o.icon, Accent());
+                tx += Sc(Sizes().windowIcon + 10.0f);
             }
             const std::string_view shown = VisibleLabel(title);
             const text::FontRef tf = Font(TextStyle::Title3);
@@ -543,7 +576,7 @@ namespace esia::ui
         c.BeginChild("##content", co);
         e.view = c.ViewRect();
         e.padX = padX;
-        e.edgeFade = !(o.flags & WindowFlags_NoScroll) && BeginScrollEdgeFade();
+        e.edgeFade = BeginScrollEdgeFade(!(o.flags & WindowFlags_NoScroll));
         m.containers.push_back(e);
 
         if (o.flags & WindowFlags_LargeTitle)

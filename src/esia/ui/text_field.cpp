@@ -479,7 +479,7 @@ namespace esia::ui
         ItemScope scope;
         Context& c = Ctx();
         const float width = o.width > 0.0f ? Sc(o.width) : AvailableWidth();
-        const Rect r = Rect::FromSize(c.CursorPos(), Vec2(width, Sc(38)));
+        const Rect r = Rect::FromSize(c.CursorPos(), Vec2(width, Sc(Sizes().textField)));
         c.ItemSize(r.Size());
         return TextFieldAt(c.GetId(id), r, value, placeholder, o);
     }

@@ -16,6 +16,31 @@ namespace esia::ui
         struct NavState;
     }
 
+    namespace detail
+    {
+        // The built-in controls' sizes in UI units, one table per density (Ui::SetDensity). As in WinUI's compact
+        // sizing every text keeps its size (one size of label everywhere: a smaller one inside the controls only
+        // looked patchy); a shorter control has smaller details - shadows, insets, the knob's swell, the lens's
+        // refraction - so its glass does not outweigh it.
+        struct ControlSizes
+        {
+            float detail;                       // a control's shadows, swell, insets and glass refraction
+            float button[3], buttonPad[3];      // ControlSize Small, Regular, Large: height, padding across
+            float field;                        // number and vector fields, segmented controls, steppers, sliders
+            float stepperWidth;
+            float rowControl;                   // a segmented control or a picker in a list row
+            float textField;                    // text fields, the search bar's field
+            float row;                          // menu and picker rows, the picker button, the color picker's hex row
+            float tableRow, tableHeader, tableCell, treeRow;
+            float toggleWidth, toggleHeight, checkbox;
+            float sliderTrack, knobWidth, knobHeight, heldKnobWidth, heldKnobHeight;
+            float colorBar;                     // the color picker's hue and opacity bars
+            float navigationBar, searchBar, tabBar, dockTabs;
+            float closeButton, windowIcon;      // in a window's header
+        };
+        static_assert(sizeof(ControlSizes) % sizeof(float) == 0, "ControlSizes holds floats only (Refresh blends them)");
+    }
+
     struct Ui::Impl
     {
         Context* ctx = nullptr;
@@ -23,8 +48,12 @@ namespace esia::ui
         text::FontId fonts[(int)FontWeight::Count] = {};
         text::FontId iconFont = 0;
         ThemeAnimator theme;
+        Theme effective;   // what the widgets use (T()): theme.current with its density applied (Refresh)
+        detail::ControlSizes sizes;   // the controls' sizes at that density (Sizes())
         Color accentOverride = Color::Clear();
         GlassLook look = GlassLook::Frosted;
+
+        void Refresh();   // effective and sizes from theme.current (ui.cpp)
 
         double time = 0.0;
         float dt = 0.0f;
@@ -115,6 +144,13 @@ namespace esia::ui
             std::size_t from = 0, to = 0;
         };
         std::vector<FloatBlock> floats;
+        // the scroll areas being submitted, innermost last: their edge fade (an index in the list's Fades(), -1 none)
+        struct EdgeFadeScope
+        {
+            DrawList* list;
+            int fade;
+        };
+        std::vector<EdgeFadeScope> edgeFades;
 
         // the island (overlays.cpp): what Notify / SetActivity queued (any thread), and what it shows
         bool islandEnabled = true;
@@ -155,9 +191,13 @@ namespace esia::ui
             return *g_impl;
         }
         inline Context& Ctx() { return *M().ctx; }
-        inline const Theme& T() { return M().theme.current; }
-        inline const Palette& C() { return M().theme.current.colors; }
-        inline float Sc(float v) { return v * M().theme.current.metrics.scale; }
+        inline const Theme& T() { return M().effective; }
+        inline const Palette& C() { return M().effective.colors; }
+        inline float Sc(float v) { return v * M().effective.metrics.scale; }
+        // The built-in controls' sizes at the Ui's density (UI units before the scale: Sc them)
+        inline const ControlSizes& Sizes() { return M().sizes; }
+        // A detail of a control (a shadow's radius, an inset) at the density
+        inline float Dt(float v) { return Sc(v * Sizes().detail); }
 
         inline const Spring& SpringFast() { return T().motion.fast; }
         inline const Spring& SpringStd() { return T().motion.standard; }
@@ -245,8 +285,12 @@ namespace esia::ui
 
         // ---- scrolling
         // Content dissolves toward an edge it can still scroll past (the innermost scroll area being submitted).
-        bool BeginScrollEdgeFade();
+        // Every Begin has its End; `allowed` false: no fade (an area that does not scroll).
+        bool BeginScrollEdgeFade(bool allowed = true);
         void EndScrollEdgeFade(bool started);
+        // A bar floating over the bottom of the area being submitted (the tab bar, the search bar), `room` the space
+        // left below the content for it: what scrolls under the bar fades out before it reaches the bar's middle.
+        void FadeUnderBar(const Rect& bar, float room);
         // WGT's ScrollAreaBegin / End on the core's scrolling: ScrollBegin before the area's BeginChild (a drag in
         // progress sets the offset), ScrollEnd inside it before EndChild, after its edge fade: drag-to-scroll on empty
         // space with momentum, and the auto-hiding, draggable indicator in the lane at `laneX` (< 0: over the content
