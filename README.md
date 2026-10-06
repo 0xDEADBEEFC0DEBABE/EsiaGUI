@@ -52,7 +52,7 @@ from ImGui to Esia means writing it again with `esia::ui`.
 | Touch | touch arrives as the mouse; dragging content does not scroll it | a phone's behavior: a finger scrolls a list from anywhere, a row or a slider included, without pressing them; a tap presses, a sideways drag moves a slider. A mouse keeps a desktop's: the wheel and the scroll indicator scroll. The showcase lays itself out for a phone |
 | Platforms | anywhere that can draw triangles: desktop, mobile, web, consoles | Windows, Linux, macOS, iOS, Android |
 | Threads | a context is used from one thread at a time | one UI thread per context; nothing process-wide but the font caches (locked); the widget layer's current `Ui` is per thread, one frame at a time; the input queue and the texture registry are thread-safe; worker threads post to the UI (the island's notifications) |
-| Maturity | more than ten years old, used in a great many games and engines, with extensions (ImPlot, node editors), bindings for many languages and a stable API | new in 2026: the API can still change, there is no package yet (`find_package` is on the roadmap), and one team works on it |
+| Maturity | more than ten years old, used in a great many games and engines, with extensions (ImPlot, node editors), bindings for many languages and a stable API | new in 2026: the API can still change, it installs as a CMake package (`find_package(Esia)`) but has no vcpkg or Conan port, and one team works on it |
 
 **Strengths of Esia:**
 
@@ -78,7 +78,7 @@ from ImGui to Esia means writing it again with `esia::ui`.
   Win32, X11 and Android only - on macOS and iOS the host passes the input on itself, as the examples' frames do -
   and no native Wayland window (XWayland);
 * no web and no consoles;
-* young: new in 2026, the API can still change, no package for `find_package` yet.
+* young: new in 2026, the API can still change, no vcpkg or Conan port.
 
 **Use Esia** for the UI users see: a game's menus and overlays, a launcher, an application's settings, a tool that
 should look like a product (tables of a million rows, docking, the compact density). It fits where the glass, the
@@ -216,16 +216,24 @@ The commands and what to install are in each system's section: [Windows](#window
 
 ## Using it in your project
 
-Add the repository (or a backend branch) as a subdirectory and link what you use:
+Add the repository (or a backend branch) as a subdirectory, or install it and find its package; either way the
+targets have the same names:
 
 ```cmake
 add_subdirectory(EsiaGUI)   # the examples are left out when Esia is not the top-level project
+# or, after `cmake --install build/<preset> --prefix <dir>` (and CMAKE_PREFIX_PATH=<dir> for the application):
+find_package(Esia CONFIG REQUIRED)
+
 target_link_libraries(my_app PRIVATE
     esia::ui                # the widgets, with the core, the renderer and the text interface
     esia::text_ft           # the FreeType + HarfBuzz text system
     esia::backends          # every backend this build has, behind the RHI's registry
     esia::platform_win32)   # or esia::platform_x11, esia::platform_android; none on macOS and iOS
 ```
+
+The install holds the static libraries of the backends that build had, their headers and the package
+(`lib/cmake/Esia`); the package finds again what the libraries need (FreeType and HarfBuzz when they came from the
+system, X11, fontconfig). `tests/package` is such an application, built and run by the `esia_package` test.
 
 A frame is `Context::NewFrame`, `Ui::NewFrame`, the widgets, `Ui::EndFrame`, `Context::EndFrame`, then the renderer
 draws `Context::GetDrawData()` into the host's target ([UI_WIDGETS.md](docs/UI_WIDGETS.md) section 1). The smallest
@@ -535,7 +543,7 @@ the commit for `main` and delete the branch.
    when first needed.
 3. Performance: fewer render-pass breaks per backdrop capture on tile-based GPUs; FX feature variants on Vulkan and
    OpenGL (the specialization constant is already in the shader library); less CPU for plain widgets.
-4. Packaging (`find_package(esia)`), API reference.
+4. An API reference; vcpkg and Conan ports.
 5. Android on real phones (Adreno, Mali GPUs; Android before 15), the Vulkan validation layer in debug APKs.
 
 Known issues (no device-loss handling yet; sRGB targets blend in linear light) are in

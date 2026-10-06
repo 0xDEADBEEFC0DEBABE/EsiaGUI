@@ -95,3 +95,24 @@ if(ESIA_EGL_INCLUDE_DIR AND ESIA_EGL_LIBRARY)
     target_include_directories(esia_glsl_link_tests PRIVATE ${ESIA_EGL_INCLUDE_DIR})
     target_link_libraries(esia_glsl_link_tests PRIVATE esia_shaders ${ESIA_EGL_LIBRARY})
 endif()
+
+# find_package: this build installed into a prefix of its own, and an application of its own (tests/package) built
+# against it with the same generator and compilers, then run (a frame on the null device)
+if(ESIA_INSTALL AND NOT CMAKE_CROSSCOMPILING)
+    # what this build was configured with that finds the dependencies (vcpkg's toolchain and triplet in CI)
+    set(_esia_package_forward)
+    foreach(_v CMAKE_PREFIX_PATH VCPKG_CHAINLOAD_TOOLCHAIN_FILE VCPKG_TARGET_TRIPLET CMAKE_OSX_DEPLOYMENT_TARGET CMAKE_OSX_ARCHITECTURES)
+        if(DEFINED ${_v} AND NOT "${${_v}}" STREQUAL "")
+            string(REPLACE ";" "@SEMICOLON@" _value "${${_v}}")   # a list (CMAKE_PREFIX_PATH) stays one argument
+            list(APPEND _esia_package_forward "-D${_v}=${_value}")
+        endif()
+    endforeach()
+    string(REPLACE ";" "|" _esia_package_forward "${_esia_package_forward}")
+    add_test(NAME esia_package
+             COMMAND ${CMAKE_COMMAND} -DBUILD=${CMAKE_BINARY_DIR} -DSOURCE=${ESIA_ROOT}/tests/package
+                     -DWORK=${CMAKE_BINARY_DIR}/package-test -DCONFIG=$<CONFIG> "-DGENERATOR=${CMAKE_GENERATOR}"
+                     "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}" "-DTOOLCHAIN=${CMAKE_TOOLCHAIN_FILE}"
+                     "-DCXX=${CMAKE_CXX_COMPILER}" "-DMAKE=${CMAKE_MAKE_PROGRAM}" "-DFORWARD=${_esia_package_forward}"
+                     -P ${ESIA_ROOT}/tests/package/run_package_test.cmake)
+    set_tests_properties(esia_package PROPERTIES TIMEOUT 900)
+endif()
