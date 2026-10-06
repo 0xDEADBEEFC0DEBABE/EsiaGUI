@@ -2,6 +2,9 @@
 #include "esia/ui/anim.hpp"
 #include "esia/ui/theme.hpp"
 #include <algorithm>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 namespace esia::ui
 {
@@ -50,10 +53,21 @@ namespace esia::ui
         static_assert(sizeof(Metrics) % sizeof(float) == 0, "Metrics holds floats only");
     }
 
+    namespace
+    {
+        // phones hide scroll indicators at rest, desktops keep them (Metrics::scrollIndicatorAlways)
+#if defined(__ANDROID__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
+        constexpr float kIndicatorsAlways = 0.0f;
+#else
+        constexpr float kIndicatorsAlways = 1.0f;
+#endif
+    }
+
     Theme ThemeLight()
     {
         Theme t;
         t.dark = false;
+        t.metrics.scrollIndicatorAlways = kIndicatorsAlways;
         Palette& c = t.colors;
         c.accent = Color::Hex(0x007AFF);
         c.onAccent = Color::White();
@@ -112,6 +126,7 @@ namespace esia::ui
     {
         Theme t;
         t.dark = true;
+        t.metrics.scrollIndicatorAlways = kIndicatorsAlways;
         Palette& c = t.colors;
         c.accent = Color::Hex(0x0A84FF);
         c.onAccent = Color::White();
@@ -160,6 +175,22 @@ namespace esia::ui
         m.window.legibility = 0.58f;   // dark glass over a bright backdrop must stay dark enough for white labels
         m.bar.legibility = 0.30f;
         m.popover.legibility = 0.50f;
+        return t;
+    }
+
+    Theme ThemeCompact(const Theme& base)
+    {
+        Theme t = base;
+        Metrics& m = t.metrics;
+        m.scale = 0.87f;
+        m.windowRadius = 20.0f;
+        m.cardRadius = 12.0f;
+        m.controlRadius = 9.0f;
+        m.padding = 12.0f;
+        m.spacing = 8.0f;
+        m.rowHeight = 36.0f;
+        m.headerHeight = 46.0f;
+        m.sectionSpacing = 16.0f;
         return t;
     }
 

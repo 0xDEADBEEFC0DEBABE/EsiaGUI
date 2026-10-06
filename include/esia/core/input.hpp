@@ -109,6 +109,9 @@ namespace esia
         float dragThreshold = 6.0f;          // UI units before a press counts as a drag
         float touchSlop = 8.0f;              // UI units (dp) a finger moves before its press is a scroll or a drag
         float touchDelay = 0.15f;            // seconds a finger rests before an item that acts on the press gets it
+        // A mouse press on a scroll area's empty space drags its content, as a finger does (a phone's way). Off: the
+        // mouse scrolls with the wheel and the scroll indicator, as on a desktop. A finger always drags.
+        bool mouseDragScrolls = false;
         float keyRepeatDelay = 0.275f;
         float keyRepeatRate = 0.050f;
     };

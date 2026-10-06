@@ -146,9 +146,11 @@ namespace esia::ui
                     s.indicatorDrag = false;
             }
 
-            // drag-to-scroll: pressed on the area's empty space, the content follows the pointer; let go, it glides on
+            // drag-to-scroll: pressed on the area's empty space, the content follows the finger (a mouse too with
+            // InputConfig::mouseDragScrolls); let go, it glides on
             const Id dragId = Salt(child, 0xD2A6);
-            if (!s.dragging && scrolls && in.MouseClicked(MouseButton::Left) && c.HoveredChild() == child && c.HoveredId() == 0 && c.ActiveId() == 0)
+            if (!s.dragging && scrolls && in.MouseClicked(MouseButton::Left) && (in.MouseTouch(MouseButton::Left) || in.config.mouseDragScrolls) &&
+                c.HoveredChild() == child && c.HoveredId() == 0 && c.ActiveId() == 0)
             {
                 s.dragging = true;
                 s.startMouse = s.lastMouse = in.MousePos().y;
@@ -200,8 +202,9 @@ namespace esia::ui
                 const bool active = (m.time - s.lastActivity) < 0.9 || it.held;
                 if (active)
                     m.animating = true;   // a frame when it is time to hide
-                // at rest it hides (iOS), or stays, dimmed on a faint track, as the theme asks (desktop apps)
-                const float always = Saturate(t.metrics.scrollIndicatorAlways);
+                // at rest it hides (iOS), or stays, dimmed on a faint track, as the theme asks (desktop apps) - while a
+                // mouse is in use: after a finger's press it hides at rest, as on a phone
+                const float always = in.MouseTouch(MouseButton::Left) ? 0.0f : Saturate(t.metrics.scrollIndicatorAlways);
                 const float show = ui::Anim(Salt(child, 0x1D2), active ? 1.0f : 0.0f, active ? SpringFast() : t.motion.gentle);
                 const float wide = ui::Anim(Salt(child, 0x1D3), (it.hovered || it.held) ? 1.0f : 0.0f, SpringFast());
                 const float alpha = std::max(show, 0.55f * always);

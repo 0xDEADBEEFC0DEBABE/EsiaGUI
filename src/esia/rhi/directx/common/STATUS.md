@@ -1,5 +1,9 @@
 # Esia Direct3D backends - status of `esia-directx`
 
+> The record of the backends' bring-up (2026-09-29 / 30, its Windows results included). Since then they run every
+> example and CI runs them on WARP; what changed and was verified after this is in
+> [docs/REWRITE_STATUS.md](../../../../../docs/REWRITE_STATUS.md), the newest sections first.
+
 The Direct3D 9, 10, 11 and 12 backends of the Esia RHI (`docs/backends/README.md`), written in a Linux cloud
 session without a GPU or Windows (2026-09-29). They build warning-free in every option combination with the
 `windows-mingw-cross` toolchain, and **everything below that says "ran" ran under Wine 9.0 on Mesa's software

@@ -1,5 +1,11 @@
 # Esia Metal backend - status of `esia-metal`
 
+> The record of the backend's bring-up (2026-09-29), and its first run in CI. Since then it ran on Apple silicon:
+> a MacBook Pro (M3 Pro, macOS 27; the test suites, the conformance suite on its GPU, the examples) and an iPhone 18
+> Pro Max (iOS 27; the examples), and FX feature variants are on (function constant 0). What follows says
+> "UNVERIFIED", "14 scenes" and "Still not run" as it was then; what changed and was verified after it is in
+> [docs/REWRITE_STATUS.md](../../../../docs/REWRITE_STATUS.md) and the README's macOS and iOS sections.
+
 The Metal RHI backend (macOS 11+ / iOS 14+, Apple silicon and Intel), as the backend guide
 ([docs/backends/README.md](../../../../docs/backends/README.md)) prescribes, written in a Linux cloud session on
 2026-09-29. **UNVERIFIED: needs macOS.** Nothing in this directory was ever compiled against Apple's SDK or run on a

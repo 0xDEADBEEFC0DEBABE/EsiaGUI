@@ -436,9 +436,10 @@ Cocoa and UIKit as libraries (the examples' frames do their work today), Wayland
 * One UI thread per `Context`: `NewFrame` .. widgets .. `EndFrame`, and `Renderer::Render` on the same thread (as in
   WGT). `Context::QueueInput` and the `TextureRegistry` are thread-safe (a window thread and loader threads use
   them).
-* WGT's thread-safe services carry over unchanged: `Property<T>`, `Channel<T>`, `Latest<T>` (`wgt/sync.hpp` is
-  already ImGui-free), `Post(Task)`, notifications, panel registration, theme changes - queued and applied at the
-  next `NewFrame`.
+* WGT's thread-safe services (`Property<T>`, `Channel<T>`, `Latest<T>` in `wgt/sync.hpp`, `Post(Task)`, panel
+  registration) were planned to carry over; they stayed with WGT (tag `wgt-1.1-final`). What Esia has instead: the
+  island's notifications and live activities, posted from any thread (`ui::Ui::Notify`, `SetActivity`), and the
+  thread-safe input queue and texture registry.
 * A separate render thread is possible later without changing the renderer: `DrawData` holds pointers to the draw
   lists; a host that renders on another thread double-buffers the lists (swap after `EndFrame`).
 * Backends: `rhi::Device` is used from one thread at a time (the renderer's). A backend with frames in flight

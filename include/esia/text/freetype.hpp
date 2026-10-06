@@ -13,8 +13,10 @@
 //
 // Installed fonts and the platform's CJK fallback chain come from system_fonts.hpp (FindSystemFont, AddFallbackFonts).
 //
+// Color glyphs: bitmap strikes (CBDT, sbix) and COLR fonts, painted with their gradients and composite modes.
+//
 // Not yet (docs/REWRITE.md, phase 2): the Unicode bidi algorithm - right-to-left runs are shaped and drawn right
-// to left, but the runs of a line are laid out left to right -, color glyphs (COLR / CBDT / sbix).
+// to left, but the runs of a line are laid out left to right.
 #pragma once
 #include "esia/text/text.hpp"
 #include <memory>
