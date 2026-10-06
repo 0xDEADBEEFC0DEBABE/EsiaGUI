@@ -178,20 +178,28 @@ namespace esia::ui
         return t;
     }
 
-    Theme ThemeCompact(const Theme& base)
+    Metrics DensityMetrics(const Metrics& metrics)
     {
-        Theme t = base;
-        Metrics& m = t.metrics;
-        m.scale = 0.87f;
-        m.windowRadius = 20.0f;
-        m.cardRadius = 12.0f;
-        m.controlRadius = 9.0f;
-        m.padding = 12.0f;
-        m.spacing = 8.0f;
-        m.rowHeight = 36.0f;
-        m.headerHeight = 46.0f;
-        m.sectionSpacing = 16.0f;
-        return t;
+        Metrics m = metrics;
+        const float c = std::clamp(m.compact, 0.0f, 1.0f);
+        if (c <= 0.0f)
+            return m;   // iOS's sizes, untouched
+        // The text keeps its size (the scale and the type are left alone, as WinUI's and Material's compact
+        // densities leave them); the space around it shrinks. Each size at `k` of itself when fully compact - the
+        // built-in theme's then: rows 34, window headers 40, padding 12, spacing 8 - and in between while a switch
+        // animates.
+        const auto at = [c](float k) { return 1.0f + (k - 1.0f) * c; };
+        m.controlHeight *= at(28.0f / 34.0f);   // custom widgets that follow it, as the built-in controls (ControlSizes)
+        m.rowHeight *= at(34.0f / 44.0f);       // WinUI: list items 40 -> 32; a switch in the row keeps its margin
+        m.headerHeight *= at(40.0f / 54.0f);
+        m.iconTile *= at(22.0f / 28.0f);
+        m.padding *= at(12.0f / 16.0f);
+        m.spacing *= at(8.0f / 10.0f);           // WinUI's 8 between buttons: the glass keeps apart
+        m.sectionSpacing *= at(16.0f / 22.0f);
+        m.windowRadius *= at(20.0f / 28.0f);
+        m.cardRadius *= at(12.0f / 16.0f);
+        m.controlRadius *= at(8.0f / 12.0f);
+        return m;
     }
 
     Theme ThemeWithAccent(const Theme& base, Color accent)

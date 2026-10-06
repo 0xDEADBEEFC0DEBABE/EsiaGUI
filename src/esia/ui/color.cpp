@@ -153,7 +153,7 @@ namespace esia::ui
         // The picker's height at a width: the spectrum, the bars, the hex row and the swatches (PickerAt's layout).
         float PickerHeight(float w, const ColorPickerOptions& o)
         {
-            const float gap = Sc(14), barH = Sc(26), rowH = Sc(34);
+            const float gap = Sc(14), barH = Sc(Sizes().colorBar), rowH = Sc(Sizes().row);
             float h = std::round(w * 0.62f) + gap + barH + gap * 0.75f;
             if (o.alpha)
                 h += barH + gap * 0.75f;
@@ -223,7 +223,7 @@ namespace esia::ui
             y = spec.max.y + gap;
 
             // ---- the hue bar: six gradients between the primaries and secondaries, in a capsule
-            const float barH = Sc(26);
+            const float barH = Sc(Sizes().colorBar);
             const Rect hue = Rect::FromSize(Vec2(area.min.x, y), Vec2(w, barH));
             const float inset = barH * 0.5f;   // the handle's center stays inside the capsule's ends
             const Interaction hi = InteractImpl(Salt(id, 2), hue, InteractFlags_PressOnClick);
@@ -276,7 +276,7 @@ namespace esia::ui
             }
 
             // ---- the result beside the hex value
-            const float rowH = Sc(34);
+            const float rowH = Sc(Sizes().row);
             const Rect swatch = Rect::FromSize(Vec2(area.min.x, y), Vec2(Sc(54), rowH));
             {
                 const float px = OnePixel();

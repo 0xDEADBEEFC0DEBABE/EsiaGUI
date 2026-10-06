@@ -170,6 +170,8 @@ namespace esia
         const std::vector<fx::Instance>& FxInstances() const { return fx_; }
         const std::vector<fx::LayerParams>& Layers() const { return layers_; }
         const std::vector<fx::FadeParams>& Fades() const { return fades_; }
+        // A fade begun earlier in the frame may still change (a bar floating over the bottom of its area)
+        std::vector<fx::FadeParams>& Fades() { return fades_; }
         bool Empty() const { return cmds_.empty(); }
 
     private:
