@@ -187,8 +187,8 @@ namespace esia::ui
         const InputState& in = c.Input();
 
         const bool header = !(o.flags & TableFlags_NoHeader);
-        t.headerH = header ? Sc(30) : 0.0f;
-        t.rowH = Sc(o.rowHeight > 0.0f ? o.rowHeight : 34.0f);
+        t.headerH = header ? Sc(Sizes().tableHeader) : 0.0f;
+        t.rowH = Sc(o.rowHeight > 0.0f ? o.rowHeight : Sizes().tableRow);
         const float width = AvailableWidth();
         const Vec2 pos = c.CursorPos();
         // a height and a maxHeight: the smaller (no option is ignored for the other)
@@ -406,7 +406,7 @@ namespace esia::ui
         c.SetCursorPos(cell.min);
         ContainerOptions co;
         co.size = cell.Size();
-        co.padding = Vec2(Sc(10), std::max(0.0f, (t.rowH - Sc(30)) * 0.5f));
+        co.padding = Vec2(Sc(10), std::max(0.0f, (t.rowH - Sc(Sizes().tableCell)) * 0.5f));
         c.BeginContainer(Salt(t.id, 0x20000 + (std::uint32_t)t.column), co);
         t.cellOpen = true;
     }
@@ -506,7 +506,7 @@ namespace esia::ui
             g_nextTreeOpen.reset();
         }
 
-        const float rowH = Sc(30);
+        const float rowH = Sc(Sizes().treeRow);
         const float indentStep = Sc(18);
         const float depth = (float)g_trees.size();
         const float width = AvailableWidth();

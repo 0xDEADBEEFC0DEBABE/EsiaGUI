@@ -69,9 +69,33 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
 
 * **Built-in themes.** `ThemeLight()` and `ThemeDark()` hold WGT's values. `ThemeWithAccent(theme, color)` changes
   the accent and what derives from it.
-* **A desktop tool's density.** The sizes are iOS's (44-unit rows, 34-unit controls, 15-unit body text).
-  `ThemeCompact(theme)` sets everything at 0.87 of its size (body text 13, controls about 29), with shorter rows
-  and headers, less padding and spacing and smaller corners: `workbench --compact`. `SetDarkMode` keeps it.
+* **Density.** `UiDesc::density` or `Ui::SetDensity(Density::Compact)`: one line, animated, kept by `SetTheme` and
+  `SetDarkMode` (it is the Ui's: `metrics.compact`). `metrics.scale` is something else: everything larger or smaller
+  at once (the showcase's text size).
+
+  Regular is iOS's sizes. Compact follows what desktop toolkits do: WinUI's compact sizing (`Compact.xaml`) and
+  Material's density keep the text's size and make the controls, rows and spacing smaller (WinUI: text fields 32 ->
+  24, list items 40 -> 32, tree items 28 -> 24; Material: 4 units per density step). Every text keeps its size here
+  too - a smaller label inside the controls than beside them was tried and looked patchy. What a flat control does
+  not have and a glass one does is taken down with the control: its shadows, insets, the knob's swell and the lens's
+  refraction (x 0.8), so the glass does not outweigh a shorter capsule.
+
+  | Regular -> Compact (UI units) | |
+  | --- | --- |
+  | buttons (small, regular, large) | 28, 36, 48 -> 24, 30, 40; padding 12, 18, 24 -> 10, 15, 20 |
+  | number, vector and segmented fields, steppers, sliders | 32 -> 26 (a stepper 96 -> 84 wide) |
+  | text fields | 38 -> 30 |
+  | menu and picker rows, the picker button | 34 -> 28 |
+  | table rows, header; tree rows | 34, 30 -> 28, 26; 30 -> 26 |
+  | switch; check box | 50 x 30 -> 40 x 24; 22 -> 18 |
+  | list rows (`metrics.rowHeight`), window headers (`headerHeight`) | 44 -> 34, 54 -> 40 |
+  | padding, spacing, section spacing | 16, 10, 22 -> 12, 8, 16 |
+  | corners: window, card, control | 28, 16, 12 -> 20, 12, 8 |
+  | a control's details: shadows, insets, the knob's swell, the glass's refraction | x 0.8 |
+  | navigation bar, search bar, tab bar, dock tabs | 44, 46, 60, 44 -> 36, 36, 48, 34 |
+
+  The metrics shrink as fractions (`DensityMetrics`), so a theme with its own padding or rows keeps its own
+  proportions; `metrics.controlHeight` (28 when compact) is for custom widgets.
 * **Scroll indicators.** `metrics.scrollIndicatorAlways` is 1 in the built-in themes on Windows, Linux and macOS
   (an area that scrolls shows its indicator, dimmed, at rest) and 0 on iOS and Android (hidden at rest); after a
   finger's press they hide at rest anyway (section 5).
@@ -324,6 +348,12 @@ ui::SearchBar("search", &query);                                                
 * **The search bar** floats the same way: a text field with the search symbol in a glass pill across the bottom of
   its area (iOS Settings). Its glass is clear by default with a soft base inside (`SearchBarOptions::look`, `base`,
   `fill`); a Clear look from the style makes it fully transparent.
+* **Under a floating bar the content fades out** (iOS 26's scroll edge effect): the area's bottom edge fade ends at
+  the bar's middle and starts 16 units above the bar (`FadeUnderBar`, which moves the fade the area began earlier in
+  the frame). The area's own fade is 30 units, the bar and its margin twice that: rows showed through the upper half
+  of the glass at full strength and ran into the bar's own text (the search field's placeholder). The effect goes with
+  what is left to scroll past the bar: at the end the room below the content keeps it clear of the bar, and nothing
+  fades.
 
 ## 8. Auto layout
 
@@ -646,7 +676,7 @@ What applications built on the widgets ran into, and what now catches it.
 * **Tables.** Call `TableVisible(rowCount)` before the rows: it returns the rows in view, and with it a million rows
   cost what the visible ones cost. `maxHeight` fits the table to its rows up to that height; with `height` too, the
   smaller wins.
-* **Phone defaults on a desktop.** The sizes are iOS's: `ThemeCompact` for a denser tool (section 2). Scroll
+* **Phone defaults on a desktop.** The sizes are iOS's: `Density::Compact` for a tool (section 2). Scroll
   indicators show at rest on desktops and hide on phones (`metrics.scrollIndicatorAlways`); a mouse scrolls with the
   wheel and the indicator, a finger drags the content (`InputConfig::mouseDragScrolls` lets a mouse drag it too).
 * **The frame.** `Ui::NewFrame` after `Context::NewFrame`, `Ui::EndFrame` before `Context::EndFrame`; the `ui::`

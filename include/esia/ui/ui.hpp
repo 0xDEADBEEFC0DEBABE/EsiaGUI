@@ -53,6 +53,11 @@ namespace esia::ui
         float duration = 3.5f;         // seconds on screen
     };
 
+    // How much room the widgets take (Ui::SetDensity), as WinUI's compact sizing and Material's density: the text
+    // keeps its size; Compact makes the controls shorter (buttons 36 -> 28, fields 32 -> 26, text fields 38 -> 28,
+    // menu and table rows 34 -> 28), list rows 44 -> 32, window headers 54 -> 40, padding 16 -> 12, spacing 10 -> 6.
+    enum class Density : std::uint8_t { Regular, Compact };
+
     struct UiDesc
     {
         // Required for text. The Ui loads its fonts into it (below); the host renders with it (PainterEnv).
@@ -65,6 +70,7 @@ namespace esia::ui
         // Add the platform's fallback chain (CJK, symbols) after the UI font.
         bool fallbackChain = true;
         Theme theme = ThemeLight();
+        Density density = Density::Regular;   // Compact: a desktop tool's sizes (one line: .density = Density::Compact)
         GlassLook glassLook = GlassLook::Frosted;
         // Draw the island (notifications, live activities) at the top of the display at EndFrame.
         bool island = true;
@@ -86,10 +92,14 @@ namespace esia::ui
         Context& GetContext() const;
         text::TextSystem* Text() const;
 
-        const Theme& GetTheme() const;   // the one in effect (mid-transition: the blend)
+        const Theme& GetTheme() const;   // the one in effect (mid-transition: the blend); its sizes before Density
+        // Keeps the density (metrics.compact is the Ui's).
         void SetTheme(const Theme& theme, bool animate = true);
         // The built-in light / dark colors and materials, with the accent, metrics (scale), type and motion kept.
         void SetDarkMode(bool dark, bool animate = true);
+        // Regular or Compact sizes for every widget; kept across SetTheme and SetDarkMode, animated like them.
+        void SetDensity(Density density, bool animate = true);
+        Density GetDensity() const;
         void SetAccent(Color accent);                       // Clear: the theme's own
         void SetGlassLook(GlassLook look);
         GlassLook GetGlassLook() const;

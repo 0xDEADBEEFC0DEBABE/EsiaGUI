@@ -91,7 +91,8 @@ namespace esia::ui
         float padding = 16.0f;
         float spacing = 10.0f;
         float rowHeight = 44.0f;       // a list row (Row*, ListRow)
-        // for custom widgets: the built-in controls are 32 - 34 tall (at scale 1) whatever it says
+        // For custom widgets: a control's height (28 at Density::Compact). The built-in controls take theirs from
+        // the density's table of sizes.
         float controlHeight = 34.0f;
         float iconTile = 28.0f;
         float headerHeight = 54.0f;
@@ -103,6 +104,10 @@ namespace esia::ui
         // in ThemeLight / ThemeDark on Windows, Linux and macOS, 0 on iOS and Android; after a finger's press the
         // indicators hide at rest anyway. A float, as every metric: a theme transition blends it.
         float scrollIndicatorAlways = 1.0f;
+        // 0: iOS's sizes; 1: a desktop tool's (Density::Compact): the text as it is, the controls, rows, headers,
+        // padding, spacing and corners smaller (DensityMetrics, and the controls' own table). The Ui's:
+        // Ui::SetDensity sets it, SetTheme and SetDarkMode keep it. A float, so a switch animates.
+        float compact = 0.0f;
     };
 
     struct Typography
@@ -151,9 +156,8 @@ namespace esia::ui
 
     ESIA_API Theme ThemeLight();
     ESIA_API Theme ThemeDark();
-    // `base` at a desktop tool's density: everything at 0.87 of its size (body text 13 px, controls about 29),
-    // shorter list rows and headers, less padding and spacing, smaller corners. SetDarkMode keeps it.
-    ESIA_API Theme ThemeCompact(const Theme& base);
+    // The metrics the widgets use: `metrics` with its `compact` applied (the identity at 0).
+    ESIA_API Metrics DensityMetrics(const Metrics& metrics);
     // `base` with another accent (a Clear accent leaves it as it is).
     ESIA_API Theme ThemeWithAccent(const Theme& base, Color accent);
     // Component-wise interpolation (animated transitions): colors, materials, metrics and type sizes blend; `dark`,
