@@ -6,6 +6,7 @@
 //
 //   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--rows N]
 //             and glass_window's options (../glass_window/app.hpp)
+// Ctrl+Shift+D (Cmd+Shift+D on a Mac) switches between the regular and the compact sizes (Ui::SetDensity).
 #include "app.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/ui/ui.hpp"
@@ -59,7 +60,7 @@ namespace
         Context* ctx = nullptr;
         std::unique_ptr<ui::Ui> ui;
         bool dark = true;
-        bool compact = false;
+        bool compactSizes = false;   // --compact
         bool laidOut = false;
         std::string floatPanel, showPanel;
         int frame = 0;
@@ -241,6 +242,11 @@ namespace
         {
             ++frame;
             ui->NewFrame();
+            // Ctrl+Shift+D (Cmd+Shift+D): the other density, animated
+            const InputState& in = ctx->Input();
+            const std::uint32_t mods = in.KeyMods(Key::D);
+            if (in.KeyPressed(Key::D, false) && (mods & Mod_Shift) && (mods & (Mod_Ctrl | Mod_Super)))
+                ui->SetDensity(ui->GetDensity() == ui::Density::Compact ? ui::Density::Regular : ui::Density::Compact);
             Background();
             const Rect safe = ctx->SafeArea();   // clear of a phone's camera housing and home indicator
             const float m = ui::S(12);
@@ -480,7 +486,7 @@ int main(int argc, char** argv)
         if (o == "--light")
             return !(d.dark = false);
         if (o == "--compact")
-            return d.compact = true;
+            return d.compactSizes = true;
         if (!value)
             return false;
         usedValue = true;
@@ -509,8 +515,7 @@ int main(int argc, char** argv)
         if (!fonts.empty())
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.dark ? ui::ThemeDark() : ui::ThemeLight();
-        if (d.compact)
-            desc.theme = ui::ThemeCompact(desc.theme);   // a desktop tool's density
+        desc.density = d.compactSizes ? ui::Density::Compact : ui::Density::Regular;   // a desktop tool's sizes
         desc.island = false;
 #if !defined(_WIN32)
         desc.iconFontFile = glass::kSystemSymbolsFont;

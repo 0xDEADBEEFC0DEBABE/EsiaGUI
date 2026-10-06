@@ -42,9 +42,14 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Density** (2026-10-06, later): `UiDesc::density` / `Ui::SetDensity` - Regular (iOS's sizes) or Compact, as WinUI's
+compact sizing and Material's density: the text keeps its size, controls, rows, headers, padding and spacing get
+smaller, and a control's shadows and glass with it, so the glass does not outweigh it. Under a floating bar (the tab
+bar, the search bar) the content now fades out, as under iOS 26's bars.
+
 **Debug checks, desktop defaults, the README audited** (2026-10-06): the core reports two items with one id, two
 scroll areas with one id and items laid out out of view, and outlines them; a mouse no longer drags content and
-desktops show scroll indicators at rest; `ThemeCompact`, `ui::IdScope`; sections without a header keep their state
+desktops show scroll indicators at rest; `ui::IdScope`; sections without a header keep their state
 apart, a table's `maxHeight` caps a `height`; the Control Center modules shrank since 2026-10-05 (`LineRoom`), fixed;
 the README checked claim by claim against the code, the Windows pictures taken again.
 
@@ -61,6 +66,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Density](#density)
 * [Debug checks, desktop defaults, the README audited](#debug-checks-desktop-defaults-the-readme-audited)
 * [Text against Dear ImGui](#text-against-dear-imgui)
 * [Frame cost against Dear ImGui](#frame-cost-against-dear-imgui)
@@ -81,6 +87,63 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Density
+
+The widgets' sizes are iOS's (44-unit rows, 34-unit controls, 15-unit text): roomy on a phone, sparse in a desktop
+tool. `ThemeCompact` scaled everything to 0.87, text included - what `metrics.scale` already does, and barely denser.
+
+### How others do it
+
+* WinUI: `Compact.xaml`, a resource dictionary of smaller control sizes (`TextControlThemeMinHeight` 24 for 32,
+  `ListViewItemMinHeight` 32 for 40, `TreeViewItemMinHeight` 24 for 28, `ComboBoxMinHeight` 24, smaller paddings);
+  the font stays 14. One line puts it on a page.
+* Material: a density scale per component (0 to -3), 4 units of height per step (a button 36 -> 24 at -3); the
+  typography stays.
+* Apple: control sizes (regular, small, mini; SwiftUI's `controlSize`): the control and its label shrink together.
+
+Esia takes the first two's model: the text keeps its size, every control, row and gap gets a smaller size from a
+table, not a factor. Apple's way was tried for the controls (their labels 13 for 15): beside 15-unit row labels the
+smaller labels inside them looked patchy, so every text stays as it is. What the glass adds is taken down with the
+control: its shadows, insets, the knob's swell and the lens's refraction (x 0.8).
+
+### What changed
+
+* `Density` (`Regular`, `Compact`), `UiDesc::density`, `Ui::SetDensity` / `GetDensity`; `Metrics::compact`, the
+  Ui's: `SetTheme` and `SetDarkMode` keep it, a theme transition blends it (the switch animates).
+* `detail::ControlSizes`: every built-in control's size in one table per density (buttons, fields, text fields,
+  menu, table and tree rows, switches, check boxes, sliders, steppers, the color picker's bars, the bars, a window
+  header's close button and icon), blended by `metrics.compact`. The Regular table is the sizes the code had, so
+  the regular look is unchanged pixel for pixel.
+* `DensityMetrics`: rows, headers, icon tiles, padding, spacing, section spacing and corners as fractions of the
+  theme's; the scale and the type are left alone.
+* A control's details (`Dt`: shadows, insets, the knob's swell) follow the table's `detail`, and its glass refracts in
+  proportion (`materials.control`, the lens); bars keep their glass.
+* The showcase and the workbench: `--compact`, and Ctrl+Shift+D (Cmd+Shift+D) switches the density while running.
+* **Under a floating bar the content fades out** (iOS 26's scroll edge effect; the tab bar, the search bar): rows that
+  scrolled under the bar showed through the upper half of its glass at full strength - the area's bottom fade is 30
+  units, the bar and its margin twice that - and ran into the search field's placeholder (worst in the compact
+  density, where a row lines up with the field). The bar moves its area's fade, begun earlier in the frame
+  (`DrawList::Fades()` is writable until the frame renders): it ends at the bar's middle and starts 16 units above
+  it, as much as there is left to scroll. The shaders are unchanged (the fade already reaches 0 past its edge).
+  `BeginScrollEdgeFade` / `EndScrollEdgeFade` keep a stack of the areas being submitted for it.
+
+### Verified (2026-10-06)
+
+* ctest 33 / 33 in Debug (clang-cl 22); new: `UiSearchBar.TheContentFadesOutUnderIt` (the fade ends at the bar's
+  middle while there is scrolling left, nothing fades at the end), `UiDensity.CompactKeepsTheTextAndShrinksTheControls` (the regular sizes
+  exactly, the compact ones from the table, the text 15 in both),
+  `UiTheme.DarkModeKeepsTheMetrics` (the density survives `SetTheme` and `SetDarkMode`).
+* The workbench in the regular density, captured as the README's picture and encoded the same way: the same JPEG,
+  byte for byte. The showcase's Components and Settings panels and the workbench in both densities, side by side:
+  the compact ones show more (the Components panel two more of its sections), the controls in their regular
+  proportions.
+* The README's Windows showcase pictures taken again (the Settings and Components panels' bars).
+
+### Not verified
+
+* Linux, macOS, iOS and Android: CI only. The compact density on a phone (it is meant for a desktop tool).
+* The iOS and Android pictures predate the fade under the bars (their Settings screens have the search bar).
 
 ## Debug checks, desktop defaults, the README audited
 
@@ -108,8 +171,9 @@ in the headers. The causes of the first two were fixed on 2026-10-05; nothing to
 * **Desktop defaults.** A mouse press on a scroll area's empty space no longer drags the content (a finger's still
   does; `InputConfig::mouseDragScrolls` for the old way): on a desktop it moves the window, as in Dear ImGui. `metrics.scrollIndicatorAlways` is 1 in the built-in themes on Windows, Linux and macOS (0 on iOS and Android)
   and the indicators hide at rest after a finger's press; the showcase keeps WGT's hidden indicators.
-  `ThemeCompact(theme)`: a desktop tool's density (`workbench --compact`). `metrics.controlHeight` is documented as
-  what it is: for custom widgets (the built-in controls do not read it).
+  `metrics.controlHeight` is documented as what it is: for custom widgets (the built-in controls do not read it).
+  `ThemeCompact`, added with these changes, scaled everything at once (as `metrics.scale` already does); the same
+  day it became `Density` (below).
 * **The Control Center modules shrank** (since `e8c4ff4`, 2026-10-05): the groups of an auto-layout container had one
   layout sequence (their parent's lines do not move under a provider), so one module's `SameLine` buttons gave every
   module their room, and a module's own buttons, placed with `SetCursorPos`, gave it theirs. A frame's sequence is now

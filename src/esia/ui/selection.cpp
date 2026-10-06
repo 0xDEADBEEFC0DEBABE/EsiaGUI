@@ -129,7 +129,7 @@ namespace esia::ui
         const float segW = r.Width() / (float)count;
         // tap a segment or drag the selection: it travels as a clear lens and lands as a solid pill
         const LiquidSelection sel = LiquidSelect(id, r, count, selected);
-        const Rect pill = LiquidSelectionRect(sel, r, count, Sc(2.5f));
+        const Rect pill = LiquidSelectionRect(sel, r, count, Dt(2.5f));
         const float solid = 1.0f - Saturate(sel.lens);
         // the selected segment's background: the style's, else the tint, else - on a custom track - a light,
         // see-through pill that sits on any color, else the iOS gray / white
@@ -147,7 +147,7 @@ namespace esia::ui
         {
             Style ps = Style().Radius(std::min(pill.Height() * 0.5f, std::max(trackR - (pill.min.y - r.min.y), 0.0f))).Fill(StateFill(selFill).Fade(solid));
             if (!LookClear())
-                ps.Shadow(Color::Black((t.dark ? 0.3f : 0.12f) * solid), Sc(8), Vec2(0, Sc(2)));
+                ps.Shadow(Color::Black((t.dark ? 0.3f : 0.12f) * solid), Dt(8), Vec2(0, Dt(2)));
             p.Rect(pill, ps);
         }
 
@@ -170,7 +170,7 @@ namespace esia::ui
             label(FontWeight::Regular, 1.0f - bold);
             label(FontWeight::Semibold, bold);
         }
-        DrawSelectionLens(p, pill, sel, Sc(4), st.Has(ItemStyle::kMovingFill) ? st.movingFill : Color::Clear());
+        DrawSelectionLens(p, pill, sel, Dt(4), st.Has(ItemStyle::kMovingFill) ? st.movingFill : Color::Clear());
         return sel.changed;
     }
 
@@ -179,7 +179,7 @@ namespace esia::ui
         ItemScope scope;
         Context& c = Ctx();
         const float w = width > 0.0f ? Sc(width) : AvailableWidth();
-        const Vec2 size(w, Sc(32));
+        const Vec2 size(w, Sc(Sizes().field));
         const Vec2 pos = c.CursorPos();
         c.ItemSize(size);
         return SegmentedAt(c.GetId(id), Rect::FromSize(pos, size), selected, items);

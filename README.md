@@ -40,10 +40,10 @@ from ImGui to Esia means writing it again with `esia::ui`.
 | | Dear ImGui | Esia |
 | --- | --- | --- |
 | Made for | tools: debug panels, editors, dense data | UI that users see, in the iOS 26 liquid-glass style |
-| Look | flat panels and one global style (`ImGuiStyle`, with push / pop of colors and variables) | liquid glass (backdrop blur, refraction, dispersion, specular rims), glow and shadows; a theme whose light and dark modes cross-fade; styles per widget or per block; three glass looks; a compact density for tools (`ThemeCompact`) |
+| Look | flat panels and one global style (`ImGuiStyle`, with push / pop of colors and variables) | liquid glass (backdrop blur, refraction, dispersion, specular rims), glow and shadows; a theme whose light and dark modes cross-fade; styles per widget or per block; three glass looks; two densities: iOS's sizes, or a compact one for tools (one line) |
 | Motion | none: a change shows on the next frame | springs on every control: the switch's knob, the segmented control's lens, momentum scrolling, panels, the island |
 | Rendering | hands the host triangles (`ImDrawData`), drawn in one pass by any renderer that can draw textured triangles with a scissor | its own renderer, several passes per frame (backdrop captures, a blur pyramid, glow layers), through its RHI on Direct3D 9 - 12, OpenGL / ES, Vulkan or Metal |
-| GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes 0.74 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most |
+| GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes about 0.8 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most |
 | CPU cost | small: 0.05 - 0.08 ms to build and submit a frame of a few hundred widgets or 3300 glyphs (Direct3D 11, on the machine of the comparison) | text: less than Dear ImGui's (0.068 ms against 0.076 for 3300 glyphs); plain widgets: more (0.092 against 0.052 ms: shadows, springs); the glass scene: 0.20 ms against 0.37 for WGT, Dear ImGui with the same glass ([REWRITE_STATUS.md](docs/REWRITE_STATUS.md), "Text against Dear ImGui") |
 | Text | its font atlas (stb_truetype, or FreeType). Text is not shaped, so scripts that need shaping (Arabic, Devanagari and the other Indic scripts) do not come out right, and there is no right-to-left | FreeType + HarfBuzz shaping, the system's fonts with a fallback chain for every major script, editing by grapheme, IME composition in the field (Windows, macOS, iOS), color emoji (bitmap and COLR fonts: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji). A line in one direction is right; mixed directions wait for the bidi algorithm |
 | Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports; extensions add more (ImPlot, node editors) | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, text fields, a line chart, the island and the dock. For tools: number and vector fields (scrub, type an expression), a color picker, tables (only the rows in view are drawn: a million rows; sort, resize, select), trees, a multi-line editor, docking. No plots beyond the line chart, no node editors, no multiple viewports |
@@ -108,15 +108,19 @@ The data widgets, in the same glass style as the rest (`esia::ui`, [UI_WIDGETS.m
   Down to step; a field with limits fills in proportion to its value.
 * **Color picker**: a spectrum, hue and opacity bars, the hex value and swatches, or a round color well that opens it.
 * **Multi-line editor**: wrapping, line numbers, the monospace font, Tab, undo, the clipboard and IME composition.
-* **Density.** The sizes are iOS's; `ui::ThemeCompact(theme)` sets a desktop tool's (everything at 0.87, body text
-  13, tighter rows and padding). On a desktop, scroll areas show their indicator at rest and the mouse scrolls with
-  the wheel and the indicator; a finger drags the content, as on a phone.
+* **Compact density** for tools, in one line: `desc.density = ui::Density::Compact` when creating the `Ui`, or
+  `ui.SetDensity(ui::Density::Compact)` (animated; kept across theme and dark-mode changes). The text keeps its size;
+  controls get shorter, their shadows and glass with them, so the glass does not outweigh them (buttons 36 -> 30, fields
+  32 -> 26, table rows 34 -> 28, list rows 44 -> 34, window headers 54 -> 40; [UI_WIDGETS.md](docs/UI_WIDGETS.md)
+  section 2). `workbench --compact`, or Ctrl+Shift+D while it runs.
+* **On a desktop** scroll areas show their indicator at rest and the mouse scrolls with the wheel and the indicator;
+  a finger drags the content, as on a phone.
 
 ```
 workbench                                  # the docked layout (glass_window's options apply too)
 workbench --float Inspector --show Script  # a window floating, the editor's tab in front
 workbench --rows 1000000 --light           # a million rows, light theme
-workbench --compact                        # ThemeCompact: a desktop tool's density
+workbench --compact                        # the compact density (Ctrl+Shift+D switches it while running)
 ```
 
 ## Status
@@ -221,6 +225,18 @@ host is `examples/glass_window` (`app.hpp`, `host_*.cpp` per API); the Win32 lay
 out out of view ([UI_CORE.md](docs/UI_CORE.md) section 16); what else trips people up is in
 [UI_WIDGETS.md](docs/UI_WIDGETS.md) section 14.
 
+Every appearance setting is one line, at creation (`UiDesc`) or while running (`Ui`), and each keeps the others:
+
+| | at creation (`ui::UiDesc desc`) | while running (`ui::Ui ui`) |
+| --- | --- | --- |
+| dark or light | `desc.theme = ui::ThemeDark();` | `ui.SetDarkMode(true);` |
+| density | `desc.density = ui::Density::Compact;` | `ui.SetDensity(ui::Density::Compact);` |
+| glass look | `desc.glassLook = ui::GlassLook::Clear;` | `ui.SetGlassLook(ui::GlassLook::Clear);` |
+| accent | `desc.theme = ui::ThemeWithAccent(desc.theme, color);` | `ui.SetAccent(color);` |
+| everything larger or smaller | `desc.theme.metrics.scale = 1.2f;` | `ui.SetTheme(theme);` with that scale |
+
+Scroll indicators and the mouse's scrolling follow the platform (a desktop's, or a phone's) with nothing to set.
+
 ## Running the examples
 
 ```
@@ -243,7 +259,8 @@ These options work on every system with an example window (on iOS and Android th
 | `--debug` | the API's validation layer; the message count is printed at exit |
 | `--font file` | glass_window: font files instead of the system's (the first is the main one, the others its fallbacks); showcase and workbench: the regular-weight UI font (the first file only; the other weights and the fallbacks stay the system's) |
 | showcase: `--open list`, `--open-all`, `--open-later p@n`, `--spread`, `--light`, `--look l`, `--tab n`, `--page id`, `--menu` | the panels to open (`settings,effects,control,components,languages,telemetry,plugin`, or `none`; default: the first three), every panel, panel `p` opened at frame `n`, every panel laid out side by side for a 1872 x 1400 window (add `--size 1872x1400`), the light theme, the glass look (`theme`, `clear`, `frosted`: the default), the Components panel's tab (0 - 2), the Settings page shown first (`accent`, `perf`), the Components panel's menu open |
-| workbench: `--float window`, `--show window`, `--rows N`, `--light`, `--compact` | a window floating instead of docked (`Scene`, `Outline`, `Inspector`, `Assets`, `Script`, `Notes`), the tab in front, the table's row count, the light theme, `ThemeCompact` |
+| workbench: `--float window`, `--show window`, `--rows N`, `--light` | a window floating instead of docked (`Scene`, `Outline`, `Inspector`, `Assets`, `Script`, `Notes`), the tab in front, the table's row count, the light theme |
+| showcase and workbench: `--compact`, Ctrl+Shift+D (Cmd+Shift+D) | the compact density; the key switches it while running |
 
 ## Windows
 

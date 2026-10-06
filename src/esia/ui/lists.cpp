@@ -340,7 +340,7 @@ namespace esia::ui
         acc.flexible = true;
         acc.min = minSlider + (valueW > 0.0f ? valueW + gap : 0.0f);
         acc.natural = acc.min;
-        acc.height = Sc(32);
+        acc.height = Sc(Sizes().field);
         const RowLayout L = RowStart(label, icon, acc, 0.0f, false);
         if (!L.visible)
             return false;
@@ -397,7 +397,7 @@ namespace esia::ui
         Accessory acc;
         acc.min = count * (widest + Sc(20));   // every label still fits its segment
         acc.natural = std::max(acc.min, count * Sc(74));
-        acc.height = Sc(30);
+        acc.height = Sc(Sizes().rowControl);
         const RowLayout L = RowStart(label, icon, acc, 0.0f, false);
         if (!L.visible)
             return false;
@@ -413,7 +413,7 @@ namespace esia::ui
         Accessory acc;
         acc.natural = (count > 0 ? BodyWidth(VisibleLabel(items[(std::size_t)sel])) : 0.0f) + Sc(30);
         acc.min = std::min(acc.natural, Sc(80));
-        acc.height = Sc(30);
+        acc.height = Sc(Sizes().rowControl);
         const RowLayout L = RowStart(label, icon, acc, 0.0f, false);
         if (!L.visible)
             return false;

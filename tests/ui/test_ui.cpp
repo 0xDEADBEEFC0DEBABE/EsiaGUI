@@ -674,13 +674,14 @@ ESIA_TEST(UiTheme, DarkModeKeepsTheMetrics)
 #if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
     ESIA_CHECK(system == 1.0f && ui::ThemeDark().metrics.scrollIndicatorAlways == 1.0f);   // a desktop's
 #endif
-    // compact: smaller, kept by SetDarkMode
-    const ui::Theme compact = ui::ThemeCompact(ui::ThemeLight());
-    ESIA_CHECK(compact.metrics.scale < 1.0f && compact.metrics.rowHeight < ui::ThemeLight().metrics.rowHeight && !compact.dark);
-    h.ui.SetTheme(compact, false);
+    // the density is the Ui's: SetTheme and SetDarkMode keep it
+    h.ui.SetDensity(ui::Density::Compact, false);
+    h.ui.SetTheme(ui::ThemeLight(), false);
     h.ui.SetDarkMode(true, false);
     h.Frame([] {});
-    ESIA_CHECK(h.ui.GetTheme().dark && h.ui.GetTheme().metrics.scale == compact.metrics.scale);
+    ESIA_CHECK(h.ui.GetDensity() == ui::Density::Compact && h.ui.GetTheme().metrics.compact == 1.0f && h.ui.GetTheme().dark);
+    h.ui.SetDensity(ui::Density::Regular, false);
+    ESIA_CHECK(h.ui.GetDensity() == ui::Density::Regular && h.ui.GetTheme().metrics.compact == 0.0f);
 }
 
 ESIA_TEST(UiPopups, MenuItemsCloseTheMenu)
@@ -1236,4 +1237,90 @@ ESIA_TEST(UiIds, IdScopeKeepsALoopsWidgetsApart)
     scoped = false;
     frame();
     ESIA_CHECK(got.size() == 1 && got[0].kind == Diagnostic::Kind::IdConflict && got[0].message.find("\"Set value\"") != std::string::npos);
+}
+
+// One line for a desktop tool's sizes (UiDesc::density or Ui::SetDensity), as WinUI's compact sizing and Material's
+// density do it: the text keeps its size, the controls and rows get shorter; the regular sizes are the design's
+ESIA_TEST(UiDensity, CompactKeepsTheTextAndShrinksTheControls)
+{
+    struct Sizes
+    {
+        float button = 0, toggle = 0, field = 0, row = 0, table = 0, font = 0;
+    };
+    const auto measure = [](ui::Density density) {
+        UiHarness h;
+        h.ui.SetDensity(density, false);
+        Sizes s;
+        double value = 1.0;
+        bool on = false;
+        auto frame = [&] {
+            h.Frame([&] {
+                ui::Button("Apply");
+                s.button = h.ctx.LastItemRect().Height();
+                ui::NumberField("value", &value);
+                s.field = h.ctx.LastItemRect().Height();
+                ui::BeginSection();   // rows abut: the distance between two switches is a row
+                ui::RowToggle("Row", &on);
+                const float first = h.ctx.LastItemRect().min.y;
+                ui::RowToggle("Row 2", &on);
+                s.row = h.ctx.LastItemRect().min.y - first;
+                s.toggle = h.ctx.LastItemRect().Height();
+                ui::EndSection();
+                if (ui::BeginTable("t", {{"Name"}}))
+                {
+                    const ui::TableRange r = ui::TableVisible(3);
+                    for (int i = r.first; i < r.last; ++i)
+                    {
+                        ui::TableRow(i);
+                        ui::TableCell("row");
+                    }
+                    ui::EndTable();
+                    s.table = h.ctx.LastItemRect().Height();
+                }
+            });
+        };
+        frame();
+        frame();
+        s.font = h.ui.Font(ui::TextStyle::Body).size;
+        return s;
+    };
+    const Sizes regular = measure(ui::Density::Regular), compact = measure(ui::Density::Compact);
+    ESIA_CHECK(regular.button == 36.0f && regular.toggle == 30.0f && regular.field == 32.0f && regular.row == 44.0f && regular.table == 30.0f + 3 * 34.0f);
+    ESIA_CHECK(compact.button == 30.0f && compact.toggle == 24.0f && compact.field == 26.0f && compact.table == 26.0f + 3 * 28.0f);
+    ESIA_CHECK_NEAR(compact.row, 34.0f, 0.01f);
+    ESIA_CHECK(compact.font == regular.font && regular.font == 15.0f);   // the text keeps its size
+}
+
+// A bar floating over the bottom of a scroll area (iOS's scroll edge effect): what scrolls under it fades out by the
+// bar's middle, from a little above the bar - as much as there is left to scroll; at the end nothing fades
+ESIA_TEST(UiSearchBar, TheContentFadesOutUnderIt)
+{
+    UiHarness h;
+    std::string text;
+    bool toEnd = false;
+    auto frame = [&] {
+        h.Frame([&] {
+            ui::BeginScrollArea("area", {600, 300});
+            ui::Spacer(1000);
+            if (toEnd)
+                h.ctx.SetScrollY(1e6f);
+            ui::SearchBar("search", &text);
+            ui::EndScrollArea();
+        });
+    };
+    frame();
+    frame();
+    const std::vector<fx::FadeParams>& fades = h.ctx.FindWindowByName("W")->GetDrawList().Fades();
+    ESIA_CHECK(fades.size() == 1);
+    if (fades.size() == 1)
+    {
+        // the bar: 46 tall, 14 above the area's bottom (300): 240 .. 286, its middle 263
+        ESIA_CHECK_NEAR(fades[0].y1, 263.0f, 0.01f);
+        ESIA_CHECK_NEAR(fades[0].bottom, 263.0f - (240.0f - 16.0f), 0.01f);
+    }
+    toEnd = true;
+    for (int i = 0; i < 90; ++i)
+        frame();   // the smooth scroll glides to the end
+    const std::vector<fx::FadeParams>& end = h.ctx.FindWindowByName("W")->GetDrawList().Fades();
+    ESIA_CHECK(end.empty() || (end[0].bottom == 0.0f && end[0].y1 == 300.0f));   // at the end: nothing fades at the bottom
 }

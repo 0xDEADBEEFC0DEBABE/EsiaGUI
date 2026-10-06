@@ -463,7 +463,7 @@ namespace esia::ui
         {
             Ui::Impl& m = M();
             Context& c = *m.ctx;
-            const Theme& t = m.theme.current;
+            const Theme& t = T();
             const float themeSpacing = Sc(t.metrics.spacing);
             const bool stylePushed = TakeNextStyle();
             const Id id = c.GetId(strId);
