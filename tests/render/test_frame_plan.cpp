@@ -206,6 +206,43 @@ ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)
     ESIA_CHECK(plan3.ops.size() == 3 && plan3.ops[2].type == RenderOp::FxBatch && plan3.ops[2].instStart == 1);
 }
 
+// A form: rows of a label, a button with a shadow beside it, the button's title and a switch. The shadows' faint tails
+// reach the labels, what they show does not: the shapes batch together and the text after them; a batch's text keeps
+// its pieces apart (a title and the next row's label do not claim the gap between them, where the next button lies).
+ESIA_TEST(FramePlan, ShadowsBatchByWhatTheyShow)
+{
+    auto form = [](DrawList& dl, float buttonX) {
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl);
+        for (int row = 0; row < 2; ++row)
+        {
+            const float y = 20.0f + 60.0f * (float)row;
+            dl.AddRectFilled(Rect(10, y, 60, y + 14), 0xFFFFFFFFu);   // the label
+            p.Rect(Rect(buttonX, y - 6, buttonX + 80, y + 22), Style().Fill(Color::Hex(0x3060C0)).Radius(14).Shadow(Color::Black(0.3f), 12.0f, Vec2(0, 4)));
+            dl.AddRectFilled(Rect(buttonX + 10, y, buttonX + 70, y + 14), 0xFFFFFFFFu);   // its title
+            p.Rect(Rect(300, y - 4, 350, y + 18), Style().Fill(Color::Hex(0x30C060)).Radius(11));   // a switch
+        }
+    };
+    DrawList dl;
+    form(dl, 70.0f);   // the shadow's reach (25 px) passes the label's end, its visible part (6) does not
+    FramePlan plan;
+    plan.Build(Data({&dl}), {});
+    ESIA_CHECK(plan.ops.size() == 3);   // the first label, the shapes, the rest of the text
+    if (plan.ops.size() == 3)
+    {
+        ESIA_CHECK(plan.ops[0].type == RenderOp::Draw && plan.ops[0].idxCount == 6);
+        ESIA_CHECK(plan.ops[1].type == RenderOp::FxBatch && plan.ops[1].instCount == 4);
+        ESIA_CHECK(plan.ops[2].type == RenderOp::Draw && plan.ops[2].idxCount == 18);
+    }
+
+    // a button right beside its label: what its shadow shows covers the label's end, so each row keeps its order
+    DrawList d2;
+    form(d2, 62.0f);
+    FramePlan plan2;
+    plan2.Build(Data({&d2}), {});
+    ESIA_CHECK(plan2.ops.size() == 5);
+}
+
 ESIA_TEST(FramePlan, GlassKeepsItsPlace)
 {
     // a shape, a label, a glass panel, another label - all apart. The second label joins the first unless the glass
