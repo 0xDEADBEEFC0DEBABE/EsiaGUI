@@ -124,10 +124,12 @@ from a clean checkout.
   runner offers); Vulkan's Windows code is only compiled there. D3D12's GPU-based validation (`ESIA_D3D_DEBUG=2`) is
   not run.
 * **The mingw-w64 build** only compiles and links; the shipped Windows ABI is MSVC's (the Windows jobs).
-* **iOS** is not built.
+* **iOS** is built (the library and the examples' frame, the macOS job's "Build for iOS" step), not run: no tests run
+  on iOS.
 * **Android** is not built: there is no Android job (the NDK and SDK would be a large download per run). It is checked
   locally: `cmake --preset android` builds the library and the APKs; the tests and the conformance suite run on an
-  emulator or a phone through `adb` (README, section Android).
+  emulator or a phone through `adb` (configured with `-DBUILD_TESTING=ON`: the preset leaves them out; README, section
+  Android).
 
 ## 3. Reproducing a job locally
 
@@ -289,9 +291,10 @@ the Diagnostics step's log).
 
 ## 5. Maintenance
 
-* **Minutes**: the repository is private, so the hosted runners' minutes come out of the account's monthly
-  allowance (3,000 with GitHub Pro), macOS at 10x and Windows at 2x: one run of the three workflows is about
-  100 minutes, most of it macOS. Hence the triggers: pushes to `main` and pull requests into it, not feature branches,
+* **Minutes**: the jobs were set up while the repository was private, when the hosted runners' minutes came out of
+  the account's monthly allowance (3,000 with GitHub Pro), macOS at 10x and Windows at 2x: one run of the three
+  workflows is about 100 minutes, most of it macOS. The repository is public since 2026-10-02; the triggers stay as
+  narrow: pushes to `main` and pull requests into it, not feature branches,
   and no run for a change to `docs/` or Markdown alone; `[skip ci]` in the head commit's message skips a push.
   Branches are tested locally first (every backend on Windows with real GPUs); to check a branch on another OS
   before merging, run only the workflow that matters from the Actions tab (*Run workflow*, pick the branch). Job

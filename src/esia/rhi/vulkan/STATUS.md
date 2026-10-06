@@ -1,5 +1,9 @@
 # Esia Vulkan backend - status of `esia-vulkan`
 
+> The record of the backend's bring-up (2026-09-29 / 30). Since then the conformance suite has 17 scenes and the
+> backend runs the examples on Windows, Linux (X11) and Android; what changed and was verified after this is in
+> [docs/REWRITE_STATUS.md](../../../../docs/REWRITE_STATUS.md), the newest sections first.
+
 Where the Vulkan backend stands at the end of its cloud session (2026-09-29). The contract it implements is
 `include/esia/rhi/rhi.hpp` and [docs/backends/README.md](../../../../docs/backends/README.md); the host API is
 [include/esia/rhi/vulkan.hpp](include/esia/rhi/vulkan.hpp).

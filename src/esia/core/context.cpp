@@ -21,7 +21,15 @@ namespace esia
         }
     }
 
-    Context::Context(const ContextDesc& desc) : desc_(desc) { input_.config = desc.input; }
+    Context::Context(const ContextDesc& desc) : desc_(desc)
+    {
+        input_.config = desc.input;
+#if defined(NDEBUG)
+        checks_ = desc.debugChecks == DebugChecks::On;
+#else
+        checks_ = desc.debugChecks != DebugChecks::Off;
+#endif
+    }
 
     Context::~Context() = default;
 
@@ -44,6 +52,8 @@ namespace esia
         params_ = params;
         ++frame_;
         inFrame_ = true;
+        if (checks_)
+            idLabels_.clear();
         {
             std::lock_guard lock(inputMutex_);
             input_.NewFrame(params.time, queued_);
@@ -146,6 +156,8 @@ namespace esia
         End();   // root
         inFrame_ = false;
         popupStack_.clear();
+        if (checks_)
+            RunDebugChecks();
 
         // keys nobody claimed act now, after every widget had its chance
         UpdateTabNavigation();

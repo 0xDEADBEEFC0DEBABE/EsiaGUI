@@ -35,7 +35,13 @@ namespace esia
             w->idStack_.pop_back();
     }
 
-    Id Context::GetId(std::string_view label) const { return HashLabel(label, IdSeed()); }
+    Id Context::GetId(std::string_view label) const
+    {
+        const Id id = HashLabel(label, IdSeed());
+        if (checks_)
+            idLabels_.try_emplace(id, label);   // the debug checks' messages name it
+        return id;
+    }
     Id Context::GetId(std::int64_t value) const { return HashInt(value, IdSeed()); }
 
     // ------------------------------------------------------------------ items
@@ -84,9 +90,15 @@ namespace esia
         h.layer = w.floating_ * 2 + ((itemFlags & ItemFlags_Background) ? 0 : 1);
         h.child = w.childStack_.empty() ? -1 : w.childStack_.back();
         h.fixed = fixed;
+        h.item = itemSerial_;
         ScrollOffsets(w, w.children_, h.child, h.total, h.own);
         if (!w.hits_.empty() && w.hits_.back().id == id)
+        {
+            // the item's own record again - or the next item with its id (a debug check reports it)
+            if (checks_ && w.hits_.back().item != h.item)
+                replacedHits_.push_back({w.id_, id, w.hits_.back().rect});
             w.hits_.back() = h;
+        }
         else
             w.hits_.push_back(h);
     }
@@ -95,10 +107,18 @@ namespace esia
     {
         Window* w = CurrentWindow();
         ESIA_ASSERT(w);
+        ++itemSerial_;
         lastItem_ = LastItem();
         lastItem_.id = id;
         lastItem_.rect = bb;
         lastItem_.flags = itemFlags;
+        if (outOfViewLast_ >= 0)
+        {
+            // the item the debug checks found out of view as it was laid out (ItemSize just before, the same rect)
+            if (id != 0 && outOfView_[(std::size_t)outOfViewLast_].rect == bb)
+                outOfView_[(std::size_t)outOfViewLast_].id = id;
+            outOfViewLast_ = -1;
+        }
         const bool disabled = (itemFlags & ItemFlags_Disabled) != 0;
         if (id != 0)
         {

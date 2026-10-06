@@ -482,3 +482,43 @@ ESIA_TEST(Layout, LineRoomOfSameLineItems)
     frame();
     ESIA_CHECK(room[0] == 116.0f && lead == 284.0f);   // the same every frame: the line ends at the window's edge
 }
+
+// Groups in an auto-layout container, whose children are on no line of the cursor, keep their lines' room to
+// themselves: a group starting a line does not get the room of another group's SameLine items, nor of the row it
+// places elsewhere with SetCursorPos (the showcase's Control Center modules shrank by their media buttons)
+ESIA_TEST(Layout, LineRoomKeepsToItsGroup)
+{
+    Harness h;
+    StackLayout stack;   // a column
+    float second = -1.0f, first = -1.0f, third = -1.0f;
+    auto frame = [&] {
+        h.Frame();
+        h.Win("W", {0, 0}, {400, 300});
+        ContainerOptions co;
+        co.layout = &stack;
+        h.ctx.BeginContainer(h.ctx.GetId("stack"), co);
+        h.ctx.BeginGroup();
+        first = h.ctx.LineRoom();
+        h.ctx.ItemSize({100, 20});
+        h.ctx.SameLine();
+        h.ctx.ItemSize({60, 20});
+        h.ctx.EndGroup();
+        h.ctx.BeginGroup();
+        second = h.ctx.LineRoom();
+        h.ctx.ItemSize({100, 20});
+        h.ctx.EndGroup();
+        h.ctx.BeginGroup();   // a module: sized with what is available, its buttons placed in a row elsewhere
+        third = h.ctx.LineRoom();
+        h.ctx.SetCursorPos(h.ctx.CursorPos() + Vec2(10, 40));
+        h.ctx.ItemSize({30, 20});
+        h.ctx.SameLine();
+        h.ctx.ItemSize({30, 20});
+        h.ctx.EndGroup();
+        h.ctx.EndContainer();
+        h.ctx.End();
+        h.End();
+    };
+    frame();
+    frame();
+    ESIA_CHECK(first == 68.0f && second == 0.0f && third == 0.0f);   // 8 + 60 after the first group's first item
+}

@@ -10,6 +10,7 @@ esia_add_test(esia_core_tests
     core/test_interaction.cpp
     core/test_windows.cpp
     core/test_layout.cpp
+    core/test_debug_checks.cpp
     core/test_utf8.cpp
     core/test_public_headers.cpp)
 target_link_libraries(esia_core_tests PRIVATE esia::core)

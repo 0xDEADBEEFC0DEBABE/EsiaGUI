@@ -26,6 +26,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 
 namespace esia
@@ -128,6 +129,31 @@ namespace esia
         Vec2 tooltipOffset{16, 16};         // from the mouse
     };
 
+    // A mistake in UI code that otherwise only shows as something not working (ContextDesc::debugChecks,
+    // docs/UI_CORE.md section 16).
+    struct Diagnostic
+    {
+        enum class Kind : std::uint8_t
+        {
+            // two items of a window took the same id in one frame: they share the hover, presses and per-id state
+            IdConflict,
+            // two child regions of a window began with the same id in one frame: they share one scroll offset
+            ChildIdConflict,
+            // an item has been laid out past the edge of what shows of its container, on an axis nothing scrolls,
+            // for a second: it is clipped away (a row wider than its window, a window too short for what it holds)
+            OutOfView,
+        };
+        Kind kind = Kind::IdConflict;
+        std::string message;          // one line: what, where (the window, the id and its label) and what to do
+        Id window = 0;
+        Id id = 0;                    // 0: an item without an id (OutOfView)
+        Rect rect;                    // the item (the region)
+        Rect other;                   // the other one with the id; OutOfView: what shows of the container
+    };
+
+    // ContextDesc::debugChecks. Auto: on when Esia is built without NDEBUG (a debug build).
+    enum class DebugChecks : std::uint8_t { Auto, Off, On };
+
     struct ContextDesc
     {
         InputConfig input;
@@ -137,6 +163,11 @@ namespace esia
         // Clipboard of the platform (optional). Called on the UI thread.
         std::function<std::string()> getClipboard;
         std::function<void(const std::string&)> setClipboard;
+        // Checks for mistakes in UI code (Diagnostic): an id two items share, an item laid out where it cannot be
+        // seen. Each is reported once - to `diagnostics`, else to stderr and the debugger's output - and outlined in
+        // red over the UI while it lasts. They cost a little per item, so Auto keeps them to debug builds.
+        DebugChecks debugChecks = DebugChecks::Auto;
+        std::function<void(const Diagnostic&)> diagnostics;   // on the UI thread, in EndFrame (or BeginChild)
     };
 
     struct FrameParams
@@ -239,6 +270,7 @@ namespace esia
             Vec2 fixedSize;               // ContainerOptions / child size (0 = fitted)
             Rect region;                  // work rect of the current slot
             Vec2 cursor, cursorMax;
+            int items = 0;                // laid out in it so far (debug checks: an item's place from frame to frame)
             float lineStartX = 0.0f, lineTop = 0.0f, lineHeight = 0.0f, lineBaseline = -1.0f;
             Vec2 prevLineEnd;
             float prevLineHeight = 0.0f, prevLineBaseline = -1.0f;
@@ -269,6 +301,7 @@ namespace esia
             int child;                    // innermost child record it is in, -1 = the window's content
             bool fixed;                   // does not scroll (a floating region's own area)
             Vec2 total, own;              // scroll offsets when recorded: all its areas', its innermost area's
+            std::uint32_t item;           // the ItemAdd it came after: an item's own records, or another item's
         };
         struct ChildRecord
         {
@@ -284,6 +317,7 @@ namespace esia
             ScrollState scroll;
             bool smooth = false;
             std::uint64_t lastFrame = 0;
+            Rect rect;                    // where it was begun last (debug checks: two regions with one id)
         };
 
         Id id_ = 0;
@@ -338,6 +372,9 @@ namespace esia
         bool InputPending() const { return inputPending_; }
         const LayoutMetrics& Metrics() const { return desc_.layout; }
         LayoutMetrics& Metrics() { return desc_.layout; }
+        // ContextDesc::debugChecks, switched at run time.
+        bool DebugChecksOn() const { return checks_; }
+        void SetDebugChecks(bool on);
         Vec2 DisplaySize() const { return params_.displaySize; }
         // FrameParams::safeArea, clamped to the display; the whole display when the platform gave none.
         Rect SafeArea() const;
@@ -379,12 +416,21 @@ namespace esia
         void EndTooltip();
 
         // ---- ids
+        // A string literal is a label (hashed), not a pointer; any integer (a loop's index) is a value.
         void PushId(std::string_view label);
+        void PushId(const char* label) { PushId(std::string_view(label)); }
         void PushId(std::int64_t value);
+        template <class T>
+            requires std::is_integral_v<T>
+        void PushId(T value) { PushId((std::int64_t)value); }
         void PushId(const void* ptr) { PushId((std::int64_t)(std::intptr_t)ptr); }
         void PopId();
         Id GetId(std::string_view label) const;
+        Id GetId(const char* label) const { return GetId(std::string_view(label)); }
         Id GetId(std::int64_t value) const;
+        template <class T>
+            requires std::is_integral_v<T>
+        Id GetId(T value) const { return GetId((std::int64_t)value); }
         Id IdSeed() const;
 
         // ---- items
@@ -534,6 +580,13 @@ namespace esia
         Rect ChildClipNow(const Window& w, std::size_t index) const;
         void StepSmoothScrolls();
         void ApplyNextScroll(Window::ScrollState& s, bool immediate);
+        // debug checks (debug.cpp)
+        void CheckOutOfView(const Window& w, const Window::Frame& f, const Rect& r);
+        void ChildIdConflict(const Window& w, Id id, const Rect& first, const Rect& second);
+        void RunDebugChecks();
+        void Report(Diagnostic d, std::uint64_t once);
+        void Outline(const Rect& r);
+        std::string Describe(Id id) const;
         void ClosePopupsFrom(std::size_t index);
         int PopupIndex(Id id) const;
 
@@ -622,5 +675,30 @@ namespace esia
         DrawList background_, foreground_;
         DrawData drawData_;
         PlatformRequests requests_;
+
+        // debug checks (ContextDesc::debugChecks, debug.cpp)
+        struct OutOfViewItem
+        {
+            Id window = 0, key = 0, id = 0;
+            Rect rect, shown;             // the item; what shows of its container
+            int edge = 0;                 // past which edge: 0 left, 1 right, 2 top, 3 bottom
+            double since = 0.0;           // out of view since (FrameParams::time)
+            std::uint64_t lastFrame = 0;
+        };
+        bool checks_ = false;
+        std::uint32_t itemSerial_ = 0;    // ItemAdds so far (HitRecord::item)
+        struct ReplacedHit
+        {
+            Id window, id;
+            Rect rect;
+        };
+        // the record of an item that the next item, with its id, replaced in its window's hit list (RecordHit keeps
+        // one record for an item's run of them)
+        std::vector<ReplacedHit> replacedHits_;
+        mutable std::unordered_map<Id, std::string, IntHash> idLabels_;   // this frame's GetId labels, by id
+        std::vector<OutOfViewItem> outOfView_;
+        int outOfViewLast_ = -1;          // the entry of the item laid out last: its ItemAdd names it
+        std::vector<std::uint64_t> reported_;                             // sorted: reported once
+        std::vector<std::pair<Id, Rect>> idScratch_;
     };
 }

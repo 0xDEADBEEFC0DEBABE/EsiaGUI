@@ -4,7 +4,8 @@
 // between the panels resize them. On a phone the six panels are tabs of two panels, one above the other (side by side
 // in landscape), in the display's safe area.
 //
-//   workbench [--float <panel>] [--show <panel>] [--light] [--rows N]       and glass_window's options (../glass_window/app.hpp)
+//   workbench [--float <panel>] [--show <panel>] [--light] [--compact] [--rows N]
+//             and glass_window's options (../glass_window/app.hpp)
 #include "app.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/ui/ui.hpp"
@@ -58,6 +59,7 @@ namespace
         Context* ctx = nullptr;
         std::unique_ptr<ui::Ui> ui;
         bool dark = true;
+        bool compact = false;
         bool laidOut = false;
         std::string floatPanel, showPanel;
         int frame = 0;
@@ -477,6 +479,8 @@ int main(int argc, char** argv)
     app.option = [&](const std::string& o, const char* value, bool& usedValue) {
         if (o == "--light")
             return !(d.dark = false);
+        if (o == "--compact")
+            return d.compact = true;
         if (!value)
             return false;
         usedValue = true;
@@ -505,6 +509,8 @@ int main(int argc, char** argv)
         if (!fonts.empty())
             desc.fontFiles[0] = fonts[0];
         desc.theme = d.dark ? ui::ThemeDark() : ui::ThemeLight();
+        if (d.compact)
+            desc.theme = ui::ThemeCompact(desc.theme);   // a desktop tool's density
         desc.island = false;
 #if !defined(_WIN32)
         desc.iconFontFile = glass::kSystemSymbolsFont;

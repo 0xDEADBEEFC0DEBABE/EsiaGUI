@@ -191,7 +191,19 @@ namespace esia::ui
         Ui::Impl& m = M();
         Context& c = *m.ctx;
         const bool stylePushed = TakeNextStyle();   // the section and everything in it, until EndSection
-        c.PushId(header.empty() ? std::string_view("##section") : header);
+        // The section's id scope: its header. Sections without one, or with the same one, in one scope are told
+        // apart by their order: their rows' ids and the section's own state (its card) stay their own.
+        const std::string_view scopeLabel = header.empty() ? std::string_view("##section") : header;
+        const Id scope = c.GetId(scopeLabel);
+        int seen = 0;
+        auto it = std::find_if(m.sectionScopes.begin(), m.sectionScopes.end(), [scope](const std::pair<Id, int>& e) { return e.first == scope; });
+        if (it != m.sectionScopes.end())
+            seen = ++it->second;
+        else
+            m.sectionScopes.emplace_back(scope, 0);
+        c.PushId(scopeLabel);
+        if (seen > 0)
+            c.PushId(seen);
         const Id id = c.GetId("##sec");
 
         // header + card + footer: one item (one child inside auto-layout containers), as wide as it is offered
@@ -214,6 +226,7 @@ namespace esia::ui
             m.sectionFooters.resize(m.sections.size() + 1);
         m.sectionFooters[m.sections.size()].assign(footer);
         s.stylePushed = stylePushed;
+        s.counted = seen > 0;
         s.mark = c.WindowDrawList().Mark();   // the card goes under the rows, drawn at EndSection
         ContainerOptions card;
         card.layout = &Column(Salt(id, 3));
@@ -265,6 +278,8 @@ namespace esia::ui
         }
         c.ItemSize(Vec2(0.0f, Sc(t.metrics.sectionSpacing)));
         c.EndContainer();
+        if (s.counted)
+            c.PopId();
         c.PopId();
         if (s.stylePushed)
             PopStyle();
