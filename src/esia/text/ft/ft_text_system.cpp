@@ -22,6 +22,7 @@
 #include <atomic>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_BITMAP_H
 #include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
 #include <hb-ot.h>
@@ -132,6 +133,20 @@ namespace esia::text
             bool colorPlatformTried = false;
             bool colorStrikes = false;   // color bitmap strikes (sbix, CBDT: emoji): drawn from those, not outlines
             bool colorLayers = false;    // COLR color glyphs (vector emoji): painted from their layers (colr.hpp)
+            // A bitmap font (BDF, PCF, Windows FNT / FON, a bitmap-only sfnt): drawn from its strikes, pixel for pixel.
+            // The strike in use (SelectStrike) sets upem (its pixels), the metrics and what its HarfBuzz font reads.
+            // A Windows .fon holds a face per size: its faces of one family and style are this face's strikes.
+            struct Strike
+            {
+                FT_Face ft = nullptr;   // `ft` or one of `moreFaces`
+                int index = 0;          // its FT_Bitmap_Size
+                int px = 0;             // its em in pixels
+            };
+            bool bitmap = false;
+            std::vector<Strike> strikes;
+            std::vector<FT_Face> moreFaces;   // a .fon's other sizes (owned)
+            int strike = -1;                  // in use
+            FT_Face active = nullptr;         // its face
             hb_font_t* hb = nullptr;
             float upem = 1000.0f;
             float ascent = 0.0f, descent = 0.0f, gap = 0.0f;   // design units, descent positive
@@ -144,6 +159,8 @@ namespace esia::text
             {
                 if (hb)
                     hb_font_destroy(hb);
+                for (FT_Face f : moreFaces)
+                    FT_Done_Face(f);
                 if (ft)
                     FT_Done_Face(ft);
             }
@@ -233,14 +250,20 @@ namespace esia::text
             {
                 TextureId page = 0;
                 std::uint32_t first = 0, count = 0;   // quads
-                Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};   // pixels, as quadBounds
+                Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};   // pixels, as QuadSet::bounds
             };
-            std::vector<Vertex> quads;   // 4 per drawn glyph, as QuadWriter writes them
-            std::vector<QuadRun> runs;   // one per change of atlas page
-            Rect quadBounds;             // pixels from the origin's whole pixel
-            std::uint64_t quadGeneration = 0;   // 0 = none
-            float quadEm = 0.0f, quadScale = 0.0f, quadFx = -1.0f, quadFy = -1.0f;
-            std::uint32_t quadRgba = 0, quadColorRgba = 0;
+            struct QuadSet
+            {
+                std::vector<Vertex> quads;   // 4 per drawn glyph, as QuadWriter writes them
+                std::vector<QuadRun> runs;   // one per change of atlas page
+                Rect bounds;                 // pixels from the origin's whole pixel
+                std::uint64_t generation = 0;   // 0 = none
+                float em = 0.0f, scale = 0.0f, fx = -1.0f, fy = -1.0f;
+                std::uint32_t rgba = 0, colorRgba = 0;
+                std::uint32_t outline = 0;   // an outline's set: its width in 1/8 px
+            };
+            QuadSet fill;      // Draw's
+            QuadSet outline;   // DrawOutline's (TextOutline): the glyphs grown, in the outline's color
         };
 
         // FreeType outline (design units, y up) -> Outline (pixels, y down)
@@ -364,6 +387,14 @@ namespace esia::text
                 params_ = params;
                 if (!(params_.pixelsPerUnit > 0.0f))
                     params_.pixelsPerUnit = 1.0f;
+                if (bitmapFaces_ > 0 && params_.pixelsPerUnit != layoutPixelsPerUnit_)
+                {
+                    // a bitmap font's sizes snap to its strikes in pixels: its layouts change with the density
+                    layouts_.clear();
+                    spareLayouts_.clear();
+                    layoutFront_.fill(nullptr);
+                }
+                layoutPixelsPerUnit_ = params_.pixelsPerUnit;
                 ++frame_;
                 atlas_.BeginFrame();
                 colorAtlas_.BeginFrame();
@@ -524,23 +555,52 @@ namespace esia::text
                 const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
                 const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
                 const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
-                if (layout->quadGeneration != generation || layout->quadEm != em || layout->quadScale != scale || layout->quadFx != fx ||
-                    layout->quadFy != fy || layout->quadRgba != rgba || layout->quadColorRgba != colorGlyphRgba)
-                    PlaceQuads(*layout, em, scale, fx, fy, rgba, colorGlyphRgba, generation);
-                EmitQuads(dl, *layout, ox, oy, inv);
+                Layout::QuadSet& set = layout->fill;
+                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.rgba != rgba ||
+                    set.colorRgba != colorGlyphRgba)
+                    PlaceQuads(*layout, set, em, scale, fx, fy, rgba, colorGlyphRgba, generation, 0);
+                EmitQuads(dl, set, ox, oy, inv);
                 return layout->metrics.size;
             }
 
+            void DrawOutline(DrawList& dl, FontRef font, Vec2 pos, const TextOutline& outline, std::string_view text, float wrapWidth, std::uint32_t flags,
+                             float scale) override
+            {
+                if (!outline.Visible() || !(scale > 0.0f))
+                    return;
+                Layout* layout = GetLayout(font, text, wrapWidth, flags);
+                if (!layout)
+                    return;
+                // the placement Draw uses (the same em, origin and sub-pixel offsets), the glyphs grown
+                const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
+                const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
+                const std::uint32_t width = OutlineQ(outline.width * scale * rs);
+                const std::uint32_t rgba = outline.color.ToRgba8();
+                const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
+                const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
+                const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
+                Layout::QuadSet& set = layout->outline;
+                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.rgba != rgba ||
+                    set.outline != width)
+                    PlaceQuads(*layout, set, em, scale, fx, fy, rgba, 0, generation, width);
+                EmitQuads(dl, set, ox, oy, inv);
+            }
+
+            // An outline's width in physical pixels as OutlineGlyph keys it: 1/8 px, at most 255 (31.875 px), 1 for any
+            // width above 0
+            static std::uint32_t OutlineQ(float pixels) { return pixels > 0.0f ? (std::uint32_t)std::clamp(pixels * 8.0f + 0.5f, 1.0f, 255.0f) : 0u; }
+
             // The layout's quads for these sub-pixel offsets (Draw): physical-pixel placement, the baseline on a whole
             // pixel, the pen at a quarter-pixel phase; glyphs without ink or color left out.
-            void PlaceQuads(Layout& layout, float em, float scale, float fx, float fy, std::uint32_t rgba, std::uint32_t colorGlyphRgba,
-                            std::uint64_t generation)
+            // An outline's set (outlineQ > 0): every glyph grown by that width (OutlineGlyph), color glyphs left out.
+            void PlaceQuads(Layout& layout, Layout::QuadSet& set, float em, float scale, float fx, float fy, std::uint32_t rgba,
+                            std::uint32_t colorGlyphRgba, std::uint64_t generation, std::uint32_t outlineQ)
             {
                 const float rs = params_.pixelsPerUnit;
                 const bool rgbaShown = (rgba >> 24) != 0, colorShown = (colorGlyphRgba >> 24) != 0;
-                layout.quads.clear();
-                layout.runs.clear();
-                layout.quadBounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
+                set.quads.clear();
+                set.runs.clear();
+                set.bounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
                 for (const PlacedGlyph& g : layout.glyphs)
                 {
                     const float px = fx + g.pos.x * scale * rs, py = fy + g.pos.y * scale * rs;
@@ -551,48 +611,59 @@ namespace esia::text
                         phase = 0;
                         xi += 1.0f;
                     }
+                    if (faces_[g.face]->bitmap)
+                    {
+                        xi = FloorPx(px + 0.5f);   // a bitmap font's pixels on the target's: whole pixels, no phases
+                        phase = 0;
+                    }
                     const float yi = FloorPx(py + 0.5f);
                     const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase);
+                    if (outlineQ > 0)
+                    {
+                        if (!s || s->color || !rgbaShown)
+                            continue;   // a color glyph (emoji) has no outline
+                        s = OutlineGlyph(g.face, g.glyph, em, phase, outlineQ);
+                    }
                     if (!s || !s->page || s->width <= 0 || s->height <= 0 || !(s->color ? colorShown : rgbaShown))
                         continue;
-                    if (layout.runs.empty() || layout.runs.back().page != s->page)
-                        layout.runs.push_back({s->page, (std::uint32_t)(layout.quads.size() / 4), 0});
-                    ++layout.runs.back().count;
+                    if (set.runs.empty() || set.runs.back().page != s->page)
+                        set.runs.push_back({s->page, (std::uint32_t)(set.quads.size() / 4), 0});
+                    ++set.runs.back().count;
                     const Rect r(xi + (float)s->left, yi + (float)s->top, xi + (float)(s->left + s->width), yi + (float)(s->top + s->height));
                     const std::uint32_t c = s->color ? colorGlyphRgba : rgba;
-                    layout.quads.push_back({r.min, s->uv0, c});
-                    layout.quads.push_back({Vec2(r.max.x, r.min.y), Vec2(s->uv1.x, s->uv0.y), c});
-                    layout.quads.push_back({r.max, s->uv1, c});
-                    layout.quads.push_back({Vec2(r.min.x, r.max.y), Vec2(s->uv0.x, s->uv1.y), c});
-                    layout.quadBounds = layout.quadBounds.Union(r);
-                    layout.runs.back().bounds = layout.runs.back().bounds.Union(r);
+                    set.quads.push_back({r.min, s->uv0, c});
+                    set.quads.push_back({Vec2(r.max.x, r.min.y), Vec2(s->uv1.x, s->uv0.y), c});
+                    set.quads.push_back({r.max, s->uv1, c});
+                    set.quads.push_back({Vec2(r.min.x, r.max.y), Vec2(s->uv0.x, s->uv1.y), c});
+                    set.bounds = set.bounds.Union(r);
+                    set.runs.back().bounds = set.runs.back().bounds.Union(r);
                 }
-                layout.quadGeneration = generation;
-                layout.quadEm = em;
-                layout.quadScale = scale;
-                layout.quadFx = fx;
-                layout.quadFy = fy;
-                layout.quadRgba = rgba;
-                layout.quadColorRgba = colorGlyphRgba;
+                set.generation = generation;
+                set.em = em;
+                set.scale = scale;
+                set.fx = fx;
+                set.fy = fy;
+                set.rgba = rgba;
+                set.colorRgba = colorGlyphRgba;
+                set.outline = outlineQ;
             }
 
             // The quads at the whole pixel (ox, oy), in UI units; the ones outside the clip left out (none to test when
             // the text lies inside it).
-            static void EmitQuads(DrawList& dl, const Layout& layout, float ox, float oy, float inv)
+            static void EmitQuads(DrawList& dl, const Layout::QuadSet& set, float ox, float oy, float inv)
             {
                 const Rect clip = dl.ClipRect();
-                const Rect all((layout.quadBounds.min.x + ox) * inv, (layout.quadBounds.min.y + oy) * inv, (layout.quadBounds.max.x + ox) * inv,
-                               (layout.quadBounds.max.y + oy) * inv);
-                if (layout.runs.empty() || !all.Overlaps(clip))
+                const Rect all((set.bounds.min.x + ox) * inv, (set.bounds.min.y + oy) * inv, (set.bounds.max.x + ox) * inv, (set.bounds.max.y + oy) * inv);
+                if (set.runs.empty() || !all.Overlaps(clip))
                     return;
                 if (clip.Contains(all))
                 {
                     // all in view: the quads go in as a block, through local cursors (stores through the writer's
                     // members kept the compiler from keeping them in registers), with the bounds of their run
-                    for (const Layout::QuadRun& run : layout.runs)
+                    for (const Layout::QuadRun& run : set.runs)
                     {
                         DrawList::QuadWriter w = dl.BeginQuads(run.page, run.count);
-                        const Vertex* q = layout.quads.data() + (std::size_t)run.first * 4;
+                        const Vertex* q = set.quads.data() + (std::size_t)run.first * 4;
                         Vertex* v = w.vtx;
                         std::uint32_t* x = w.idx;
                         std::uint32_t b = w.base;
@@ -618,11 +689,11 @@ namespace esia::text
                     }
                     return;
                 }
-                for (const Layout::QuadRun& run : layout.runs)
+                for (const Layout::QuadRun& run : set.runs)
                 {
                     DrawList::QuadWriter w;
                     bool open = false;
-                    const Vertex* q = layout.quads.data() + (std::size_t)run.first * 4;
+                    const Vertex* q = set.quads.data() + (std::size_t)run.first * 4;
                     for (std::uint32_t i = 0; i < run.count; ++i, q += 4)
                     {
                         const Rect r((q[0].pos.x + ox) * inv, (q[0].pos.y + oy) * inv, (q[2].pos.x + ox) * inv, (q[2].pos.y + oy) * inv);
@@ -638,6 +709,31 @@ namespace esia::text
                     if (open)
                         dl.EndQuads(w);
                 }
+            }
+
+            void DrawGlyphOutline(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, const TextOutline& outline) override
+            {
+                if (font.id == 0 || font.id > faces_.size() || !(font.size > 0.0f) || !outline.Visible())
+                    return;
+                const std::uint16_t face = PickFace((std::uint16_t)(font.id - 1), codepoint, -1);
+                hb_codepoint_t glyph = 0;
+                if (!hb_font_get_nominal_glyph(faces_[face]->hb, codepoint, &glyph))
+                    return;
+                const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
+                const float em = std::floor(font.size * rs * 4.0f + 0.5f) * 0.25f;
+                const GlyphSlot* s = Glyph(face, (std::uint16_t)glyph, em, 0);
+                if (!s || !s->page || s->color)
+                    return;   // nothing drawn, or a color glyph: no outline
+                // placed as DrawGlyph places the glyph (the glyph's ink box on `center`), grown around it
+                const float ox = std::floor(center.x * rs - (s->ink.min.x + s->ink.max.x) * 0.5f + 0.5f);
+                const float oy = std::floor(center.y * rs - (s->ink.min.y + s->ink.max.y) * 0.5f + 0.5f);
+                const GlyphSlot* o = OutlineGlyph(face, (std::uint16_t)glyph, em, 0, OutlineQ(outline.width * rs));
+                if (!o || !o->page || o->width <= 0 || o->height <= 0)
+                    return;
+                dl.AddImage(o->page,
+                            Rect((ox + (float)o->left) * inv, (oy + (float)o->top) * inv, (ox + (float)(o->left + o->width)) * inv,
+                                 (oy + (float)(o->top + o->height)) * inv),
+                            o->uv0, o->uv1, outline.color.ToRgba8());
             }
 
             void DrawGlyph(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, Color color) override
@@ -695,7 +791,42 @@ namespace esia::text
                 }
                 face->colorStrikes = FT_HAS_COLOR(face->ft) && FT_HAS_FIXED_SIZES(face->ft);
                 if (!FT_IS_SCALABLE(face->ft) && !face->colorStrikes)
-                    return 0;   // monochrome bitmap fonts: nothing to rasterize
+                {
+                    // a bitmap font: no outlines, and no OpenType tables to shape with - HarfBuzz reads its characters,
+                    // advances and metrics from FreeType at the strike in use (BitmapFontFuncs)
+                    if (!FT_HAS_FIXED_SIZES(face->ft) || face->ft->num_fixed_sizes <= 0)
+                        return 0;
+                    face->bitmap = true;
+                    AddStrikes(*face, face->ft);
+                    if (faceIndex == 0)
+                        for (FT_Long i = 1; i < face->ft->num_faces; ++i)
+                        {
+                            // a .fon's other sizes of the font
+                            FT_Face more = nullptr;
+                            if (FT_New_Memory_Face(ft_, static_cast<const FT_Byte*>(data), (FT_Long)size, i, &more) != 0)
+                                continue;
+                            const auto same = [](const char* a, const char* b) { return (!a && !b) || (a && b && std::strcmp(a, b) == 0); };
+                            if (!FT_IS_SCALABLE(more) && FT_HAS_FIXED_SIZES(more) && same(more->family_name, face->ft->family_name) &&
+                                same(more->style_name, face->ft->style_name))
+                            {
+                                face->moreFaces.push_back(more);
+                                AddStrikes(*face, more);
+                            }
+                            else
+                                FT_Done_Face(more);
+                        }
+                    // a face of its own without tables (HarfBuzz's empty face is inert: nothing is shaped with it)
+                    hb_face_t* hbFace = hb_face_create_for_tables([](hb_face_t*, hb_tag_t, void*) -> hb_blob_t* { return nullptr; }, nullptr, nullptr);
+                    hb_face_set_glyph_count(hbFace, (unsigned)std::max<FT_Long>(face->ft->num_glyphs, 1));
+                    face->hb = hb_font_create(hbFace);
+                    hb_face_destroy(hbFace);
+                    hb_font_set_funcs(face->hb, BitmapFontFuncs(), face.get(), nullptr);
+                    Face& f = *face;
+                    faces_.push_back(std::move(face));
+                    ++bitmapFaces_;
+                    SelectStrike(f, 0);
+                    return (FontId)faces_.size();
+                }
                 face->colorLayers = !face->colorStrikes && detail::HasColrGlyphs(face->ft);
                 hb_blob_t* blob = face->file ? hb_blob_reference(face->file->blob)
                                              : hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
@@ -902,7 +1033,7 @@ namespace esia::text
                     std::memcpy(layout.params, params, sizeof(params));
                     layout.glyphs.clear();
                     layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
-                    layout.quadGeneration = 0;   // other glyphs: placed again
+                    layout.fill.generation = layout.outline.generation = 0;   // other glyphs: placed again
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
@@ -914,8 +1045,9 @@ namespace esia::text
             void BuildLayout(FontRef font, std::string_view text, float wrapWidth, std::uint32_t flags, Layout& layout)
             {
                 const std::uint16_t primary = (std::uint16_t)(font.id - 1);
+                const float primarySize = Snapped(primary, font.size);   // a bitmap font: its strike's
                 const Face& pf = *faces_[primary];
-                const float k = font.size / pf.upem;
+                const float k = primarySize / pf.upem;
                 // one line box for every line, from the requested font (WGT's uniform line spacing)
                 const float lineHeight = (pf.ascent + pf.descent + pf.gap) * k;
                 const float baseline = (pf.ascent + pf.gap * 0.5f) * k;
@@ -1097,6 +1229,7 @@ namespace esia::text
                 for (std::uint32_t r = 0; r < (std::uint32_t)runs_.size(); ++r)
                 {
                     const Run& run = runs_[r];
+                    const float runSize = Snapped(run.face, size);   // before shaping: a bitmap font's strike
                     const Face& face = *faces_[run.face];
                     hb_buffer_clear_contents(buffer_);
                     // the whole paragraph goes in as context: shaping across run boundaries (Arabic joining) sees it
@@ -1114,7 +1247,7 @@ namespace esia::text
                     unsigned n = 0;
                     const hb_glyph_info_t* info = hb_buffer_get_glyph_infos(buffer_, &n);
                     const hb_glyph_position_t* pos = hb_buffer_get_glyph_positions(buffer_, nullptr);
-                    const float k = size / face.upem;
+                    const float k = runSize / face.upem;
                     const std::size_t first = glyphs_.size();
                     for (unsigned i = 0; i < n; ++i)
                     {
@@ -1224,6 +1357,7 @@ namespace esia::text
                 const bool single = faces_[face]->Has(0x2026);
                 if (!single)
                     face = primary;
+                const float faceSize = Snapped(face, size);
                 const Face& f = *faces_[face];
                 hb_buffer_clear_contents(buffer_);
                 hb_buffer_add_utf8(buffer_, single ? "\xE2\x80\xA6" : "...", -1, 0, -1);
@@ -1232,7 +1366,7 @@ namespace esia::text
                 unsigned n = 0;
                 const hb_glyph_info_t* info = hb_buffer_get_glyph_infos(buffer_, &n);
                 const hb_glyph_position_t* pos = hb_buffer_get_glyph_positions(buffer_, nullptr);
-                const float k = size / f.upem;
+                const float k = faceSize / f.upem;
                 float advance = 0.0f;
                 for (unsigned i = 0; i < n; ++i)
                 {
@@ -1323,6 +1457,8 @@ namespace esia::text
             // rasterized from the unhinted outline on first use.
             const GlyphSlot* Glyph(std::uint16_t face, std::uint16_t glyph, float emPixels, int phase)
             {
+                if (faces_[face]->bitmap)
+                    return BitmapGlyph(face, glyph, emPixels, 0);
                 const std::uint64_t q = (std::uint64_t)std::min(emPixels * 16.0f + 0.5f, 134217727.0f);   // 1/16 px, 27 bits
                 const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (q << 2) | (std::uint64_t)(phase & 3);
                 if (faces_[face]->colorStrikes)
@@ -1332,11 +1468,22 @@ namespace esia::text
                         return s;
                 if (const GlyphSlot* s = atlas_.Find(key))
                     return s;
+                LoadOutline(face, glyph, (float)q / 16.0f);
+                const float offsetX = 0.25f * (float)phase;
+                if (!RasterizeGray(outline_, offsetX, bitmap_))
+                    bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
+                const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
+                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
+            }
+
+            // The glyph's outline at `emPixels` into outline_: design units, no hinting, no embedded bitmaps (color
+            // strikes: ColorGlyph)
+            void LoadOutline(std::uint16_t face, std::uint16_t glyph, float emPixels)
+            {
                 Face& f = *faces_[face];
                 outline_.Clear();
-                // design units, no hinting, no embedded bitmaps (color strikes: ColorGlyph)
                 if (f.platform)
-                    f.platform->GlyphOutline(glyph, ((float)q / 16.0f) / f.upem, outline_);
+                    f.platform->GlyphOutline(glyph, emPixels / f.upem, outline_);
                 else if (FT_Load_Glyph(f.ft, glyph, FT_LOAD_NO_SCALE) == 0 && f.ft->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
                 {
                     FT_Outline_Funcs funcs{};
@@ -1344,14 +1491,28 @@ namespace esia::text
                     funcs.line_to = &SinkLineTo;
                     funcs.conic_to = &SinkConicTo;
                     funcs.cubic_to = &SinkCubicTo;
-                    OutlineSink sink{&outline_, ((float)q / 16.0f) / f.upem};
+                    OutlineSink sink{&outline_, emPixels / f.upem};
                     FT_Outline_Decompose(&f.ft->glyph->outline, &funcs, &sink);
                 }
-                const float offsetX = 0.25f * (float)phase;
-                if (!RasterizeGray(outline_, offsetX, bitmap_))
-                    bitmap_ = GlyphBitmap{};   // larger than the rasterizer takes: cached as empty, not retried every frame
+            }
+
+            // A glyph grown by an outline's width (`widthQ`, 1/8 px: OutlineQ), in the gray atlas beside the glyphs. Its
+            // key is a glyph's with bit 31 set and the width in bits 22 .. 29 (a glyph's em takes bits 2 .. 28 only up
+            // to 2^20 / 16 px, which no outline reaches: the em is capped there).
+            const GlyphSlot* OutlineGlyph(std::uint16_t face, std::uint16_t glyph, float emPixels, int phase, std::uint32_t widthQ)
+            {
+                if (faces_[face]->bitmap)
+                    return BitmapGlyph(face, glyph, emPixels, widthQ);
+                const std::uint64_t q = (std::uint64_t)std::min(emPixels * 16.0f + 0.5f, 1048575.0f);   // 1/16 px, 20 bits
+                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) | (1ull << 31) |
+                                          ((std::uint64_t)(widthQ & 0xFF) << 22) | (q << 2) | (std::uint64_t)(phase & 3);
+                if (const GlyphSlot* s = atlas_.Find(key))
+                    return s;
+                LoadOutline(face, glyph, (float)q / 16.0f);
+                if (!RasterizeGrown(outline_, 0.25f * (float)phase, (float)widthQ / 8.0f, bitmap_))
+                    bitmap_ = GlyphBitmap{};
                 const GlyphSlot* s = atlas_.Add(key, bitmap_, outline_.Bounds());
-                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());   // larger than a page: empty too
+                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());
             }
 
             // A COLR color glyph (a vector emoji) under the gray glyph's `key` (size and phase), painted on first use; null
@@ -1514,6 +1675,209 @@ namespace esia::text
                 }
             }
 
+            // ---- bitmap fonts
+            // A strike's height in pixels (its em)
+            static int StrikePx(const Face& f, int strike) { return f.strikes[(std::size_t)strike].px; }
+
+            // `ft`'s bitmap sizes as strikes of `f`
+            static void AddStrikes(Face& f, FT_Face ft)
+            {
+                // a Windows FNT's one character map is not marked Unicode, so FreeType selects none: its codes are the
+                // font's code page, Latin-1 for the usual ANSI fonts
+                if (!ft->charmap && ft->num_charmaps > 0)
+                    FT_Set_Charmap(ft, ft->charmaps[0]);
+                for (int i = 0; i < ft->num_fixed_sizes; ++i)
+                {
+                    const FT_Bitmap_Size& s = ft->available_sizes[i];
+                    f.strikes.push_back({ft, i, std::max(1, s.y_ppem > 0 ? (int)((s.y_ppem + 32) >> 6) : (int)s.height)});
+                }
+            }
+
+            // The strike and whole multiple of it nearest `px` pixels (a larger strike on a tie)
+            static void PickStrike(const Face& f, float px, int& strike, int& times)
+            {
+                strike = 0;
+                times = 1;
+                float best = std::numeric_limits<float>::infinity();
+                for (int i = 0; i < (int)f.strikes.size(); ++i)
+                {
+                    const int s = StrikePx(f, i);
+                    const int k = std::max(1, (int)std::floor(px / (float)s + 0.5f));
+                    const float d = std::fabs((float)(k * s) - px);
+                    if (d < best || (d == best && s > StrikePx(f, strike)))
+                    {
+                        best = d;
+                        strike = i;
+                        times = k;
+                    }
+                }
+            }
+
+            // Selects `strike` in FreeType: upem becomes its pixels, the metrics its own
+            void SelectStrike(Face& f, int strike)
+            {
+                const Face::Strike& s = f.strikes[(std::size_t)strike];
+                if (f.strike == strike || FT_Select_Size(s.ft, s.index) != 0)
+                    return;
+                f.strike = strike;
+                f.active = s.ft;
+                const FT_Size_Metrics& m = s.ft->size->metrics;
+                f.upem = (float)StrikePx(f, strike);
+                f.ascent = (float)((m.ascender + 32) >> 6);
+                f.descent = (float)((-m.descender + 32) >> 6);
+                if (f.ascent + f.descent <= 0.0f)
+                {
+                    f.ascent = f.upem;
+                    f.descent = 0.0f;
+                }
+                f.gap = std::max(0.0f, (float)((m.height + 32) >> 6) - f.ascent - f.descent);
+                hb_font_set_scale(f.hb, (int)f.upem, (int)f.upem);
+            }
+
+            // The size (UI units) a face draws `size` at: `size`, or for a bitmap font the strike and whole multiple of
+            // it nearest in pixels - selected, so its metrics and HarfBuzz font are that strike's
+            float Snapped(std::uint16_t face, float size)
+            {
+                Face& f = *faces_[face];
+                if (!f.bitmap)
+                    return size;
+                int strike = 0, times = 1;
+                PickStrike(f, size * params_.pixelsPerUnit, strike, times);
+                SelectStrike(f, strike);
+                return (float)(times * StrikePx(f, strike)) / params_.pixelsPerUnit;
+            }
+
+            // A bitmap font's glyph at the strike and multiple nearest `emPixels`: its pixels, each repeated `times` x
+            // `times` (nearest neighbour), on whole pixels with no phases. `outlineQ` > 0: its outline (TextOutline) -
+            // every pixel within the width (in whole pixels, a square around each: crisp as the font).
+            const GlyphSlot* BitmapGlyph(std::uint16_t face, std::uint16_t glyph, float emPixels, std::uint32_t outlineQ)
+            {
+                Face& f = *faces_[face];
+                int strike = 0, times = 1;
+                PickStrike(f, emPixels, strike, times);
+                const std::uint64_t q = (std::uint64_t)(times * StrikePx(f, strike)) * 16u;
+                const std::uint64_t key = ((std::uint64_t)face << 48) | ((std::uint64_t)glyph << 32) |
+                                          (outlineQ ? (1ull << 31) | ((std::uint64_t)(outlineQ & 0xFF) << 22) : 0u) | (std::min<std::uint64_t>(q, 1048575u) << 2);
+                if (const GlyphSlot* s = atlas_.Find(key))
+                    return s;
+                Rect ink;
+                if (!BitmapCoverage(f, glyph, strike, times, bitmap_, ink))
+                    bitmap_ = GlyphBitmap{};
+                if (outlineQ > 0)
+                    GrowPixels(bitmap_, std::max(1, (int)(outlineQ / 8.0f + 0.5f)));
+                const GlyphSlot* s = atlas_.Add(key, bitmap_, ink);
+                return s ? s : atlas_.Add(key, GlyphBitmap{}, Rect());
+            }
+
+            // The glyph's bitmap at `strike` as 8-bit coverage, scaled `times` (nearest neighbour), with an empty pixel
+            // around it; `ink`: its pixels (from the pen, y down). False when FreeType has none.
+            bool BitmapCoverage(Face& f, std::uint16_t glyph, int strike, int times, GlyphBitmap& out, Rect& ink)
+            {
+                out = GlyphBitmap{};
+                ink = Rect();
+                SelectStrike(f, strike);
+                FT_Face ft = f.active;
+                if (FT_Load_Glyph(ft, glyph, FT_LOAD_DEFAULT) != 0 || ft->glyph->format != FT_GLYPH_FORMAT_BITMAP)
+                    return false;
+                FT_Bitmap gray;
+                FT_Bitmap_Init(&gray);
+                if (FT_Bitmap_Convert(ft_, &ft->glyph->bitmap, &gray, 1) != 0)
+                {
+                    FT_Bitmap_Done(ft_, &gray);
+                    return false;
+                }
+                const int w = (int)gray.width, h = (int)gray.rows;
+                const bool fits = w > 0 && h > 0 && w * times + 2 <= 4096 && h * times + 2 <= 4096;
+                if (fits)
+                {
+                    // 0 .. num_grays - 1 (a monochrome font: 0 or 1) to 0 .. 255
+                    const int levels = std::max(1, (int)gray.num_grays - 1);
+                    out.width = w * times + 2;
+                    out.height = h * times + 2;
+                    out.left = ft->glyph->bitmap_left * times - 1;
+                    out.top = -ft->glyph->bitmap_top * times - 1;
+                    out.pixels.assign((std::size_t)out.width * (std::size_t)out.height, 0);
+                    for (int y = 0; y < h; ++y)
+                        for (int x = 0; x < w; ++x)
+                        {
+                            const int v = std::min(255, gray.buffer[(std::size_t)y * (std::size_t)gray.pitch + (std::size_t)x] * 255 / levels);
+                            for (int yy = 0; yy < times; ++yy)
+                                std::memset(&out.pixels[(std::size_t)(1 + y * times + yy) * (std::size_t)out.width + (std::size_t)(1 + x * times)], v, (std::size_t)times);
+                        }
+                    ink = Rect((float)(out.left + 1), (float)(out.top + 1), (float)(out.left + 1 + w * times), (float)(out.top + 1 + h * times));
+                }
+                FT_Bitmap_Done(ft_, &gray);
+                return fits || w == 0 || h == 0;
+            }
+
+            // Every pixel takes the most coverage within `r` pixels across and down (a square around it): the bitmap
+            // grows by `r` on every side, its edges stay empty.
+            static void GrowPixels(GlyphBitmap& b, int r)
+            {
+                if (b.width <= 0 || b.height <= 0)
+                    return;
+                const int w = b.width + 2 * r, h = b.height + 2 * r;
+                std::vector<std::uint8_t> rows((std::size_t)w * (std::size_t)b.height, 0), out((std::size_t)w * (std::size_t)h, 0);
+                for (int y = 0; y < b.height; ++y)
+                    for (int x = 0; x < w; ++x)
+                    {
+                        std::uint8_t m = 0;
+                        for (int sx = std::max(0, x - 2 * r); sx <= std::min(b.width - 1, x); ++sx)
+                            m = std::max(m, b.pixels[(std::size_t)y * (std::size_t)b.width + (std::size_t)sx]);
+                        rows[(std::size_t)y * (std::size_t)w + (std::size_t)x] = m;
+                    }
+                for (int y = 0; y < h; ++y)
+                    for (int x = 0; x < w; ++x)
+                    {
+                        std::uint8_t m = 0;
+                        for (int sy = std::max(0, y - 2 * r); sy <= std::min(b.height - 1, y); ++sy)
+                            m = std::max(m, rows[(std::size_t)sy * (std::size_t)w + (std::size_t)x]);
+                        out[(std::size_t)y * (std::size_t)w + (std::size_t)x] = m;
+                    }
+                b.pixels.swap(out);
+                b.left -= r;
+                b.top -= r;
+                b.width = w;
+                b.height = h;
+            }
+
+            // HarfBuzz's view of a bitmap font: its characters, advances (in pixels of the strike in use) and metrics
+            static hb_bool_t BitmapNominalGlyph(hb_font_t*, void* data, hb_codepoint_t unicode, hb_codepoint_t* glyph, void*)
+            {
+                const FT_UInt g = FT_Get_Char_Index(static_cast<Face*>(data)->active, unicode);
+                *glyph = g;
+                return g != 0;
+            }
+            static hb_position_t BitmapAdvance(hb_font_t*, void* data, hb_codepoint_t glyph, void*)
+            {
+                FT_Face ft = static_cast<Face*>(data)->active;
+                if (FT_Load_Glyph(ft, glyph, FT_LOAD_DEFAULT) != 0)
+                    return 0;
+                return (hb_position_t)((ft->glyph->advance.x + 32) >> 6);
+            }
+            static hb_bool_t BitmapExtents(hb_font_t*, void* data, hb_font_extents_t* extents, void*)
+            {
+                const Face& f = *static_cast<Face*>(data);
+                extents->ascender = (hb_position_t)f.ascent;
+                extents->descender = -(hb_position_t)f.descent;
+                extents->line_gap = (hb_position_t)f.gap;
+                return true;
+            }
+            static hb_font_funcs_t* BitmapFontFuncs()
+            {
+                static hb_font_funcs_t* const funcs = [] {
+                    hb_font_funcs_t* f = hb_font_funcs_create();
+                    hb_font_funcs_set_nominal_glyph_func(f, &BitmapNominalGlyph, nullptr, nullptr);
+                    hb_font_funcs_set_glyph_h_advance_func(f, &BitmapAdvance, nullptr, nullptr);
+                    hb_font_funcs_set_font_h_extents_func(f, &BitmapExtents, nullptr, nullptr);
+                    hb_font_funcs_make_immutable(f);
+                    return f;
+                }();
+                return funcs;
+            }
+
+            int bitmapFaces_ = 0;                  // bitmap fonts loaded
+            float layoutPixelsPerUnit_ = 0.0f;     // the density the layouts were built at (bitmap fonts snap to it)
             FT_Library ft_ = nullptr;
             hb_buffer_t* buffer_ = nullptr;
             hb_unicode_funcs_t* unicode_ = nullptr;

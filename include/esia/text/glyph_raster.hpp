@@ -49,4 +49,8 @@ namespace esia::text
     // is a row / column of zero coverage, so neighbours in an atlas never bleed in. Returns false when the glyph is
     // larger than 4096 pixels; an outline without contours gives an empty, valid bitmap.
     ESIA_API bool RasterizeGray(const Outline& outline, float offsetX, GlyphBitmap& out);
+    // The same glyph grown by `radius` pixels all around (a text outline's coverage, TextOutline): a pixel is covered
+    // as much as the glyph covers it, or by how far its center lies within radius + 1/2 of the glyph's edge, round at
+    // the corners. The bitmap is larger by the growth on every side (zero edges as RasterizeGray's).
+    ESIA_API bool RasterizeGrown(const Outline& outline, float offsetX, float radius, GlyphBitmap& out);
 }

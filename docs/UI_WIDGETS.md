@@ -153,7 +153,9 @@ ui::EndCard();
 * **Fields.**
   * Glass: `Look`, `Blur`, `Refraction`, `Bezel`, `Dispersion`, `Saturation`, `Brightness`, `Specular`, `Legibility`,
     `Magnify`, `GlassTint`, `Rim`.
-  * The widget: `Tint` (its accent), `Fill` (its surface), `Radius`, `Opacity`, `Label`.
+  * The widget: `Tint` (its accent), `Fill` (its surface), `Radius`, `Opacity`, `Label`, `TextOutline(width, color)`
+    (an outline around its text and symbols: `width` UI units of `color`, drawn under the glyphs; a block of
+    outlined text is a `StyleScope` with it).
   * Selections: `SelectedFill`, `MovingFill`, `SelectedLabel`.
 * **Merging.** Scopes merge field by field and the innermost wins. Opacity multiplies down the scopes.
 * **Taking the style.** A widget takes `Next()` when it starts, so it styles exactly one widget. A container takes
