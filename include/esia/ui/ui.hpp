@@ -117,6 +117,30 @@ namespace esia::ui
     // The current Ui (between NewFrame and EndFrame), or null.
     ESIA_API Ui* Current();
 
+    // An id scope for the widgets submitted while it lives (inside one window): the same label in two scopes is two
+    // widgets. Widgets take their ids from their labels, so widgets made in a loop need one - the loop's index, an
+    // object's address, a name. Two items with one id share the hover, presses and state; a debug build reports
+    // them (ContextDesc::debugChecks).
+    //
+    //   for (int i = 0; i < (int)items.size(); ++i) {
+    //       ui::IdScope scope(i);
+    //       if (ui::Button("Set value")) items[i].Set();
+    //   }
+    class ESIA_API IdScope
+    {
+    public:
+        explicit IdScope(std::string_view key);
+        explicit IdScope(const char* key) : IdScope(std::string_view(key)) {}
+        explicit IdScope(std::int64_t key);
+        template <class T>
+            requires std::is_integral_v<T>
+        explicit IdScope(T key) : IdScope((std::int64_t)key) {}
+        explicit IdScope(const void* key);
+        ~IdScope();
+        IdScope(const IdScope&) = delete;
+        IdScope& operator=(const IdScope&) = delete;
+    };
+
     // ====================================================== per-widget style
     // Only the fields that are set change; everything else follows the theme and the enclosing scopes.
     //
@@ -455,8 +479,8 @@ namespace esia::ui
     {
         std::uint32_t flags = TableFlags_None;
         float height = 0.0f;           // > 0: rows scroll inside this height under the header; 0 = as tall as the rows
-        // > 0 (with height 0): as tall as the rows up to this height (the header included), then they scroll inside
-        // it. Call TableVisible before the rows: the table takes its height from the row count it is given.
+        // > 0: as tall as the rows up to this height (the header included), then they scroll inside it; with a
+        // height too, the smaller of the two. Its row count comes from TableVisible (without it: last frame's rows).
         float maxHeight = 0.0f;
         float rowHeight = 0.0f;        // 0 = 34
         std::vector<int>* selection = nullptr;   // Selectable: the selected row indices, sorted
@@ -483,8 +507,9 @@ namespace esia::ui
         bool doubleClicked = false;
     };
     // Rows go between BeginTable and EndTable. Only the rows in view are submitted (TableVisible), so a table of a
-    // million rows costs what the visible ones cost. In a row, each TableCell or TableNextColumn moves to the next
-    // cell; widgets submitted after TableNextColumn go in that cell.
+    // million rows costs what the visible ones cost; without TableVisible every row is submitted and the table
+    // sizes itself from last frame's. In a row, each TableCell or TableNextColumn moves to the next cell; widgets
+    // submitted after TableNextColumn go in that cell. A table is an id scope: two tables' rows never share ids.
     //
     //   if (ui::BeginTable("files", {{"Name"}, {"Size", 90, 0, ui::Align::End}}, {.flags = ui::TableFlags_Sortable})) {
     //       if (ui::TableSortSpec().changed) Sort(files, ui::TableSortSpec());

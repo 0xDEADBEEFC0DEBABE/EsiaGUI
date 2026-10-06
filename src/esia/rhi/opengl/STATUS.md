@@ -1,5 +1,10 @@
 # Esia OpenGL / GLES backend - status of `esia-opengl`
 
+> The record of the backend's bring-up (2026-09-29 / 30). Since then `ESIA_BACKEND_OPENGL` is on by default on
+> Windows, Linux and Android, the conformance suite has 17 scenes, and the backend runs the examples on Windows, Linux
+> (X11) and Android; what changed and was verified after this is in
+> [docs/REWRITE_STATUS.md](../../../../docs/REWRITE_STATUS.md), the newest sections first.
+
 The OpenGL 3.3 core + OpenGL ES 3.0 RHI backend (`src/esia/rhi/opengl`, `ESIA_BACKEND_OPENGL`, OFF by default),
 end of the backend session (2026-09-29). Built on `esia-core` at `3810b97`; the guide it follows is
 [docs/backends/README.md](../../../../docs/backends/README.md).

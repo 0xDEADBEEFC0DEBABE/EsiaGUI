@@ -12,7 +12,7 @@ cmake --preset windows-msvc
 cmake --build --preset windows-msvc-release
 ```
 
-The examples are `build\windows-msvc\bin\Release\showcase.exe` and `glass_window.exe`. With LLVM instead (clang-cl
+The examples are `build\windows-msvc\bin\Release\showcase.exe`, `workbench.exe` and `glass_window.exe`. With LLVM instead (clang-cl
 and lld on PATH, from an "x64 Native Tools" prompt): `cmake --preset windows-clang-cl`, then
 `cmake --build --preset windows-clang-cl`. Keep the clone's path under about 140 characters: Visual Studio's build
 fails on paths over 260.
@@ -20,14 +20,14 @@ fails on paths over 260.
 ## Build on Linux
 
 clang, lld, Ninja and CMake, and X11 for the examples (Ubuntu: `sudo apt install clang lld ninja-build cmake
-libfreetype-dev libharfbuzz-dev libx11-dev libjpeg-dev libegl-dev`):
+libfreetype-dev libharfbuzz-dev libfontconfig-dev libx11-dev libjpeg-dev libegl-dev`):
 
 ```
 cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
-The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
+The examples are `build/linux-clang/bin/showcase`, `workbench` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
 the desktop's icon theme for the icons, Ubuntu's wallpaper.
 
 ## Build for Android
@@ -47,7 +47,7 @@ icons are Google's Material Icons, downloaded when configuring.
 
 ## About this branch
 
-It is generated from `main` (fb87497) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (4f92ce5) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.
 
 ## License

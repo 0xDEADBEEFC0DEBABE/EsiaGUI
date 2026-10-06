@@ -20,12 +20,11 @@ namespace esia
         // ---- the layout cursor's lines (Context::LineRoom)
         constexpr int kLineEdges = 4;   // the items of a line that know what follows them
 
-        // A frame among this frame's frames: from its parent's, the place it has in its parent's lines and its id.
-        // Nothing positional: it stays the same while things move (scrolling, an animation above it).
-        Id FrameSeq(Id parentSeq, int line, int lineItems, bool sameLine, Id id)
-        {
-            return HashInt(((std::int64_t)line << 24) ^ ((std::int64_t)lineItems << 1) ^ (sameLine ? 1 : 0), HashInt(id, parentSeq));
-        }
+        // A frame among this frame's frames: from its parent's, its place among the parent's items and its id.
+        // Nothing positional: it stays the same while things move (scrolling, an animation above it). The place, not
+        // the parent's lines: the children of an auto-layout container are on no line of the cursor, and its groups
+        // (id 0) took one sequence, so one group's lines gave another their room (LineRoom).
+        Id FrameSeq(Id parentSeq, int items, Id id) { return HashInt(items, HashInt(id, parentSeq)); }
 
         Id LineKey(Id seq, int line, int item) { return HashInt(((std::int64_t)line << 8) | item, seq); }
     }
@@ -103,8 +102,11 @@ namespace esia
         visible.rect = r.Intersect(w.drawList_.ClipRect());
         if (visible.rect.Width() >= 1.0f && visible.rect.Height() >= 1.0f)
             w.laidOut_.push_back(visible);
-        if (!childReport)
-            AdvanceCursor(w.frames_.back(), r, baseline);
+        if (childReport)
+            return;
+        if (checks_)
+            CheckOutOfView(w, w.frames_.back(), r);
+        AdvanceCursor(w.frames_.back(), r, baseline);
     }
 
     void Context::AdvanceCursor(Window::Frame& f, const Rect& r, float baseline)
@@ -112,6 +114,7 @@ namespace esia
         if (baseline >= 0.0f && f.firstBaseline < 0.0f)
             f.firstBaseline = r.min.y + baseline;
         f.anyItem = true;
+        ++f.items;
         if (!f.layout)
         {
             // the line: SameLine continues it, any other item starts the next one. Each item continuing it tells
@@ -186,6 +189,10 @@ namespace esia
         f.lineTop = pos.y;
         f.cursorMax = Max(f.cursorMax, pos);
         f.sameLine = false;
+        // what is laid out from here is not the line LineRoom was asked about before the move: a module sizing itself
+        // with AvailableWidth() and then placing its buttons in a row got the buttons' room taken off its own width
+        ++f.line;
+        f.lineItems = 0;
     }
 
     void Context::SameLine(float offsetFromStartX, float spacing)
@@ -299,7 +306,7 @@ namespace esia
         const Window::Frame& parent = w->frames_.back();
         Window::Frame f;
         f.id = id;
-        f.seq = FrameSeq(parent.seq, parent.line, parent.lineItems, parent.sameLine, id);
+        f.seq = FrameSeq(parent.seq, parent.items, id);
         f.layout = options.layout;
         f.origin = parent.cursor;
         f.padding = options.padding;
@@ -372,7 +379,10 @@ namespace esia
         }
 
         Window::ChildState& cs = w->childStates_[id];
+        if (checks_ && cs.lastFrame == frame_)
+            ChildIdConflict(*w, id, cs.rect, rect);   // a second region with its id this frame
         cs.lastFrame = frame_;
+        cs.rect = rect;
         const bool scrolls = (options.flags & (ChildFlags_ScrollX | ChildFlags_ScrollY)) != 0;
         const bool smooth = scrolls && (options.flags & ChildFlags_SmoothScroll);
         cs.smooth = smooth;
@@ -411,7 +421,7 @@ namespace esia
 
         Window::Frame f;
         f.id = id;
-        f.seq = FrameSeq(parent.seq, parent.line, parent.lineItems, parent.sameLine, id);
+        f.seq = FrameSeq(parent.seq, parent.items, id);
         f.origin = rect.min;
         f.padding = options.padding;
         f.fixedSize = rect.Size();

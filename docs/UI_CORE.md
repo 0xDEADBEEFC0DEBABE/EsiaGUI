@@ -20,6 +20,7 @@ code. The architecture around the core (renderer, RHI, text) is in [REWRITE.md](
 * [13. What changes for widget code](#13-what-changes-for-widget-code)
 * [14. The review's bugs](#14-the-reviews-bugs)
 * [15. Public API changes](#15-public-api-changes)
+* [16. Debug checks](#16-debug-checks)
 
 ## 1. Goals
 
@@ -204,9 +205,10 @@ child (or the provider's).
 **The room of a line.** `LineRoom()` is how far the items after the next one on its line (`SameLine`) reached past
 it last frame. A widget that fills what is available takes that much less (`ui::AvailableWidth`), so a field that
 fills the width does not push the button after it out of view. The lines are told apart by their place in their
-container and the container's place in its parent, nothing positional: the room stays found while the content
-scrolls or moves above them. It only covers the first four items of a line and the cursor layout (a provider
-places its children itself).
+container and the container's place among its parent's items, nothing positional: the room stays found while the
+content scrolls or moves above them. `SetCursorPos` starts a line: what is placed after it is not the line asked
+about before it (a module that sizes itself with `AvailableWidth` and then places its buttons in a row). It only
+covers the first four items of a line and the cursor layout (a provider places its children itself).
 
 **Layout providers** hand out slots instead (`include/esia/core/layout.hpp`):
 
@@ -572,3 +574,49 @@ For the widget layer (`esia_ui`, [UI_WIDGETS.md](UI_WIDGETS.md)):
 * **Changed**: the wheel stays with the area it scrolls while it turns (section 8); auto-sized windows are on whole
   physical pixels (section 7).
 * **Changed**: `Context::Snap` snaps down instead of to the nearest pixel (section 6), as WGT's Dear ImGui did.
+
+For the debug checks (section 16) and desktop input:
+
+* **Added**: `ContextDesc::debugChecks` (`DebugChecks::Auto`, `Off`, `On`) and `diagnostics`, `Diagnostic`,
+  `Context::DebugChecksOn` / `SetDebugChecks`; `InputConfig::mouseDragScrolls`.
+* **Changed**: `PushId("literal")` hashes the label, as `GetId` does: a string literal took the `const void*`
+  overload and pushed its address. `PushId` and `GetId` take any integer type (a `std::size_t` index, a literal 0),
+  which were ambiguous between `std::int64_t` and `const void*`.
+
+## 16. Debug checks
+
+Immediate-mode UI fails quietly where it is used wrong: two widgets that take one id share the hover, their presses
+and their state, and an item laid out past the edge of its window is simply not there. Nothing crashes and nothing
+is logged; the symptom ("scrolling is broken", "the button disappeared") points somewhere else. The core checks for
+these while the UI runs:
+
+```cpp
+esia::ContextDesc desc;
+desc.debugChecks = esia::DebugChecks::On;   // Auto (the default): on when Esia is built without NDEBUG
+desc.diagnostics = [](const esia::Diagnostic& d) { MyLog(d.message); };   // default: stderr and the debugger
+esia::Context ctx(desc);
+```
+
+| `Diagnostic::Kind` | What | How it is found |
+| --- | --- | --- |
+| `IdConflict` | two items of a window took one id in a frame | each window's hit list of the frame, sorted by id. An item's own records (`ItemHoverable`, then `ButtonBehavior`) run together and `RecordHit` keeps one of them; `HitRecord::item`, the `ItemAdd` a record came after, tells the next item with the same id from them |
+| `ChildIdConflict` | two child regions of a window began with one id in a frame: one scroll offset for both | `BeginChild` finds its region's state already begun this frame |
+| `OutOfView` | an item laid out wholly past the edge of its layout region and of the clip, on an axis that nothing it is in scrolls, for a second | `LayOut` before the item advances the cursor. A window's content scrolls down unless `WindowFlags_NoScroll`, a child region on the axes of its `ChildFlags_Scroll*`; nothing scrolls a window sideways. The item is known from frame to frame by its place among its container's items, so what slides through (a page, a panel on a spring) passes; the `ItemAdd` after it names it |
+
+Each problem is reported once (per window and id, or place), in `EndFrame` (`BeginChild` for regions), with the
+window's name, the id and the label it was made from (`GetId` keeps this frame's labels while the checks are on), and
+what to do about it. While it lasts it is outlined in red in the foreground list, over every window; an item out of
+view also gets a bar along the edge it is past.
+
+```
+Esia: 2 items in window "Inspector" have the same id 0x36E55D00 ("Dup"): they share the hover, presses and per-id
+state. Give each a label of its own ("Label##2") or an id scope (ui::IdScope, Context::PushId), e.g. a loop's index.
+```
+
+* **Not checked**: items outside the clip (they record no hit), items that never ask for the hover, two widgets
+  sharing `State<T>` through one id without hit records, an item only partly out of view.
+* **Cost**: with the checks off, a predictable branch in `ItemAdd` and `LayOut`. On: a label kept per `GetId`, a sort
+  of each window's hit list per frame. `Auto` keeps them to debug builds; the UI tests turn them on in every build
+  and fail on any report, so the widget layer itself never trips them.
+* **The widget layer's id scopes**: windows, tables, the multi-line editor and sections are scopes of their own;
+  `ui::IdScope` scopes a loop ([UI_WIDGETS.md](UI_WIDGETS.md) section 14).

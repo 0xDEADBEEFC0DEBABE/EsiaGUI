@@ -16,6 +16,19 @@ using namespace esia;
 
 namespace
 {
+    // The UI tests run the debug checks in every build, failing on any report: the widgets themselves never share
+    // an id or lay an item out of view. A test that wants the reports passes its own `diagnostics`.
+    ContextDesc Strict(ContextDesc d)
+    {
+        d.debugChecks = DebugChecks::On;
+        if (!d.diagnostics)
+            d.diagnostics = [](const Diagnostic& x) {
+                std::fprintf(stderr, "  %s\n", x.message.c_str());
+                ::esia::test::Fail(__FILE__, __LINE__, "a debug check reported something");
+            };
+        return d;
+    }
+
     struct UiHarness
     {
         Context ctx;
@@ -24,7 +37,7 @@ namespace
         Vec2 display{800, 600};
         Vec2 scale{1, 1};   // physical pixels per UI unit
 
-        explicit UiHarness(const ContextDesc& desc = {}) : ctx(desc) {}
+        explicit UiHarness(const ContextDesc& desc = {}) : ctx(Strict(desc)) {}
 
         // One frame: `body` runs inside a window at (0, 0) of 600 x 400 without padding.
         template <class F>
@@ -649,14 +662,25 @@ ESIA_TEST(UiTheme, DarkModeKeepsTheMetrics)
     UiHarness h;
     ui::Theme t = ui::ThemeLight();
     t.metrics.scale = 1.5f;
-    t.metrics.scrollIndicatorAlways = 1.0f;
+    const float system = t.metrics.scrollIndicatorAlways;   // 1 on desktops, 0 on phones
+    t.metrics.scrollIndicatorAlways = 1.0f - system;
     h.ui.SetTheme(t, false);
     h.ui.SetDarkMode(true, false);
     h.Frame([] {});
     const ui::Theme& now = h.ui.GetTheme();
-    ESIA_CHECK(now.dark && now.metrics.scale == 1.5f && now.metrics.scrollIndicatorAlways == 1.0f);
+    ESIA_CHECK(now.dark && now.metrics.scale == 1.5f && now.metrics.scrollIndicatorAlways == 1.0f - system);
     ESIA_CHECK(now.colors.label == ui::ThemeDark().colors.label);
     ESIA_CHECK(ui::LerpTheme(ui::ThemeLight(), t, 0.5f).metrics.scrollIndicatorAlways == 0.5f);   // it blends
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+    ESIA_CHECK(system == 1.0f && ui::ThemeDark().metrics.scrollIndicatorAlways == 1.0f);   // a desktop's
+#endif
+    // compact: smaller, kept by SetDarkMode
+    const ui::Theme compact = ui::ThemeCompact(ui::ThemeLight());
+    ESIA_CHECK(compact.metrics.scale < 1.0f && compact.metrics.rowHeight < ui::ThemeLight().metrics.rowHeight && !compact.dark);
+    h.ui.SetTheme(compact, false);
+    h.ui.SetDarkMode(true, false);
+    h.Frame([] {});
+    ESIA_CHECK(h.ui.GetTheme().dark && h.ui.GetTheme().metrics.scale == compact.metrics.scale);
 }
 
 ESIA_TEST(UiPopups, MenuItemsCloseTheMenu)
@@ -722,9 +746,16 @@ ESIA_TEST(UiPopups, TooltipAfterAShortHover)
     ESIA_CHECK(lists() == alone);   // back over it: it waits again
 }
 
+// A finger drags a scroll area's content from its empty space and lets it glide on; a mouse does that only with
+// InputConfig::mouseDragScrolls (it has the wheel and the indicator). The indicator drags with the mouse.
 ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
 {
-    UiHarness h;
+  for (int mode = 0; mode < 3; ++mode)   // a mouse, a finger, a mouse with mouseDragScrolls
+  {
+    ContextDesc desc;
+    desc.input.mouseDragScrolls = mode == 2;
+    UiHarness h(desc);
+    const bool finger = mode == 1;
     float scroll = 0.0f, max = 0.0f;
     auto frame = [&] {
         h.Frame([&] {
@@ -739,10 +770,10 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     frame();
     ESIA_CHECK(max > 700.0f);
 
-    // drag the content up by 100: it follows the pointer
+    // drag the content up by 100: it follows the finger (the mouse with mouseDragScrolls)
     h.ctx.QueueInput(InputEvent::MouseMove({300, 150}));
     frame();
-    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true));
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, true, finger));
     frame();
     for (int i = 1; i <= 10; ++i)
     {
@@ -750,9 +781,16 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
         frame();
     }
     frame();
+    if (mode == 0)
+    {
+        ESIA_CHECK(scroll == 0.0f);   // a desktop's mouse: the content stays
+        h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+        frame();
+        continue;
+    }
     ESIA_CHECK(std::fabs(scroll - 100.0f) < 1.0f);
     // let go: it glides on
-    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
+    h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false, finger));
     for (int i = 0; i < 60; ++i)
         frame();
     ESIA_CHECK(scroll > 110.0f && scroll <= max);
@@ -775,6 +813,7 @@ ESIA_TEST(UiScroll, DragTheContentOrTheIndicator)
     h.ctx.QueueInput(InputEvent::Button(MouseButton::Left, false));
     frame();
     ESIA_CHECK(std::fabs(scroll - max) < 1.0f);
+  }
 }
 
 // A window scrolled to its end: its indicator stops above the rounded bottom corner (inside the window's shape), and
@@ -1136,4 +1175,65 @@ ESIA_TEST(UiText, FormattingIsVsnprintfs)
     ESIA_SAME_FORMAT("%d%s", 1234567, " and a tail that runs past the end of the sixty-four byte buffer for sure");
     ESIA_SAME_FORMAT("100%%");
 #undef ESIA_SAME_FORMAT
+}
+
+// Sections without a header, or with one header, in one id scope keep their rows apart: the same row label in each
+// is a row of its own (the strict harness fails on a shared id), and a click toggles that row only
+ESIA_TEST(UiLists, SectionsWithOneHeaderKeepTheirRowsApart)
+{
+    UiHarness h;
+    bool v[4] = {};
+    Rect rows[4];
+    auto frame = [&] {
+        h.Frame([&] {
+            for (int i = 0; i < 4; ++i)
+            {
+                ui::BeginSection(i < 2 ? std::string_view() : std::string_view("Network"));
+                ui::RowToggle("Enabled", &v[i]);
+                rows[i] = h.ctx.LastItemRect();
+                ui::EndSection();
+            }
+        });
+    };
+    frame();
+    frame();
+    ClickAt(h, rows[3].Center(), frame);
+    ClickAt(h, rows[1].Center(), frame);
+    ESIA_CHECK(!v[0] && v[1] && !v[2] && v[3]);
+}
+
+// Widgets made in a loop: the same label in each pass is one id (the checks report it), each pass in an IdScope a
+// widget of its own
+ESIA_TEST(UiIds, IdScopeKeepsALoopsWidgetsApart)
+{
+    std::vector<Diagnostic> got;
+    ContextDesc desc;
+    desc.diagnostics = [&got](const Diagnostic& d) { got.push_back(d); };
+    UiHarness h(desc);
+    bool scoped = true;
+    int pressed = -1;
+    Rect rects[3];
+    auto frame = [&] {
+        h.Frame([&] {
+            for (int i = 0; i < 3; ++i)
+            {
+                if (scoped)
+                {
+                    ui::IdScope scope(i);
+                    if (ui::Button("Set value"))
+                        pressed = i;
+                }
+                else if (ui::Button("Set value"))
+                    pressed = i;
+                rects[i] = h.ctx.LastItemRect();
+            }
+        });
+    };
+    frame();
+    frame();
+    ClickAt(h, rects[1].Center(), frame);
+    ESIA_CHECK(got.empty() && pressed == 1);
+    scoped = false;
+    frame();
+    ESIA_CHECK(got.size() == 1 && got[0].kind == Diagnostic::Kind::IdConflict && got[0].message.find("\"Set value\"") != std::string::npos);
 }

@@ -92,20 +92,20 @@ cmake --preset windows-msvc
 cmake --build --preset windows-msvc-release
 ```
 
-The examples are `build\\windows-msvc\\bin\\Release\\showcase.exe` and `glass_window.exe`. With LLVM instead (clang-cl
+The examples are `build\\windows-msvc\\bin\\Release\\showcase.exe`, `workbench.exe` and `glass_window.exe`. With LLVM instead (clang-cl
 and lld on PATH, from an "x64 Native Tools" prompt): `cmake --preset windows-clang-cl`, then
 `cmake --build --preset windows-clang-cl`. Keep the clone's path under about 140 characters: Visual Studio's build
 fails on paths over 260.
 """
 LINUX_BUILD = """clang, lld, Ninja and CMake, and X11 for the examples (Ubuntu: `sudo apt install clang lld ninja-build cmake
-libfreetype-dev libharfbuzz-dev libx11-dev libjpeg-dev{extra}`):
+libfreetype-dev libharfbuzz-dev libfontconfig-dev libx11-dev libjpeg-dev{extra}`):
 
 ```
 cmake --preset linux-clang
 cmake --build --preset linux-clang && ctest --preset linux-clang
 ```
 
-The examples are `build/linux-clang/bin/showcase` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
+The examples are `build/linux-clang/bin/showcase`, `workbench` and `glass_window`: an X11 window (XWayland on a Wayland desktop),
 the desktop's icon theme for the icons, Ubuntu's wallpaper.
 """
 ANDROID_BUILD = """The Android NDK and SDK (a platform, build-tools and platform-tools; a JDK for the APK signing tools), CMake and
@@ -177,7 +177,7 @@ cmake --preset macos-clang
 cmake --build --preset macos-clang
 ```
 
-The examples are `build/macos-clang/bin/showcase` and `glass_window`.
+The examples are `build/macos-clang/bin/showcase`, `workbench` and `glass_window`.
 
 ## Build for iOS
 
