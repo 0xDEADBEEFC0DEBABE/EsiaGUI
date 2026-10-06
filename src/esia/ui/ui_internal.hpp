@@ -332,6 +332,11 @@ namespace esia::ui
         // the text field at an explicit rect (number fields, the color picker's hex field)
         TextFieldResult TextFieldAt(Id id, const Rect& r, std::string* value, std::string_view placeholder, const TextFieldOptions& o);
 
+        // ---- plots (plot.cpp)
+        // The ticks of an axis from lo to hi: multiples of 1, 2 or 5 times a power of ten, at most maxTicks of them
+        // (out, cleared first); the step between them (0: an empty range).
+        float PlotTicks(float lo, float hi, int maxTicks, std::vector<float>& out);
+
         // ---- docking (dock.cpp)
         struct DockPlacement
         {
