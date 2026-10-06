@@ -162,6 +162,8 @@ namespace esia
         // They batch with the text around them: a frame of plain widgets is a few draws of flat geometry.
         bool flat = false;
         Color flatSurface = Color(0.11f, 0.11f, 0.12f, 1.0f);
+        // An outline under every text and icon this Painter draws (text::TextOutline; none by default).
+        text::TextOutline textOutline;
     };
 
     class ESIA_API Painter
@@ -170,10 +172,18 @@ namespace esia
         explicit Painter(DrawList& drawList, const PainterEnv& env = {});
 
         DrawList& GetDrawList() const { return *dl_; }
+        // The outline Text, TextBox and Icon draw under their glyphs (PainterEnv::textOutline): `width` UI units of its
+        // color around every glyph; a width of 0 draws none.
+        void SetTextOutline(const text::TextOutline& outline) { env_.textOutline = outline; }
+        const text::TextOutline& GetTextOutline() const { return env_.textOutline; }
         const PainterEnv& Env() const { return env_; }
 
         // ---------------------------------------------------------- SDF shapes
         void Rect(const esia::Rect& r, const Style& s);
+        // A solid rounded rectangle, `radius` on every corner: Rect(r, Style().Radius(radius).Fill(color)) without
+        // building a Style (flat drawing: its geometry directly). `smoothing` < 0: the environment's (0: circular
+        // corners, as Circle draws).
+        void FillRound(const esia::Rect& r, float radius, Color color, float smoothing = -1.0f);
         void Capsule(const esia::Rect& r, const Style& s);
         void Circle(Vec2 center, float radius, const Style& s);
         // Arc along a circle of `radius` (centerline) with round caps. Angles in radians, clockwise, 0 = +x.
@@ -247,6 +257,9 @@ namespace esia
                        float smoothing = -1.0f);
         // Flat drawing: the shape as geometry when it can be, filled with `fill` (true: drawn, or nothing to draw).
         bool FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill, const float* radii, float smoothing);
+        // its core: colors with their opacity applied
+        bool FlatShape(const esia::Rect& bounds, Color fill, Color stroke, float strokeWidth, float strokeAlign, const float* shapeRadii,
+                       float smoothing);
         void ApplyScale(fx::Instance& inst) const;
         void ExcludeFromScale(std::size_t vtxStart);
         float Pixel() const { return env_.pixelScale > 0.0f ? env_.pixelScale : 1.0f; }

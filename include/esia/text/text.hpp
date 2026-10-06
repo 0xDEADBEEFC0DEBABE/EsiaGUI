@@ -6,7 +6,8 @@
 // A TextSystem shapes UTF-8 text, rasterizes glyphs into atlas pages it owns in the TextureRegistry and emits
 // glyph quads into a DrawList (Geometry commands on those pages). Glyph pages are Alpha8 coverage, which the renderer
 // recognizes from the page's TextureInfo and draws with its text pipeline, so text needs no special draw commands.
-// Text is antialiased in grayscale on every platform: there is no sub-pixel (LCD / ClearType) text.
+// Text is antialiased in grayscale on every platform: there is no sub-pixel (LCD / ClearType) text. Bitmap fonts draw
+// their own pixels (freetype.hpp).
 //
 // Threading: a TextSystem belongs to one UI thread (like the Context that uses it).
 #pragma once
@@ -57,6 +58,17 @@ namespace esia::text
         float x = 0.0f;             // where the caret is drawn, from the start of the line (UI units)
     };
 
+    // An outline around text and icons (Painter::SetTextOutline, ui::ItemStyle::TextOutline): `width` UI units of
+    // `color` all around every glyph, under it - the glyph's coverage grown by the width, round at its corners (up to
+    // 32 physical pixels). The text's box does not grow: the outline reaches past it by the width. Color glyphs
+    // (emoji) get none.
+    struct TextOutline
+    {
+        float width = 0.0f;
+        Color color = Color::Black();
+        constexpr bool Visible() const { return width > 0.0f && color.a > 0.0f; }
+    };
+
     // How glyphs are rasterized this frame.
     struct RasterParams
     {
@@ -89,6 +101,18 @@ namespace esia::text
                           std::uint32_t flags = 0, float scale = 1.0f) = 0;
         // One glyph (icon fonts) optically centered on `center`; `size` = em size in UI units.
         virtual void DrawGlyph(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, Color color) = 0;
+        // The outline of what Draw / DrawGlyph with the same arguments draws (TextOutline), to be drawn just before it:
+        // the same layout and placement, every glyph grown by the outline's width in its color. This default draws
+        // none (a text system without outlines); the FreeType system draws them.
+        virtual void DrawOutline(DrawList& dl, FontRef font, Vec2 pos, const TextOutline& outline, std::string_view text, float wrapWidth = 0.0f,
+                                 std::uint32_t flags = 0, float scale = 1.0f)
+        {
+            (void)dl, (void)font, (void)pos, (void)outline, (void)text, (void)wrapWidth, (void)flags, (void)scale;
+        }
+        virtual void DrawGlyphOutline(DrawList& dl, FontRef font, char32_t codepoint, Vec2 center, const TextOutline& outline)
+        {
+            (void)dl, (void)font, (void)codepoint, (void)center, (void)outline;
+        }
         // Coverage tiles other than glyphs, in the texture text is drawn with (the corners of Painter's flat shapes, so
         // they batch with the text) and kept apart from the glyphs: the tile cached under `key`, else null; AddTile packs
         // one the caller rasterized (8-bit coverage). Gone when the glyph pages start over. Null from both: no tiles.

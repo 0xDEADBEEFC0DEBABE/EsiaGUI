@@ -42,23 +42,6 @@ namespace esia
 
     const Window::Frame* Context::ScrollFrame() const { return const_cast<Context*>(this)->ScrollFrame(); }
 
-    float Context::Snap(float v) const
-    {
-        // layout positions land on physical pixels: text and hairlines stay crisp at fractional scales. Down, as
-        // Dear ImGui truncates its cursor (WGT's layouts, pixel for pixel); the epsilon keeps a whole pixel whole
-        const float s = Scale();
-        if (!(s > 0.0f))
-            return v;
-        // floor without the C runtime's call (MSVC does not inline floorf for SSE2)
-        const float x = v * s + 1e-3f;
-        if (!(std::fabs(x) < 2.0e9f))
-            return std::floor(x) / s;
-        float f = (float)(std::int64_t)x;
-        if (f > x)
-            f -= 1.0f;
-        return f / s;
-    }
-
     void Context::InitRootFrame(Window& w)
     {
         w.frames_.clear();
@@ -84,20 +67,31 @@ namespace esia
     void Context::LayOut(Window& w, const Rect& r, float baseline, bool childReport)
     {
         const bool floating = w.floating_ > 0 || childReport;
-        LaidOutItem item;
-        item.rect = r;
-        item.baseline = baseline;
-        item.depth = childReport ? -1 : (int)w.frames_.size() - 1;
-        item.window = w.id_;
-        item.container = w.frames_.back().id;
-        item.floating = floating;
+        const int depth = childReport ? -1 : (int)w.frames_.size() - 1;
+        const Id container = w.frames_.back().id;
         if (observer_)
+        {
+            LaidOutItem item;
+            item.rect = r;
+            item.baseline = baseline;
+            item.depth = depth;
+            item.window = w.id_;
+            item.container = container;
+            item.floating = floating;
             observer_(item);
+        }
         // the window's item map keeps what was visible of it (glow halos, the layout inspector)
-        LaidOutItem visible = item;
-        visible.rect = r.Intersect(w.drawList_.ClipRect());
-        if (visible.rect.Width() >= 1.0f && visible.rect.Height() >= 1.0f)
-            w.laidOut_.push_back(visible);
+        const Rect seen = r.Intersect(w.drawList_.ClipRect());
+        if (seen.Width() >= 1.0f && seen.Height() >= 1.0f)
+        {
+            LaidOutItem& visible = w.laidOut_.emplace_back();
+            visible.rect = seen;
+            visible.baseline = baseline;
+            visible.depth = depth;
+            visible.window = w.id_;
+            visible.container = container;
+            visible.floating = floating;
+        }
         if (childReport)
             return;
         if (checks_)
@@ -411,6 +405,10 @@ namespace esia
         }
         w->children_.push_back({id, parentIndex, rect.Intersect(parentClip), w->floating_, options.flags, outer});
         const int index = (int)w->children_.size() - 1;
+        // the scroll offsets of this region and its parents change only as each ends (EndScroll): its items' records
+        // take these
+        Window::ChildRecord& record = w->children_.back();
+        ScrollOffsets(*w, w->children_, index, record.total, record.own);
         w->childStack_.push_back(index);
 
         const Rect content = rect.Expanded(-options.padding.x, -options.padding.y);

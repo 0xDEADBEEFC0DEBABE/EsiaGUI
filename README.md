@@ -21,7 +21,7 @@ fails on paths over 260.
 
 ## About this branch
 
-It is generated from `main` (1491a17) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
+It is generated from `main` (4cd9099) by `tools/branches/backend_branches.py`: do not commit to it. `main` has every
 backend (DirectX, OpenGL, Vulkan, Metal), the documents in `docs/`, the development history and the pull requests.
 
 ## License

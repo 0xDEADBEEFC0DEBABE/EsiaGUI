@@ -6,6 +6,9 @@
 #include "esia/text/system_fonts.hpp"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <string>
 #include "font_test_util.hpp"
 #include "ft_test_util.hpp"
 
@@ -282,6 +285,182 @@ ESIA_TEST(FreeType, ScaledTextIsRasterizedAtItsSize)
         ESIA_CHECK_NEAR(qb[i].r.Height(), (qb[i].uv1.y - qb[i].uv0.y) * 2048.0f, 1e-3f);
         ESIA_CHECK_NEAR(qb[i].r.min.x - pos.x, 2.0f * (qa[i].r.min.x - pos.x), 2.5f);
     }
+}
+
+ESIA_TEST(FreeType, OutlinesGrowEveryGlyphUnderTheText)
+{
+    Fixture f;
+    const text::FontRef fr{f.droid, 16.0f};
+    const Vec2 at(10.3f, 20.6f);
+    DrawList plain = NewList(), dl = NewList();
+    f.ts->Draw(plain, fr, at, Color::White(), "Esia");
+    const text::TextOutline outline{2.0f, Color(1.0f, 0.0f, 0.0f, 1.0f)};
+    f.ts->DrawOutline(dl, fr, at, outline, "Esia");
+    f.ts->Draw(dl, fr, at, Color::White(), "Esia");
+    const std::vector<Quad> g = Quads(plain), q = Quads(dl);
+    ESIA_CHECK(g.size() == 4 && q.size() == 8);
+    if (g.size() == 4 && q.size() == 8)
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            // the outline first, in its color, each glyph's grown by ceil(2) + 1 px on every side, on the glyph's page
+            ESIA_CHECK(q[i].color == outline.color.ToRgba8());
+            ESIA_CHECK(q[i].r.min == g[i].r.min - Vec2(3, 3) && q[i].r.max == g[i].r.max + Vec2(3, 3));
+            ESIA_CHECK(q[i].texture == q[4 + i].texture);
+            // then the text, as without an outline
+            ESIA_CHECK(q[4 + i].r.min == g[i].r.min && q[4 + i].r.max == g[i].r.max && q[4 + i].color == g[i].color);
+        }
+    // again: the same quads (the outline's are cached with the layout beside the text's)
+    DrawList again = NewList();
+    f.ts->DrawOutline(again, fr, at, outline, "Esia");
+    const std::vector<Quad> q2 = Quads(again);
+    ESIA_CHECK(q2.size() == 4 && !q.empty() && q2.at(0).r.min == q.at(0).r.min);
+    // no width or no color: nothing
+    DrawList none = NewList();
+    f.ts->DrawOutline(none, fr, at, text::TextOutline{0.0f, Color::Black()}, "Esia");
+    f.ts->DrawOutline(none, fr, at, text::TextOutline{2.0f, Color::Clear()}, "Esia");
+    ESIA_CHECK(none.Empty());
+
+    // an icon's outline: grown around the glyph DrawGlyph places
+    DrawList icon = NewList();
+    f.ts->DrawGlyphOutline(icon, {f.droid, 24.0f}, U'O', Vec2(50.0f, 40.0f), outline);
+    f.ts->DrawGlyph(icon, {f.droid, 24.0f}, U'O', Vec2(50.0f, 40.0f), Color::Black());
+    const std::vector<Quad> iq = Quads(icon);
+    ESIA_CHECK(iq.size() == 2);
+    if (iq.size() == 2)
+        ESIA_CHECK(iq[0].r.min == iq[1].r.min - Vec2(3, 3) && iq[0].r.max == iq[1].r.max + Vec2(3, 3) && iq[0].color == outline.color.ToRgba8());
+}
+
+// A bitmap font without a file: BDF, 8 px, a space, A and B (5 x 7 pixels each, advance 6)
+namespace
+{
+    constexpr char kBdf[] = R"(STARTFONT 2.1
+FONT -Esia-Test-Medium-R-Normal--8-80-75-75-C-60-ISO10646-1
+SIZE 8 75 75
+FONTBOUNDINGBOX 5 8 0 -1
+STARTPROPERTIES 5
+PIXEL_SIZE 8
+FONT_ASCENT 7
+FONT_DESCENT 1
+CHARSET_REGISTRY "ISO10646"
+CHARSET_ENCODING "1"
+ENDPROPERTIES
+CHARS 3
+STARTCHAR space
+ENCODING 32
+SWIDTH 750 0
+DWIDTH 6 0
+BBX 1 1 0 0
+BITMAP
+00
+ENDCHAR
+STARTCHAR A
+ENCODING 65
+SWIDTH 750 0
+DWIDTH 6 0
+BBX 5 7 0 0
+BITMAP
+20
+50
+88
+88
+F8
+88
+88
+ENDCHAR
+STARTCHAR B
+ENCODING 66
+SWIDTH 750 0
+DWIDTH 6 0
+BBX 5 7 0 0
+BITMAP
+F0
+88
+88
+F0
+88
+88
+F0
+ENDCHAR
+ENDFONT
+)";
+}
+
+ESIA_TEST(FreeType, BitmapFontsDrawPixelForPixelAtTheirStrikes)
+{
+    Fixture f;
+    const text::FontId bdf = f.ts->AddFontMemory(kBdf, sizeof(kBdf) - 1);
+    ESIA_CHECK(bdf != 0);
+    if (bdf == 0)
+        return;
+    // the strike and whole multiple nearest the size: 8 px for 8 and 11, 16 for 13 and 16
+    ESIA_CHECK(f.ts->Measure({bdf, 8.0f}, "AB").size == Vec2(12, 8));
+    ESIA_CHECK(f.ts->Measure({bdf, 11.0f}, "AB").size == Vec2(12, 8));
+    ESIA_CHECK(f.ts->Measure({bdf, 13.0f}, "AB").size == Vec2(24, 16));
+    ESIA_CHECK(f.ts->Measure({bdf, 16.0f}, "A B").size == Vec2(36, 16));
+
+    // the glyphs: their pixels (and an empty one around), texel for pixel, on whole pixels, an advance apart
+    DrawList dl = NewList();
+    f.ts->Draw(dl, {bdf, 8.0f}, Vec2(10.3f, 20.6f), Color::White(), "AB");
+    const std::vector<Quad> q = Quads(dl);
+    ESIA_CHECK(q.size() == 2);
+    if (q.size() == 2)
+    {
+        ESIA_CHECK(q[0].r.Width() == 7.0f && q[0].r.Height() == 9.0f);
+        ESIA_CHECK(IsWhole(q[0].r.min.x) && IsWhole(q[0].r.min.y) && q[1].r.min.x - q[0].r.min.x == 6.0f);
+        TextureInfo info;
+        ESIA_CHECK(f.textures.Info(q[0].texture, info) && info.format == TextureFormat::Alpha8);
+        ESIA_CHECK_NEAR(q[0].r.Width(), (q[0].uv1.x - q[0].uv0.x) * (float)info.width, 1e-3f);
+    }
+    // twice the strike: every pixel two by two
+    DrawList big = NewList();
+    f.ts->Draw(big, {bdf, 16.0f}, Vec2(0, 0), Color::White(), "AB");
+    const std::vector<Quad> b = Quads(big);
+    ESIA_CHECK(b.size() == 2 && b.at(0).r.Width() == 12.0f && b.at(0).r.Height() == 16.0f && b.at(1).r.min.x - b.at(0).r.min.x == 12.0f);
+    // an outline: the pixels grown by whole pixels around the glyph
+    DrawList outlined = NewList();
+    f.ts->DrawOutline(outlined, {bdf, 8.0f}, Vec2(10.3f, 20.6f), text::TextOutline{1.0f, Color::Black()}, "AB");
+    const std::vector<Quad> o = Quads(outlined);
+    ESIA_CHECK(o.size() == 2 && !q.empty() && o.at(0).r.min == q.at(0).r.min - Vec2(1, 1) && o.at(0).r.Width() == 9.0f);
+
+    // at twice the density the 8-unit size is 16 px: the strike doubled, the same box in UI units
+    f.ts->NewFrame({2.0f});
+    ESIA_CHECK(f.ts->Measure({bdf, 8.0f}, "AB").size == Vec2(12, 8));
+    DrawList hi = NewList();
+    f.ts->Draw(hi, {bdf, 8.0f}, Vec2(0, 0), Color::White(), "A");
+    const std::vector<Quad> h = Quads(hi);
+    ESIA_CHECK(h.size() == 1 && h.at(0).r.Width() == 6.0f);   // 12 px: 5 x 2 and an empty pixel each side
+}
+
+// A Windows .fon holds a face per size: MS Sans Serif's join as one font's strikes (Windows only)
+ESIA_TEST(FreeType, WindowsFonFilesJoinTheirSizes)
+{
+    const char* windir = std::getenv("WINDIR");
+    const std::string path = std::string(windir ? windir : "C:\\Windows") + "\\Fonts\\sserife.fon";
+    if (!std::filesystem::exists(path))
+    {
+        std::printf("  skipped: no %s\n", path.c_str());
+        return;
+    }
+    Fixture f;
+    const text::FontId fon = f.ts->AddFontFile(path.c_str());
+    ESIA_CHECK(fon != 0);
+    if (fon == 0)
+        return;
+    // its 8, 10 and 12 point sizes at 96 dpi: 13, 16 and 20 px (a size between takes the nearest)
+    const float h13 = f.ts->Measure({fon, 13.0f}, "Esia").size.y, h16 = f.ts->Measure({fon, 16.0f}, "Esia").size.y;
+    const float h20 = f.ts->Measure({fon, 20.0f}, "Esia").size.y;
+    ESIA_CHECK(h13 > 0.0f && h13 < h16 && h16 < h20);
+    DrawList dl = NewList();
+    f.ts->Draw(dl, {fon, 13.0f}, Vec2(0.3f, 0.6f), Color::White(), "Esia");
+    const std::vector<Quad> q = Quads(dl);
+    ESIA_CHECK(q.size() == 4);
+    for (const Quad& g : q)
+        ESIA_CHECK(IsWhole(g.r.min.x) && IsWhole(g.r.min.y) && IsWhole(g.r.max.x) && IsWhole(g.r.max.y));
+    // with the system's fallback chain (as a Ui adds it) the font's own characters stay its own
+    const float alone = f.ts->Measure({fon, 17.0f}, "Settings").size.x;
+    text::AddFallbackFonts(*f.ts, text::FindDefaultFallbackFonts());
+    f.ts->NewFrame({});
+    ESIA_CHECK(f.ts->Measure({fon, 17.0f}, "Settings").size.x == alone);
 }
 
 ESIA_TEST(FreeType, IconGlyphsAreOpticallyCentered)
