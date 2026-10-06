@@ -241,29 +241,46 @@ namespace esia
         void Emit(const fx::Instance& inst, EffectId effect = 0, TextureId texture = 0);
 
     private:
-        void EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra);
+        // `radius` >= 0: every corner's instead of the style's; `smoothing` >= 0: instead of the style's (capsules and
+        // circles without a copy of the style)
+        void EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra, float radius = -1.0f,
+                       float smoothing = -1.0f);
         // Flat drawing: the shape as geometry when it can be, filled with `fill` (true: drawn, or nothing to draw).
-        bool FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill);
+        bool FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill, const float* radii, float smoothing);
         void ApplyScale(fx::Instance& inst) const;
         void ExcludeFromScale(std::size_t vtxStart);
         float Pixel() const { return env_.pixelScale > 0.0f ? env_.pixelScale : 1.0f; }
+
+        // A stack read only below its depth: not initialized (a Painter is made for every widget; zeroing these
+        // was most of making one)
+        template <class T, int N>
+        struct Stack
+        {
+            union
+            {
+                T v[N];
+            };
+            Stack() {}
+            T& operator[](int i) { return v[i]; }
+            const T& operator[](int i) const { return v[i]; }
+        };
 
         DrawList* dl_;
         PainterEnv env_;
         float alpha_ = 1.0f;
         int maskDepth_ = 0;
-        esia::Rect masks_[8];
-        float maskRadius_[8] = {};
+        Stack<esia::Rect, 8> masks_;
+        Stack<float, 8> maskRadius_;
         int scaleDepth_ = 0;
-        Vec2 scaleOrigin_[8];
-        float scaleValue_[8] = {};
-        std::size_t scaleVtxStart_[8] = {};
+        Stack<Vec2, 8> scaleOrigin_;
+        Stack<float, 8> scaleValue_;
+        Stack<std::size_t, 8> scaleVtxStart_;
         float mergeRadius_ = 0.0f;
         float mergeSmooth_ = -1.0f;
+        std::uint64_t tileGeneration_ = 0;   // flat drawing: env_.text->TileGeneration(), asked once (0: not yet)
         // vertex ranges drawn at their final scaled geometry (text / icons): PopScale leaves them alone
         static constexpr int kMaxExcluded = 64;
-        std::size_t excludedStart_[kMaxExcluded] = {};
-        std::size_t excludedEnd_[kMaxExcluded] = {};
+        Stack<std::size_t, kMaxExcluded> excludedStart_, excludedEnd_;
         int excludedCount_ = 0;
     };
 }

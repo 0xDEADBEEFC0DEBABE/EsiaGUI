@@ -238,7 +238,7 @@ namespace esia::ui
                 const bool sorted = st.sortColumn == (int)i;
                 if (sortable)
                 {
-                    const Interaction it = InteractImpl(Salt(t.id, 0x100 + (std::uint32_t)i), cell.Expanded(-Sc(4), 0.0f), InteractFlags_None);
+                    const InteractState it = InteractImpl(Salt(t.id, 0x100 + (std::uint32_t)i), cell.Expanded(-Sc(4), 0.0f), InteractFlags_None);
                     if (it.hover > 0.01f)
                         p.Rect(cell.Expanded(-Sc(2), -Sc(3)), Style().Radius(Sc(7)).Fill(pc.highlight.Fade(it.hover * 0.8f)));
                     if (it.pressed)
@@ -275,7 +275,7 @@ namespace esia::ui
                 {
                     const float ex = t.x[i + 1];
                     const Rect grip(ex - Sc(4), hr.min.y, ex + Sc(4), hr.max.y);
-                    const Interaction gi = InteractImpl(Salt(t.id, 0x300 + (std::uint32_t)i), grip, InteractFlags_PressOnClick);
+                    const InteractState gi = InteractImpl(Salt(t.id, 0x300 + (std::uint32_t)i), grip, InteractFlags_PressOnClick);
                     if (gi.pressed)
                     {
                         st.resizing = (int)i;
@@ -519,7 +519,7 @@ namespace esia::ui
         // the row (selects; toggles unless OpenOnArrow), then the arrow over it (always toggles)
         const ButtonResult b = c.ItemAdd(id, row) ? c.ButtonBehavior(id, row, ButtonFlags_None) : ButtonResult{};
         bool toggle = false;
-        Interaction ai;
+        InteractState ai;
         if (!leaf)
         {
             ai = InteractImpl(Salt(id, 0xA77), arrow, InteractFlags_None);

@@ -55,7 +55,7 @@ namespace esia::ui
                 const float mag = Anim(id, 0xD0, magTarget, t.motion.fast);
                 const float s = 1.0f + 0.32f * mag;
                 const Rect r = Rect::FromCenter(Vec2(center.x, dock.max.y - pad - tile * 0.5f * s), Vec2(tile * s, tile * s));
-                const Interaction it = InteractImpl(id, Rect::FromCenter(center, Vec2(tile + gap, tile + pad)), InteractFlags_None);
+                const InteractState it = InteractImpl(id, Rect::FromCenter(center, Vec2(tile + gap, tile + pad)), InteractFlags_None);
                 const bool isOpen = item.open && *item.open;
                 if (it.pressed)
                 {
