@@ -16,6 +16,10 @@
 //   --page id       the Settings page shown first (accent, perf)
 //   --menu          the Components panel opens its menu (checks the popups)
 //   --compact       the compact density (Ui::SetDensity); Ctrl+Shift+D (Cmd+Shift+D) switches it while running
+//   --font f [--font b]  the UI font instead of the platform's: the regular face, then the bold one (semibold and
+//                   bold text; without it they draw with the regular face)
+//   --text-outline w  an outline of w UI units around all text and symbols (ui::ItemStyle::TextOutline)
+//   --outline-color RRGGBB[AA]  its color (default black)
 // On a display smaller than the desktop layout (a phone) one panel shows at a time, as large as fits over the status bar
 // (then centered over the dock); the dock switches panels as between apps.
 // The app options (API, size, scale, frames, screenshot ...) are glass_window's (../glass_window/app.hpp).
@@ -123,6 +127,8 @@ float4 WgtEffect(WgtFx fx)
         // appearance
         bool darkMode = true;
         bool compactSizes = false;   // --compact
+        float textOutline = 0.0f;    // --text-outline
+        esia::Color outlineColor = esia::Color::Black();   // --outline-color
         int accent = 0, textSize = 1, glassLook = 2;
         float frost = 10.0f, refraction = 14.0f, dispersion = 0.30f;
         bool glassEdited = false, specular = true, searchBase = true;
@@ -1074,6 +1080,9 @@ float4 WgtEffect(WgtFx fx)
             if (++frameCount == openLaterFrame && openLater >= 0)
                 open[openLater] = true;
             ui->NewFrame();
+            std::optional<ui::StyleScope> outlined;   // --text-outline: every text and symbol of the demo
+            if (textOutline > 0.0f)
+                outlined.emplace(ui::ItemStyle().TextOutline(textOutline, outlineColor));
             {
                 // Ctrl+Shift+D (Cmd+Shift+D): the other density, animated
                 const esia::InputState& in = ctx->Input();
@@ -1130,6 +1139,7 @@ float4 WgtEffect(WgtFx fx)
                 for (int i = 0; i < PanelCount; ++i)
                     if (i != clicked)
                         open[i] = false;
+            outlined.reset();
             ui->EndFrame();
         }
     };
@@ -1203,6 +1213,18 @@ int main(int argc, char** argv)
             d.openPage = value;
             return true;
         }
+        if (o == "--text-outline")
+        {
+            d.textOutline = std::max(0.0f, (float)std::atof(value));
+            return true;
+        }
+        if (o == "--outline-color")
+        {
+            const unsigned long v = std::strtoul(value, nullptr, 16);
+            const bool alpha = std::strlen(value) > 6;
+            d.outlineColor = esia::Color::Hex(alpha ? (std::uint32_t)(v >> 8) : (std::uint32_t)v, alpha ? (float)(v & 0xFF) / 255.0f : 1.0f);
+            return true;
+        }
         usedValue = false;
         return false;
     };
@@ -1211,7 +1233,13 @@ int main(int argc, char** argv)
         ui::UiDesc desc;
         desc.text = text;
         if (!fonts.empty())
-            desc.fontFiles[0] = fonts[0];
+        {
+            // a font of one's own: its bold face (a second --font) for semibold and bold, else the regular for all
+            desc.fontFiles[(int)ui::FontWeight::Regular] = fonts[0];
+            const std::string& bold = fonts.size() > 1 ? fonts[1] : fonts[0];
+            desc.fontFiles[(int)ui::FontWeight::Semibold] = bold;
+            desc.fontFiles[(int)ui::FontWeight::Bold] = bold;
+        }
         desc.theme = d.darkMode ? ui::ThemeDark() : ui::ThemeLight();
         desc.theme.metrics.scrollIndicatorAlways = 0.0f;   // as ApplyTheme
         desc.density = d.compactSizes ? ui::Density::Compact : ui::Density::Regular;

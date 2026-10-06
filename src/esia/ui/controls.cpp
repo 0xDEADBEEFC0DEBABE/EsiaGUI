@@ -272,6 +272,24 @@ namespace esia::ui
             const float scale = bc.glass ? 1.0f + 0.06f * it.press : 1.0f - 0.035f * it.press;
             p.PushScale(r.Center(), scale);
 
+            if (M().flat && !bc.glass && !o.glow)
+            {
+                // flat drawing: no shadow, glow or glass - a solid shape, without a Style
+                Color bg = bc.bg;
+                if (bg.a > 0.0f)
+                    bg = (t.dark ? bg.Lighter(0.10f * it.hover) : bg.Darker(0.05f * it.hover)).Fade(1.0f - 0.25f * it.press);
+                else if (o.kind == ButtonKind::Plain && it.hover > 0.001f)
+                    bg = C().highlight.Fade(it.hover);
+                if (bg.a > 0.0f)
+                {
+                    if (circle && !HasItemRadius())
+                        p.FillRound(r, r.Height() * 0.5f, bg, 0.0f);   // Circle: circular corners
+                    else
+                        p.FillRound(r, (circle || o.capsule) ? ItemRadius(r.Height() * 0.5f) : ItemRadius(Sc(t.metrics.controlRadius)), bg);
+                }
+            }
+            else
+            {
             Style s;
             if (circle || o.capsule)
                 s.Radius(ItemRadius(r.Height() * 0.5f));
@@ -305,6 +323,7 @@ namespace esia::ui
                     p.Circle(r.Center(), r.Height() * 0.5f, s);
                 else
                     p.Rect(r, s);
+            }
             }
 
             // content
@@ -378,13 +397,13 @@ namespace esia::ui
         const Palette& c = C();
         // position: under-damped, the knob overshoots and squashes against the end of the track; speed: it stretches
         // along its motion and thins (a liquid drop); press: it reaches toward where it will travel; lens: held or
-        // just toggled, it swells into a clear lens (iOS 26); color: its own critically damped spring (no bounce)
-        const Id posId = Salt(id, 0x10);
-        static constexpr Spring kKnob{0.42f, 0.60f};
+        // just toggled, it swells into a clear lens (iOS 26); color: its own critically damped spring (no bounce).
+        // All in the interaction's entry: position (more 0, 1), color (2, 3), the lens (4 .. 6).
+        static constexpr Spring kKnob{0.42f, 0.60f}, kColor{0.30f, 1.0f};
         float vel;
-        const float pos = AnimWithVelocity(posId, *value ? 1.0f : 0.0f, kKnob, vel);
-        const float colorT = Saturate(Anim(id, 0x11, *value ? 1.0f : 0.0f, Spring{0.30f, 1.0f}));
-        const float lens = LiquidPulse(id, it.held, changed);
+        const float pos = ControlSpring(it, 0, *value ? 1.0f : 0.0f, kKnob, vel);
+        const float colorT = Saturate(ControlSpring(it, 2, *value ? 1.0f : 0.0f, kColor));
+        const float lens = ControlPulse(it, 4, it.held, changed);
 
         const float pad = Dt(2);
         const float kd = r.Height() - pad * 2.0f;
@@ -403,9 +422,20 @@ namespace esia::ui
 
         Painter p = GetPainter();
         const Color onColor = AccentOr(c.green);
-        DrawPill(p, r, Surface(Lerp(FillOr(c.secondaryFill), onColor, colorT)));
-        if (GlassSurface() && colorT > 0.001f)
-            DrawPill(p, r, Style().Fill(StateFill(onColor).Fade(colorT)));
+        const Color track = Lerp(FillOr(c.secondaryFill), onColor, colorT);
+        if (GlassSurface())
+        {
+            DrawPill(p, r, Surface(track));
+            if (colorT > 0.001f)
+                FillPill(p, r, StateFill(onColor).Fade(colorT));
+        }
+        else
+            FillPill(p, r, track);
+        if (M().flat && lens <= 0.02f)
+        {
+            p.FillRound(knob, knob.Height() * 0.5f, c.controlKnob);   // no shadow, no lens: a solid knob
+            return changed;
+        }
         Style ks;
         ks.Radius(knob.Height() * 0.5f).Shadow(Color::Black(0.18f + 0.12f * lens), Dt(5 + 10 * lens), Vec2(0, Dt(2 + 2.5f * lens)));
         if (lens > 0.02f)
@@ -582,20 +612,23 @@ namespace esia::ui
         }
         const float frac = mx > mn ? Saturate((*value - mn) / (mx - mn)) : 0.0f;
         // dragging follows the pointer tightly, jumps (a click on the track) glide on a softer spring
-        const Id shownId = Salt(id, 0x20);
+        // in the interaction's entry: the knob's place (more 0, 1), the lens (2 .. 4)
         static constexpr Spring kFollow{0.10f, 1.0f}, kGlide{0.38f, 0.78f};
         float vel;
-        const float shown = AnimWithVelocity(shownId, frac, it.held ? kFollow : kGlide, vel);
-        const float press = LiquidPulse(id, it.held, it.pressed);
+        const float shown = ControlSpring(it, 0, frac, it.held ? kFollow : kGlide, vel);
+        const float press = ControlPulse(it, 2, it.held, it.pressed);
 
         Painter p = GetPainter();
         const float cy = r.Center().y;
         const float th = Sc(Sizes().sliderTrack);
         const Rect track(area.min.x, cy - th * 0.5f, area.max.x, cy + th * 0.5f);
         const Color tint = Tint(o.tint);
-        DrawPill(p, track, Surface(FillOr(pc.fill)));
+        if (GlassSurface())
+            DrawPill(p, track, Surface(FillOr(pc.fill)));
+        else
+            FillPill(p, track, FillOr(pc.fill));
         const float kx = Lerp(x0, x1, shown);
-        DrawPill(p, Rect(track.min.x, track.min.y, std::max(kx, track.min.x + th), track.max.y), Style().Fill(StateFill(tint)));
+        FillPill(p, Rect(track.min.x, track.min.y, std::max(kx, track.min.x + th), track.max.y), StateFill(tint));
 
         if (o.minIcon)
             DrawIcon(p, Vec2(r.min.x + iconPad * 0.4f, cy), o.minIcon, iconSize, pc.secondaryLabel);
@@ -607,6 +640,11 @@ namespace esia::ui
         const float kw = Lerp(kwRest, Sc(Sizes().heldKnobWidth), press) + speed;
         const float kh = Lerp(khRest, Sc(Sizes().heldKnobHeight), press) - std::min(speed * 0.12f, Dt(3));
         const Rect knob = Rect::FromCenter(Vec2(kx, cy), Vec2(kw, kh));
+        if (M().flat && press <= 0.02f)
+        {
+            p.FillRound(knob, kh * 0.5f, pc.controlKnob);   // no shadow, no lens: a solid knob
+            return changed;
+        }
         Style ks;
         ks.Radius(kh * 0.5f).Shadow(Color::Black(0.18f + 0.1f * press), Dt(6 + 10 * press), Vec2(0, Dt(2 + 2 * press)));
         if (press > 0.02f)

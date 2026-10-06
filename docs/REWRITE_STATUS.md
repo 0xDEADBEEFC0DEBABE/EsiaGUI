@@ -42,10 +42,18 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Bitmap fonts** (2026-10-07): BDF, PCF and Windows FNT / FON draw pixel for pixel, sizes snapped to a strike's whole
+multiples; a .fon's sizes are one font.
+
+**Text outlines** (2026-10-07): `ItemStyle::TextOutline` / `Painter::SetTextOutline` - every glyph grown by exact
+distance (round corners), cached in the atlas beside it and drawn under it in the same command.
+
 **CPU of plain widgets** (2026-10-06, after flat drawing): springs and timers in a table of their own with fewer
 look-ups, Painters that cost nothing to make, flat shapes written in place, a front for the text layout cache, a
 Direct3D 11 host that owns its context: CPU 0.095 -> 0.079 ms regular and 0.072 flat, against Dear ImGui's 0.051. The
-widgets' own work takes 0.039 ms with nothing drawn: 20% under Dear ImGui needs a lighter widget layer.
+widgets' own work takes 0.039 ms with nothing drawn: 20% under Dear ImGui needs a lighter widget layer. Its second
+round (2026-10-07): one animation entry per control, solid fills without a Style, capsule tiles found at any
+length, hit records without a map look-up: flat 1.41 -> 1.23 times Dear ImGui's CPU, regular 1.55 -> 1.49.
 
 **Flat drawing** (2026-10-06, before the CPU round): `UiDesc::flat` / `Ui::SetFlat` - no glass, shadows or glows, and rounded
 shapes as nine-patches of coverage tiles in the text's texture, batched with the text: GPU time 0.054 -> 0.031 ms in
@@ -85,6 +93,8 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Bitmap fonts](#bitmap-fonts)
+* [Text outlines](#text-outlines)
 * [CPU of plain widgets](#cpu-of-plain-widgets)
 * [Flat drawing](#flat-drawing)
 * [Batching by what shadows show](#batching-by-what-shadows-show)
@@ -111,6 +121,63 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Bitmap fonts
+
+Fonts without outlines - BDF, PCF, Windows FNT / FON (MS Sans Serif, the console fonts), bitmap-only sfnt - were
+refused at load. They draw now, pixel for pixel.
+
+### What changed
+
+* The bundled FreeType compiles its BDF, PCF and Windows FNT drivers (`cmake/EsiaTextDeps.cmake`); zlib and LZW stay
+  off, so a compressed PCF (.pcf.gz) is unpacked before loading. A system FreeType has them already.
+* A bitmap face is a list of strikes; a Windows .fon's faces of one family and style (a face per size) join as one
+  font's strikes, and its one character map (not marked Unicode: the font's code page) is selected.
+* Sizes snap: a size takes the strike and whole multiple of it nearest in physical pixels (`Snapped`), and the face's
+  metrics, units per em and HarfBuzz font become that strike's. HarfBuzz shapes it through callbacks into FreeType
+  (characters, advances in the strike's pixels, its ascent and descent) on a face of its own without tables -
+  HarfBuzz's empty face is inert and shapes nothing. Layouts are made again when the pixel density changes.
+* Glyphs: the strike's bitmap as 8-bit coverage (monochrome: 0 or 255), each pixel repeated `times` x `times`, on
+  whole pixels with no pen phases. An outline (`TextOutline`) is the pixels grown by whole pixels, a square around
+  each: crisp as the font.
+
+### Verified (2026-10-07)
+
+* `FreeType.BitmapFontsDrawPixelForPixelAtTheirStrikes` (a BDF font made in the test: sizes 8, 11, 13, 16, the
+  glyphs texel for pixel, twice the strike, an outline, twice the density),
+  `FreeType.WindowsFonFilesJoinTheirSizes` (MS Sans Serif's sizes, whole pixels, the system's fallback chain beside
+  it; Windows only); the showcase with `--font %WINDIR%\Fonts\sserife.fon`, with and without `--text-outline 1`,
+  looked at.
+
+## Text outlines
+
+Outlined text and symbols, natively: `ui::ItemStyle::TextOutline(width, color)` (a widget, a container or a
+`StyleScope`), `Painter::SetTextOutline` / `PainterEnv::textOutline` for custom drawing, `text::TextOutline` in the
+text interface.
+
+### What changed
+
+* `RasterizeGrown` (`glyph_raster.hpp`): a glyph's coverage grown by a radius - a pixel is covered as much as the glyph
+  covers it, or by how far its center lies within radius + 1/2 of the glyph's edge, from the exact distance to the
+  flattened contours (each edge visits the pixels around it: the cost follows the perimeter). Round at the corners,
+  zero borders as `RasterizeGray`'s.
+* `TextSystem::DrawOutline` / `DrawGlyphOutline`: what `Draw` / `DrawGlyph` would draw, every glyph grown, in the
+  outline's color - to be drawn just before them. The default draws none; the FreeType system keeps the grown glyphs
+  in the gray atlas beside the glyphs (bit 31 of the key, the width in 1/8 px: up to 32 px) and their quads with the
+  layout beside the text's, so an outlined label is copied in as a plain one is. Color glyphs (emoji) get none.
+* `Painter::Text`, `TextBox` and `Icon` draw the outline first when the environment has one (under a scale too, at
+  the scaled size); the glyphs share the outline's page, so the two are one draw command.
+* `ItemStyle::TextOutline` (field `kTextOutline`): `GetPainter` gives every Painter of the scope the outline at the
+  metrics scale, so every widget's labels and symbols get it.
+* showcase: `--text-outline w`, `--outline-color RRGGBB[AA]`.
+
+The text's box does not grow (as CSS's text shadows do not): the outline reaches past it by its width.
+
+### Verified (2026-10-07)
+
+* `Raster.GrownCoverageReachesTheRadiusRoundAtTheCorners`, `FreeType.OutlinesGrowEveryGlyphUnderTheText`,
+  `Painter.TextOutlinesGoUnderTheirTextAndIcons`, `UiStyle.TextOutlineReachesTheLabelsOfItsScope`; the showcase with
+  `--text-outline 1.5` (dark) and `--text-outline 2 --outline-color FFFFFF` (light), looked at.
 
 ## CPU of plain widgets
 
@@ -169,6 +236,41 @@ state, springs), no styles merged in the hot path, layout and hit records in one
 * `UiAnim.TableKeepsEntriesThroughGrowthAndForgetsUnused` (new), `UiAnim.SpringsStepOncePerFrameAndReportMotion`
   and the other UI tests unchanged; ctest 34 / 34 with clang-cl (every backend, `ESIA_WERROR`) and MSVC (a new tree,
   `ESIA_WERROR`); Ubuntu 24.04 (clang 18) Debug and Release, 20 / 20.
+
+### Second round: the widgets' hot path (2026-10-07)
+
+* A control's own springs and timers live in its interaction's table entry (`ControlSpring`, `ControlPulse`, beside
+  the hover and press): a toggle looks up one entry instead of four, a slider one instead of three.
+* `Painter::FillRound`: a solid rounded rectangle without a `Style` - flat drawing goes straight to its geometry.
+  Toggles, sliders, buttons and pills use it wherever they draw nothing but a fill (in flat drawing the knobs too).
+* Flat tiles of capsules are found by their short side and corners: their length does not change the tile (the
+  corners cap at half the short side, the long axis always stretches), so a slider's fill - a length of its own on
+  every slider - no longer misses the memo and asks the text system's map.
+* Hit records take their region's scroll offsets from its child record (computed at `BeginChild`, fixed until the
+  region ends) instead of walking its parents with a map look-up per item; `ItemAdd` and `LayOut` build their
+  records once.
+* The style helpers (`ResolvedStyle`, `Accent`, `FillOr`, `LookClear`, `GlassSurface` ...), `Font`, `VisibleLabel`
+  and `Context::Snap` are inline; a spring at rest costs one test.
+
+| ms per frame (alternating, median of seven) | build | submit | CPU | against Dear ImGui |
+| --- | --- | --- | --- | --- |
+| plain widgets, regular | 0.050 -> 0.048 | 0.029 -> 0.030 | 0.079 -> 0.077 | 1.55 -> 1.49 |
+| plain widgets, flat | 0.057 -> 0.049 | 0.015 -> 0.015 | 0.072 -> 0.064 | 1.41 -> 1.23 |
+| Dear ImGui, the same scene | 0.040 | 0.012 | 0.052 | |
+
+Pixels: the workbench, regular and flat, renders the same image before and after (the showcase changes between any
+two runs: its frame rate and clock-driven effects).
+
+What is left (flat, share of the build): shapes 22% (a capsule is about 50 ns: 8 vertices and 18 indices written),
+text 15% (four vertices and six indices a glyph), the core's items 12% (layout, hit records, ids), the windows 14%;
+submit uploads 133 KB (32-bit indices) where Dear ImGui uploads 107 KB (16-bit). Each remaining item is a few
+percent; 0.80 of Dear ImGui's CPU needs structural changes: shapes and glyphs expanded on the GPU from instances (a
+few bytes each instead of 4 - 8 vertices and 6 - 18 indices, less to write and to upload) and 16-bit indices per
+draw - the renderer and every backend.
+
+### Verified (2026-10-07)
+
+* ctest 34 / 34 with clang-cl (every backend, `ESIA_WERROR`); the image A/B above (MSVC Release, Direct3D 11).
 
 ## Flat drawing
 
@@ -344,6 +446,12 @@ Esia could only be used from its source tree (`add_subdirectory`): a weakness th
   the test forwarded them, and a second `-DCMAKE_PREFIX_PATH` replaced the one with the install prefix, so the
   application did not find Esia. `run_package_test.cmake` now passes one list, the prefix first; reproduced and
   checked locally with a build configured with two prefix paths.
+* That fixed the clang-cl job; the MSVC one still failed: Visual Studio generates every configuration of the
+  application's project, the test installs one (Debug), and vcpkg's toolchain maps MinSizeRel and RelWithDebInfo to
+  Release and then to no configuration, which `esia::ui` does not have ("IMPORTED_LOCATION not set ... MinSizeRel"); a
+  single-config generator (Ninja) generates only Debug. The application's project now gets
+  `CMAKE_CONFIGURATION_TYPES` set to the configuration installed. Reproduced and checked locally with the CI job's
+  configuration: Visual Studio 2022, vcpkg's FreeType and HarfBuzz (x64-windows), Debug.
 
 ## Density
 

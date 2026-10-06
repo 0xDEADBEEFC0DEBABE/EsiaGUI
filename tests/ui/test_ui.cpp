@@ -236,6 +236,66 @@ ESIA_TEST(UiAnim, SpringsStepOncePerFrameAndReportMotion)
     ESIA_CHECK(v1 == 1.0f && !h.ui.Animating());
 }
 
+ESIA_TEST(UiStyle, TextOutlineReachesTheLabelsOfItsScope)
+{
+    // a text system that records which texts got an outline, and how wide
+    struct Recorder final : text::TextSystem
+    {
+        std::vector<std::pair<std::string, float>> outlined;
+        std::vector<std::string> drawn;
+        text::FontId AddFontFile(const char*, int) override { return 1; }
+        text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
+        void AddFallback(text::FontId) override {}
+        void NewFrame(const text::RasterParams&) override {}
+        text::TextMetrics Measure(text::FontRef f, std::string_view s, float, std::uint32_t) override
+        {
+            return {Vec2(6.0f * (float)s.size(), f.size), f.size * 0.8f, 1};
+        }
+        Vec2 Draw(DrawList&, text::FontRef f, Vec2, Color, std::string_view s, float, std::uint32_t, float) override
+        {
+            drawn.emplace_back(s);
+            return Measure(f, s, 0, 0).size;
+        }
+        void DrawGlyph(DrawList&, text::FontRef, char32_t, Vec2, Color) override {}
+        void DrawOutline(DrawList&, text::FontRef, Vec2, const text::TextOutline& o, std::string_view s, float, std::uint32_t, float) override
+        {
+            outlined.emplace_back(std::string(s), o.width);
+        }
+    };
+    Recorder rec;
+    Context ctx(Strict({}));
+    ui::UiDesc desc;
+    desc.text = &rec;
+    desc.fallbackChain = false;
+    ui::Ui u(ctx, desc);
+    ctx.NewFrame({Vec2(800, 600), Vec2(1, 1), 1.0});
+    u.NewFrame();
+    ctx.SetNextWindowPos({0, 0}, Cond::FirstUse);
+    ctx.SetNextWindowSize({600, 400}, Cond::FirstUse);
+    ctx.Begin("W", WindowOptions{});
+    ui::Text(ui::TextStyle::Body, "plain");
+    {
+        ui::StyleScope scope(ui::ItemStyle().TextOutline(2.0f, Color::Black()));
+        ui::Text(ui::TextStyle::Body, "scoped");
+        ui::Button("Scoped button");
+    }
+    ui::Next().TextOutline(1.0f, Color::White());
+    ui::Button("Next button");
+    ui::Text(ui::TextStyle::Body, "after");
+    ctx.End();
+    u.EndFrame();
+    ctx.EndFrame();
+    const auto has = [&](const std::string& s) { return std::find(rec.drawn.begin(), rec.drawn.end(), s) != rec.drawn.end(); };
+    ESIA_CHECK(has("plain") && has("scoped") && has("Scoped button") && has("Next button") && has("after"));
+    ESIA_CHECK(rec.outlined.size() == 3);
+    if (rec.outlined.size() == 3)
+    {
+        ESIA_CHECK(rec.outlined[0] == std::make_pair(std::string("scoped"), 2.0f));
+        ESIA_CHECK(rec.outlined[1] == std::make_pair(std::string("Scoped button"), 2.0f));
+        ESIA_CHECK(rec.outlined[2] == std::make_pair(std::string("Next button"), 1.0f));
+    }
+}
+
 ESIA_TEST(UiAnim, TableKeepsEntriesThroughGrowthAndForgetsUnused)
 {
     using Table = ui::detail::AnimTable;

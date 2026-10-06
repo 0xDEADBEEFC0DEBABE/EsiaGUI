@@ -99,6 +99,45 @@ ESIA_TEST(Raster, PixelAlignedSquareIsExactWithEmptyBorders)
     ESIA_CHECK_NEAR(CoverageSum(b), 30.0, 1e-9);
 }
 
+ESIA_TEST(Raster, GrownCoverageReachesTheRadiusRoundAtTheCorners)
+{
+    Outline o;
+    AddRect(o, 10, 10, 20, 20);
+    GlyphBitmap g, b;
+    ESIA_CHECK(RasterizeGray(o, 0.0f, g));
+    ESIA_CHECK(RasterizeGrown(o, 0.0f, 2.0f, b));
+    // larger by the growth (ceil(2) + 1) on every side
+    ESIA_CHECK(b.left == g.left - 3 && b.top == g.top - 3 && b.width == g.width + 6 && b.height == g.height + 6);
+    ESIA_CHECK(b.pixels.size() == (std::size_t)b.width * b.height);
+    ESIA_CHECK(At(b, 15, 15) == 255);   // inside
+    ESIA_CHECK(At(b, 8, 15) == 255);    // a center 1.5 px out: within 2 + 1/2
+    ESIA_CHECK(At(b, 7, 15) == 0);      // 2.5 px out: none
+    // the corner is round: (8.5, 8.5) lies 2.12 px from (10, 10), where a square growth would cover it
+    ESIA_CHECK(At(b, 8, 8) > 60 && At(b, 8, 8) < 140);
+    // never less than the glyph, and empty borders as RasterizeGray's
+    bool covers = true, emptyBorders = true;
+    for (int y = g.top; y < g.top + g.height; ++y)
+        for (int x = g.left; x < g.left + g.width; ++x)
+            covers = covers && At(b, x, y) >= At(g, x, y);
+    for (int x = b.left; x < b.left + b.width; ++x)
+        emptyBorders = emptyBorders && At(b, x, b.top) == 0 && At(b, x, b.top + b.height - 1) == 0;
+    for (int y = b.top; y < b.top + b.height; ++y)
+        emptyBorders = emptyBorders && At(b, b.left, y) == 0 && At(b, b.left + b.width - 1, y) == 0;
+    ESIA_CHECK(covers && emptyBorders);
+
+    // half a pixel of coverage where a center lies at radius + 0 (1.5 px from the edge, radius 1.5)
+    GlyphBitmap h;
+    ESIA_CHECK(RasterizeGrown(o, 0.0f, 1.5f, h));
+    ESIA_CHECK(std::abs(At(h, 8, 15) - 128) <= 1);
+    // no growth: the glyph's own coverage
+    GlyphBitmap z;
+    ESIA_CHECK(RasterizeGrown(o, 0.0f, 0.0f, z));
+    ESIA_CHECK_NEAR(CoverageSum(z), CoverageSum(g), 1e-9);
+    // no ink: an empty, valid bitmap
+    GlyphBitmap e;
+    ESIA_CHECK(RasterizeGrown(Outline(), 0.0f, 2.0f, e) && e.width == 0 && e.pixels.empty());
+}
+
 ESIA_TEST(Raster, PartialPixelsGetTheirAreaFraction)
 {
     // half-pixel edges
