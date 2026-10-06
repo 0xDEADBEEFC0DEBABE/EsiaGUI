@@ -96,6 +96,23 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
 
   The metrics shrink as fractions (`DensityMetrics`), so a theme with its own padding or rows keeps its own
   proportions; `metrics.controlHeight` (28 when compact) is for custom widgets.
+* **Flat drawing.** `UiDesc::flat` or `Ui::SetFlat(true)`: no glass, shadows or glows on any shape, every window
+  solid; glass elsewhere (bars, popovers, a pressed knob's lens) becomes a solid surface - the theme's
+  `secondaryBackground` under the glass's tint, its fill over that (`PainterEnv::flat`, `flatSurface`). Rounded
+  rectangles, capsules and circles with a solid fill and stroke are drawn as geometry instead of distance fields:
+  their corners are coverage tiles in the text's texture (rasterized once per kind of shape with the FX shader's
+  formula, `TextSystem::FindTile` / `AddTile`), stretched as nine-patches - 1 to 9 quads a shape - and the middle of a
+  large one is a quad of the white texture. They batch with the text around them. What geometry cannot draw (a
+  gradient, an image, a shape a rounded mask cuts, arcs) stays an FX shape, without its shadow and glow.
+
+  | Direct3D 11, ms per frame | CPU (build + submit) | GPU | draws |
+  | --- | --- | --- | --- |
+  | the plain-widget scene, regular / flat | 0.061 + 0.034 / 0.070 + 0.025 | 0.054 / 0.031 | 7 / 8 |
+  | the workbench at 1600 x 1000, regular / flat | 0.082 + 0.045 / 0.093 + 0.035 | 0.202 / 0.110 | 68 / 53 |
+
+  The plain-widget scene is section "Frame cost against Dear ImGui" of
+  [REWRITE_STATUS.md](REWRITE_STATUS.md) (Dear ImGui: 0.042 + 0.012 ms, 0.025 ms GPU). A flat shape takes a little
+  longer to build than an FX instance and less to submit; flat drawing pays where the GPU is the limit.
 * **Scroll indicators.** `metrics.scrollIndicatorAlways` is 1 in the built-in themes on Windows, Linux and macOS
   (an area that scrolls shows its indicator, dimmed, at rest) and 0 on iOS and Android (hidden at rest); after a
   finger's press they hide at rest anyway (section 5).
