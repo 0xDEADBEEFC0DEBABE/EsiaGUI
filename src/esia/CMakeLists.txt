@@ -7,7 +7,7 @@
 #   esia_text      text interface, the analytic glyph rasterizer, the glyph atlas and the system font lookup
 #   esia_text_ft   FreeType + HarfBuzz text system (ESIA_TEXT_FREETYPE; ESIA_TEXT_DEPS=auto|bundled|system)
 #   esia_rhi_<n>   one target per backend, from src/esia/rhi/<n>/ (ESIA_BACKEND_<N>)
-#   esia_ui        the widget layer: theme, springs, styles, auto layout, controls, containers
+#   esia_ui        a widget layer, where the tree has one (src/esia/ui: EsiaGUI's liquid-glass widgets)
 #   esia_platform_win32   the Win32 platform layer: input, IME, DPI, cursor, clipboard (ESIA_PLATFORM_WIN32)
 cmake_minimum_required(VERSION 3.24)
 include(CMakeDependentOption)
@@ -135,30 +135,11 @@ if(ESIA_TEXT_FREETYPE)
 endif()
 
 # ------------------------------------------------------------------ widgets
-# The widget layer (include/esia/ui): theme, springs, styles, auto layout, controls, containers and lists drawn with Painter.
-add_library(esia_ui STATIC
-    ui/theme.cpp
-    ui/anim.cpp
-    ui/ui.cpp
-    ui/controls.cpp
-    ui/layout.cpp
-    ui/containers.cpp
-    ui/selection.cpp
-    ui/lists.cpp
-    ui/navigation.cpp
-    ui/text_field.cpp
-    ui/number.cpp
-    ui/color.cpp
-    ui/table.cpp
-    ui/text_editor.cpp
-    ui/dock.cpp
-    ui/popups.cpp
-    ui/charts.cpp
-    ui/plot.cpp
-    ui/overlays.cpp)
-target_link_libraries(esia_ui PUBLIC esia_render esia_text)
-esia_target_defaults(esia_ui)
-add_library(esia::ui ALIAS esia_ui)
+# A widget layer on the core and the Painter, where the tree has one (src/esia/ui/CMakeLists.txt: EsiaGUI's liquid-glass
+# widgets, esia::ui). The backend builds without it.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/ui/CMakeLists.txt)
+    add_subdirectory(ui)
+endif()
 
 # ------------------------------------------------------------------ platform layers
 # They depend on the core only (docs/REWRITE.md, "Platform layer"); each is on by default where its OS is.
