@@ -13,6 +13,20 @@ namespace esia::text
             textures_.Destroy(p.texture);
     }
 
+    void GlyphAtlas::Reformat(TextureFormat format, std::uint32_t flags)
+    {
+        if (format == desc_.format && flags == desc_.flags)
+            return;
+        for (const Page& p : pages_)
+            textures_.Destroy(p.texture);
+        pages_.clear();
+        glyphs_.clear();
+        overflow_ = false;
+        ++resets_;
+        desc_.format = format;
+        desc_.flags = flags;
+    }
+
     void GlyphAtlas::BeginFrame()
     {
         if (!overflow_)
@@ -61,6 +75,7 @@ namespace esia::text
         TextureInfo info;
         info.format = desc_.format;
         info.width = info.height = desc_.pageSize;
+        info.flags = desc_.flags;
         Page p;
         p.texture = textures_.Create(info);
         if (!p.texture)
@@ -83,12 +98,17 @@ namespace esia::text
         slot.width = bitmap.width;
         slot.height = bitmap.height;
         slot.ink = ink;
-        slot.color = desc_.format == TextureFormat::RGBA8;
+        const bool lcd = Lcd(), sdf = DistanceField();
+        slot.color = desc_.format == TextureFormat::RGBA8 && !lcd && !sdf;
         if (bitmap.width > 0 && bitmap.height > 0)
         {
             const std::size_t bpp = (std::size_t)BytesPerPixel(desc_.format);
-            if ((std::size_t)bitmap.channels != bpp || bitmap.pixels.size() < (std::size_t)bitmap.width * bitmap.height * bpp)
-                return nullptr;   // a coverage bitmap for a color atlas or the other way round
+            // what each page takes: its own kind, and sub-pixel pages 8-bit coverage too (as gray)
+            const bool gray = lcd && bitmap.channels == 1;
+            const std::size_t in = gray ? 1 : bpp;
+            if (bitmap.lcd != (lcd && !gray) || bitmap.sdf != sdf || (std::size_t)bitmap.channels != in ||
+                bitmap.pixels.size() < (std::size_t)bitmap.width * bitmap.height * in)
+                return nullptr;   // a coverage bitmap for a color atlas, a sub-pixel one for a grayscale atlas ...
             const int cw = bitmap.width + desc_.padding, ch = bitmap.height + desc_.padding;
             int page = 0, x = 0, y = 0;
             if (!Pack(cw, ch, page, x, y))
@@ -96,8 +116,15 @@ namespace esia::text
             // the whole cell goes up, padding cleared: after a restart the texels next to a glyph may hold an old one
             cell_.assign((std::size_t)cw * ch * bpp, 0);
             for (int row = 0; row < bitmap.height; ++row)
-                std::memcpy(cell_.data() + (std::size_t)row * cw * bpp, bitmap.pixels.data() + (std::size_t)row * bitmap.width * bpp,
-                            (std::size_t)bitmap.width * bpp);
+            {
+                std::uint8_t* dst = cell_.data() + (std::size_t)row * cw * bpp;
+                const std::uint8_t* src = bitmap.pixels.data() + (std::size_t)row * bitmap.width * in;
+                if (gray)
+                    for (int col = 0; col < bitmap.width; ++col)
+                        std::memset(dst + (std::size_t)col * 4, src[col], 4);   // R = G = B = A: gray in a sub-pixel page
+                else
+                    std::memcpy(dst, src, (std::size_t)bitmap.width * bpp);
+            }
             slot.page = pages_[page].texture;
             textures_.Update(slot.page, x, y, cw, ch, cell_.data());
             const float inv = 1.0f / (float)desc_.pageSize;

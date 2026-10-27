@@ -30,8 +30,8 @@ ESIA_TEST(D3D9Shaders, Sm3ProgramsAndVariants)
     r.prelude = reinterpret_cast<const char*>(rhi::d3d9::blobs::esia_sm3_prelude_hlsli);
     for (int p = 0; p < (int)rhi::ShaderProgram::Count; ++p)
     {
-        if ((rhi::ShaderProgram)p == rhi::ShaderProgram::Fx)
-            continue;   // the FX shader: per feature mask, below
+        if (rhi::DualSourceProgram((rhi::ShaderProgram)p) || (rhi::ShaderProgram)p == rhi::ShaderProgram::Fx)
+            continue;   // no dual-source blending on D3D9; the FX shader only compiles per feature mask
         for (shaders::Stage s : {shaders::Stage::Vertex, shaders::Stage::Pixel})
         {
             r.program = (rhi::ShaderProgram)p;
@@ -130,7 +130,7 @@ ESIA_TEST(D3D9Host, WrapDrawRestore)
     ESIA_CHECK(dev != nullptr);
     if (!dev)
         return;
-    ESIA_CHECK(dev->GetCaps().halfPixelOffset);
+    ESIA_CHECK(dev->GetCaps().halfPixelOffset && !dev->GetCaps().dualSourceBlend);
     // feature variants only where the full FX shader does not fit
     D3DCAPS9 dc = {};
     device->GetDeviceCaps(&dc);

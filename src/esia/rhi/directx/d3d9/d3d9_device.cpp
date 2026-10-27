@@ -313,6 +313,8 @@ namespace esia::rhi::d3d9
             caps_.fxStorage = FxStorage::Texture;
             caps_.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm3;
             caps_.halfPixelOffset = true;
+            caps_.fullFxGlyphs = false;   // the full ps_3_0 FX shader has no registers left for glyph shapes
+            caps_.dualSourceBlend = false;
             caps_.floatRenderTargets = Supports(D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING | D3DUSAGE_QUERY_FILTER, D3DFMT_A16B16G16R16F);
             caps_.sampleRenderTarget = true;
             caps_.readback = true;
@@ -330,8 +332,10 @@ namespace esia::rhi::d3d9
             // FxFetch computes `instance % perRow` and `instance / perRow` in floats here (SM3 has no integers), and
             // fxc's float modulo is inexact for most divisors (6 % 682 comes out as 5.9999, truncated to the previous
             // instance's texels). With 24 * 2^k texels per row, perRow = 2^k and both are exact.
+            // At most 4096 texels wide, as on OpenGL: NVIDIA's driver fails the system-memory surface of a
+            // 16384-texel row upload (E_FAIL), and the device misbehaves after it.
             int perRow = 1;
-            while (perRow * 2 * (int)fx::kInstanceVec4Count <= (int)dc.MaxTextureWidth)
+            while (perRow * 2 * (int)fx::kInstanceVec4Count <= (int)std::min<DWORD>(dc.MaxTextureWidth, 4096))
                 perRow *= 2;
             caps_.maxFxDataWidth = perRow * (int)fx::kInstanceVec4Count;
 
@@ -566,8 +570,8 @@ namespace esia::rhi::d3d9
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count)
-                return {};
+            if (desc.program >= ShaderProgram::Count || desc.blend == BlendMode::DualSourceLcd || DualSourceProgram(desc.program))
+                return {};   // no dual-source blending on D3D9
             d3d::ShaderRequest vr;
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
@@ -612,7 +616,7 @@ namespace esia::rhi::d3d9
             p.ps = ShaderOf(ps, false);
             if (!p.vs || !p.ps)
                 return {};
-            p.decl = desc.layout == VertexLayout::UiVertex ? uiDecl_.Get() : desc.program == ShaderProgram::Fx ? fxDecl_.Get() : fullscreenDecl_.Get();
+            p.decl = desc.layout == VertexLayout::UiVertex ? uiDecl_.Get() : DrawsInstances(desc.program) ? fxDecl_.Get() : fullscreenDecl_.Get();
             return Pipeline{pipelines_.Add(std::move(p))};
         }
 
@@ -751,6 +755,7 @@ namespace esia::rhi::d3d9
             case BlendMode::Opaque: dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE); break;
             case BlendMode::Straight:
             case BlendMode::Premultiplied:
+            case BlendMode::DualSourceLcd:
                 dev_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
                 dev_->SetRenderState(D3DRS_SRCBLEND, pipe->desc.blend == BlendMode::Straight ? D3DBLEND_SRCALPHA : D3DBLEND_ONE);
                 dev_->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);

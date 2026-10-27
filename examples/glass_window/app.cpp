@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <thread>
 
 namespace glass
@@ -35,6 +36,8 @@ namespace glass
             int frames = 0;
             std::string screenshot;
             std::vector<std::string> fonts;
+            std::string textRendering;   // --text-rendering
+            bool light = false;          // --light: one UI light at the cursor (RenderParams::light)
         };
 
         int Usage(const App& app, const char* problem)
@@ -42,7 +45,7 @@ namespace glass
             std::fprintf(stderr,
                          "%s: %s\n"
                          "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--no-shader-cache] [--fixed-dt seconds]\n"
-                         "       [--frames N] [--screenshot out.png] [--font file]...\n",
+                         "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--light]\n",
                          app.name, problem, app.name, BuiltApis().c_str());
             return 2;
         }
@@ -102,6 +105,7 @@ namespace glass
             esia::text::FontId font = 0;
 #if defined(GLASS_TEXT)
             std::unique_ptr<esia::text::TextSystem> textSystem = esia::text::CreateFreeTypeTextSystem(ctx.Textures());
+            ApplyTextRendering(textSystem.get(), opt.textRendering);
             if (textSystem && !app.loadFonts)
                 text = textSystem.get();
             else if (textSystem && (font = LoadFonts(*textSystem, opt.fonts)) != 0)
@@ -115,6 +119,13 @@ namespace glass
             if (app.renderer)
                 app.renderer(renderer);
             platform.SetContext(&ctx);   // input flows from here on
+
+            // "--text-rendering native" (or ESIA_TEXT_RENDERING=native): the window's monitor decides the sub-pixel stripes
+            // and the ClearType level, contrast and gamma, from monitor to monitor (pw::DisplayText)
+            const char* envRendering = std::getenv("ESIA_TEXT_RENDERING");
+            const std::string spec = !opt.textRendering.empty() ? opt.textRendering : std::string(envRendering ? envRendering : "");
+            const bool followMonitor = spec.rfind("native", 0) == 0;
+            std::optional<pw::DisplayText> monitorText;
 
             using Clock = std::chrono::steady_clock;
             const Clock::time_point start = Clock::now();
@@ -141,11 +152,25 @@ namespace glass
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     continue;
                 }
+                if (followMonitor && monitorText != fi.text)
+                {
+                    monitorText = fi.text;
+#if defined(GLASS_TEXT)
+                    if (textSystem)
+                    {
+                        esia::text::TextRendering r = textSystem->Rendering();
+                        r.subpixel = fi.text.stripes == pw::DisplayText::Stripes::Rgb   ? esia::text::SubpixelLayout::Rgb
+                                     : fi.text.stripes == pw::DisplayText::Stripes::Bgr ? esia::text::SubpixelLayout::Bgr
+                                                                                        : esia::text::SubpixelLayout::None;
+                        textSystem->SetRendering(r);   // from the text system's next NewFrame
+                    }
+#endif
+                }
                 const double now = std::chrono::duration<double>(Clock::now() - start).count();
                 // fixed steps: frame N (from 1) is at N x dt, as WGT's demo counted (captures at the same moment)
                 ctx.NewFrame(fi.Params(opt.fixedDt > 0.0 ? (frame + 1) * opt.fixedDt : now));
                 if (text && app.loadFonts)
-                    text->NewFrame({fi.scale});
+                    text->NewFrame({fi.scale, ctx.Input().Time()});
                 const Clock::time_point uiStart = Clock::now();
                 if (app.frame)
                     app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats()});
@@ -153,6 +178,14 @@ namespace glass
                 cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
                 rp.frame = host->Frame();
+                if (opt.light && ctx.Input().MouseValid())   // the glass rims and the shadows lit from the cursor
+                    rp.light = esia::render::UiLight::Point(ctx.Input().MousePos(), 240.0f);
+                if (monitorText)
+                {
+                    rp.text.gamma = monitorText->gamma;
+                    rp.text.clearTypeContrast = monitorText->enhancedContrast;
+                    rp.text.clearTypeLevel = monitorText->clearTypeLevel;
+                }
                 if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                     std::fprintf(stderr, "%s: the device refused frame %d\n", app.name, frame);
                 platform.ApplyRequests(ctx.Requests());
@@ -216,6 +249,8 @@ namespace glass
                 bool usedValue = false;
                 if (a == "--debug")
                     o.debug = true;
+                else if (a == "--light")
+                    o.light = true;
                 else if (a == "--no-shader-cache")
                     o.shaderCache = false;
                 else if (a == "--api" && needs())
@@ -241,6 +276,12 @@ namespace glass
                     o.screenshot = value;
                 else if (a == "--font" && needs())
                     o.fonts.push_back(value);
+                else if (a == "--text-rendering" && needs())
+                {
+                    o.textRendering = value;
+                    if (!TextRenderingValid(o.textRendering, problem))
+                        return false;
+                }
                 else if (app.option && app.option(a, value, usedValue))
                     i += usedValue ? 1 : 0;
                 else if (problem.empty())

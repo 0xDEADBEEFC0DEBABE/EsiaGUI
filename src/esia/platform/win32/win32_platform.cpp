@@ -1,6 +1,7 @@
 // Esia - Win32 platform layer: messages -> InputEvents, PlatformRequests -> the window (esia/platform/win32.hpp).
 #include "win32_platform.hpp"
 #include "esia/base/utf8.hpp"
+#include <dwrite.h>
 #include <windowsx.h>
 #include <algorithm>
 #include <cmath>
@@ -178,6 +179,64 @@ namespace esia::platform::win32
     {
         std::lock_guard lock(frameMutex);
         frame.focused = focused;
+    }
+
+    void Platform::Impl::PublishMonitor(HWND w, bool reread)
+    {
+        HMONITOR mon = ::MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST);
+        if (mon == monitor && !reread)
+            return;
+        monitor = mon;
+        const DisplayText text = MonitorText(mon);
+        std::lock_guard lock(frameMutex);
+        frame.text = text;
+    }
+
+    DisplayText::Stripes RotatedStripes(DisplayText::Stripes stripes, int orientation)
+    {
+        if (stripes == DisplayText::Stripes::None || orientation == DMDO_DEFAULT)
+            return stripes;
+        if (orientation == DMDO_180)
+            return stripes == DisplayText::Stripes::Rgb ? DisplayText::Stripes::Bgr : DisplayText::Stripes::Rgb;
+        return DisplayText::Stripes::None;   // 90 / 270 degrees: the stripes run down the picture
+    }
+
+    DisplayText MonitorText(void* monitorPtr)
+    {
+        HMONITOR mon = static_cast<HMONITOR>(monitorPtr);
+        if (!mon)
+            mon = ::MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        DisplayText t;
+        // DirectWrite's parameters for the monitor: the ClearType tuner's per-monitor choices, else the system's
+        IDWriteFactory* factory = nullptr;
+        IDWriteRenderingParams* params = nullptr;
+        DWRITE_PIXEL_GEOMETRY geometry = DWRITE_PIXEL_GEOMETRY_RGB;
+        if (SUCCEEDED(::DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&factory))) &&
+            SUCCEEDED(factory->CreateMonitorRenderingParams(mon, &params)))
+        {
+            geometry = params->GetPixelGeometry();
+            t.clearTypeLevel = std::clamp(params->GetClearTypeLevel(), 0.0f, 1.0f);
+            t.enhancedContrast = std::max(params->GetEnhancedContrast(), 0.0f);
+            t.gamma = std::clamp(params->GetGamma(), 1.0f, 3.0f);
+            params->Release();
+        }
+        if (factory)
+            factory->Release();
+        BOOL smoothing = FALSE;
+        UINT type = 0;
+        if (::SystemParametersInfoW(SPI_GETFONTSMOOTHING, 0, &smoothing, 0) && smoothing &&
+            ::SystemParametersInfoW(SPI_GETFONTSMOOTHINGTYPE, 0, &type, 0) && type == FE_FONTSMOOTHINGCLEARTYPE)
+            t.stripes = geometry == DWRITE_PIXEL_GEOMETRY_BGR   ? DisplayText::Stripes::Bgr
+                        : geometry == DWRITE_PIXEL_GEOMETRY_RGB ? DisplayText::Stripes::Rgb
+                                                                : DisplayText::Stripes::None;
+        MONITORINFOEXW info{};
+        info.cbSize = sizeof(info);
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        if (::GetMonitorInfoW(mon, &info) && ::EnumDisplaySettingsExW(info.szDevice, ENUM_CURRENT_SETTINGS, &mode, 0) &&
+            (mode.dmFields & DM_DISPLAYORIENTATION))
+            t.stripes = RotatedStripes(t.stripes, (int)mode.dmDisplayOrientation);
+        return t;
     }
 
     // ------------------------------------------------------------------ mouse
@@ -497,6 +556,7 @@ namespace esia::platform::win32
             m.dpi = USER_DEFAULT_SCREEN_DPI;
         m.hwnd = w;
         m.PublishClientRect(w);
+        m.PublishMonitor(w, true);
         const bool focused = ::GetFocus() == w;
         m.PublishFocus(focused);
         if (focused)
@@ -519,6 +579,7 @@ namespace esia::platform::win32
             ::ImmAssociateContextEx(w, nullptr, IACE_DEFAULT);
         m.hwnd = nullptr;
         m.owned = false;
+        m.monitor = nullptr;
         m.trackingLeave = m.mouseInside = m.textInput = false;
         m.caretHeight = 0;
         m.lastMousePos = Vec2(kNoMousePos, kNoMousePos);
@@ -697,10 +758,18 @@ namespace esia::platform::win32
                 ::SetWindowPos(w, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
             }
             m.PublishClientRect(w);   // the size and the scale change together, even without a WM_SIZE
+            m.PublishMonitor(w, false);
             m.lastMousePos = Vec2(kNoMousePos, kNoMousePos);
             m.PlaceIme(w);
             return m.owned;
         }
+        case WM_WINDOWPOSCHANGED:   // onto a monitor of the same DPI: no WM_DPICHANGED
+            m.PublishMonitor(w, false);
+            return false;
+        case WM_DISPLAYCHANGE:      // a monitor turned, another resolution
+        case WM_SETTINGCHANGE:      // font smoothing, the ClearType tuner
+            m.PublishMonitor(w, true);
+            return false;
         case WM_NCDESTROY:
             Detach();
             return false;

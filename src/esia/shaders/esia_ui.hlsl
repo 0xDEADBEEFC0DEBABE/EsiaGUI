@@ -1,4 +1,4 @@
-// Esia - indexed UI geometry (images, lines, charts) and grayscale text. Programs UiGeometry, TextGray.
+// Esia - indexed UI geometry (images, lines, charts) and text. Programs UiGeometry, TextGray, TextLcd, TextLcdGray.
 #include "esia_common.hlsli"
 
 // esia::Vertex: attribute locations 0, 1, 2 (GL / Vulkan / Metal vertex descriptors)
@@ -79,4 +79,44 @@ float4 TextGrayPS(UiPSIn i) : SV_Target
 {
     const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).r;
     return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
+}
+
+// Sub-pixel pages drawn where per-channel alpha cannot be kept (glow layers, targets that are not opaque, devices
+// without dual-source blending): the grayscale coverage kept in A.
+float4 TextLcdGrayPS(UiPSIn i) : SV_Target
+{
+    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).a;
+    return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
+}
+
+// Sub-pixel (ClearType-style) text: one coverage per R / G / B stripe, composed per channel with dual-source blending:
+// target = ink * alpha + target * (1 - alpha), alpha an RGB triple. Gray texels (R = G = B: shapes and outlines in the
+// page, a glyph's solid inside) compose as grayscale text does, so colored shapes get no fringes.
+// For SPIR-V (and the GLSL / MSL made from it) tools/shaders/build_shaders.py rewrites SV_Target1 to location 0,
+// index 1: dual-source blending reads both outputs from attachment 0, and glslang has no [[vk::index]].
+struct TextLcdOut
+{
+    float4 color : SV_Target0;
+    float4 alpha : SV_Target1;
+};
+
+TextLcdOut TextLcdPS(UiPSIn i)
+{
+    const float4 t = ESIA_SAMPLE(gTex, gLinear, i.uv);
+    float3 a;
+    if (t.r == t.g && t.g == t.b)
+        a = WgtGrayText(t.r, i.col.rgb).xxx;
+    else
+    {
+        const float3 cov = lerp(t.aaa, t.rgb, gText.w);   // ClearType level: 0 = the grayscale coverage
+        const float k = WgtLightOnDarkContrast(gText.z, i.col.rgb);
+        a.r = WgtTextAlpha(WgtEnhanceContrast(cov.r, k), i.col.r, gText.x);
+        a.g = WgtTextAlpha(WgtEnhanceContrast(cov.g, k), i.col.g, gText.x);
+        a.b = WgtTextAlpha(WgtEnhanceContrast(cov.b, k), i.col.b, gText.x);
+    }
+    a *= i.col.a * WgtEdgeFade(WgtPixelPos(i.pos).y);
+    TextLcdOut o;
+    o.color = WgtOutputStraight(float4(i.col.rgb, 1.0));
+    o.alpha = float4(a, max(a.r, max(a.g, a.b)));
+    return o;
 }

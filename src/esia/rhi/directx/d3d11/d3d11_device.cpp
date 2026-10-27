@@ -161,6 +161,8 @@ namespace esia::rhi::d3d11
             PipelineDesc desc;
         };
 
+        bool profiling_ = false;   // this frame records timestamps (its slot's queries were free)
+
         struct ProfileSlot
         {
             ComPtr<ID3D11Query> disjoint;
@@ -178,6 +180,7 @@ namespace esia::rhi::d3d11
             c.framebufferOriginBottomLeft = false;
             c.clipSpaceYDown = false;
             c.halfPixelOffset = false;
+            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -234,6 +237,8 @@ namespace esia::rhi::d3d11
             bool ok = blend(false, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, blends_[(int)BlendMode::Opaque]);
             ok = ok && blend(true, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Straight]);
             ok = ok && blend(true, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Premultiplied]);
+            ok = ok && blend(true, D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_INV_SRC1_COLOR, D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_INV_SRC1_ALPHA,
+                             blends_[(int)BlendMode::DualSourceLcd]);
 
             D3D11_RASTERIZER_DESC rd = {};
             rd.FillMode = D3D11_FILL_SOLID;
@@ -516,13 +521,13 @@ namespace esia::rhi::d3d11
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count)
+            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != DualSourceProgram(desc.program))
                 return {};
             d3d::ShaderRequest vr;
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
-            vr.instanceAttribute = desc.program == ShaderProgram::Fx;   // Caps::drawFirstInstance
+            vr.instanceAttribute = DrawsInstances(desc.program);   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;
@@ -563,11 +568,11 @@ namespace esia::rhi::d3d11
                 }
                 p.layout = uiLayout_;
             }
-            else if (desc.program == ShaderProgram::Fx)
+            else if (DrawsInstances(desc.program))
             {
                 if (!fxLayout_)
                 {
-                    // the instance's index, from InstanceIndices at slot 1 (every FX vertex shader has this input)
+                    // the instance's index, from InstanceIndices at slot 1 (every FX and quad vertex shader has this input)
                     const D3D11_INPUT_ELEMENT_DESC e = {"INSTANCEINDEX", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1};
                     if (!log_.Check(dev_->CreateInputLayout(&e, 1, vs->data(), vs->size(), &fxLayout_), "CreateInputLayout (fx)"))
                         return {};
@@ -583,6 +588,7 @@ namespace esia::rhi::d3d11
         bool BeginFrame(const FrameDesc&) override
         {
             ++frame_;
+            profiling_ = false;
             instanceIndicesBound_ = false;
             // with restoreHostState, what the frame changes is captured and put back (ClearState would also drop the
             // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
@@ -595,25 +601,30 @@ namespace esia::rhi::d3d11
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 if (s.pending)
                 {
-                    ReadSlot(s);   // the GPU is kProfileSlots frames behind: the old numbers are dropped if not ready
+                    ReadSlot(s);   // the GPU is kProfileSlots frames behind
                     // Still not done: nothing presented since (a headless loop, which a present would have
                     // submitted). Submit what waits now. A presenting host never gets here: flushing every frame at
                     // its end cost Direct3D 11 0.18 ms of CPU a frame, on top of the present's own submit.
                     if (s.pending)
                         ctx_->Flush();
                 }
-                s.used = 0;
-                s.pending = false;
-                s.frame.Reset(frame_);
-                ctx_->Begin(s.disjoint.Get());
-                s.frame.frameStart = Stamp();
+                // Queries whose results are still out are not begun again (the debug layer reports it, and their
+                // numbers would be lost): this frame then has no timestamps, and the slot is read when it comes round.
+                if (!s.pending)
+                {
+                    profiling_ = true;
+                    s.used = 0;
+                    s.frame.Reset(frame_);
+                    ctx_->Begin(s.disjoint.Get());
+                    s.frame.frameStart = Stamp();
+                }
             }
             return true;
         }
 
         void EndFrame() override
         {
-            if (caps_.timestampQueries)
+            if (profiling_)
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 s.frame.frameEnd = Stamp();
@@ -802,7 +813,7 @@ namespace esia::rhi::d3d11
         // ------------------------------------------------------------------ profiling
         void BeginProfile(ProfileCategory category) override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             f.openStart = Stamp();
@@ -811,7 +822,7 @@ namespace esia::rhi::d3d11
 
         void EndProfile() override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             const int end = Stamp();
@@ -1006,7 +1017,7 @@ namespace esia::rhi::d3d11
         std::uint32_t mappedBuffer_ = 0;         // MapBuffer's, until UnmapBuffer
         std::uint32_t instanceIndexCount_ = 0;
         bool instanceIndicesBound_ = false;
-        ComPtr<ID3D11BlendState> blends_[3];   // per BlendMode
+        ComPtr<ID3D11BlendState> blends_[4];   // per BlendMode
         ComPtr<ID3D11RasterizerState> raster_;
         ComPtr<ID3D11DepthStencilState> depth_;
         ComPtr<ID3D11SamplerState> samplers_[2];

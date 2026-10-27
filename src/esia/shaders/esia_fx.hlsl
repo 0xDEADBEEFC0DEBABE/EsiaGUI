@@ -19,6 +19,10 @@
 #ifdef ESIA_SPIRV
 [[vk::constant_id(0)]] const uint kEsiaFxFeatures = 0xFFFFFFFFu;
 #define ESIA_FX_FEATURES kEsiaFxFeatures
+#elif defined(ESIA_SM3)
+// SM3's 32 temporary registers hold the full shader without the glyph code (glyphs, their legibility halo) and motion
+// blur: their batches take variants (rhi::Caps::fullFxGlyphs, fx::kVariantOnlyFeatures)
+#define ESIA_FX_FEATURES (0xFFFFFFFFu & ~(32768u | 65536u | 131072u))
 #else
 #define ESIA_FX_FEATURES 0xFFFFFFFFu
 #endif
@@ -39,6 +43,9 @@
 #define F_CUSTOM       4096u
 #define F_HALO         8192u
 #define F_CAUSTIC      16384u
+#define F_GLYPH        32768u
+#define F_LEGIBLE      65536u
+#define F_MOTION       131072u
 
 // Shape kinds (esia::fx::ShapeKind) and paint kinds (esia::fx::PaintKind), compared with the flags row: plain
 // literals take the type of what they are compared with (a uint on SM4+, the float SM3 emulates it with), so
@@ -46,6 +53,7 @@
 #define SHAPE_RRECT    0
 #define SHAPE_ARC      1
 #define SHAPE_SEGMENT  2
+#define SHAPE_GLYPH    3
 
 #define PAINT_SOLID    0
 #define PAINT_LINEAR   1
@@ -138,6 +146,24 @@ ESIA_BINDING(10) StructuredBuffer<float4> gFxData : register(t7);
 float4 FxFetch(uint instance, uint field) { return gFxData[instance * 24u + field]; }
 #endif
 
+// ------------------------------------------------------------------ light ----
+// The UI light (RenderParams::light, in the Draw constants): gDrawInfo.yz its point (UI units) or direction, gDrawInfo.w
+// 0 none, 1 a direction, 1 + its height above the screen a point.
+bool UiLightOn() { return gDrawInfo.w > 0.5; }
+// the direction towards the light from `p` (in the screen's plane)
+float2 UiLightDir(float2 p)
+{
+    const float2 v = gDrawInfo.w > 1.0 ? gDrawInfo.yz - p : gDrawInfo.yz;
+    return v / max(length(v), 1e-4);
+}
+// How far a drop shadow's offset reaches from the shape: every way once the light turns it.
+float ShadowReach(float2 offset) { return UiLightOn() ? length(offset) : max(abs(offset.x), abs(offset.y)); }
+// A shadow's offset: as given, or turned away from the light (its length kept)
+float2 ShadowOffset(FxInst I)
+{
+    return UiLightOn() ? -UiLightDir((I.rect.xy + I.rect.zw) * 0.5) * length(I.shadowParams.zw) : I.shadowParams.zw;
+}
+
 struct FxVSIn
 {
     ESIA_VERTEX_ID(vid);
@@ -215,13 +241,26 @@ FxPSIn FxVS(FxVSIn v)
         mn = min(mn, shape2.xy);
         mx = max(mx, shape2.zw);
     }
+    if FX_HAS(feat, F_GLYPH)
+    {
+        mn = shape2.xy;   // the glyph's field, not the text's box
+        mx = shape2.zw;
+    }
+    if FX_HAS(feat, F_MOTION)
+    {
+        const float2 sweep = abs(FxFetch(instance, FX_ROW_custom).xy) * 0.5;   // the area the shape sweeps
+        mn -= sweep;
+        mx += sweep;
+    }
     float pad = 2.0;
     if FX_HAS(feat, F_STROKE)
         pad = max(pad, strokeParams.x * strokeParams.y + 2.0);
     if (FX_HAS(feat, F_SHADOW) && !FX_HAS(feat, F_INNER_SHADOW))
-        pad = max(pad, shadowParams.x * 1.6 + max(shadowParams.y, 0.0) + max(abs(shadowParams.z), abs(shadowParams.w)) + 2.0);
+        pad = max(pad, shadowParams.x * 1.6 + max(shadowParams.y, 0.0) + ShadowReach(shadowParams.zw) + 2.0);
     if FX_HAS(feat, F_GLOW)
         pad = max(pad, glowParams.x * 1.8 + 2.0);
+    if FX_HAS(feat, F_LEGIBLE)
+        pad = max(pad, FxFetch(instance, FX_ROW_radii).w * 1.8 + 2.0);
     mn -= pad;
     mx += pad;
     if FX_HAS(feat, F_MASK)
@@ -338,13 +377,39 @@ float SminPoly(float a, float b, float k)
     return min(a, b) - h * h * k * 0.25;
 }
 
+// A glyph's distance field on gTex (esia::fx::ShapeKind::Glyph, the field's extent in shape2): near the edge the
+// median of R, G, B - sharp corners at any scale -, farther out the true distance in A, which reaches farther
+// (glows, shadows). Where A saturates (half its range out) and past the field the distance to the glyph's ink box
+// (the field less its margin) takes over: a lower bound that keeps growing, so glows and shadows fade out instead of
+// standing on a plateau up to the field's edge. Negative inside, UI units, grown by the weight.
+float SdGlyph(float2 p, FxInst I)
+{
+    const float unit = 1.0 / max(I.shape.z, 1e-6);   // UI units per field pixel
+    const float2 inner = clamp(p, I.shape2.xy, I.shape2.zw);
+    const float2 uv = lerp(I.uvRect.xy, I.uvRect.zw, (inner - I.shape2.xy) / max(I.shape2.zw - I.shape2.xy, 1e-6));
+    const float4 f = ESIA_SAMPLE_LEVEL(gTex, gLinear, uv);
+    const float multi = (max(min(f.r, f.g), min(max(f.r, f.g), f.b)) - 0.5) * I.radii.x;
+    const float single = (f.a - 0.5) * I.radii.y;
+    // the multi-channel distance saturates at half its range: the true one takes over a pixel and a half before
+    const float inside = lerp(multi, single, saturate(abs(single) - (0.5 * I.radii.x - 1.5)));
+    // the ink box, signed: inside the glyph never above its own distance, outside never beyond it
+    const float margin = (0.5 * I.radii.y + 1.0) * unit;
+    const float2 q = abs(p - (I.shape2.xy + I.shape2.zw) * 0.5) - max((I.shape2.zw - I.shape2.xy) * 0.5 - margin, 0.0);
+    const float box = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+    return max(-inside * unit, box) - I.shape.w;
+}
+
 float ShapeSD(float2 p, FxInst I)
 {
     uint kind = I.flags.z;
     float2 center = (I.rect.xy + I.rect.zw) * 0.5;
     float2 halfSize = max((I.rect.zw - I.rect.xy) * 0.5, 1e-3);
     float d;
-    [branch] if (kind == SHAPE_ARC)
+    [branch] if (FX_HAS(I.flags.x, F_GLYPH))
+    {
+        d = SdGlyph(p, I);
+    }
+    else if (kind == SHAPE_ARC)
     {
         d = SdArc(p - center, I.radii.x, I.radii.y, I.shape.z, I.shape.w);
     }
@@ -458,6 +523,19 @@ static const float kGlassAmbientBlur = 36.0;   // UI units: neighbourhood that s
 // The legibility exposure is a wide, smooth average: one bilinear read of the pyramid level closest to its blur
 // (at most level 4, so a capture never has to build level 5 for it). Must match AmbientLevel() in src/esia/render/gpu_constants.hpp.
 int WgtAmbientLevel(float rs) { return clamp((int)round(log2(kGlassAmbientBlur * rs) - 1.0), 1, 4); }
+
+// ------------------------------------------------------------- motion blur ----
+// fx::kMotion: a pixel's coverage averaged along the path the shape moves while the frame is shown. The distance is
+// taken at the ends of a few segments of the path (at most 4 pixels long, at most 8); along each one it is taken to
+// change linearly, and the coverage ramp (a = 0.5 - d / px, one pixel wide) is integrated over it exactly:
+// (F(a1) - F(a0)) / (a1 - a0), F the ramp's integral. Smooth with few samples, right for curved edges and for strokes
+// thinner than the motion alike.
+float RampIntegral(float u) { return u <= 0.0 ? 0.0 : (u >= 1.0 ? u - 0.5 : 0.5 * u * u); }
+float SegmentCoverage(float a0, float a1)
+{
+    const float da = a1 - a0;
+    return abs(da) < 1e-3 ? saturate(0.5 * (a0 + a1)) : (RampIntegral(a1) - RampIntegral(a0)) / da;
+}
 
 struct GlassSample
 {
@@ -577,7 +655,7 @@ GlassSample EvalGlass(float2 svpos, float2 p, float d, float px, FxInst I)
     col = lerp(col, env * 1.1 + 0.08, fres * 0.35);
 
     // light catches the rim facing it, and bounces weaker on the opposite side
-    const float2 L = float2(cos(I.glassParams.w), sin(I.glassParams.w));
+    const float2 L = UiLightOn() ? UiLightDir(p) : float2(cos(I.glassParams.w), sin(I.glassParams.w));   // the UI light, or the glass's own
     const float facing = dot(n, L);
     const float lit = pow(saturate(facing), 1.5) + 0.4 * pow(saturate(-facing), 1.5);
     // The Fresnel term peaks within a fraction of a pixel of the outline, and ends there at once: sampled at the
@@ -646,14 +724,42 @@ float4 FxPS(FxPSIn i) : SV_Target
     }
 #endif
 
-    // the second shape of a liquid merge, the end points of a segment
+    // the second shape of a liquid merge, the end points of a segment, a glyph's field
     [branch] if (I.flags.z == SHAPE_SEGMENT || FX_HAS(feat, F_MERGE))
     {
         FX_FETCH(I, shape2)
         FX_FETCH(I, shape2Params)
     }
+    [branch] if FX_HAS(feat, F_GLYPH)
+    {
+        FX_FETCH(I, shape2)
+        FX_FETCH(I, uvRect)
+    }
     float d = ShapeSD(p, I);
     float cov = saturate(0.5 - d / px);
+    // motion blur: the fill's and the stroke's coverage averaged along the path (strokeCov < 0: the stroke's own, below)
+    float strokeCov = -1.0;
+    [branch] if FX_HAS(feat, F_MOTION)
+    {
+        FX_FETCH(I, custom)
+        FX_FETCH(I, strokeParams)
+        const float2 m = I.custom.xy;
+        const float n = clamp(ceil(length(m) / (4.0 * px)), 1.0, 8.0);
+        const float out0 = I.strokeParams.x * I.strokeParams.y, in0 = I.strokeParams.x * (1.0 - I.strokeParams.y);
+        float d0 = ShapeSD(p + 0.5 * m, I);   // the start of the path: p - t m at t = -1/2
+        float sumFill = 0.0, sumStroke = 0.0;
+        [loop] for (int s = 1; s <= 8; ++s)
+        {
+            if ((float)s > n)
+                break;
+            const float d1 = ShapeSD(p + (0.5 - (float)s / n) * m, I);
+            sumFill += SegmentCoverage(0.5 - d0 / px, 0.5 - d1 / px);
+            sumStroke += SegmentCoverage(0.5 - (d0 - out0) / px, 0.5 - (d1 - out0) / px) - SegmentCoverage(0.5 - (d0 + in0) / px, 0.5 - (d1 + in0) / px);
+            d0 = d1;
+        }
+        cov = sumFill / n;
+        strokeCov = FX_HAS(feat, F_STROKE) ? sumStroke / n : -1.0;
+    }
 
     float maskCov = 1.0;
     [branch] if FX_HAS(feat, F_MASK)
@@ -678,7 +784,7 @@ float4 FxPS(FxPSIn i) : SV_Target
         FX_FETCH(I, shadow)
         FX_FETCH(I, shadowParams)
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
-        float ds = ShapeSD(p - I.shadowParams.zw, I) - I.shadowParams.y;
+        float ds = ShapeSD(p - ShadowOffset(I), I) - I.shadowParams.y;
         float a = 0.5 - 0.5 * WgtErf(ds / (sigma * 1.41421356));
         acc = Over(Premul(I.shadow, a), acc);
     }
@@ -720,6 +826,19 @@ float4 FxPS(FxPSIn i) : SV_Target
         const float x = max(d, 0.0) / r;
         const float g = exp(-x * x * 2.2) * I.glowParams.y * edgeFade;
         acc = Over(Premul(I.glow, saturate(g)), acc);
+    }
+
+    // 2b. legibility (glyph shapes): where the backdrop behind the text is too close to its fill in lightness, a soft
+    //     halo of the other tone, as strong as the contrast is missing - nothing where it is ample. The backdrop as
+    //     blurred as the halo is wide, from 4 px: blurred levels only (the planner captures no level 0 for it)
+    [branch] if FX_HAS(feat, F_LEGIBLE)
+    {
+        const float3 back = gTime.z > 0.5 ? WgtSampleBackdrop(spos * gTarget.zw, max(I.radii.w / px, 4.0)) : float3(0.5, 0.5, 0.5);
+        const float lf = Luma(I.fill0.rgb), lb = Luma(back);
+        const float need = saturate((0.5 - abs(lf - lb)) * 4.0) * I.radii.z;
+        const float x = max(d, 0.0) / max(I.radii.w, 1e-3);
+        const float tone = lf > 0.5 ? 0.0 : 1.0;
+        acc = Over(Premul(float4(tone, tone, tone, 0.85), need * exp(-x * x * 2.2)), acc);
     }
 
     // 3. liquid glass body
@@ -836,7 +955,7 @@ float4 FxPS(FxPSIn i) : SV_Target
         FX_FETCH(I, shadow)
         FX_FETCH(I, shadowParams)
         float sigma = max(I.shadowParams.x * 0.5, px * 0.5);
-        float ds = ShapeSD(p - I.shadowParams.zw, I) + I.shadowParams.y;
+        float ds = ShapeSD(p - ShadowOffset(I), I) + I.shadowParams.y;
         float a = (0.5 + 0.5 * WgtErf(ds / (sigma * 1.41421356))) * cov;
         acc = Over(Premul(I.shadow, a), acc);
     }
@@ -864,7 +983,7 @@ float4 FxPS(FxPSIn i) : SV_Target
         float align = I.strokeParams.y;
         float outer = d - w * align;
         float inner = d + w * (1.0 - align);
-        float sc = saturate(0.5 - outer / px) - saturate(0.5 - inner / px);
+        float sc = strokeCov >= 0.0 ? strokeCov : saturate(0.5 - outer / px) - saturate(0.5 - inner / px);
         float4 scol = I.stroke;
         if (I.strokeParams.z < 0.999)
         {

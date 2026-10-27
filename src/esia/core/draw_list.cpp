@@ -8,6 +8,7 @@ namespace esia
     {
         vtx_.clear();
         idx_.clear();
+        quads_.clear();
         cmds_.clear();
         fx_.clear();
         layers_.clear();
@@ -124,31 +125,59 @@ namespace esia
 
     void DrawList::AddRectFilled(const Rect& r, std::uint32_t color) { AddRectFilledUV(r, Vec2(0, 0), Vec2(1, 1), color); }
 
+    DrawCmd& DrawList::QuadCommand(TextureId tex)
+    {
+        if (cmds_.size() > mergeBarrier_)
+        {
+            DrawCmd& last = cmds_.back();
+            if (last.kind == DrawCmdKind::Quads && last.texture == tex && last.clip == clipStack_.back() &&
+                last.first + last.count == (std::uint32_t)quads_.size())
+                return last;
+            if (last.kind == DrawCmdKind::Quads && last.count == 0)
+            {
+                last.texture = tex;
+                last.clip = clipStack_.back();
+                last.first = (std::uint32_t)quads_.size();
+                last.vtxBounds = DrawCmd().vtxBounds;
+                return last;
+            }
+        }
+        DrawCmd& c = Push(DrawCmdKind::Quads);
+        c.texture = tex;
+        c.first = (std::uint32_t)quads_.size();
+        return c;
+    }
+
     DrawList::QuadWriter DrawList::BeginQuads(TextureId texture, std::uint32_t maxQuads)
     {
-        PushTexture(texture);
+        QuadCommand(texture);
+        const std::size_t at = quads_.size();
+        if (quads_.capacity() < at + maxQuads)
+            quads_.reserve(std::max(at + maxQuads, quads_.capacity() * 2));
+        quads_.resize(at + maxQuads);
         QuadWriter w;
-        w.base = PrimBegin(maxQuads * 6, maxQuads * 4);
-        const std::size_t i = idx_.size();
-        vtx_.resize(w.base + (std::size_t)maxQuads * 4);
-        idx_.resize(i + (std::size_t)maxQuads * 6);
-        w.vtx = vtx_.data() + w.base;
-        w.idx = idx_.data() + i;
+        w.quad = quads_.data() + at;
         return w;
     }
 
     void DrawList::EndQuads(const QuadWriter& w)
     {
-        vtx_.resize(w.base + (std::size_t)w.written * 4);
-        idx_.resize((std::size_t)(w.idx - idx_.data()) + (std::size_t)w.written * 6);
-        DrawCmd& c = cmds_.back();
-        c.count += w.written * 6;
+        quads_.resize((std::size_t)(w.quad - quads_.data()) + w.written);
         if (w.written > 0)
         {
-            c.vtxEnd = (std::uint32_t)vtx_.size();
+            DrawCmd& c = cmds_.back();
+            c.count += w.written;
             c.vtxBounds = c.vtxBounds.Union(w.bounds);
         }
-        PopTexture();
+    }
+
+    void DrawList::AddQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
+    {
+        if (r.Empty() || (color >> 24) == 0)
+            return;
+        QuadWriter w = BeginQuads(texture, 1);
+        w.Add(r, uv0, uv1, color);
+        EndQuads(w);
     }
 
     DrawList::PrimWriter DrawList::PrimReserve(std::uint32_t indexCount, std::uint32_t vertexCount)
@@ -186,15 +215,23 @@ namespace esia
         c.vtxBounds = c.vtxBounds.Union(bounds);
     }
 
-    void DrawList::RefreshBounds(std::size_t fromVertex)
+    void DrawList::RefreshBounds(std::size_t fromVertex, std::size_t fromQuad)
     {
         for (DrawCmd& c : cmds_)
         {
-            if (c.kind != DrawCmdKind::Geometry || c.vtxEnd <= fromVertex)
-                continue;
             Rect b = DrawCmd().vtxBounds;
-            for (std::uint32_t v = c.vtxFirst; v < c.vtxEnd; ++v)
-                b = b.Union(Rect(vtx_[v].pos, vtx_[v].pos));
+            if (c.kind == DrawCmdKind::Geometry && c.vtxEnd > fromVertex)
+            {
+                for (std::uint32_t v = c.vtxFirst; v < c.vtxEnd; ++v)
+                    b = b.Union(Rect(vtx_[v].pos, vtx_[v].pos));
+            }
+            else if (c.kind == DrawCmdKind::Quads && c.first + c.count > fromQuad)
+            {
+                for (std::uint32_t q = c.first; q < c.first + c.count; ++q)
+                    b = b.Union(Rect(quads_[q].rect[0], quads_[q].rect[1], quads_[q].rect[2], quads_[q].rect[3]));
+            }
+            else
+                continue;
             c.vtxBounds = b;
         }
     }
@@ -304,6 +341,14 @@ namespace esia
         std::size_t n = 0;
         for (const DrawList* l : lists)
             n += l->Indices().size();
+        return n;
+    }
+
+    std::size_t DrawData::TotalQuads() const
+    {
+        std::size_t n = 0;
+        for (const DrawList* l : lists)
+            n += l->Quads().size();
         return n;
     }
 

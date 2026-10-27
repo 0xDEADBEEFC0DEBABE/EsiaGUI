@@ -10,6 +10,8 @@
 // SM3 counts code against the pixel shader's instruction slots: esia_common.hlsli's compact forms of the backdrop
 // sampling (each level's code once, the two levels of a blur in a loop)
 #define ESIA_COMPACT 1
+// ... and has 32 temporary registers: esia_fx.hlsl's glyph distance in its smallest form
+#define ESIA_SM3 1
 
 // no binding annotations; cbuffers are plain groups of globals (float4 c registers)
 #define ESIA_BINDING(n)

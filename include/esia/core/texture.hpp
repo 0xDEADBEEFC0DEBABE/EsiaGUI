@@ -19,11 +19,25 @@ namespace esia
         Alpha8,   // grayscale coverage (glyph atlas)
     };
 
+    enum TextureFlags_ : std::uint32_t
+    {
+        TextureFlags_None = 0,
+        // An RGBA8 page of sub-pixel (LCD) coverage: one coverage per R / G / B stripe, the grayscale coverage in A
+        // (texels with R = G = B are grayscale: shapes, outlines). Drawn with the dual-source text pipeline, or its
+        // grayscale fallback where per-channel alpha cannot be kept (layers, devices without dual-source blending).
+        TextureFlags_LcdCoverage = 1u << 0,
+        // An RGBA8 page of glyph distance fields (MTSDF: R, G, B multi-channel, A true distance): drawn by FX glyph
+        // instances, never as coverage.
+        TextureFlags_DistanceField = 1u << 1,
+    };
+
     struct TextureInfo
     {
         TextureFormat format = TextureFormat::RGBA8;
         int width = 0, height = 0;
-        bool Coverage() const { return format == TextureFormat::Alpha8; }   // glyph coverage: drawn as text
+        std::uint32_t flags = TextureFlags_None;
+        bool Lcd() const { return format == TextureFormat::RGBA8 && (flags & TextureFlags_LcdCoverage) != 0; }
+        bool Coverage() const { return format == TextureFormat::Alpha8 || Lcd(); }   // glyph coverage: drawn as text
     };
 
     // One pending change, in the order it was requested.

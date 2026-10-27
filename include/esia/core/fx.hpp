@@ -34,9 +34,29 @@ namespace esia::fx
         kCustom      = 1u << 12,
         kHalo        = 1u << 13,   // outer glow fades out before `halo` (keeps glows off neighbouring items)
         kCaustic     = 1u << 14,   // light streak: custom = smile, open, speed, thickness; fill0.a = intensity, fill1.x = clock
+        // a glyph's distance field (with ShapeKind::Glyph): the glyph code of the shaders is a feature, so variants of
+        // other batches leave it out (and SM3's full shader, which has no room for it)
+        kGlyph       = 1u << 15,
+        // glyph shapes: where the backdrop under the text is too close to its fill in lightness, a soft halo of the
+        // other tone (radii.z strength 0 .. 1, radii.w radius in UI units) - none where the contrast is ample. Reads
+        // the captured backdrop, as glass does.
+        kLegible     = 1u << 16,
+        // motion blur: the shape moves custom.xy (UI units) while the frame is shown - its edges are blurred along it,
+        // in closed form (the coverage ramp averaged over the distance the edge sweeps across each pixel). The custom
+        // row is a user effect's otherwise: an effect's shape is not blurred.
+        kMotion      = 1u << 17,
     };
 
-    enum class ShapeKind : std::uint32_t { RoundRect = 0, Arc = 1, Segment = 2 };
+    // Features whose code the full FX shader of a device with rhi::Caps::fullFxGlyphs = false has no room for
+    // (Direct3D 9: SM3's registers): their batches always draw with a feature variant, built at once.
+    constexpr std::uint32_t kVariantOnlyFeatures = kGlyph | kLegible | kMotion;
+
+    // Glyph: a glyph's distance field (MTSDF, text/distance_field.hpp) on the instance's texture - shape2 = the field's
+    // extent (UI units: the quad), uvRect = its texels, radii.x / y = the multi-channel / true distance ranges (field
+    // pixels), shape.z = field pixels per UI unit, shape.w = weight (UI units the glyph grows by), rect = the whole
+    // text's box (what paints, glass and shimmer span); with the feature kGlyph. TextSystem::DrawShapes makes them;
+    // every material row applies (but an image fill: uvRect is the field's).
+    enum class ShapeKind : std::uint32_t { RoundRect = 0, Arc = 1, Segment = 2, Glyph = 3 };
     enum class PaintKind : std::uint32_t { Solid = 0, Linear = 1, Radial = 2, Conic = 3, Spectrum = 4 };
 
     struct Instance

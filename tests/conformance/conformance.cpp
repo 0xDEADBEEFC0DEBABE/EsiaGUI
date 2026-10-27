@@ -25,6 +25,7 @@
 #include "esia/rhi/null_device.hpp"
 #include "image.hpp"
 #include "scenes.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -259,10 +260,22 @@ namespace
         }
         SceneFrame frame;
         BuildScene(scene, frame);
-        if (!renderer.Render(frame.data, &frame.textures, h.target, params))
+        for (int r = 0; r < std::max(scene.repeat, 1); ++r)
         {
-            detail = "Renderer::Render refused the frame";
-            return Result::Fail;
+            // a repeated frame (Scene::repeat): the target as before each, the last frame's log alone
+            if (r > 0 && null)
+                null->ClearLog();
+            else if (r > 0 && !ClearTarget(dev, h.target))
+            {
+                detail = "BeginFrame failed (clearing the target)";
+                return Result::Fail;
+            }
+            frame.callbacks = 0;
+            if (!renderer.Render(frame.data, &frame.textures, h.target, params))
+            {
+                detail = "Renderer::Render refused the frame";
+                return Result::Fail;
+            }
         }
         if (frame.callbacks != scene.callbacks)
         {
@@ -291,6 +304,11 @@ namespace
         if (!h.device || !h.target)
         {
             detail = error.empty() ? "no headless device" : error;
+            return Result::Skip;
+        }
+        if (scene.needsDualSource && !h.device->GetCaps().dualSourceBlend)
+        {
+            detail = "no dual-source blending";
             return Result::Skip;
         }
         adapter = h.adapter;
