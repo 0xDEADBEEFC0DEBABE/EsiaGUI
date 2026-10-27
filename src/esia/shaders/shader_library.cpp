@@ -18,6 +18,7 @@ namespace esia::shaders
         extern const unsigned char source_esia_ui_hlsl[];
         extern const unsigned char source_esia_fx_hlsl[];
         extern const unsigned char source_esia_post_hlsl[];
+        extern const unsigned char source_esia_quad_hlsl[];
     }
 
     namespace
@@ -27,6 +28,7 @@ namespace esia::shaders
             {"esia_ui.hlsl", reinterpret_cast<const char*>(blobs::source_esia_ui_hlsl)},
             {"esia_fx.hlsl", reinterpret_cast<const char*>(blobs::source_esia_fx_hlsl)},
             {"esia_post.hlsl", reinterpret_cast<const char*>(blobs::source_esia_post_hlsl)},
+            {"esia_quad.hlsl", reinterpret_cast<const char*>(blobs::source_esia_quad_hlsl)},
             {nullptr, nullptr},
         };
 
@@ -85,6 +87,12 @@ namespace esia::shaders
         case rhi::ShaderProgram::Downsample: return {"esia_post.hlsl", "FullscreenVS", "DownsamplePS"};
         case rhi::ShaderProgram::LayerComposite: return {"esia_post.hlsl", "FullscreenVS", "LayerCompositePS"};
         case rhi::ShaderProgram::Clear: return {"esia_post.hlsl", "FullscreenVS", "ClearPS"};
+        case rhi::ShaderProgram::TextLcd: return {"esia_ui.hlsl", "UiVS", "TextLcdPS"};
+        case rhi::ShaderProgram::TextLcdGray: return {"esia_ui.hlsl", "UiVS", "TextLcdGrayPS"};
+        case rhi::ShaderProgram::QuadImage: return {"esia_quad.hlsl", "QuadVS", "UiPS"};
+        case rhi::ShaderProgram::QuadGray: return {"esia_quad.hlsl", "QuadVS", "TextGrayPS"};
+        case rhi::ShaderProgram::QuadLcd: return {"esia_quad.hlsl", "QuadVS", "TextLcdPS"};
+        case rhi::ShaderProgram::QuadLcdGray: return {"esia_quad.hlsl", "QuadVS", "TextLcdGrayPS"};
         case rhi::ShaderProgram::Count: break;
         }
         return {nullptr, nullptr, nullptr};

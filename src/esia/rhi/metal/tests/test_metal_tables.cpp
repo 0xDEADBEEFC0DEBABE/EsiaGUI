@@ -77,7 +77,10 @@ ESIA_TEST(MetalTables, BlendStates)
     const BlendState p = BlendStateOf(BlendMode::Premultiplied);
     ESIA_CHECK(p.enabled && p.rgbSrc == mtl::BlendFactorOne && p.rgbDst == mtl::BlendFactorOneMinusSourceAlpha);
     ESIA_CHECK(p.alphaSrc == mtl::BlendFactorOne && p.alphaDst == mtl::BlendFactorOneMinusSourceAlpha);
-    for (BlendMode m : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied})
+    const BlendState l = BlendStateOf(BlendMode::DualSourceLcd);
+    ESIA_CHECK(l.enabled && l.rgbSrc == mtl::BlendFactorSource1Color && l.rgbDst == mtl::BlendFactorOneMinusSource1Color);
+    ESIA_CHECK(l.alphaSrc == mtl::BlendFactorSource1Alpha && l.alphaDst == mtl::BlendFactorOneMinusSource1Alpha);
+    for (BlendMode m : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied, BlendMode::DualSourceLcd})
         ESIA_CHECK(BlendStateOf(m).rgbOp == mtl::BlendOperationAdd && BlendStateOf(m).alphaOp == mtl::BlendOperationAdd);
 }
 

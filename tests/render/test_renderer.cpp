@@ -231,7 +231,7 @@ ESIA_TEST(Renderer, SrgbTargetsCopyRawAndEncodeTheirOutput)
     Renderer r(s.dev);
     r.Render(Data({&dl}), nullptr, s.target);
     ESIA_CHECK(NoErrors(s.dev));
-    ESIA_CHECK(Lines(s.dev, "RGBA8_UNORM usage=9 backdrop-copy") == 1);   // the raw sibling of the sRGB target
+    ESIA_CHECK(Lines(s.dev, "RGBA8_UNORM usage=d backdrop-copy") == 1);   // the raw sibling of the sRGB target
     const std::vector<float> main = FrameConstantsAfter(s.dev, "load ui");
     const std::vector<float> layer = FrameConstantsAfter(s.dev, "dont-care glow-layer");
     ESIA_CHECK(main.size() == 48 && layer.size() == 48);
@@ -305,6 +305,36 @@ ESIA_TEST(Renderer, TextDrawsWithTheGrayscaleProgram)
     };
     ESIA_CHECK(run(false) == 1);
     ESIA_CHECK(run(true) == 1);
+}
+
+// Sub-pixel pages: the dual-source program on the target; their grayscale coverage without dual-source blending,
+// inside glow layers (alpha targets) and on targets RenderParams says are not opaque.
+ESIA_TEST(Renderer, SubpixelTextPrograms)
+{
+    auto run = [](bool dualSource, bool inLayer, bool opaqueTarget = true) {
+        Caps caps;
+        caps.dualSourceBlend = dualSource;
+        Setup s(caps);
+        TextureRegistry reg;
+        const TextureId page = reg.Create({TextureFormat::RGBA8, 64, 64, TextureFlags_LcdCoverage});
+        DrawList dl = MakeList();
+        Painter p(dl);
+        if (inLayer)
+            p.BeginGlowLayer(Color::White(), 6);
+        dl.AddImage(page, Rect(10, 10, 20, 20), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+        if (inLayer)
+            p.EndGlowLayer();
+        Renderer r(s.dev);
+        RenderParams params;
+        params.subpixelText = opaqueTarget;
+        r.Render(Data({&dl}), &reg, s.target, params);
+        ESIA_CHECK(NoErrors(s.dev));
+        return std::make_pair(Lines(s.dev, "TextLcd list dual-source"), Lines(s.dev, "TextLcdGray list straight"));
+    };
+    ESIA_CHECK(run(true, false) == std::make_pair(1, 0));
+    ESIA_CHECK(run(false, false) == std::make_pair(0, 1));
+    ESIA_CHECK(run(true, true) == std::make_pair(0, 1));          // alpha layers get the grayscale coverage
+    ESIA_CHECK(run(true, false, false) == std::make_pair(0, 1));   // and so do targets that are not opaque
 }
 
 ESIA_TEST(Renderer, TextureRegistryReachesTheDevice)
@@ -654,6 +684,119 @@ ESIA_TEST(Renderer, PyramidLevelsKeepTheirContentWhenGlassReusesACapture)
     ESIA_CHECK(Lines(e.dev, "clear pyramid") >= 4 && Lines(e.dev, "dont-care pyramid") == 0);   // the effect reads every level
 }
 
+// Temporal reuse: with RenderParams::targetStatic a capture whose region, pyramid and content are last frame's is not
+// taken again (no copy, no pyramid pass: its levels still hold it) until what lies under it changes; without the
+// promise, or when the content animates by itself, every frame takes it.
+ESIA_TEST(Renderer, UnchangedCapturesAreReused)
+{
+    Setup s;
+    DrawList dl = MakeList();
+    GlassScene(dl, 10);
+    Renderer r(s.dev);
+    RenderParams still;
+    still.targetStatic = true;
+    r.Render(Data({&dl}), nullptr, s.target, still);
+    ESIA_CHECK(NoErrors(s.dev) && r.Stats().backdropCaptures == 1 && r.Stats().reusedCaptures == 0);
+    // the levels a kept capture lives in are loaded by the passes that write them, never DontCare
+    ESIA_CHECK(Lines(s.dev, "dont-care pyramid") == 0);
+    s.dev.ClearLog();
+    r.Render(Data({&dl}), nullptr, s.target, still);
+    ESIA_CHECK(NoErrors(s.dev) && r.Stats().backdropCaptures == 0 && r.Stats().reusedCaptures == 1);
+    ESIA_CHECK(Lines(s.dev, "pyramid") == 0 && r.Stats().passes == 1);
+    // something new under the glass: taken again, then reused again
+    DrawList changed = MakeList();
+    {
+        Painter p(changed);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
+        p.Rect(Rect(100, 100, 140, 140), Style().Fill(Color::Hex(0xFFCC00)));
+        p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
+    }
+    r.Render(Data({&changed}), nullptr, s.target, still);
+    ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().reusedCaptures == 0);
+    r.Render(Data({&changed}), nullptr, s.target, still);
+    ESIA_CHECK(r.Stats().backdropCaptures == 0 && r.Stats().reusedCaptures == 1);
+    // without the promise (the target's own content may have changed): every frame
+    r.Render(Data({&changed}), nullptr, s.target);
+    ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().reusedCaptures == 0);
+    // content that animates on the shader's clock under the glass: every frame
+    DrawList shimmer = MakeList();
+    {
+        Painter p(shimmer);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203050)).Shimmer(0.5f, 1.0f));
+        p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        r.Render(Data({&shimmer}), nullptr, s.target, still);
+        ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().reusedCaptures == 0);
+    }
+    ESIA_CHECK(NoErrors(s.dev));
+}
+
+// Captures share the copy and the pyramid, so the next one writes over a capture's margins - glass on glass, or glass
+// beside glass. A capture whose content stays the same is copied aside, then brought back from that copy (a few
+// copies, no pyramid pass) when something wrote over it: frame 1 takes both, frame 2 takes both again into their
+// copies aside, from frame 3 on both come back from them.
+ESIA_TEST(Renderer, CapturesWrittenOverComeBackFromTheirCopy)
+{
+    Setup s;
+    DrawList dl = MakeList();
+    {
+        Painter p(dl);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
+        p.Rect(Rect(40, 40, 360, 260), Style().Radius(24).Glass(Glass(10)));
+        p.Rect(Rect(80, 80, 200, 140), Style().Fill(Color::Hex(0xFFCC00)));   // content on the card ...
+        p.Rect(Rect(70, 70, 210, 150), Style().Radius(16).Glass(Glass(6)));    // ... under a glass control
+    }
+    Renderer r(s.dev);
+    RenderParams still;
+    still.targetStatic = true;
+    for (int i = 0; i < 2; ++i)
+    {
+        r.Render(Data({&dl}), nullptr, s.target, still);
+        ESIA_CHECK(r.Stats().backdropCaptures == 2 && r.Stats().reusedCaptures == 0);
+    }
+    for (int i = 0; i < 2; ++i)
+    {
+        s.dev.ClearLog();
+        r.Render(Data({&dl}), nullptr, s.target, still);
+        ESIA_CHECK(r.Stats().backdropCaptures == 0 && r.Stats().reusedCaptures == 2 && r.Stats().restoredCaptures == 2);
+        ESIA_CHECK(Lines(s.dev, "pyramid") == 0 && Lines(s.dev, "copy ") >= 2 && Lines(s.dev, "create texture") == 0);
+    }
+    ESIA_CHECK(NoErrors(s.dev));
+}
+
+// backdropReuseFrames: a capture of the same region serves that many frames whatever changed under it (a live
+// background), then it is taken again; a capture that moved is taken at once.
+ESIA_TEST(Renderer, CapturesServeSomeFramesOverALiveBackground)
+{
+    Setup s;
+    Renderer r(s.dev);
+    RenderParams live;
+    live.backdropReuseFrames = 2;
+    int taken = 0, reused = 0;
+    for (int f = 0; f < 6; ++f)
+    {
+        DrawList dl = MakeList();
+        Painter p(dl);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color((float)f / 6.0f, 0.3f, 0.5f, 1.0f)));   // a new background every frame
+        p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
+        r.Render(Data({&dl}), nullptr, s.target, live);
+        taken += r.Stats().backdropCaptures;
+        reused += r.Stats().reusedCaptures;
+    }
+    ESIA_CHECK(taken == 2 && reused == 4);   // taken, reused twice, taken, reused twice
+    DrawList moved = MakeList();
+    {
+        Painter p(moved);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203050)));
+        p.Rect(Rect(70, 60, 350, 240), Style().Radius(24).Glass(Glass(10)));
+    }
+    r.Render(Data({&moved}), nullptr, s.target, live);
+    ESIA_CHECK(r.Stats().backdropCaptures == 1 && r.Stats().reusedCaptures == 0);
+    ESIA_CHECK(NoErrors(s.dev));
+}
+
 ESIA_TEST(Renderer, RefusedOrFailedVariantsFallBackToTheFullShader)
 {
     Caps caps;
@@ -687,6 +830,97 @@ ESIA_TEST(Renderer, RefusedOrFailedVariantsFallBackToTheFullShader)
         ESIA_CHECK(NoErrors(dev));   // a failed pipeline is never bound
         ESIA_CHECK(Lines(dev, "background") == 2 && Lines(dev, "draw instanced") == 2 && r.Stats().fxFallbacks == 2);
     }
+}
+
+// Glyph shapes on a device whose full FX shader has no glyph code (Caps::fullFxGlyphs, Direct3D 9): their batch takes
+// its variant, built at once even where variants are off; a refused one is not drawn (nothing else could draw it).
+ESIA_TEST(Renderer, GlyphShapesTakeTheirVariantWhereTheFullShaderLacksThem)
+{
+    Caps caps;
+    caps.fullFxGlyphs = false;
+    caps.fxFeatureVariants = false;
+    caps.asyncPipelines = true;
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
+    fx::Instance glyph;
+    std::memset(&glyph, 0, sizeof(glyph));
+    glyph.rect[2] = glyph.rect[3] = 40.0f;
+    glyph.shape2[0] = glyph.shape2[1] = 100.0f;
+    glyph.shape2[2] = glyph.shape2[3] = 140.0f;
+    glyph.fill0[3] = glyph.misc[0] = 1.0f;
+    glyph.flags[0] = fx::kFill | fx::kGlyph;
+    glyph.flags[2] = (std::uint32_t)fx::ShapeKind::Glyph;
+    p.Emit(glyph, 0, 9);
+    for (const bool refuse : {false, true})
+    {
+        NullOptions o{caps};
+        o.refuseFxVariants = refuse;
+        NullDevice dev(o);
+        const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+        Renderer r(dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(dev));
+        if (!refuse)
+        {
+            // the rectangle with the full shader, the glyph with its variant - not in the background
+            ESIA_CHECK(Lines(dev, "Fx strip premul RGBA8_UNORM features=0x8001") == 1 && Lines(dev, "background") == 0);
+            ESIA_CHECK(Lines(dev, "draw instanced") == 2 && r.Stats().fxFallbacks == 0);
+        }
+        else
+            ESIA_CHECK(Lines(dev, "draw instanced") == 1 && r.Stats().fxFallbacks == 1);
+    }
+    // a device whose full shader draws them: one batch shape, no variant
+    NullDevice dev(NullOptions{Caps{}});
+    const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+    Renderer r(dev);
+    r.Render(Data({&dl}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev) && Lines(dev, "features=") == 0 && Lines(dev, "draw instanced") >= 1);
+}
+
+// Motion blur is code the full shader of a device like Direct3D 9 has no room for, as glyph shapes are: a moving
+// shape takes its variant at once.
+ESIA_TEST(Renderer, MovingShapesTakeTheirVariantWhereTheFullShaderLacksThem)
+{
+    Caps caps;
+    caps.fullFxGlyphs = false;
+    caps.fxFeatureVariants = false;
+    caps.asyncPipelines = true;
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
+    p.Rect(Rect(100, 10, 150, 50), Style().Fill(Color::White()).MotionBlur(Vec2(12, 0)));
+    NullDevice dev(NullOptions{caps});
+    const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+    Renderer r(dev);
+    r.Render(Data({&dl}), nullptr, target);
+    ESIA_CHECK(NoErrors(dev));
+    // one batch of both: the variant with their features, built at once
+    ESIA_CHECK(Lines(dev, "features=0x20001") == 1 && Lines(dev, "background") == 0 && Lines(dev, "draw instanced") == 1);
+}
+
+// The UI light (RenderParams::light) reaches every draw in the Draw constants: x, y and 0 none / 1 a direction / 1 + the
+// height of a point; drop shadows then reach as far as their offset's length every way (the planner's bounds).
+ESIA_TEST(Renderer, TheUiLightIsInTheDrawConstants)
+{
+    Setup s;
+    DrawList dl = MakeList();
+    Painter(dl).Rect(Rect(100, 100, 160, 140), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 4, Vec2(16, 12)));
+    Renderer r(s.dev);
+    r.Render(Data({&dl}), nullptr, s.target);
+    ESIA_CHECK(Lines(s.dev, "constants draw: 0 0 0 0 | 0 0 0 0") == 1);
+    const PxRect unlit = r.Plan().ops[0].bounds;   // the offset reaching 16 along x or y ...
+    s.dev.ClearLog();
+    RenderParams lit;
+    lit.light = UiLight::Point(Vec2(130, 300), 80.0f);
+    r.Render(Data({&dl}), nullptr, s.target, lit);
+    ESIA_CHECK(NoErrors(s.dev) && Lines(s.dev, "constants draw: 0 0 0 0 | 0 130 300 81") == 1);
+    const PxRect turned = r.Plan().ops[0].bounds;   // ... or 20, its length, any way
+    ESIA_CHECK(turned.y0 == unlit.y0 - 4.0f && turned.y1 == unlit.y1 + 4.0f && turned.x0 == unlit.x0 - 4.0f);
+    s.dev.ClearLog();
+    lit.light = UiLight::Direction(Vec2(-1, 0));
+    r.Render(Data({&dl}), nullptr, s.target, lit);
+    ESIA_CHECK(Lines(s.dev, "constants draw: 0 0 0 0 | 0 -1 0 1") == 1);
 }
 
 ESIA_TEST(Renderer, VariantsCompilingInTheBackgroundDrawWithAReadyPipeline)

@@ -1,5 +1,7 @@
 // Esia - glyph atlas: rasterized glyphs packed into Alpha8 coverage pages the TextureRegistry owns, cached under a
-// key the text system chooses. An atlas of RGBA8 pages holds color glyphs (emoji) the same way.
+// key the text system chooses. An atlas of RGBA8 pages holds color glyphs (emoji) the same way, and one of RGBA8
+// sub-pixel pages (TextureFlags_LcdCoverage) LCD glyphs - with grayscale coverage beside them as R = G = B = A, so
+// shapes and outlines stay in the same page and draw call as the text.
 //
 // Shelf packing into square pages. When `maxPages` pages are full, the frame still gets overflow pages -
 // a glyph drawn earlier in the frame is never overwritten while the frame is being built - and the next BeginFrame
@@ -20,7 +22,7 @@ namespace esia::text
         Vec2 uv0, uv1;
         int left = 0, top = 0, width = 0, height = 0;   // the bitmap, in pixels from the integer pen position
         Rect ink;             // outline bounds in pixels from the pen position (optical centering of icons)
-        bool color = false;   // an RGBA8 page: the glyph has its own colors (drawn white, with the text's alpha)
+        bool color = false;   // an RGBA8 color page: the glyph has its own colors (drawn white, with the text's alpha)
     };
 
     struct GlyphAtlasDesc
@@ -29,6 +31,8 @@ namespace esia::text
         int maxPages = 4;   // before the atlas starts over
         int padding = 1;    // empty texels right of and below every glyph
         TextureFormat format = TextureFormat::Alpha8;   // RGBA8: color glyphs (GlyphBitmap::channels 4)
+        std::uint32_t flags = TextureFlags_None;        // with RGBA8: TextureFlags_LcdCoverage (sub-pixel pages) or
+                                                        // TextureFlags_DistanceField (MTSDF pages)
     };
 
     class ESIA_API GlyphAtlas
@@ -41,10 +45,17 @@ namespace esia::text
 
         // Once per frame, before drawing: starts over if the last frame needed overflow pages.
         void BeginFrame();
+        // Every glyph goes at the next BeginFrame (what is cached was rasterized another way): the pages are refilled.
+        void StartOver() { overflow_ = true; }
+        // Pages of another kind from now on (grayscale <-> sub-pixel): the pages and every glyph go at once.
+        void Reformat(TextureFormat format, std::uint32_t flags);
+        bool Lcd() const { return desc_.format == TextureFormat::RGBA8 && (desc_.flags & TextureFlags_LcdCoverage) != 0; }
+        bool DistanceField() const { return desc_.format == TextureFormat::RGBA8 && (desc_.flags & TextureFlags_DistanceField) != 0; }
 
         const GlyphSlot* Find(std::uint64_t key) const;
         // Packs `bitmap` into a page and caches it under `key`. Null when it cannot fit into an empty page (a glyph
-        // larger than the page).
+        // larger than the page) or is of another kind (a color glyph for a coverage atlas ...); sub-pixel pages take
+        // 8-bit coverage too, as gray.
         const GlyphSlot* Add(std::uint64_t key, const GlyphBitmap& bitmap, const Rect& ink);
 
         std::size_t GlyphCount() const { return glyphs_.size(); }

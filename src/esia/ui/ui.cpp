@@ -151,8 +151,8 @@ namespace esia::ui
         const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
         if (frame % 64 == 0)
             m.anims.Collect(frame, 600);   // as Context::State keeps its entries (ContextDesc::retainFrames)
-        if (m.text)
-            m.text->NewFrame({m.ctx->FramebufferScale().x});
+        if (m.text)   // with the frame's clock: moving text settles into its hinting in 0.12 s (TextRendering::smoothMotion)
+            m.text->NewFrame({m.ctx->FramebufferScale().x, m.ctx->Input().Time()});
         m.inFrame = true;
         g_current = this;
         detail::g_impl = impl_.get();

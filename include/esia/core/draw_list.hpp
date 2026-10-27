@@ -1,9 +1,10 @@
 // Esia - draw lists: what the UI core produces and the renderer consumes.
 //
-// A DrawList holds ordinary indexed geometry (text, lines, charts, images - `Vertex` triangles) and the FX
-// command stream (SDF shapes as fx::Instance, glow-layer and edge-fade brackets, host callbacks) in one ordered
-// command list, each command with its clip rect. Consecutive geometry with the same clip and texture merges
-// into one command, so do consecutive FX shapes with the same clip, texture and effect.
+// A DrawList holds ordinary indexed geometry (lines, charts, images - `Vertex` triangles), textured quads drawn
+// instanced (glyphs, the Painter's flat tiles - `QuadInstance`) and the FX command stream (SDF shapes as
+// fx::Instance, glow-layer and edge-fade brackets, host callbacks) in one ordered command list, each command with its
+// clip rect. Consecutive geometry with the same clip and texture merges into one command, so do consecutive quads
+// with the same clip and texture, and consecutive FX shapes with the same clip, texture and effect.
 //
 // Indices are 32-bit and local to the list (0 = the list's first vertex); the renderer rebases them when it
 // concatenates lists, so backends never need a base-vertex draw.
@@ -45,9 +46,47 @@ namespace esia
     using VertexVector = std::vector<Vertex, UninitAllocator<Vertex>>;
     using IndexVector = std::vector<std::uint32_t, UninitAllocator<std::uint32_t>>;
 
+    // A textured quad as the instanced quad programs read it (rhi::ShaderProgram::QuadImage .. QuadLcdGray): two float4
+    // rows of the frame's instance data, 32 bytes where a quad of vertices and indices takes 104. Its uv in 1/4096
+    // steps - exact for whole texels of power-of-two textures up to 4096 wide, as glyph pages and tiles are - and its
+    // color as whole numbers, all exact in a float, so every shader model decodes them (SM3 without integers too):
+    //   rect     x0, y0, x1, y1 (UI units)
+    //   packed   u0 + 4096 v0, (u1 - u0) + 4096 (v1 - v0) (uv in 1/4096), R + 256 G + 65536 B, A (0 .. 255)
+    // uv1 >= uv0: no mirrored quads (images that need them are geometry).
+    struct QuadInstance
+    {
+        float rect[4];
+        float packed[4];
+
+        void Set(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
+        {
+            rect[0] = r.min.x;
+            rect[1] = r.min.y;
+            rect[2] = r.max.x;
+            rect[3] = r.max.y;
+            PackUv(uv0, uv1, packed);
+            PackColor(color, packed + 2);
+        }
+        static void PackUv(Vec2 uv0, Vec2 uv1, float* out)
+        {
+            const float u0 = (float)(std::int32_t)(uv0.x * 4096.0f + 0.5f), v0 = (float)(std::int32_t)(uv0.y * 4096.0f + 0.5f);
+            const float u1 = (float)(std::int32_t)(uv1.x * 4096.0f + 0.5f), v1 = (float)(std::int32_t)(uv1.y * 4096.0f + 0.5f);
+            out[0] = u0 + 4096.0f * v0;
+            out[1] = (u1 - u0) + 4096.0f * (v1 - v0);
+        }
+        static void PackColor(std::uint32_t color, float* out)
+        {
+            out[0] = (float)(color & 0xFFFFFFu);   // RGBA8 has R in the lowest byte: R + 256 G + 65536 B
+            out[1] = (float)(color >> 24);
+        }
+    };
+    static_assert(sizeof(QuadInstance) == 32, "QuadInstance is two float4 rows of the instance data");
+    using QuadVector = std::vector<QuadInstance, UninitAllocator<QuadInstance>>;
+
     enum class DrawCmdKind : std::uint8_t
     {
         Geometry,     // indices [first, first + count)
+        Quads,        // quads [first, first + count) of Quads(), drawn instanced
         Fx,           // instances [first, first + count) of FxInstances()
         LayerBegin,   // Layers()[payload]
         LayerEnd,
@@ -64,7 +103,7 @@ namespace esia
     {
         DrawCmdKind kind = DrawCmdKind::Geometry;
         Rect clip;
-        TextureId texture = 0;       // Geometry / Fx: 0 = white
+        TextureId texture = 0;       // Geometry / Quads / Fx: 0 = white
         std::uint32_t first = 0;
         std::uint32_t count = 0;
         EffectId effect = 0;         // Fx
@@ -73,7 +112,7 @@ namespace esia
         void* userData = nullptr;
         // Geometry: its vertices [vtxFirst, vtxEnd) and their bounds (empty: none), kept as they are written - the
         // renderer's planner needs every command's bounds, and scanning them back through the indices cost it more
-        // than writing them did
+        // than writing them did. Quads: the bounds of its quads.
         std::uint32_t vtxFirst = 0, vtxEnd = 0;
         Rect vtxBounds{1e30f, 1e30f, -1e30f, -1e30f};
     };
@@ -111,36 +150,24 @@ namespace esia
         void AddTriangleFilled(Vec2 a, Vec2 b, Vec2 c, std::uint32_t color);
         void AddConvexPolyFilled(const Vec2* points, int count, std::uint32_t color);
 
-        // A run of textured quads (a text's glyphs): room for `maxQuads` reserved once with `texture` current, the
-        // quads written in place - the same vertices, indices and command as AddRectFilledUV one by one. Nothing else
-        // may be added to the list until EndQuads, which keeps the quads written.
+        // ---- textured quads, drawn instanced (glyphs, flat tiles: QuadInstance; the current clip rect)
+        // A run of quads on `texture` (a text's glyphs): room for `maxQuads` reserved once, the quads written in place.
+        // Nothing else may be added to the list until EndQuads, which keeps the quads written.
         struct QuadWriter
         {
-            Vertex* vtx = nullptr;
-            std::uint32_t* idx = nullptr;
-            std::uint32_t base = 0, written = 0;
+            QuadInstance* quad = nullptr;
+            std::uint32_t written = 0;
             Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};
             void Add(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
             {
                 bounds = bounds.Union(r);
-                Vertex* w = vtx + (std::size_t)written * 4;
-                w[0] = {r.min, uv0, color};
-                w[1] = {Vec2(r.max.x, r.min.y), Vec2(uv1.x, uv0.y), color};
-                w[2] = {r.max, uv1, color};
-                w[3] = {Vec2(r.min.x, r.max.y), Vec2(uv0.x, uv1.y), color};
-                std::uint32_t* x = idx + (std::size_t)written * 6;
-                const std::uint32_t b = base + written * 4;
-                x[0] = b;
-                x[1] = b + 1;
-                x[2] = b + 2;
-                x[3] = b;
-                x[4] = b + 2;
-                x[5] = b + 3;
-                ++written;
+                quad[written++].Set(r, uv0, uv1, color);
             }
         };
         QuadWriter BeginQuads(TextureId texture, std::uint32_t maxQuads);
         void EndQuads(const QuadWriter& w);
+        // One quad (an image of a glyph or a tile); nothing for an empty rect or a transparent color.
+        void AddQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color);
         // Room for `vertexCount` vertices and `indexCount` indices written in place (the indices count from `base`),
         // then PrimCommit with their bounds: what WriteVertex / WriteIndex do one at a time. The current clip and
         // texture; nothing else may be added in between.
@@ -187,10 +214,13 @@ namespace esia
 
         // ---- read access (renderer, tests)
         const VertexVector& Vertices() const { return vtx_; }
-        // Painter::PopScale rewrites positions: whoever does calls RefreshBounds with the first vertex it changed
+        // Painter::PopScale rewrites positions: whoever does calls RefreshBounds with the first vertex and the first
+        // quad it changed
         VertexVector& Vertices() { return vtx_; }
-        void RefreshBounds(std::size_t fromVertex);
+        void RefreshBounds(std::size_t fromVertex, std::size_t fromQuad = (std::size_t)-1);
         const IndexVector& Indices() const { return idx_; }
+        const QuadVector& Quads() const { return quads_; }
+        QuadVector& Quads() { return quads_; }
         const std::vector<DrawCmd>& Commands() const { return cmds_; }
         const std::vector<fx::Instance>& FxInstances() const { return fx_; }
         const std::vector<fx::LayerParams>& Layers() const { return layers_; }
@@ -202,11 +232,13 @@ namespace esia
     private:
         DrawCmd& Geometry() { return Geometry(CurrentTexture()); }   // current geometry command (opens one when the state changed)
         DrawCmd& Geometry(TextureId texture);
+        DrawCmd& QuadCommand(TextureId texture);   // the current quad command on `texture` (opens one when the state changed)
         void Reserve(std::uint32_t indexCount, std::uint32_t vertexCount);
         DrawCmd& Push(DrawCmdKind kind);
 
         VertexVector vtx_;
         IndexVector idx_;
+        QuadVector quads_;
         std::vector<DrawCmd> cmds_;
         std::vector<fx::Instance> fx_;
         std::vector<fx::LayerParams> layers_;
@@ -228,6 +260,7 @@ namespace esia
 
         std::size_t TotalVertices() const;
         std::size_t TotalIndices() const;
+        std::size_t TotalQuads() const;
         std::size_t TotalFx() const;
     };
 }

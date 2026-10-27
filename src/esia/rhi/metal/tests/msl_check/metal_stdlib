@@ -94,6 +94,7 @@ namespace metal
 
     template <class T> T abs(T x) { return x; }
     template <class T> T floor(T x) { return x; }
+    template <class T> T ceil(T x) { return x; }
     template <class T> T fract(T x) { return x; }
     template <class T> T sin(T x) { return x; }
     template <class T> T cos(T x) { return x; }

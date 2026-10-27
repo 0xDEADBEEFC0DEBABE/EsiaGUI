@@ -11,25 +11,31 @@ using namespace esia::rhi::metal;
 
 ESIA_TEST(MetalPlanning, PipelineKeys)
 {
+    Caps caps;
+    caps.dualSourceBlend = true;
     // every combination the renderer can ask for gets its own key and packed value
     std::set<std::uint32_t> packed;
     std::unordered_set<PipelineKey, PipelineKeyHash> keys;
     int n = 0;
     for (int p = 0; p < (int)ShaderProgram::Count; ++p)
-        for (BlendMode b : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied})
+        for (BlendMode b : {BlendMode::Opaque, BlendMode::Straight, BlendMode::Premultiplied, BlendMode::DualSourceLcd})
             for (Format f : {Format::RGBA8_UNORM, Format::RGBA8_SRGB, Format::BGRA8_UNORM, Format::BGRA8_SRGB, Format::RGB10A2_UNORM, Format::RGBA16_FLOAT})
                 for (int s : {1, 4})
                 {
                     PipelineDesc d;
                     d.program = (ShaderProgram)p;
                     d.layout = ProgramUsesVertices(d.program) ? VertexLayout::UiVertex : VertexLayout::None;
-                    d.topology = d.program == ShaderProgram::Fx ? Topology::TriangleStrip : Topology::TriangleList;
+                    d.topology = DrawsInstances(d.program) ? Topology::TriangleStrip : Topology::TriangleList;
                     d.blend = b;
                     d.targetFormat = f;
                     d.samples = s;
                     PipelineKey k;
                     std::string why;
-                    ESIA_CHECK(MakePipelineKey(d, k, why));
+                    const bool ok = MakePipelineKey(d, caps, k, why);
+                    // dual-source blending belongs to TextLcd and QuadLcd, and they need it
+                    ESIA_CHECK(ok == (DualSourceProgram(d.program) == (b == BlendMode::DualSourceLcd)));
+                    if (!ok)
+                        continue;
                     ++n;
                     packed.insert(PackPipelineKey(k));
                     keys.insert(k);
@@ -39,17 +45,22 @@ ESIA_TEST(MetalPlanning, PipelineKeys)
     PipelineDesc d;
     PipelineKey k, k2;
     std::string why;
-    ESIA_CHECK(MakePipelineKey(d, k, why));
+    ESIA_CHECK(MakePipelineKey(d, caps, k, why));
     d.topology = Topology::TriangleStrip;   // the topology is a draw-time argument on Metal: same pipeline state
-    ESIA_CHECK(MakePipelineKey(d, k2, why) && k == k2);
+    ESIA_CHECK(MakePipelineKey(d, caps, k2, why) && k == k2);
     d.effect = 7;                            // no runtime HLSL
-    ESIA_CHECK(!MakePipelineKey(d, k, why) && !why.empty());
+    ESIA_CHECK(!MakePipelineKey(d, caps, k, why) && !why.empty());
     d = PipelineDesc();
     d.layout = VertexLayout::None;           // UiGeometry reads vertices
-    ESIA_CHECK(!MakePipelineKey(d, k, why));
+    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
     d = PipelineDesc();
     d.targetFormat = Format::RGBA32_FLOAT;
-    ESIA_CHECK(!MakePipelineKey(d, k, why));
+    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
+    d = PipelineDesc();
+    d.program = ShaderProgram::TextLcd;
+    d.blend = BlendMode::DualSourceLcd;
+    caps.dualSourceBlend = false;
+    ESIA_CHECK(!MakePipelineKey(d, caps, k, why));
 }
 
 ESIA_TEST(MetalPlanning, FxFeatureVariants)
@@ -62,15 +73,16 @@ ESIA_TEST(MetalPlanning, FxFeatureVariants)
     d.blend = BlendMode::Premultiplied;
     PipelineKey full, a, b;
     std::string why;
-    ESIA_CHECK(MakePipelineKey(d, full, why));
+    const Caps caps;
+    ESIA_CHECK(MakePipelineKey(d, caps, full, why));
     d.fxFeatures = 0x21;
-    ESIA_CHECK(MakePipelineKey(d, a, why) && a.fxFeatures == 0x21 && !(a == full));
+    ESIA_CHECK(MakePipelineKey(d, caps, a, why) && a.fxFeatures == 0x21 && !(a == full));
     d.fxFeatures = 0x25;
-    ESIA_CHECK(MakePipelineKey(d, b, why) && !(a == b) && PipelineKeyHash{}(a) != PipelineKeyHash{}(b));
+    ESIA_CHECK(MakePipelineKey(d, caps, b, why) && !(a == b) && PipelineKeyHash{}(a) != PipelineKeyHash{}(b));
     d.program = ShaderProgram::TextGray;
     d.layout = VertexLayout::UiVertex;
     d.topology = Topology::TriangleList;
-    ESIA_CHECK(MakePipelineKey(d, a, why) && a.fxFeatures == 0);
+    ESIA_CHECK(MakePipelineKey(d, caps, a, why) && a.fxFeatures == 0);
     // what SPIRV-Cross writes for [[vk::constant_id(0)]] in MSL
     ESIA_CHECK(MslDeclaresFxFeatures("constant uint kEsiaFxFeatures_tmp [[function_constant(0)]];\n"));
     ESIA_CHECK(!MslDeclaresFxFeatures("constant uint x [[function_constant(1)]];") && !MslDeclaresFxFeatures("") && !MslDeclaresFxFeatures(nullptr));

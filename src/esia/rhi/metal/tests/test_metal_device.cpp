@@ -134,7 +134,12 @@ ESIA_TEST(MetalDevice, NullGoldensWithMetalCaps)
             conformance::SceneFrame frame;
             conformance::BuildScene(scene, frame);
             render::Renderer renderer(null);
-            ESIA_CHECK(renderer.Render(frame.data, &frame.textures, t, conformance::RenderParamsOf(scene)));
+            for (int rep = 0; rep < (scene.repeat > 1 ? scene.repeat : 1); ++rep)   // a repeated frame: the last one's log
+            {
+                if (rep > 0)
+                    null.ClearLog();
+                ESIA_CHECK(renderer.Render(frame.data, &frame.textures, t, conformance::RenderParamsOf(scene)));
+            }
         }
         ESIA_CHECK(null.Errors().empty());
         const std::vector<std::string> golden = ReadLines(std::string(ESIA_METAL_NULL_GOLDEN_DIR) + "/" + scene.name + ".log");

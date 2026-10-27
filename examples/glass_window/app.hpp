@@ -3,6 +3,7 @@
 //
 //   <example>.exe [--api directx|d3d11|d3d12|d3d10|d3d9|opengl|vulkan] [--size 1280x800] [--scale 1.5] [--vsync on|off]
 //                 [--debug] [--fixed-dt 0.016667] [--frames N] [--screenshot out.png] [--font file.ttf]...
+//                 [--text-rendering spec]
 //                 <the example's own>
 //
 //   --api           the backend; directx (the default where it is built) starts the first Direct3D version that works
@@ -18,6 +19,10 @@
 //                   %LOCALAPPDATA%\Esia\ShaderCache and read back in later runs: esia::rhi::d3d::SetShaderCacheDirectory)
 //   --font          font files, the first the main one, the others fallbacks (default: Segoe UI + Microsoft YaHei);
 //                   for examples that load their own fonts, passed on to them
+//   --text-rendering how glyphs become pixels (esia::text::ParseTextRendering): "crisp", "light", "cleartype",
+//                   "native", "hinting=full,interpreter=35,rasterizer=freetype" ...; over the ESIA_TEXT_RENDERING
+//                   environment variable, which every program honours. On Windows "native" follows the window's
+//                   monitor: its ClearType stripes (none on a monitor turned sideways), level, contrast and gamma
 //
 // Threads, as a game has them: the main thread creates the window and pumps its messages (window thread); a render
 // thread owns the device, the Context and the frame loop. Input crosses over through Context::QueueInput, so moving
@@ -70,6 +75,26 @@ namespace glass
     };
 
     int RunApp(int argc, char** argv, App& app);
+
+    // --text-rendering: a spec ParseTextRendering takes (else false and `problem` says why), and the text system made
+    // to draw it (over its own rendering: ESIA_TEXT_RENDERING's, else the default) from its next NewFrame on.
+    inline bool TextRenderingValid(const std::string& spec, std::string& problem)
+    {
+        esia::text::TextRendering r;
+        std::string error;
+        if (esia::text::ParseTextRendering(spec, r, &error))
+            return true;
+        problem = "--text-rendering: " + error;
+        return false;
+    }
+    inline void ApplyTextRendering(esia::text::TextSystem* text, const std::string& spec)
+    {
+        if (!text || spec.empty())
+            return;
+        esia::text::TextRendering r = text->Rendering();
+        if (esia::text::ParseTextRendering(spec, r))
+            text->SetRendering(r);
+    }
 
 #if defined(__ANDROID__)
     // Android: a wallpaper as straight-alpha RGBA8, at most `maxSide` pixels on its longer side - the APK's own

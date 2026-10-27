@@ -70,6 +70,7 @@ namespace esia::rhi::metal
     struct GpuCaps
     {
         int maxTextureSize = 8192;
+        bool dualSourceBlend = true;
         bool timestamps = false;                // stage-boundary timestamp sampling (MTLCommonCounterSetTimestamp)
         bool asyncPipelines = false;            // CreatePipelineAsync compiles off the calling thread
     };

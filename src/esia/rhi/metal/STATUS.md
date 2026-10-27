@@ -185,6 +185,12 @@ properties, types and availability are what the mock declares; its enum values a
 `static_assert`s pass trivially there. Apple's SDK headers were deliberately not used on this Linux machine (their
 license ties them to Apple-branded computers).
 
+### Sub-pixel text back (2026-10-28)
+
+The owner asked for sub-pixel text again: the `Source1*` blend factors, `index(1)` outputs, `GpuCaps::dualSourceBlend`
+and `MakePipelineKey`'s caps argument are back (round 3's removals reversed). Built on Windows (clang-cl,
+`ESIA_WERROR=ON`): `esia_rhi_metal_tests` pass; `metal_device.mm` (the cap line) was not compiled - it needs macOS.
+
 ### Core round 3 (grayscale text only)
 
 Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): no dual-source blending (the
