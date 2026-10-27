@@ -2,7 +2,7 @@
 // to submit (Renderer::Render: plan, upload, commands), and what it costs the GPU where the device has timestamps.
 //
 //   esia_bench [--backend d3d11] [--scene all|text|widgets|widgets-flat|shapes|glass|...] [--frames 600] [--warmup 60]
-//              [--size 1600x1000]
+//              [--size 1600x1000] [--hdr]
 //
 // The glass scenes: as they are, with RenderParams::targetStatic (unchanged captures reused), with a background that
 // scrolls under the glass ("live"), and that with captures reused for two frames (RenderParams::backdropReuseFrames).
@@ -168,6 +168,7 @@ int main(int argc, char** argv)
 {
     std::string backend = DefaultBackend(), scene = "all", fonts = ESIA_BENCH_FONT_DIR;
     int frames = 600, warmup = 60, width = 1600, height = 1000;
+    bool hdr = false;   // an RGBA16_FLOAT target, the frame encoded as scRGB (RenderParams::hdr)
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
@@ -184,10 +185,12 @@ int main(int argc, char** argv)
             ;
         else if (a == "--fonts" && more)
             fonts = argv[++i];
+        else if (a == "--hdr")
+            hdr = true;
         else
         {
             std::fprintf(stderr, "usage: esia_bench [--backend name] [--scene all|text|widgets|widgets-flat|shapes|glass] [--frames n] "
-                                 "[--warmup n] [--size WxH] [--fonts dir]\n");
+                                 "[--warmup n] [--size WxH] [--fonts dir] [--hdr]\n");
             return 2;
         }
     }
@@ -212,6 +215,7 @@ int main(int argc, char** argv)
     rhi::HeadlessDesc hd;
     hd.width = width;
     hd.height = height;
+    hd.format = hdr ? rhi::Format::RGBA16_FLOAT : rhi::Format::RGBA8_UNORM;
     std::string error;
     rhi::HeadlessDevice hdev = info->createHeadless(hd, error);
     if (!hdev.device)
@@ -256,6 +260,8 @@ int main(int argc, char** argv)
         render::RenderParams params;
         params.targetStatic = sd.targetStatic;
         params.backdropReuseFrames = sd.reuseFrames;
+        if (hdr)
+            params.hdr.encoding = render::HdrEncoding::ScRgb;
         int captures = 0, reused = 0, restored = 0;
         DrawList dl;
         Series build, submit, gpu;

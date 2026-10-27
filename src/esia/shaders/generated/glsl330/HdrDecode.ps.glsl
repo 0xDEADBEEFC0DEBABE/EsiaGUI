@@ -1,0 +1,63 @@
+#version 330
+
+layout(std140) uniform WgtFrame
+{
+    vec4 gXform;
+    vec4 gTarget;
+    vec4 gDisplay;
+    vec4 gTime;
+    vec4 gLevel[6];
+    vec4 gText;
+    vec4 gConv;
+} _45;
+
+layout(std140) uniform WgtPass
+{
+    vec4 gPass0;
+    vec4 gPass1;
+} _191;
+
+uniform sampler2D SPIRV_Cross_CombinedgTexgPoint;
+
+layout(location = 0) out vec4 _entryPointOutput;
+
+void main()
+{
+    vec2 _305 = gl_FragCoord.xy + _45.gConv.yy;
+    vec2 _396;
+    if (_45.gConv.x > 0.5)
+    {
+        vec2 _387 = _305;
+        _387.y = _45.gTarget.y - _305.y;
+        _396 = _387;
+    }
+    else
+    {
+        _396 = _305;
+    }
+    vec2 _266 = _396 * _45.gTarget.zw;
+    vec2 _397;
+    if (_45.gConv.x > 0.5)
+    {
+        vec2 _390 = _266;
+        _390.y = 1.0 - _266.y;
+        _397 = _390;
+    }
+    else
+    {
+        _397 = _266;
+    }
+    vec4 _272 = textureLod(SPIRV_Cross_CombinedgTexgPoint, _397, 0.0);
+    vec3 _338 = pow(clamp(_272.xyz, vec3(0.0), vec3(1.0)), vec3(0.0126833133399486541748046875));
+    vec3 _349 = pow(max(_338 - vec3(0.8359375), vec3(0.0)) / (vec3(18.8515625) - (_338 * 18.6875)), vec3(6.277394771575927734375)) * 10000.0;
+    vec3 _358 = vec3(dot(_349, vec3(1.660500049591064453125, -0.5875999927520751953125, -0.072800002992153167724609375)), dot(_349, vec3(-0.124600000679492950439453125, 1.1328999996185302734375, -0.008299999870359897613525390625)), dot(_349, vec3(-0.01820000074803829193115234375, -0.100599996745586395263671875, 1.1187000274658203125)));
+    vec3 _282 = _272.xyz * 80.0;
+    bvec3 _283 = bvec3(_191.gPass0.y > 1.5);
+    vec3 _289 = vec3(_283.x ? _358.x : _282.x, _283.y ? _358.y : _282.y, _283.z ? _358.z : _282.z) / vec3(_191.gPass0.x);
+    vec3 _363 = abs(_289);
+    vec3 _370 = (pow(_363, vec3(0.4166666567325592041015625)) * 1.05499994754791259765625) - vec3(0.054999999701976776123046875);
+    vec3 _372 = _363 * 12.9200000762939453125;
+    bvec3 _374 = lessThanEqual(_363, vec3(0.003130800090730190277099609375));
+    _entryPointOutput = vec4(sign(_289) * vec3(_374.x ? _372.x : _370.x, _374.y ? _372.y : _370.y, _374.z ? _372.z : _370.z), _272.w);
+}
+

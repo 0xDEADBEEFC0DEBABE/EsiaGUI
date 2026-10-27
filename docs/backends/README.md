@@ -194,6 +194,7 @@ With `asyncPipelines`, `CreatePipeline` may return a handle at once and build it
 | `firstDrawCompiles` | the driver finishes a shader at its first draw: the renderer draws a ready user effect once where no pixel is written (an empty scissor) | yes (NVIDIA) | no | no | no (its debug layer warns about the empty scissor) | no | no | no | no |
 | `baseVertex` | `DrawIndexedBase` (above): every list's vertices and indices go to the GPU as they are, no merged copy and no rebasing | yes | yes | yes | yes | yes (3.2 core) | no | yes | no (not yet) |
 | `drawFirstInstance` | `DrawInstancedFrom` (above): the Draw constants then change only with the edge fade - each change is a buffer update, one per FX batch was most of Direct3D 11's submit | no | no | yes | no | no | no | no | no |
+| `quadAttributes` | quads (`DrawsQuads`) come as instance-rate vertex attributes - `VertexLayout::QuadInstance`, a `BufferKind::QuadInstances` buffer bound with `SetVertexBuffer`, drawn with `DrawInstancedFrom`, whose first instance offsets the attributes - instead of after the FX instances in the instance data: no texture upload and no texel fetches for them where that is a texture. The quad shaders built for texture storage read them so | yes | yes | no | no | yes | yes | no | no |
 | `maxTextureSize`, `maxFxDataWidth` | limits (the FX texture is `perRow * 24` wide) | device caps; `maxFxDataWidth` = 24 x a power of two | 8192 | 16384 | 16384 | `GL_MAX_TEXTURE_SIZE` | same | limits | 16384 |
 
 ## 4. Shaders and the binding model
