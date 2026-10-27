@@ -222,7 +222,7 @@ ESIA_TEST(FreeType, DrawsPixelAlignedQuadsOnAtlasPages)
     DrawList clipped;
     clipped.Reset(Rect(0, 0, 5, 5));
     f.ts->Draw(clipped, fr, Vec2(100, 100), color, "Esia");
-    ESIA_CHECK(clipped.Vertices().empty());
+    ESIA_CHECK(clipped.Vertices().empty() && clipped.Quads().empty());
     DrawList clear = NewList();
     ESIA_CHECK(f.ts->Draw(clear, fr, Vec2(0, 0), Color::Clear(), "Esia") == size && clear.Empty());
 }

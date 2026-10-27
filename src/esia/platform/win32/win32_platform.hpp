@@ -41,6 +41,7 @@ namespace esia::platform::win32
         // ---- window thread
         bool owned = false;                  // made by CreateAppWindow
         UINT dpi = USER_DEFAULT_SCREEN_DPI;
+        HMONITOR monitor = nullptr;          // whose DisplayText the frame holds
         std::uint32_t buttonsDown = 0;       // bit per MouseButton pressed in the window
         bool capturedMouse = false;          // SetCapture was ours
         bool trackingLeave = false, mouseInside = false;
@@ -60,6 +61,7 @@ namespace esia::platform::win32
         void Publish(int width, int height, bool minimized);
         void PublishClientRect(HWND w);
         void PublishFocus(bool focused);
+        void PublishMonitor(HWND w, bool reread);   // reread: the same monitor's settings changed
 
         // input
         void OnMouseMove(LPARAM lparam);

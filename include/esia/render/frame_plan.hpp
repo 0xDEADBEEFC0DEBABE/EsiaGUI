@@ -1,7 +1,8 @@
 // Esia - backend-agnostic frame planner (a port of WGT's src/render/frame_plan.*).
 //
 // Walks DrawData once and produces a flat list of render operations plus the frame's merged buffers:
-//   * geometry draws (indices rebased into one index buffer, vertex bounds for dirty tracking),
+//   * geometry draws (indices rebased into one index buffer, vertex bounds for dirty tracking), and draws of
+//     instanced quads (the lists' QuadInstance runs, op by op),
 //   * FX batches: instances sharing clip / texture / effect become ONE instanced draw, split whenever a glass shape
 //     would need to "see" something drawn earlier in the same batch. A draw also joins an earlier batch (FX or
 //     geometry) when everything drawn since touches other pixels: the shapes and the text of a window alternate, and
@@ -62,7 +63,10 @@ namespace esia::render
         // Draw
         std::uint32_t idxCount = 0, idxOffset = 0;   // into FramePlan::indices
         std::uint32_t geometryFirst = 0, geometryCount = 0;   // direct plans: into FramePlan::geometry
-        bool coverage = false;       // glyph coverage texture: the text pipeline
+        bool quads = false;          // instanced quads (DrawCmdKind::Quads): quadCount of the frame's quads from quadStart
+        std::uint32_t quadStart = 0, quadCount = 0;
+        bool coverage = false;       // glyph coverage texture: a text pipeline
+        bool lcd = false;            // ... of sub-pixel coverage (TextureFlags_LcdCoverage): the dual-source one
         // FxBatch
         std::uint32_t instStart = 0, instCount = 0;   // into FramePlan::instances
         std::uint32_t features = 0;  // union of the instances' fx::Feature bits (shader variants, Caps::fxFeatureVariants)
@@ -86,6 +90,11 @@ namespace esia::render
         float fade[4] = {0, 0, 0, 0}; // Draw / FxBatch: edge fade (top y, bottom y, top width, bottom width; px)
         PxRect captureRegion;        // glass batch: capture the backdrop over this region first (empty = reuse)
         int captureLevels = 0;       // pyramid levels that capture must build
+        // glass batch with a capture, planned with FramePlan::keyCaptures: what the capture sees - a hash of its region,
+        // its pyramid and everything drawn before it that touches the region (0: it cannot be told - a host callback,
+        // content that animates on the shader's clock, too much to hash). The renderer reuses last frame's capture of
+        // the same key (RenderParams::targetStatic). captureShape: the region and pyramid alone.
+        std::uint64_t captureKey = 0, captureShape = 0;
         // LayerBegin / LayerEnd
         fx::LayerParams layer{};
         // Callback
@@ -127,24 +136,43 @@ namespace esia::render
         std::vector<InstanceRun> instanceRuns;
         std::uint32_t totalVertices = 0, totalIndices = 0;
 
+        // The quads of the ops that draw them (RenderOp::quads), op by op, as runs in the draw lists (either plan):
+        // an op's quads are quadCount from its quadStart.
+        struct QuadRun
+        {
+            const QuadInstance* first = nullptr;
+            std::uint32_t count = 0;
+        };
+        std::vector<QuadRun> quadRuns;
+        std::uint32_t quadCount = 0;
+
         bool anyGlass = false;
         bool anyLayer = false;
         int fxCount = 0;
         int plannedCaptures = 0;
+        // Build keys every capture (RenderOp::captureKey): the renderer sets it when it may reuse captures.
+        bool keyCaptures = false;
+        // Drop shadows turn with a light (RenderParams::light): their offsets count as far in every direction.
+        bool lightShadows = false;
 
         void Build(const DrawData& dd, const TextureInfoFn& textureInfo, bool direct = false);
 
     private:
         // Decides before which glass batches the backdrop is captured and over which region (see .cpp).
         void PlanCaptures();
+        // RenderOp::captureKey of every capture (see .cpp).
+        void KeyCaptures();
+        std::uint64_t OpHash(std::size_t k);
+        std::vector<std::uint64_t> opHash_;   // KeyCaptures' scratch: every op's hash, computed when first needed
 
-        // Build's scratch: what each op draws, as a chain of runs of instances or indices (see .cpp).
+        // Build's scratch: what each op draws, as a chain of runs of instances, indices or quads (see .cpp).
         struct Piece
         {
             const fx::Instance* inst = nullptr;   // FX batch: `count` instances from here
             const std::uint32_t* idx = nullptr;   // draw: `count` indices from here, rebased by `base`
             std::uint32_t count = 0, base = 0, next = 0;
             std::uint32_t firstIndex = 0;          // draw: where `idx` lands in the frame's index buffer (direct)
+            const QuadInstance* quad = nullptr;   // draw of quads: `count` quads from here
         };
         std::vector<Piece> pieces_;
         std::vector<std::uint32_t> opFirst_, opLast_;

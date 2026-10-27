@@ -18,6 +18,7 @@ target_link_libraries(esia_core_tests PRIVATE esia::core)
 esia_add_test(esia_text_tests
     text/test_glyph_raster.cpp
     text/test_glyph_atlas.cpp
+    text/test_distance_field.cpp
     text/test_system_fonts.cpp)
 target_link_libraries(esia_text_tests PRIVATE esia::text)
 target_compile_definitions(esia_text_tests PRIVATE
@@ -44,9 +45,16 @@ target_link_libraries(esia_testkit_tests PRIVATE esia_testkit)
 
 # the FreeType + HarfBuzz text system with the fonts in tests/fonts (DroidSans, Karla, a Noto Sans SC subset) and the
 # platform's fallback chain; its golden images (tests/text/golden) are CPU composites of the glyph quads, so they need
-# no GPU
+# no GPU. Images of FreeType's own pixels (its hinting, its rasterizer) are compared only with the bundled FreeType they
+# were made with; the tests run without ESIA_TEXT_RENDERING (a developer's own choice would change every image).
 if(TARGET esia_text_ft)
-    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp text/test_platform_face.cpp text/test_color_glyphs.cpp)
+    esia_add_test(esia_text_ft_tests text/test_ft_text.cpp text/test_ft_cjk.cpp text/test_ft_rendering.cpp text/test_platform_face.cpp
+                  text/test_color_glyphs.cpp)
+    set_tests_properties(esia_text_ft_tests PROPERTIES ENVIRONMENT "ESIA_TEXT_RENDERING=")
+    get_property(_esia_text_deps GLOBAL PROPERTY ESIA_TEXT_DEPS_FOUND)
+    if(_esia_text_deps STREQUAL "bundled")
+        target_compile_definitions(esia_text_ft_tests PRIVATE ESIA_TEST_BUNDLED_FREETYPE)
+    endif()
     target_link_libraries(esia_text_ft_tests PRIVATE esia_text_ft esia_testkit esia::harfbuzz)
     target_include_directories(esia_text_ft_tests PRIVATE ${ESIA_ROOT}/src/esia/text/ft)   # platform_face.hpp, png.hpp
     if(APPLE)   # Core Text's own widths (coretext_util.cpp: its headers' Rect clashes with esia's in the tests)
@@ -63,7 +71,7 @@ endif()
 # are a library of their own: backend tests that render them with their API's checks link it too.
 add_library(esia_conformance_scenes STATIC conformance/scenes.cpp)
 target_include_directories(esia_conformance_scenes PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/conformance)
-target_link_libraries(esia_conformance_scenes PUBLIC esia::render esia_testkit)
+target_link_libraries(esia_conformance_scenes PUBLIC esia::render esia_testkit PRIVATE esia::text)   # text: the glyph fields
 esia_target_defaults(esia_conformance_scenes)
 add_executable(esia_conformance conformance/conformance.cpp)
 target_link_libraries(esia_conformance PRIVATE esia_conformance_scenes esia::backends)
@@ -83,6 +91,16 @@ foreach(_b ${_esia_backends})
         set_tests_properties(esia_conformance_${_b}_frames PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endforeach()
+
+# the renderer on fixed workloads (tests/bench/esia_bench.cpp): build, submit and GPU time per frame, median and 99th
+# percentile. CTest only runs it a few frames on the null device, so that it keeps working.
+if(TARGET esia_text_ft)
+    add_executable(esia_bench bench/esia_bench.cpp)
+    target_link_libraries(esia_bench PRIVATE esia::render esia_text_ft esia::backends)
+    target_compile_definitions(esia_bench PRIVATE ESIA_BENCH_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts")
+    esia_target_defaults(esia_bench)
+    add_test(NAME esia_bench_smoke COMMAND esia_bench --backend null --frames 3 --warmup 1 --size 640x400)
+endif()
 
 esia_add_test(esia_shader_tests shaders/test_shader_library.cpp)
 target_link_libraries(esia_shader_tests PRIVATE esia_shaders)

@@ -4,7 +4,7 @@
 add_library(esia_platform_win32 STATIC
     win32_platform.cpp
     win32_window.cpp)
-target_link_libraries(esia_platform_win32 PUBLIC esia_core PRIVATE user32 imm32 dwmapi)
+target_link_libraries(esia_platform_win32 PUBLIC esia_core PRIVATE user32 imm32 dwmapi dwrite)   # dwrite: MonitorText
 # Windows 10 APIs (per-monitor v2 DPI), wide-character Win32
 target_compile_definitions(esia_platform_win32 PRIVATE UNICODE _UNICODE _WIN32_WINNT=0x0A00)
 esia_target_defaults(esia_platform_win32)

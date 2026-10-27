@@ -1,6 +1,7 @@
 // Esia - null RHI backend (see esia/rhi/null_device.hpp)
 #include "esia/rhi/null_device.hpp"
 #include "esia/rhi/backend_registry.hpp"
+#include "esia/core/fx.hpp"
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -29,6 +30,7 @@ namespace esia::rhi
             case BlendMode::Opaque: return "opaque";
             case BlendMode::Straight: return "straight";
             case BlendMode::Premultiplied: return "premul";
+            case BlendMode::DualSourceLcd: return "dual-source";
             }
             return "?";
         }
@@ -233,6 +235,12 @@ namespace esia::rhi
 
     Pipeline NullDevice::CreatePipeline(const PipelineDesc& d)
     {
+        if (d.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
+        {
+            if (record_)
+                Record("create pipeline refused: dual-source blending unsupported");
+            return {};
+        }
         if (d.effect != 0 && !caps_.runtimeEffects)
         {
             if (record_)
@@ -256,13 +264,15 @@ namespace esia::rhi
             Error("CreatePipeline: bad program");
             return {};
         }
-        const bool wantsVertices = d.program == ShaderProgram::UiGeometry || d.program == ShaderProgram::TextGray;
-        if (wantsVertices != (d.layout == VertexLayout::UiVertex))
+        if (UsesUiVertices(d.program) != (d.layout == VertexLayout::UiVertex))
             Error(Fmt("CreatePipeline: %s with the wrong vertex layout", ShaderProgramName(d.program)));
+        if (DualSourceProgram(d.program) != (d.blend == BlendMode::DualSourceLcd))
+            Error("CreatePipeline: TextLcd and QuadLcd need (and only they may use) dual-source blending");
         const Pipeline p{next_++};
         pipelines_[p.id] = d;
-        if (d.fxFeatures != 0 && (!caps_.fxFeatureVariants || d.program != ShaderProgram::Fx))
-            Error("CreatePipeline: fxFeatures without Caps::fxFeatureVariants or on a non-Fx program");
+        const bool glyphVariant = !caps_.fullFxGlyphs && (d.fxFeatures & fx::kVariantOnlyFeatures);
+        if (d.fxFeatures != 0 && ((!caps_.fxFeatureVariants && !glyphVariant) || d.program != ShaderProgram::Fx))
+            Error("CreatePipeline: fxFeatures without Caps::fxFeatureVariants (or glyph shapes without Caps::fullFxGlyphs) or on a non-Fx program");
         const bool background = d.background && caps_.asyncPipelines;
         if (background)
             pipelineReadyAt_[p.id] = frame_ + (std::uint64_t)std::max(options_.pendingFrames, 0);
@@ -481,11 +491,11 @@ namespace esia::rhi
             return;
         }
         const PipelineDesc& p = it->second;
-        if ((p.program == ShaderProgram::Fx) != instanced)
+        if (DrawsInstances(p.program) != instanced)
             Error(Fmt("%s: program %s", call, ShaderProgramName(p.program)));
         // What each program's shaders declare must be bound: Vulkan and D3D12 have no "unbound" descriptors, and
         // Metal / GL would read whatever an earlier draw left.
-        const bool ui = p.program == ShaderProgram::UiGeometry || p.program == ShaderProgram::TextGray;
+        const bool ui = UsesUiVertices(p.program) || DrawsInstances(p.program);
         const bool fx = p.program == ShaderProgram::Fx;
         const bool composite = p.program == ShaderProgram::LayerComposite;
         const bool usesPass = p.program == ShaderProgram::Downsample || composite;
@@ -499,7 +509,7 @@ namespace esia::rhi
         for (int sl = 0; sl < slots; ++sl)
             if (!bound_[sl])
                 Error(Fmt("%s (%s): nothing bound at t%d", call, ShaderProgramName(p.program), sl));
-        if (fx)
+        if (DrawsInstances(p.program))
         {
             const bool data = caps_.fxStorage == FxStorage::Buffer ? (bool)fxBuffer_ : (bool)bound_[kSlotFxData];
             if (!data)

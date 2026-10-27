@@ -10,7 +10,7 @@ using namespace esia;
 
 namespace
 {
-    // Text stand-in: every character is a 6 x 10 quad on texture 42.
+    // Text stand-in: every character is a 6 x 10 quad on texture 42 (an instanced quad, as glyphs are).
     struct FakeText final : text::TextSystem
     {
         float lastScale = 0.0f;
@@ -30,6 +30,21 @@ namespace
             calls += 'O';
             lastOutline = o;
         }
+        // the material and weight of the last DrawShapes
+        fx::Instance lastMaterial{};
+        float lastWeight = 0.0f;
+        EffectId lastEffect = 0;
+        Vec2 DrawShapes(DrawList&, text::FontRef f, Vec2 pos, const fx::Instance& m, EffectId effect, float weight, std::string_view s, float, std::uint32_t,
+                        float scale) override
+        {
+            calls += 's';
+            lastMaterial = m;
+            lastWeight = weight;
+            lastEffect = effect;
+            lastScale = scale;
+            lastPos = pos;
+            return Measure(f, s, 0, 0).size;
+        }
         text::FontId AddFontFile(const char*, int) override { return 1; }
         text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
         void AddFallback(text::FontId) override {}
@@ -43,10 +58,8 @@ namespace
             calls += 't';
             lastScale = scale;
             lastPos = pos;
-            dl.PushTexture(42);
             for (std::size_t i = 0; i < s.size(); ++i)
-                dl.AddRectFilled(Rect::FromSize(pos + Vec2(6.0f * scale * (float)i, 0), Vec2(6, 10) * scale), c.ToRgba8());
-            dl.PopTexture();
+                dl.AddQuad(42, Rect::FromSize(pos + Vec2(6.0f * scale * (float)i, 0), Vec2(6, 10) * scale), Vec2(0, 0), Vec2(1, 1), c.ToRgba8());
             return Measure(f, s, 0, 0).size;
         }
         void DrawGlyph(DrawList& dl, text::FontRef f, char32_t, Vec2 center, Color c) override
@@ -160,6 +173,7 @@ ESIA_TEST(Painter, MasksAndScale)
     p.PushScale(Vec2(50, 50), 0.5f);
     p.Rect(Rect(0, 0, 100, 100), Style().Fill(Color::White()).Radius(20).Glow(Color::White(), 10));
     dl.AddRectFilled(Rect(0, 0, 100, 100), 0xFFFFFFFFu);
+    dl.AddQuad(7, Rect(0, 0, 100, 100), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
     p.PopScale();
     p.PopMask();
     p.Rect(Rect(0, 0, 10, 10), Style().Fill(Color::White()));
@@ -167,8 +181,11 @@ ESIA_TEST(Painter, MasksAndScale)
     ESIA_CHECK((i.flags[0] & fx::kMask) && i.mask[2] == 100 && i.maskParams[0] == 12);
     ESIA_CHECK(i.rect[0] == 25 && i.rect[2] == 75 && i.radii[0] == 10 && i.glowParams[0] == 5);
     ESIA_CHECK(!(dl.FxInstances()[1].flags[0] & fx::kMask));
-    // geometry drawn under the scale is scaled at PopScale
+    // geometry and quads drawn under the scale are scaled at PopScale
     ESIA_CHECK(dl.Vertices()[0].pos == Vec2(25, 25) && dl.Vertices()[2].pos == Vec2(75, 75));
+    const QuadInstance& q = dl.Quads()[0];
+    ESIA_CHECK(q.rect[0] == 25 && q.rect[1] == 25 && q.rect[2] == 75 && q.rect[3] == 75);
+    ESIA_CHECK(dl.Commands()[2].kind == DrawCmdKind::Quads && dl.Commands()[2].vtxBounds == Rect(25, 25, 75, 75));
 }
 
 ESIA_TEST(Painter, TextUnderScaleIsRasterizedScaledNotStretched)
@@ -184,7 +201,8 @@ ESIA_TEST(Painter, TextUnderScaleIsRasterizedScaledNotStretched)
     ESIA_CHECK(text.lastScale == 2.0f && text.lastPos == Vec2(20, 20));
     ESIA_CHECK(size == Vec2(12, 10));   // the layout size, unscaled
     // the glyph quads keep their final geometry: PopScale skips them
-    ESIA_CHECK(dl.Vertices()[0].pos == Vec2(20, 20) && dl.Vertices()[2].pos == Vec2(32, 40));
+    const QuadInstance& q = dl.Quads()[0];
+    ESIA_CHECK(q.rect[0] == 20 && q.rect[1] == 20 && q.rect[2] == 32 && q.rect[3] == 40);
     ESIA_CHECK(dl.Commands().back().texture == 42);
 
     const Vec2 box = p.TextBox(Rect(0, 100, 100, 140), Vec2(0.5f, 0.5f), text::FontRef{1, 10}, Color::White(), "abcd");
@@ -392,17 +410,19 @@ namespace
         std::uint64_t TileGeneration() override { return generation; }
     };
 
-    int GeometryCommands(const DrawList& dl, TextureId texture)
+    int QuadCommands(const DrawList& dl, TextureId texture)
     {
         int n = 0;
         for (const DrawCmd& c : dl.Commands())
-            n += c.kind == DrawCmdKind::Geometry && c.count > 0 && c.texture == texture ? 1 : 0;
+            n += c.kind == DrawCmdKind::Quads && c.count > 0 && c.texture == texture ? 1 : 0;
         return n;
     }
+
+    std::uint32_t QuadColor(const QuadInstance& q) { return (std::uint32_t)q.packed[2] | ((std::uint32_t)q.packed[3] << 24); }
 }
 
-// Flat drawing: rounded rectangles, capsules and circles are geometry on the text's texture - one command with the
-// text around them - from coverage tiles made once per kind of shape; no shadows; glass a solid surface
+// Flat drawing: rounded rectangles, capsules and circles are quads on the text's texture - one command with the text
+// around them - from coverage tiles made once per kind of shape; no shadows; glass a solid surface
 ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
 {
     TileText tt;
@@ -419,16 +439,16 @@ ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
     p.Capsule(Rect(80, 60, 160, 96), Style().Fill(Color::Hex(0x0A84FF)));   // the same shape elsewhere: the same tile
     p.Circle(Vec2(200, 20), 10, Style().Fill(Color::White()));
     ESIA_CHECK(dl.FxInstances().empty());
-    ESIA_CHECK(GeometryCommands(dl, 42) == 1);   // the text and the shapes: one command
-    ESIA_CHECK(tt.added == 2);                  // the button's tile and the circle's
+    ESIA_CHECK(QuadCommands(dl, 42) == 1 && dl.Vertices().empty());   // the text and the shapes: one command
+    ESIA_CHECK(tt.added == 2);                                       // the button's tile and the circle's
     // a capsule 80 x 36: stretched along x (3 cells), whole along y; a circle: one quad
-    ESIA_CHECK(dl.Vertices().size() == (std::size_t)(5 * 4 + 8 + 2 * 4 + 8 + 4));
+    ESIA_CHECK(dl.Quads().size() == (std::size_t)(5 + 3 + 2 + 3 + 1));
 
     // a large fill: its middle from the white texture, the rim from the tile; a stroke's ring around it
     DrawList d2 = MakeList();
     Painter q(d2, env);
     q.Rect(Rect(10, 10, 310, 210), Style().Radius(20).Fill(Color(0.2f, 0.2f, 0.2f, 1)).Stroke(1.0f, Color::White(0.3f)));
-    ESIA_CHECK(d2.FxInstances().empty() && GeometryCommands(d2, 0) == 1 && GeometryCommands(d2, 42) >= 1);
+    ESIA_CHECK(d2.FxInstances().empty() && QuadCommands(d2, 0) == 1 && QuadCommands(d2, 42) >= 1);
     ESIA_CHECK(tt.added == 4);
 
     // what geometry cannot do stays an FX shape, without the shadow and glow flat drawing leaves out
@@ -443,9 +463,9 @@ ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
     GlassMaterial m;
     m.tint = Color(1, 1, 1, 0.5f);
     g.Rect(Rect(10, 10, 60, 60), Style().Radius(8).Glass(m));
-    ESIA_CHECK(d4.FxInstances().empty() && !d4.Vertices().empty());
-    if (!d4.Vertices().empty())
-        ESIA_CHECK(d4.Vertices()[0].color == Color(0.55f, 0.55f, 0.55f, 1.0f).ToRgba8());
+    ESIA_CHECK(d4.FxInstances().empty() && !d4.Quads().empty());
+    if (!d4.Quads().empty())
+        ESIA_CHECK(QuadColor(d4.Quads()[0]) == Color(0.55f, 0.55f, 0.55f, 1.0f).ToRgba8());
 
     // the tiles are gone when the text system starts its pages over: made again
     ++tt.generation;
@@ -478,4 +498,122 @@ ESIA_TEST(Painter, FlatTilesCoverAsTheShaderDoes)
     // pixel (3, 4) a little past half covered (its middle 0.08 inside the edge)
     ESIA_CHECK(at(1, 11) >= 250);
     ESIA_CHECK(at(3, 3) == 0 && at(3, 4) > 120 && at(3, 4) < 180);
+}
+
+// Text with a material: the style's rows and features go to the text system's glyph shapes - no image (the field
+// takes its uv), no radii -, the weight with them, under a scale at the final geometry; flat drawing drops shadows and
+// glows as for shapes.
+ESIA_TEST(Painter, TextWithAStyleHandsItsMaterialToTheTextSystem)
+{
+    DrawList dl = MakeList();
+    FakeText text;
+    PainterEnv env;
+    env.text = &text;
+    Painter p(dl, env);
+    const Style s = Style().Fill(Paint::Linear(Color::Hex(0xFF0000), Color::Hex(0x0000FF), 0)).Stroke(2, Color::Hex(0x00FF00), 1.0f).Shadow(Color::Black(0.5f), 4, Vec2(0, 2))
+                        .Glow(Color::White(), 6).Image(9).Radius(5).Weight(0.75f).Opacity(0.5f);
+    const Vec2 size = p.Text(Vec2(10, 20), text::FontRef{1, 10}, s, "abc");
+    ESIA_CHECK(text.calls == "s" && size == Vec2(18, 10) && text.lastPos == Vec2(10, 20) && text.lastScale == 1.0f);
+    const fx::Instance& m = text.lastMaterial;
+    ESIA_CHECK(m.flags[0] == (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow));   // no kImage
+    ESIA_CHECK(m.flags[1] == (std::uint32_t)fx::PaintKind::Linear && m.fill0[0] == 1.0f && m.fill1[2] == 1.0f);
+    ESIA_CHECK(m.stroke[1] == 1.0f && m.strokeParams[0] == 2.0f && m.strokeParams[1] == 1.0f);
+    ESIA_CHECK(m.shadowParams[0] == 4.0f && m.shadowParams[3] == 2.0f && m.glowParams[0] == 6.0f && m.misc[0] == 0.5f);
+    ESIA_CHECK(text.lastWeight == 0.75f && m.radii[0] == 0.0f && m.uvRect[2] == 0.0f);
+    ESIA_CHECK(dl.FxInstances().empty());   // the text system draws it
+
+    p.PushScale(Vec2(0, 0), 2.0f);
+    p.Text(Vec2(10, 20), text::FontRef{1, 10}, Style().Fill(Color::White()), "abc");
+    p.PopScale();
+    ESIA_CHECK(text.lastScale == 2.0f && text.lastPos == Vec2(20, 40));
+    const Vec2 box = p.TextBox(Rect(0, 100, 100, 140), Vec2(0.5f, 0.5f), text::FontRef{1, 10}, Style().Fill(Color::White()), "abcd");
+    ESIA_CHECK(box == Vec2(24, 10) && text.lastPos == Vec2(38, 115));
+    // nothing to draw: measured, not drawn
+    text.calls.clear();
+    ESIA_CHECK(p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style(), "ab") == Vec2(12, 10) && text.calls.empty());
+
+    env.flat = true;
+    Painter flat(dl, env);
+    flat.Text(Vec2(0, 0), text::FontRef{1, 10}, s, "ab");
+    ESIA_CHECK(text.lastMaterial.flags[0] == (fx::kFill | fx::kStroke));   // no shadow, no glow
+}
+
+// Legible text: kLegible with its strength (at most 1) and radius in radii.z / .w - for a fill only, and not drawn flat
+// (nothing behind it is captured there). Under a scale the halo grows with the glyphs, as their stroke and glow do.
+ESIA_TEST(Painter, LegibleTextAsksForItsHalo)
+{
+    DrawList dl = MakeList();
+    FakeText text;
+    PainterEnv env;
+    env.text = &text;
+    Painter p(dl, env);
+    const fx::Instance& m = text.lastMaterial;
+    p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Legible(0.75f, 4.0f), "ab");
+    ESIA_CHECK(m.flags[0] == (fx::kFill | fx::kLegible) && m.radii[2] == 0.75f && m.radii[3] == 4.0f);
+    p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Legible(3.0f), "ab");
+    ESIA_CHECK(m.radii[2] == 1.0f && m.radii[3] == 0.0f);   // 0: the text system's radius
+    p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Stroke(1, Color::White()).Legible(), "ab");
+    ESIA_CHECK((m.flags[0] & fx::kStroke) && !(m.flags[0] & fx::kLegible));
+    p.PushScale(Vec2(0, 0), 2.0f);
+    p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Stroke(1, Color::Black()).Glow(Color::White(), 6).Legible(1.0f, 4.0f), "ab");
+    p.PopScale();
+    ESIA_CHECK(m.radii[2] == 1.0f && m.radii[3] == 8.0f && m.strokeParams[0] == 2.0f && m.glowParams[0] == 12.0f);
+    env.flat = true;
+    Painter flat(dl, env);
+    flat.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Legible(), "ab");
+    ESIA_CHECK(m.flags[0] == fx::kFill);
+}
+
+// Motion blur: the displacement in the custom row with kMotion, scaled under PushScale; not with a user effect (its
+// row) nor when drawing flat.
+ESIA_TEST(Painter, MotionBlurIsTheShapesDisplacement)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 10, 50, 30), Style().Fill(Color::White()).MotionBlur(Vec2(12, -4)));
+    const fx::Instance& a = dl.FxInstances()[0];
+    ESIA_CHECK((a.flags[0] & fx::kMotion) && a.custom[0] == 12.0f && a.custom[1] == -4.0f);
+    p.PushScale(Vec2(0, 0), 2.0f);
+    p.Rect(Rect(10, 10, 50, 30), Style().Fill(Color::White()).MotionBlur(Vec2(12, -4)));
+    p.PopScale();
+    ESIA_CHECK(dl.FxInstances()[1].custom[0] == 24.0f && dl.FxInstances()[1].custom[1] == -8.0f);
+    p.Rect(Rect(10, 10, 50, 30), Style().Fill(Color::White()).Effect(3, 0.5f).MotionBlur(Vec2(12, 0)));
+    ESIA_CHECK(!(dl.FxInstances()[2].flags[0] & fx::kMotion) && dl.FxInstances()[2].custom[0] == 0.5f);
+    // text with a style: every glyph shape moves
+    FakeText text;
+    PainterEnv env;
+    env.text = &text;
+    Painter t(dl, env);
+    t.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).MotionBlur(Vec2(0, 6)), "ab");
+    ESIA_CHECK((text.lastMaterial.flags[0] & fx::kMotion) && text.lastMaterial.custom[1] == 6.0f);
+    env.flat = true;
+    Painter flat(dl, env);
+    flat.Rect(Rect(10, 10, 50, 30), Style().Radius(4).Fill(Paint::Linear(Color::White(), Color::Black())).MotionBlur(Vec2(12, 0)));
+    ESIA_CHECK(!(dl.FxInstances().back().flags[0] & fx::kMotion));
+}
+
+// A text system without distance fields draws the fill's first color, its opacity applied.
+ESIA_TEST(Painter, TextWithAStyleWithoutFieldsDrawsTheFillColor)
+{
+    struct PlainText final : text::TextSystem
+    {
+        Color drawn;
+        text::FontId AddFontFile(const char*, int) override { return 1; }
+        text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
+        void AddFallback(text::FontId) override {}
+        void NewFrame(const text::RasterParams&) override {}
+        text::TextMetrics Measure(text::FontRef f, std::string_view s, float, std::uint32_t) override { return {Vec2(6.0f * (float)s.size(), f.size), 8.0f, 1}; }
+        Vec2 Draw(DrawList&, text::FontRef f, Vec2, Color c, std::string_view s, float, std::uint32_t, float) override
+        {
+            drawn = c;
+            return Measure(f, s, 0, 0).size;
+        }
+        void DrawGlyph(DrawList&, text::FontRef, char32_t, Vec2, Color) override {}
+    } text;
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.text = &text;
+    Painter p(dl, env);
+    p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color(1, 0.5f, 0, 0.8f)).Opacity(0.5f), "ab");
+    ESIA_CHECK(text.drawn.r == 1.0f && text.drawn.g == 0.5f && std::fabs(text.drawn.a - 0.4f) < 1e-6f);
 }
