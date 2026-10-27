@@ -18,6 +18,11 @@ hardware interface (RHI), with backends for Direct3D 9 to 12, OpenGL / OpenGL ES
 macOS, iOS and Android. It replaces WGT UI, the Dear ImGui-based `wgt.dll`; WGT's last version is tag
 `wgt-1.1-final`, in this repository's history.
 
+EsiaGUI is the liquid-glass widget layer (`esia::ui`) and its examples on [Esia](https://github.com/0xDEADBEEFC0DEBABE/Esia),
+the engine underneath: the UI core, the renderer, the text system, the RHI and its backends, the platform layers. This
+repository is Esia with the widgets added and follows it as its upstream; everything below the widgets is developed
+in Esia ([FORK.md](docs/FORK.md)).
+
 * [Esia and Dear ImGui](#esia-and-dear-imgui) · [Widgets for tools](#widgets-for-tools-the-workbench) ·
   [Status](#status) · [Getting it](#getting-it) · [Building](#building) ·
   [Using it in your project](#using-it-in-your-project) · [Running the examples](#running-the-examples)
@@ -557,6 +562,7 @@ the commit for `main` and delete the branch.
   and how widgets use it.
 * [UI_WIDGETS.md](docs/UI_WIDGETS.md): the widget layer, its theme and styles, what of WGT is ported, and pitfalls.
 * [PLATFORM_WIN32.md](docs/PLATFORM_WIN32.md): the Win32 platform layer and `glass_window`.
+* [FORK.md](docs/FORK.md): EsiaGUI and Esia - what is only here, where a change goes, merging Esia.
 * [REWRITE_STATUS.md](docs/REWRITE_STATUS.md): what is done and verified, known issues, next steps.
 * [backends/README.md](docs/backends/README.md): how to write and test an RHI backend.
 * The backends' bring-up records: [DirectX](src/esia/rhi/directx/common/STATUS.md),
