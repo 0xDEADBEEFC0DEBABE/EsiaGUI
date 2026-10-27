@@ -200,6 +200,7 @@ namespace esia::rhi::d3d12
             Caps c;
             c.fxStorage = FxStorage::Buffer;
             c.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm5;
+            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -470,7 +471,7 @@ namespace esia::rhi::d3d12
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count)
+            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != DualSourceProgram(desc.program))
                 return {};
             const d3d::DxgiFormats f = d3d::DxgiFormatsOf(desc.targetFormat);
             if (f.rtv == DXGI_FORMAT_UNKNOWN)
@@ -479,7 +480,7 @@ namespace esia::rhi::d3d12
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
-            vr.instanceAttribute = desc.program == ShaderProgram::Fx;   // Caps::drawFirstInstance
+            vr.instanceAttribute = DrawsInstances(desc.program);   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;
@@ -523,6 +524,13 @@ namespace esia::rhi::d3d12
                 b.SrcBlend = b.SrcBlendAlpha = D3D12_BLEND_ONE;
                 b.DestBlend = b.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
                 break;
+            case BlendMode::DualSourceLcd:
+                b.BlendEnable = TRUE;
+                b.SrcBlend = D3D12_BLEND_SRC1_COLOR;
+                b.DestBlend = D3D12_BLEND_INV_SRC1_COLOR;
+                b.SrcBlendAlpha = D3D12_BLEND_SRC1_ALPHA;
+                b.DestBlendAlpha = D3D12_BLEND_INV_SRC1_ALPHA;
+                break;
             }
             d.SampleMask = 0xFFFFFFFFu;
             d.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
@@ -536,11 +544,11 @@ namespace esia::rhi::d3d12
                 {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
                 {"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
             };
-            // FX: the instance's index, from InstanceIndices at slot 1
+            // FX and quads: the instance's index, from InstanceIndices at slot 1
             const D3D12_INPUT_ELEMENT_DESC fx[] = {{"INSTANCEINDEX", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1}};
             if (desc.layout == VertexLayout::UiVertex)
                 d.InputLayout = {ui, 3};
-            else if (desc.program == ShaderProgram::Fx)
+            else if (DrawsInstances(desc.program))
                 d.InputLayout = {fx, 1};
             d.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
             d.NumRenderTargets = 1;

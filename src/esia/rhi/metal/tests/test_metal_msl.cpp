@@ -60,7 +60,7 @@ ESIA_TEST(MetalMsl, ResourcesAtTheBackendsIndices)
                     else if (Contains(r.type, "WgtDraw"))
                         ESIA_CHECK(r.index == (int)binding::kDrawConstants && Contains(r.type, "constant"));
                     else if (Contains(r.type, "gFxData"))
-                        ESIA_CHECK(r.index == (int)binding::kFxData && p == ShaderProgram::Fx);
+                        ESIA_CHECK(r.index == (int)binding::kFxData && DrawsInstances(p));
                     else
                         ESIA_CHECK(!"unknown buffer");
                     ESIA_CHECK(r.index != (int)binding::kVertexBuffer);
@@ -120,7 +120,7 @@ ESIA_TEST(MetalMsl, VertexInputsAndOutputs)
         else
         {
             ESIA_CHECK(vs.inputs.empty() && vs.usesVertexId);
-            ESIA_CHECK(vs.usesInstanceId == (p == ShaderProgram::Fx));
+            ESIA_CHECK(vs.usesInstanceId == DrawsInstances(p));
         }
         // every varying the fragment shader reads is written by the vertex shader at the same location and type
         const MslInterface ps = Parse(p, shaders::Stage::Pixel);
@@ -137,7 +137,14 @@ ESIA_TEST(MetalMsl, VertexInputsAndOutputs)
             if (in.type == "uint" || in.type == "int")
                 ESIA_CHECK(in.attribute.rfind("user(", 0) == 0);
         }
-        // one color output (no dual-source blending)
-        ESIA_CHECK(ps.outputs.size() == 1 && ps.outputs[0].attribute == "color(0)");
+        // one color output; TextLcd adds the second source for dual-source blending
+        int color0 = 0, index1 = 0;
+        for (const MslVarying& out : ps.outputs)
+        {
+            color0 += out.attribute.rfind("color(0)", 0) == 0;
+            index1 += Contains(out.attribute, "index(1)");
+        }
+        ESIA_CHECK(color0 == (DualSourceProgram(p) ? 2 : 1));
+        ESIA_CHECK(index1 == (DualSourceProgram(p) ? 1 : 0));
     }
 }

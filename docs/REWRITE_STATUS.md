@@ -4,7 +4,7 @@ Where the ImGui-free rewrite stands after core round 3 and the UI core's second 
 write a backend is [backends/README.md](backends/README.md).
 
 **Round 3.** By the owner's decision, sub-pixel (LCD / ClearType) text was removed from Esia: text is antialiased
-in grayscale everywhere (section 0). The backends must delete their dual-source code after merging (section 0,
+in grayscale everywhere (section 0). It came back on 2026-10-28, also at the owner's request ("Sub-pixel text"). The backends must delete their dual-source code after merging (section 0,
 "Backend follow-ups"); the grayscale scenes render bit-identical.
 
 **Before that, in one paragraph.** Round 1 built phase 0: the UI core without Dear ImGui, the RHI with a validating null
@@ -41,6 +41,33 @@ screenshots.
 **Data widgets, Android, color glyphs, touch** (2026-10-02): number, vector and color fields, tables, trees, a
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
+
+**One UI light, motion blur** (2026-10-28, in Esia): `RenderParams::light` lights every glass rim and turns every drop
+shadow away from one point (the cursor) or direction (a device's tilt); `Style::MotionBlur` blurs a shape, its stroke
+or text along the path it moves while the frame is shown.
+
+**Temporal reuse of the backdrop** (2026-10-28, in Esia): glass captures reused from frame to frame when what lies
+under them did not change (`RenderParams::targetStatic`), or for a few frames over a live background
+(`backdropReuseFrames`); both opt-in.
+
+**Instanced glyphs and tiles** (2026-10-28, in Esia): glyphs and flat tiles as 32-byte quad instances expanded on the
+GPU (four new programs on every backend); a benchmark of fixed scenes (`esia_bench`). Text: build -43%, upload -69%,
+GPU -60% on Direct3D 11.
+
+**Smooth text motion, legible text** (2026-10-28, in Esia): moving text drawn unhinted at quarter pixels, settling
+into its hinting when it stops; a halo of the other tone where the backdrop comes close to a glyph shape's color.
+
+**Distance-field text** (2026-10-28, in Esia): Esia's own MTSDF generator (overlapping contours resolved, sharp
+corners), glyphs as FX shapes with every Painter material (`Painter::Text` with a `Style`: outlines, glows,
+shadows, gradients, glass, weight) on every backend, large text from fields by itself.
+
+**Sub-pixel text** (2026-10-28, in Esia): LCD antialiasing again, from either rasterizer with FreeType's filters,
+dual-source blending on every backend but Direct3D 9, the grayscale fallback in glow layers; the ClearType setup of
+the window's monitor on Windows.
+
+**FreeType's rendering** (2026-10-28, in Esia): `TextRendering` chooses how the FreeType text system turns outlines
+into pixels - FreeType's hinting (light, the fonts' own with the v35 or v40 interpreter, the autohinter), its
+rasterizer, stem darkening, hinted advances; the design's outlines stay the default.
 
 **Bitmap fonts** (2026-10-07): BDF, PCF and Windows FNT / FON draw pixel for pixel, sizes snapped to a strike's whole
 multiples; a .fon's sizes are one font.
@@ -93,6 +120,13 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [One UI light, motion blur](#one-ui-light-motion-blur)
+* [Temporal reuse of the backdrop](#temporal-reuse-of-the-backdrop)
+* [Instanced glyphs and tiles](#instanced-glyphs-and-tiles)
+* [Smooth motion and legible text](#smooth-motion-and-legible-text)
+* [Distance-field text](#distance-field-text)
+* [Sub-pixel text](#sub-pixel-text)
+* [FreeType's rendering](#freetypes-rendering)
 * [Bitmap fonts](#bitmap-fonts)
 * [Text outlines](#text-outlines)
 * [CPU of plain widgets](#cpu-of-plain-widgets)
@@ -121,6 +155,326 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## One UI light, motion blur
+
+The last two of the owner's picks: one light for the whole UI, which a cursor or a device's tilt can move, and motion
+blur computed from the shapes themselves.
+
+### What changed
+
+* `RenderParams::light` (`UiLight`: `Point(at, height)`, `Direction(towards)`, `FromTilt(pitch, roll)`), in the Draw
+  constants (`gDrawInfo.yzw`: the point or direction, and 0 none / 1 a direction / 1 + the height of a point; the
+  frame constants keep their layout). With it, glass rims and the side of a slab facing it catch the light from it
+  (per pixel: a point light near a panel lights the part of the rim nearest to it), and drop and inner shadows fall
+  away from it - their offsets turned, their lengths kept; the planner then counts a shadow's offset as its length
+  every way (`FramePlan::lightShadows`). Without it each glass keeps its light angle, each shadow its offset.
+  glass_window: `--light` puts it at the cursor.
+* `Style::MotionBlur(displacement)`, feature `fx::kMotion` (the displacement in the custom row; not with a user effect,
+  not when drawing flat; scaled under `PushScale`): FxPS averages the pixel's coverage along the path - the distance
+  taken at the ends of up to 8 segments at most 4 pixels long, the coverage ramp integrated exactly over each for a
+  distance that changes linearly along it (`SegmentCoverage`) - for the fill and the stroke; FxVS and the planner
+  cover the area swept. Text with a style moves the same way (every glyph shape, its outline pass too). A first
+  attempt that blurred each edge along its own normal (one closed form per pixel) pinched curved ends and broke thin
+  strokes at motions of tens of pixels; the path integral does not.
+* `fx::kVariantOnlyFeatures` (`kGlyph | kLegible | kMotion`): the features SM3's full shader leaves out; the renderer
+  and the null device decide glyph and motion variants from it.
+
+### Verified
+
+* Conformance scenes `motion_blur` (a capsule, a circle, a stroked card and outlined glyph shapes moving, beside the
+  same at rest) and `ui_light` (glass and shadowed cards around a point light): D3D9, D3D10, D3D11, D3D12, OpenGL,
+  GLES and Vulkan against the D3D11 goldens (OpenGL / GLES within 29 levels on 0.03 % of the motion pixels); every
+  other scene unchanged; ctest 37 / 37.
+* Unit tests: the displacement with its feature, scaled, left out with an effect or flat, on text; the swept area in
+  the planner's bounds; the light in the Draw constants and the shadows' symmetric reach; moving shapes taking their
+  variant where the full shader lacks motion blur.
+
+### Not done
+
+* No platform layer feeds a device's motion yet (`UiLight::FromTilt` takes the angles); EsiaGUI's springs could pass
+  their velocity to `MotionBlur`.
+* Shadows and glows are not blurred along the motion (they are soft already); images and coverage text (quads) are not
+  motion-blurred - text with a style is.
+
+## Temporal reuse of the backdrop
+
+One of the owner's picks: the glass's backdrop capture (a copy and a blur pyramid) taken again only when it has to be.
+
+### What changed
+
+* Planner (`FramePlan::keyCaptures`, `KeyCaptures`): every capture gets a key - its region and pyramid mixed with
+  every op before it that touches the region, in order (kind, state, data: FX instances, quads, the vertices of
+  geometry); every op before it when one of those reads the backdrop itself or is a glow layer. 0 when it cannot be
+  told: a host callback, content that animates on the shader's clock (shimmer, a light streak without its own clock,
+  user effects), more than 256 KB of data in one op. `RenderOp::captureShape`: the region and pyramid alone.
+* Renderer: `RenderParams::targetStatic` (the host gives the target the same content before every frame) reuses a
+  capture whose key is last frame's; `backdropReuseFrames` reuses one of the same shape for that many frames whatever
+  changed (a live background, the frost that many frames old). Captures share the copy and the pyramid, and the next
+  capture writes over a capture's margins, so a kept capture whose levels were written over is brought back from a copy
+  of them kept aside (made before the frame's passes for captures whose content stayed the same): a few
+  `CopyTexture`s instead of a copy, a blur and its passes. The pyramid passes load instead of DontCare while captures
+  are kept; the levels and the backdrop copy are copy sources and destinations. `RenderStats::reusedCaptures`,
+  `restoredCaptures`.
+* Conformance: `Scene::repeat` draws a frame several times on one renderer (the target cleared before each, with
+  `targetStatic`) and checks the last; the scene `glass_reused` is the glass scene three times, against its golden.
+  `esia_bench`: `glass-static`, `glass-live` (the stripes scroll), `glass-live-2` (reused for two frames); the bench
+  turns the Vulkan validation layer off (`ESIA_VULKAN_VALIDATION=0` unless set).
+
+### Measured (`esia_bench`, 20 glass panels with titles, 1600 x 1000, RTX 4080 SUPER, medians)
+
+| backend | glass: submit / GPU ms | glass-static | glass-live-2 |
+| --- | --- | --- | --- |
+| Direct3D 11 | 0.042 / 0.412 | 0.039 / 0.369 | 0.044 / 0.373 |
+| Direct3D 12 | 0.143 / 0.403 | 0.162 / 0.369 | |
+| Vulkan | 0.198 / 0.550 | 0.179 / 0.457 | 0.190 / 0.463 |
+| OpenGL | 1.095 / 0.887 | 0.997 / 0.692 | |
+
+121 draw calls become 41. The panels lie close together, so every capture of `glass-static` comes back from its copy
+aside (20 restores a frame); a lone glass window is reused without a copy. The glass's own shading, not its capture,
+is most of the GPU time here: 6 to 22 % saved on these desktop backends. Tile-based GPUs (Apple, mobile), where each
+capture ends and restarts a render pass, should gain more; not measured.
+
+### Verified
+
+* Unit tests (null device): an unchanged capture reused without a pass, taken again when something under it changes,
+  without the promise, or under a shimmer; glass on glass restored from the copies aside from the third frame on, with
+  no pyramid pass and no texture made; `backdropReuseFrames` over a changing background (taken, reused twice, taken
+  ...), a moved capture taken at once.
+* `glass_reused` on D3D9, D3D10, D3D11, D3D12, OpenGL, GLES and Vulkan within the glass golden's tolerance (the same
+  deltas as `glass`); its null log shows the third frame's restores; ctest 37 / 37.
+
+### Not done
+
+* The example and EsiaGUI do not set `targetStatic` yet (their hosts clear or not per backend); an app that draws its
+  whole background with Esia can.
+* Captures that write over each other are restored every frame (copies); separate storage per capture would keep
+  them, at more memory.
+
+## Instanced glyphs and tiles
+
+One of the owner's picks (text GPU instancing), and the structural step the plain-widget measurements of 2026-10-07
+pointed at: every glyph was four vertices and six indices written by the CPU (104 bytes), every flat capsule eight
+vertices and eighteen indices.
+
+### What changed
+
+* `DrawList`: quads drawn instanced - `QuadInstance` (two float4 rows: the rect; the uv in 1/4096 and the color as
+  whole numbers, exact in a float), `DrawCmdKind::Quads`, `BeginQuads` / `EndQuads` write them in place, `AddQuad`,
+  `Quads()`, `RefreshBounds` for quads. Mirrored uv are not quads (images stay geometry).
+* The FreeType text system keeps each layout's quads packed (pixel rects from the origin, uv and color packed once)
+  and copies them in with the offset; single glyphs, outlines and icons are quads too. The Painter's flat tiles are
+  their cells as quads (uv packed per tile), the plain middle of a large fill a quad of the white texture; `PopScale`
+  scales quads as it scales vertices.
+* Planner: quads are draws of their own kind (`RenderOp::quads`, joining only draws of quads), kept as runs in the
+  lists (`FramePlan::quadRuns`). Renderer: the quads follow the FX instances in the instance data (`gConv.w`: a row
+  of the buffer; on the instance texture 8 quads in the room of an FX instance, a power of two per row for SM3), and
+  draw with `QuadImage` / `QuadGray` / `QuadLcd` / `QuadLcdGray` (`QuadVS` in `esia_quad.hlsl` with the UI pixel
+  shaders): one instanced draw per batch, no index buffer.
+* RHI: the four programs, `DrawsInstances` and `DualSourceProgram` (the backends' FX-only and TextLcd-only checks:
+  Direct3D 11 / 12 instance-index attribute, Direct3D 9 vertex declaration, Metal planning, the null device).
+  Direct3D 9: the instance texture at most 4096 texels wide - NVIDIA's driver failed the 16384-texel system-memory
+  surface of a full-row upload (E_FAIL) and misbehaved after it.
+* `esia_bench` (`tests/bench`): text, controls (regular and flat), shapes, glass through a headless device of any
+  backend; median and 99th percentile of build, submit and GPU time, what a frame uploads. CTest runs it three frames
+  on the null device.
+
+### Measured (`esia_bench`, Release clang-cl, 1600 x 1000, RTX 4080 SUPER, medians of alternating runs)
+
+| scene | build ms | submit ms | GPU ms | upload KB |
+| --- | --- | --- | --- | --- |
+| text (3418 glyphs), Direct3D 11 | 0.065 -> 0.037 | 0.014 -> 0.007 | 0.027 -> 0.010 | 347 -> 107 |
+| controls (324 capsules, labels), Direct3D 11 | 0.052 -> 0.041 | 0.028 -> 0.024 | 0.047 -> 0.037 | 282 -> 171 |
+| controls flat, Direct3D 11 | 0.100 -> 0.088 | 0.012 -> 0.008 | 0.035 -> 0.020 | 307 -> 110 |
+| text, Direct3D 12 / Vulkan | 0.065 -> 0.039 / 0.066 -> 0.041 | 0.057 -> 0.044 / 0.224 -> 0.201 | 0.028 -> 0.013 / 0.027 -> 0.017 | |
+| text, OpenGL | 0.075 -> 0.044 | 0.251 -> 0.174 | 0.018 -> 0.028 | |
+| text, Direct3D 9 / 10 | 0.078 -> 0.044 / 0.064 -> 0.038 | 0.034 -> 0.064 / 0.031 -> 0.029 | 0.031 -> 0.034 / 0.026 -> 0.018 | |
+
+Shapes and glass are unchanged (FX instances). Where the instance data is a texture (OpenGL, GLES, Direct3D 9 / 10)
+the GPU fetches each quad by texel in the vertex shader: on OpenGL a little more GPU time, on Direct3D 9 more submit
+time (the texture's upload through a system-memory surface), both less than the CPU time saved.
+
+### Verified
+
+* Every conformance scene on D3D9, D3D10, D3D11, D3D12, OpenGL, GLES and Vulkan against the goldens of the vertex
+  path, unchanged (the scenes' glyphs are quads now); the new scene `quad_rows` (the text scene with 16 quads per row
+  of the instance texture, after an FX row) on all of them; the null logs regenerated (one instance buffer, no vertex
+  or index buffers in a frame of text); ctest 37 / 37.
+* Unit tests: quad runs and single quads, the packing, quad bounds and their refresh, scaled quads, text drawn at its
+  final geometry under a scale, flat tiles as quads batching with the text; the FreeType tests decode the quads as the
+  shader does (golden images unchanged).
+
+### Not done
+
+* Instance-rate vertex attributes would spare the texture-storage backends their texel fetches (two rows a quad fit
+  in attributes, unlike the 24 of an FX instance).
+* Images are still geometry (any uv, mirrored, any texture size); FX instances still take 384 bytes each (the shapes
+  scene uploads 3.75 MB for 10000 of them: the next structural step for shape-heavy frames).
+
+## Smooth motion and legible text
+
+Two of the text ideas the owner picked: hinted text that moves without jumping from pixel to pixel, and text that
+stays legible over whatever lies behind it.
+
+### What changed
+
+* Smooth motion (`TextRendering::smoothMotion`; on in `Light`, `Crisp`, `ClearType` and `native`; parser
+  `smooth-motion[=0|1]`): the FreeType text system follows each text from frame to frame by its layout and the order
+  of its draws in the frame. A text whose position or scale changed is drawn from the design's outline, unhinted, at
+  quarter pixels across and down (glyphs keyed apart in the atlas); once it stops, its moving and hinted quads are
+  drawn together, their alphas crossfading over 0.12 s (`RasterParams::time`; 8 frames without a clock), then the
+  hinted ones alone. Outlines (`DrawOutline`) follow the same rule. `RasterizeGray` / `RasterizeGrown` /
+  `RasterizeLcd` take a 2D offset; the examples hand the frame's time to `NewFrame`.
+* Legibility (`Style::Legible(strength, radius)`, feature `fx::kLegible`): `Painter::Text` with a fill asks for it
+  (not when drawing flat); the text system puts it in the outer pass, under all faces, with its radius (by default a
+  sixth of the em). The FX shader reads the captured backdrop at the pixel, as blurred as the halo is wide (4 px at
+  least), and draws a halo of the other tone (black for light text, white for dark) as strong as the lightness
+  contrast is missing: full within a quarter, none beyond a half. The planner treats it as a backdrop reader (a
+  capture, the pyramid's levels for its radius, never level 0); Direct3D 9's full shader leaves it to the glyph
+  variants.
+* Painter: under `PushScale` a text's stroke, shadow, glows, glass and halo now scale with its glyphs (they kept their
+  unscaled size).
+
+### Verified
+
+* The text system: moving text drawn from glyphs of its own, both renderings while it settles (alphas adding up to
+  255), hinted again after 8 frames or 0.12 s; the ink moving by quarter pixels down (whole pixels without smooth
+  motion); the halo under the faces with the default and a given radius. The Painter: the halo's strength and
+  radius, none without a fill or when flat, scaled with the glyphs. The planner: a capture, a blur of 16 px or the
+  halo's radius, no level 0.
+* The conformance scene `text_legible` (white and black glyph shapes over a black-to-white gradient, a gray run on
+  gray): D3D9, D3D10, D3D11, D3D12, OpenGL, GLES and Vulkan equal to the D3D11 golden; ctest 36 / 36.
+
+### Not done
+
+* The halo's tone is decided per pixel from the blurred backdrop: over detail finer than the halo it is even, not one
+  per detail.
+* Smooth motion follows texts by their order of drawing: a text drawn in another order next frame counts as moved
+  (it settles again within 0.12 s).
+
+## Distance-field text
+
+The owner asked for native glows, outlines, shadows, glass and blur on text, all optimized, and for MSDF. Text can
+now be drawn from multi-channel signed distance fields made by Esia, as FX shapes with any Painter material.
+
+### What changed
+
+* `GenerateMtsdf` (`include/esia/text/distance_field.hpp`, `GlyphShape`): curves flattened to 1/32 px, the filled
+  area resolved (pieces of edges cut where contours cross, those inside the area dropped, the rest linked into loops
+  with the inside on the left), loops cut at corners (turns over about 8 degrees, exact tangents at the curves' ends)
+  and colored per run (Chlumsky's switching, a teardrop for one corner), per texel the pseudo-distance to the nearest
+  run per channel (from a grid of the pieces within reach) and the true distance in A (nearest points handed on from
+  texel to texel past the multi-channel reach), signs from the non-zero winding, clashes flattened to the median.
+* The FreeType text system: `DrawShapes` (fields at 48 pixels per em, ranges 8 / 24, on a field atlas; one per glyph
+  for every size), the two passes, color and bitmap glyphs as their bitmaps; `TextRendering::distanceFieldFrom`
+  (parser: `distance-field=N`).
+* FX: `ShapeKind::Glyph`, feature `kGlyph` (variants of other batches leave the glyph code out), `SdGlyph`: the median
+  near the edge, the true distance farther, the ink box's signed distance as a lower bound past the reach. The quad
+  and the planner's bounds come from `shape2`. Direct3D 9: the full ps_3_0 shader has no registers left for it
+  (`Caps::fullFxGlyphs` = false), so glyph batches build their variant at once.
+* Painter: `Material()` out of `EmitShape` (shapes unchanged), `Text` / `TextBox` with a `Style`, `Style::Weight`.
+  glass_window's text wrappers pass `DrawShapes` and `DrawOutline` on (outlines did not reach the inner system).
+
+### Verified
+
+* Generator tests: the square's distances (median and A to 0.1 px), corners held to a twentieth of a pixel, either
+  winding, holes, overlapping squares filled as their union (A exact to the union's outline), a cubic circle, a
+  triangle, an L and a drop sampled at 6 x on the right side everywhere but 0.1 px of the outline.
+* The text system (two passes, the text's box, one field per glyph for every size, large text from fields), the
+  Painter (the material handed on, flat drawing), the renderer (glyph variants where the full shader lacks them).
+* The conformance scene `text_fields` (made with the generator, no font): D3D9, D3D10, D3D11, D3D12, OpenGL, GLES and
+  Vulkan within 2 levels of the D3D11 golden (D3D9 through its variant); ctest 36 / 36.
+* glass_window with a title in white with a blue outline, a pink glow and a shadow (Latin and Chinese), a gradient
+  across a word and glass text, on Direct3D 11.
+
+### Not done
+
+* Fields are made when first drawn, on the UI thread (3 ms per glyph in a debug build): no background generation or
+  cache on disk yet.
+* Glows and shadows reach a quarter em from the field; farther they follow the glyph's box (use a glow layer).
+* Per-glyph shadows of neighbouring glyphs add up where they overlap (no union of the whole text's shadow).
+
+## Sub-pixel text
+
+The owner asked for LCD (sub-pixel) text with FreeType's rendering, after it had been removed in core round 3
+(section 0). Grayscale stays the default; `TextRendering::subpixel` (RGB / BGR) and `lcdFilter` turn it on.
+
+### What changed
+
+* Text: `RasterizeLcd` (glyph_raster.hpp) covers at three times the horizontal resolution and filters with FreeType's
+  weights (default, light, none); A is the exact grayscale coverage. The FreeType rasterizer renders
+  `FT_RENDER_MODE_LCD` with `FT_Library_SetLcdFilter`, A the stripes' mean. The atlas becomes sub-pixel pages
+  (`GlyphAtlas::Reformat`, RGBA8 + `TextureFlags_LcdCoverage`), which take 8-bit coverage as gray (tiles, outlines,
+  bitmap fonts); hinted loads use `FT_LOAD_TARGET_LCD`. Presets `ClearType()`; `native` on Windows reads the
+  user's font smoothing (ClearType and its stripe order).
+* Renderer and RHI: `ShaderProgram::TextLcd` / `TextLcdGray` (after `Clear`: the other programs keep their
+  numbers), `BlendMode::DualSourceLcd`, `Caps::dualSourceBlend`, `RenderOp::lcd`, `TextComposition::clearTypeContrast`
+  / `clearTypeLevel` (gText.zw), `RenderParams::subpixelText`. `TextLcdPS` composes gray texels as grayscale text
+  and the others per channel; `TextLcdGrayPS` uses A.
+* Backends: the dual-source code of round 3's removals is back - D3D10 / 11 / 12 blend states, GL 3.3 (core) and GLES
+  (`EXT_blend_func_extended`), Vulkan (`dualSrcBlend`, `Desc::dualSrcBlend`), Metal (`Source1` factors, `index(1)`);
+  D3D9 refuses it. `build_shaders.py` patches `SV_Target1` to location 0 index 1 in SPIR-V, adds the GLES extension
+  and leaves `TextLcd` out of SM3.
+* Conformance: the `text_lcd` scene is back with its golden from OpenGL on llvmpipe (all backends here are within
+  8 of it, allowed 48) and its null log, byte for byte the old one; every other null log changes in the frame
+  constants' gText.zw only (0 0 -> 0.5 1).
+* Windows: `win32::MonitorText` / `FrameInfo::text` - DirectWrite's rendering parameters of the window's monitor,
+  the user's font smoothing, and the monitor's orientation (`RotatedStripes`: reversed upside down, none sideways),
+  re-read on monitor, display and setting changes; glass_window follows it under `--text-rendering native`.
+
+### Verified
+
+* Windows, clang-cl with `-Werror`, every backend (Metal's portable part included): ctest 36 / 36. Unit tests of the
+  rasterizer (A = RasterizeGray's coverage, stripes by thirds, the filters keep the ink), the atlas, the text system
+  (both rasterizers, RGB / BGR swap, switching kinds, the golden `ft_lcd`, the fallback = grayscale text), the frame
+  planner, the renderer's program choice, the platform layer.
+* `text_lcd` passes on D3D10, D3D11, D3D12, OpenGL, GLES and Vulkan (RTX 4080 SUPER); glass_window with
+  `--text-rendering cleartype` on Direct3D 11: color-fringed stems on glass, blue at the left edge of light text.
+
+### Not done
+
+* Inside glow layers sub-pixel text stays grayscale (one alpha channel per pixel).
+* Vertical stripes (VRGB / VBGR) and other panels' layouts (OLED) have no sub-pixel mode: they get grayscale.
+* X11, macOS, Android: no per-monitor setup (Linux could read Xft.rgba / RandR's subpixel order).
+
+## FreeType's rendering
+
+`TextRendering` (`include/esia/text/text.hpp`) chooses how the FreeType text system turns outlines into pixels. The
+default is unchanged - the design's outlines through the analytic rasterizer - and so is every golden image.
+
+### What changed
+
+* `Hinting` (None, Light, Full, Auto), `TrueTypeInterpreter` (V40, V35), `GlyphRasterizer` (Analytic, FreeType), stem
+  darkening and hinted advances; the presets `Design`, `Light`, `Crisp` and `NativeTextRendering()`;
+  `ParseTextRendering` for `--text-rendering` (glass_window, every platform) and `ESIA_TEXT_RENDERING` (any program).
+  `FreeTypeDesc::rendering` sets it at creation, `TextSystem::SetRendering` from the next `NewFrame` on: the atlas
+  starts over (`GlyphAtlas::StartOver`), and the layouts too when the advances change.
+* Hinted or FreeType-rasterized glyphs load at their size; `FT_Set_Char_Size` runs (with a TrueType font's preparation
+  program) only when the size changes. The interpreter and stem darkening are FreeType properties set when the
+  rendering changes; the faces then request their sizes again.
+* Hinted advances (`Full` / `Auto`): `FT_Get_Advance` at the frame's density, plus what HarfBuzz added (kerning,
+  marks) rounded; the layout cache's key gains the density. Hinting across (v35, the autohinter) or hinted advances
+  put the pens on whole pixels; otherwise hinted glyphs keep the quarter-pixel phases.
+* The bundled FreeType turns on `FT_CONFIG_OPTION_SUBPIXEL_RENDERING` and adds the `autofit` and `smooth` modules.
+
+### Verified
+
+* `tests/text/test_ft_rendering.cpp`: the parser; the stem of an "l" in one pixel column with v35 and the autohinter
+  at every phase, straddling two with v40 or unhinted; fewer partly covered pixels on horizontals (light 0.54, crisp
+  0.29 times the design's with DroidSans); whole-pixel advances at densities 1, 1.5 and 2; FreeType's rasterizer
+  within 2 % of the analytic one; v35, v40 and the autohinter differ; stem darkening thickens a CFF font; a new
+  rendering waits for the next frame; the environment variable; the golden image `ft_crisp` (compared with the bundled
+  FreeType only, `ESIA_TEST_BUNDLED_FREETYPE`).
+* Windows, clang-cl with `-Werror`: 33 / 33 tests; the changed sources under the Linux CI's warnings.
+* glass_window on Direct3D 11 at scale 1 with `design`, `light`, `crisp` and `native`.
+
+### Notes
+
+* Segoe UI's instructions were written for ClearType. Under v35 (`crisp`) they fit its stems for black-and-white
+  pixels: an "m" gets narrower inside its advance and the spacing looks uneven, as GDI text without ClearType did.
+  Fonts with classic hints (Tahoma, Verdana, DejaVu, Droid) suit `crisp`; Segoe UI suits `native` (v40).
+* The autohinter's smooth mode gives stems the font's standard width and leans them into one pixel with a sliver
+  beside it, where v35 makes them whole pixels.
 
 ## Bitmap fonts
 

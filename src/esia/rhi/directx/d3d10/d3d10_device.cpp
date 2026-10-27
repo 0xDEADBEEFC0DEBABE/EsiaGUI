@@ -163,6 +163,7 @@ namespace esia::rhi::d3d10
             c.framebufferOriginBottomLeft = false;
             c.clipSpaceYDown = false;
             c.halfPixelOffset = false;
+            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -209,6 +210,8 @@ namespace esia::rhi::d3d10
             bool ok = blend(false, D3D10_BLEND_ONE, D3D10_BLEND_ZERO, D3D10_BLEND_ONE, D3D10_BLEND_ZERO, blends_[(int)BlendMode::Opaque]);
             ok = ok && blend(true, D3D10_BLEND_SRC_ALPHA, D3D10_BLEND_INV_SRC_ALPHA, D3D10_BLEND_ONE, D3D10_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Straight]);
             ok = ok && blend(true, D3D10_BLEND_ONE, D3D10_BLEND_INV_SRC_ALPHA, D3D10_BLEND_ONE, D3D10_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Premultiplied]);
+            ok = ok && blend(true, D3D10_BLEND_SRC1_COLOR, D3D10_BLEND_INV_SRC1_COLOR, D3D10_BLEND_SRC1_ALPHA, D3D10_BLEND_INV_SRC1_ALPHA,
+                             blends_[(int)BlendMode::DualSourceLcd]);
 
             D3D10_RASTERIZER_DESC rd = {};
             rd.FillMode = D3D10_FILL_SOLID;
@@ -478,7 +481,7 @@ namespace esia::rhi::d3d10
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count)
+            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != DualSourceProgram(desc.program))
                 return {};
             d3d::ShaderRequest vr;
             vr.program = desc.program;
@@ -895,7 +898,7 @@ namespace esia::rhi::d3d10
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D10VertexShader>> vertexShaders_;
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D10PixelShader>> pixelShaders_;
         ComPtr<ID3D10InputLayout> uiLayout_;
-        ComPtr<ID3D10BlendState> blends_[3];   // per BlendMode
+        ComPtr<ID3D10BlendState> blends_[4];   // per BlendMode
         ComPtr<ID3D10RasterizerState> raster_;
         ComPtr<ID3D10DepthStencilState> depth_;
         ComPtr<ID3D10SamplerState> samplers_[2];

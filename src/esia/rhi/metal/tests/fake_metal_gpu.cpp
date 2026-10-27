@@ -266,9 +266,13 @@ namespace esia::rhi::metal::test
         // the vertex descriptor and the shader's stage_in must agree
         if (d.uiVertexLayout != !p.vs.inputs.empty())
             Error("CreatePipeline: vertex descriptor and stage_in disagree");
-        // every fragment program writes one color output (no dual-source blending in Esia)
-        if (p.ps.outputs.size() != 1)
-            Error("CreatePipeline: a fragment program with other than one output");
+        // dual-source outputs need Source1 factors, and Source1 factors need them
+        bool index1 = false;
+        for (const MslVarying& o : p.ps.outputs)
+            index1 |= o.attribute.find("index(1)") != std::string::npos;
+        const bool source1 = d.blend.rgbSrc >= mtl::BlendFactorSource1Color || d.blend.rgbDst >= mtl::BlendFactorSource1Color;
+        if (index1 != (d.blend.enabled && source1))
+            Error("CreatePipeline: dual-source outputs and blend factors disagree");
         p.desc.vertexSource = p.desc.fragmentSource = nullptr;
         psos_.push_back(std::move(p));
         ++shared_->stats.pipelines;
@@ -538,7 +542,7 @@ namespace esia::rhi::metal::test
             return;
         }
         const Pso& p = psos_[pipeline_ - 1];
-        const std::uint32_t want = p.desc.program == ShaderProgram::Fx ? mtl::PrimitiveTypeTriangleStrip : mtl::PrimitiveTypeTriangle;
+        const std::uint32_t want = DrawsInstances(p.desc.program) ? mtl::PrimitiveTypeTriangleStrip : mtl::PrimitiveTypeTriangle;
         if (primitive != want)
             Error(std::string(call) + ": primitive type does not fit the program");
         for (const MslInterface* m : {&p.vs, &p.ps})

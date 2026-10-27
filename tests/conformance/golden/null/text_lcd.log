@@ -1,0 +1,87 @@
+create texture #1 320x240 RGBA8_UNORM usage=7 host-target
+begin frame 1
+create texture #2 128x32 RGBA8_UNORM usage=9 image
+create texture #3 160x120 RGBA16_FLOAT usage=f pyramid-1
+create texture #4 80x60 RGBA16_FLOAT usage=f pyramid-2
+create texture #5 40x30 RGBA16_FLOAT usage=f pyramid-3
+create texture #6 20x15 RGBA16_FLOAT usage=f pyramid-4
+create texture #7 10x8 RGBA16_FLOAT usage=f pyramid-5
+create texture #8 320x240 RGBA16_FLOAT usage=3 glow-layer
+create texture #9 1x1 RGBA8_UNORM usage=1 white
+create buffer #10 fx 4096 bytes
+update buffer #10 1888 bytes
+pass #1 load ui
+create pipeline #11 Fx strip premul RGBA8_UNORM
+pipeline #11
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+texture t0 #9
+texture t1 #9
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+fx buffer #10
+constants draw: 0 0 0 0 | 0 0 0 0
+draw instanced 4 x 2
+create pipeline #12 QuadLcd strip dual-source RGBA8_UNORM
+pipeline #12
+texture t0 #2
+draw instanced 4 x 32
+end pass
+pass #8 dont-care glow-layer
+create pipeline #13 Clear list opaque RGBA16_FLOAT
+pipeline #13
+scissor [64,0 256x224]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+draw 3 from 0
+create pipeline #14 QuadLcdGray strip straight RGBA16_FLOAT
+pipeline #14
+scissor [0,0 320x240]
+texture t0 #2
+fx buffer #10
+constants draw: 0 0 0 0 | 32 0 0 0
+draw instanced 4 x 3
+end pass
+pass #3 dont-care pyramid
+create pipeline #15 Downsample list opaque RGBA16_FLOAT
+pipeline #15
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+scissor [30,0 130x114]
+constants pass: 0.003125 0.00416667 0 0 | 0.201562 0.00208333 0.998438 0.93125
+texture t0 #8
+draw 3 from 0
+end pass
+pass #4 dont-care pyramid
+pipeline #15
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+scissor [14,0 66x58]
+constants pass: 0.00625 0.00833333 0 0 | 0.190625 0.00416667 0.996875 0.945833
+texture t0 #3
+draw 3 from 0
+end pass
+pass #5 dont-care pyramid
+pipeline #15
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+scissor [6,0 34x30]
+constants pass: 0.0125 0.0166667 0 0 | 0.18125 0.00833333 0.99375 0.958333
+texture t0 #4
+draw 3 from 0
+end pass
+pass #1 load ui
+create pipeline #16 LayerComposite list premul RGBA8_UNORM
+pipeline #16
+scissor [176,36 87x72]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 48
+constants pass: 1 0.215686 0.372549 0.6 | 1 6 1 0
+texture t0 #8
+texture t1 #9
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+draw 3 from 0
+end pass
+end frame

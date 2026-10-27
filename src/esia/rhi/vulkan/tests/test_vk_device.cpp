@@ -65,10 +65,10 @@ namespace
     {
         PipelineDesc d;
         d.program = p;
-        const bool ui = p == ShaderProgram::UiGeometry || p == ShaderProgram::TextGray;
-        d.layout = ui ? VertexLayout::UiVertex : VertexLayout::None;
-        d.topology = p == ShaderProgram::Fx ? Topology::TriangleStrip : Topology::TriangleList;
-        d.blend = p == ShaderProgram::Fx || p == ShaderProgram::LayerComposite      ? BlendMode::Premultiplied
+        d.layout = UsesUiVertices(p) ? VertexLayout::UiVertex : VertexLayout::None;
+        d.topology = DrawsInstances(p) ? Topology::TriangleStrip : Topology::TriangleList;
+        d.blend = DualSourceProgram(p)                                              ? BlendMode::DualSourceLcd
+                  : p == ShaderProgram::Fx || p == ShaderProgram::LayerComposite    ? BlendMode::Premultiplied
                   : p == ShaderProgram::Downsample || p == ShaderProgram::Clear     ? BlendMode::Opaque
                                                                                     : BlendMode::Straight;
         d.targetFormat = format;
@@ -95,9 +95,14 @@ ESIA_TEST(Vulkan, EveryProgramBuilds)
                 {
                     const PipelineDesc pd = ProgramDesc((ShaderProgram)p, f, samples);
                     const Pipeline pipe = d->CreatePipeline(pd);
-                    if (!pipe)
-                        std::printf("  %s for %s x%d failed\n", ShaderProgramName(pd.program), FormatName(f), samples);
-                    ESIA_CHECK((bool)pipe);
+                    if (pd.blend == BlendMode::DualSourceLcd && !caps.dualSourceBlend)
+                        ESIA_CHECK(!pipe);
+                    else
+                    {
+                        if (!pipe)
+                            std::printf("  %s for %s x%d failed\n", ShaderProgramName(pd.program), FormatName(f), samples);
+                        ESIA_CHECK((bool)pipe);
+                    }
                     if (pipe)
                         d->DestroyPipeline(pipe);
                 }

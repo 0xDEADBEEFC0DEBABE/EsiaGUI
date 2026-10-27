@@ -40,6 +40,18 @@ namespace glass
                 inner_->AddFallback(font);
         }
         void NewFrame(const esia::text::RasterParams& params) override { inner_->NewFrame(params); }
+        esia::Vec2 DrawShapes(esia::DrawList& dl, esia::text::FontRef font, esia::Vec2 pos, const esia::fx::Instance& material, esia::EffectId effect,
+                              float weight, std::string_view text, float wrapWidth, std::uint32_t flags, float scale) override
+        {
+            return inner_->DrawShapes(dl, font, pos, material, effect, weight, text, wrapWidth, flags, scale);
+        }
+        void DrawOutline(esia::DrawList& dl, esia::text::FontRef font, esia::Vec2 pos, const esia::text::TextOutline& outline, std::string_view text,
+                         float wrapWidth, std::uint32_t flags, float scale) override
+        {
+            inner_->DrawOutline(dl, font, pos, outline, text, wrapWidth, flags, scale);
+        }
+        void SetRendering(const esia::text::TextRendering& rendering) override { inner_->SetRendering(rendering); }
+        esia::text::TextRendering Rendering() const override { return inner_->Rendering(); }
         esia::text::TextMetrics Measure(esia::text::FontRef font, std::string_view text, float wrapWidth, std::uint32_t flags) override
         {
             return inner_->Measure(font, text, wrapWidth, flags);

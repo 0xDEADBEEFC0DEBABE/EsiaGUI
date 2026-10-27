@@ -188,6 +188,32 @@ Verified on the RTX 4080 SUPER: clang-cl 22.1.8 and MSVC 19.44 (`/W4 /WX`) with 
 scenes); D3D12 GPU-based validation clean. Largest differences from the llvmpipe goldens: D3D9 `srgb_msaa` 33 and
 `msaa_target` 25 (under 0.02 % of the pixels), everything else 20 or less.
 
+### Glyph shapes (2026-10-28)
+
+FX glyph shapes (distance-field text, `fx::kGlyph`) did not fit ps_3_0's 32 temporary registers in the full FX shader
+(X4505). SM3's full shader now leaves the glyph code out (`ESIA_SM3` in the prelude), D3D9 reports
+`Caps::fullFxGlyphs = false`, and glyph batches build their feature variant at once, even on GPUs where variants are
+off (4096 instruction slots). On the RTX 4080 SUPER `text_fields` passes on D3D9 to the pixel of the D3D11 golden, and
+on D3D10 / 11 / 12. Their legibility halo (`fx::kLegible`) is left out of SM3's full shader too; `text_legible` passes
+on all four to the pixel.
+
+Motion blur (`fx::kMotion`) is left out of SM3's full FX shader too (`fx::kVariantOnlyFeatures`): moving shapes
+take their variant; `motion_blur` passes on all four to the pixel, `ui_light` within one level.
+
+Instanced quads (glyphs, flat tiles: `QuadVS`, the instance data after the FX instances) run on all four. On D3D9 the
+instance texture is now at most 4096 texels wide: with quads after an FX row the renderer uploaded a full row of
+12288 texels, whose 16384-texel system-memory surface NVIDIA's driver refused (E_FAIL), and the device then failed
+`CreateVertexShader` of valid bytecode. Text costs D3D9 more submit time than the vertices did (the texture upload),
+less build time.
+
+### Sub-pixel text back (2026-10-28)
+
+The owner asked for sub-pixel text again: the D3D10 / 11 / 12 `DualSourceLcd` blend states (`SRC1_COLOR` /
+`INV_SRC1_COLOR`, `SRC1_ALPHA` / `INV_SRC1_ALPHA`), `Caps::dualSourceBlend` and the TextLcd checks are back
+(round 3's removals reversed); D3D9 has no dual-source blending, refuses `TextLcd` and skips `text_lcd`, drawing
+sub-pixel pages with their grayscale coverage. On the RTX 4080 SUPER: `text_lcd` passes on D3D10, 11 and 12 against
+the old llvmpipe golden (max delta 8), every other scene as before.
+
 ### Core round 3 (grayscale text only)
 
 Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): the D3D10 / 11 / 12 dual-source

@@ -345,6 +345,56 @@ ESIA_TEST(FramePlan, PyramidLevelsAndLevelZeroFollowTheGlass)
     ESIA_CHECK(clear.ops[1].glassShape == (PxRect{40, 40, 360, 240}));
 }
 
+// Legible glyph shapes read the captured backdrop (their halo's tone follows it), as blurred as the halo is wide: the
+// pyramid's levels for its radius - the 16 px of the glass's surroundings at least -, never level 0.
+ESIA_TEST(FramePlan, LegibleTextReadsTheBlurredBackdrop)
+{
+    for (const float radius : {6.0f, 40.0f})
+    {
+        DrawList dl;
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl);
+        p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
+        fx::Instance g{};
+        g.rect[0] = g.rect[1] = 100.0f;   // the text's box
+        g.rect[2] = 220.0f;
+        g.rect[3] = 140.0f;
+        g.shape2[0] = g.shape2[1] = 100.0f;   // the glyph's field
+        g.shape2[2] = g.shape2[3] = 140.0f;
+        g.uvRect[2] = g.uvRect[3] = 1.0f;
+        g.fill0[3] = g.misc[0] = 1.0f;
+        g.radii[0] = 8.0f;
+        g.radii[1] = 24.0f;
+        g.radii[2] = 1.0f;
+        g.radii[3] = radius;
+        g.shape[2] = 1.0f;
+        g.flags[0] = fx::kLegible | fx::kGlyph;
+        g.flags[2] = (std::uint32_t)fx::ShapeKind::Glyph;
+        dl.AddFx(g, 0, 7);
+        FramePlan plan;
+        plan.Build(Data({&dl}), {});
+        ESIA_CHECK(plan.anyGlass && Captures(plan) == 1);
+        const RenderOp& op = plan.ops.back();
+        ESIA_CHECK(op.type == RenderOp::FxBatch && op.glass && !op.readsLevel0 && !op.captureLevel0);
+        ESIA_CHECK(op.blurPx == std::max(radius, 16.0f) && op.captureLevels == (radius > 16.0f ? 5 : 4));
+        ESIA_CHECK(op.captureRegion.Contains(op.bounds));
+    }
+}
+
+// A moving shape's batch covers the area it sweeps (half its displacement each way), as FxVS draws it.
+ESIA_TEST(FramePlan, MovingShapesCoverWhatTheySweep)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    Painter p(dl);
+    p.Rect(Rect(100, 100, 140, 120), Style().Fill(Color::White()).MotionBlur(Vec2(40, -10)));
+    FramePlan plan;
+    plan.Build(Data({&dl}), {});
+    const PxRect b = plan.ops[0].bounds;
+    ESIA_CHECK(b.x0 <= 80.0f - 2.0f && b.x1 >= 160.0f + 2.0f && b.y0 <= 95.0f - 2.0f && b.y1 >= 125.0f + 2.0f);
+    ESIA_CHECK(b.x0 >= 75.0f && b.x1 <= 165.0f);
+}
+
 ESIA_TEST(FramePlan, UserEffectsBuildTheWholePyramid)
 {
     DrawList dl;
@@ -403,26 +453,30 @@ ESIA_TEST(FramePlan, EdgeFadesInPixelsAndNeverMixed)
     }
 }
 
-ESIA_TEST(FramePlan, CoveragePagesPickTheTextProgram)
+ESIA_TEST(FramePlan, CoveragePagesPickTextPrograms)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
     dl.AddImage(5, Rect(0, 0, 10, 10), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
     dl.AddImage(6, Rect(0, 20, 10, 30), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
-    dl.AddImage(9, Rect(0, 40, 10, 50), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    dl.AddImage(7, Rect(0, 40, 10, 50), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    dl.AddImage(9, Rect(0, 60, 10, 70), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
     FramePlan plan;
     plan.Build(Data({&dl}), [](TextureId id, TextureInfo& out) {
         if (id == 5)
             out = {TextureFormat::Alpha8, 256, 256};
         else if (id == 6)
+            out = {TextureFormat::RGBA8, 256, 256, TextureFlags_LcdCoverage};
+        else if (id == 7)
             out = {TextureFormat::RGBA8, 256, 256};
         else
             return false;
         return true;
     });
-    ESIA_CHECK(plan.ops.size() == 3);
-    ESIA_CHECK(plan.ops[0].coverage);                            // an Alpha8 glyph page
-    ESIA_CHECK(!plan.ops[1].coverage && !plan.ops[2].coverage);   // an image, an unknown texture
+    ESIA_CHECK(plan.ops.size() == 4);
+    ESIA_CHECK(plan.ops[0].coverage && !plan.ops[0].lcd);                              // an Alpha8 glyph page
+    ESIA_CHECK(plan.ops[1].coverage && plan.ops[1].lcd);                               // a sub-pixel page
+    ESIA_CHECK(!plan.ops[2].coverage && !plan.ops[2].lcd && !plan.ops[3].coverage);   // an image, an unknown texture
 }
 
 ESIA_TEST(FramePlan, CallbacksAndDisplayMapping)

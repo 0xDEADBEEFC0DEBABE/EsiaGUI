@@ -2,14 +2,19 @@
 // ESIA_TEXT_DEPS): fonts from files or memory on every platform, the only text system on Linux / Android / consoles.
 //
 //   * shaping with HarfBuzz in design units (kerning, ligatures, marks, complex scripts), scaled to the size in
-//     float: unhinted, linear advances, the same layout at every pixel density;
+//     float: linear advances, the same layout at every pixel density (hinted advances on whole pixels instead with
+//     TextRendering::hintedAdvances);
 //   * per-character fallback through the fonts given to AddFallback, in order;
 //   * greedy line breaking at spaces, after hyphens and between CJK characters (no break before closing / after
 //     opening punctuation), character breaks for words longer than the line, ellipsis trimming, alignment;
 //   * a uniform line box from the requested font (ascent + descent + line gap, baseline at ascent + gap / 2), so
 //     fallback fonts never change the line height - WGT's DirectWrite layout does the same;
-//   * glyphs from the unhinted outlines (FreeType, design units) through the shared analytic rasterizer
-//     (glyph_raster.hpp) at the exact physical size, 4 horizontal sub-pixel phases, baselines on whole pixels.
+//   * glyphs from the outlines at the exact physical size - the design's (the default), or hinted there by FreeType
+//     (TextRendering: light, the fonts' own hints with either TrueType interpreter, the autohinter) - through the
+//     shared analytic rasterizer (glyph_raster.hpp) or FreeType's, in grayscale or per LCD stripe (sub-pixel pages:
+//     TextureFlags_LcdCoverage, shapes and outlines in them as gray); 4 horizontal sub-pixel phases (whole pixels when
+//     the hinting fits vertical stems too - the classic interpreter, the autohinter - or the advances are hinted),
+//     baselines on whole pixels.
 //
 // Installed fonts and the platform's CJK fallback chain come from system_fonts.hpp (FindSystemFont, AddFallbackFonts).
 //
@@ -37,6 +42,10 @@ namespace esia::text
     {
         int atlasPageSize = 2048;
         int atlasMaxPages = 4;   // before the glyph atlas starts over
+        // How glyphs become pixels (TextRendering: hinting, the rasterizer); SetRendering changes it later. The
+        // ESIA_TEXT_RENDERING environment variable, when set, overrides it (ParseTextRendering: "crisp", "light",
+        // "hinting=full,interpreter=35" ...), so any program can be compared under another rendering.
+        TextRendering rendering;
     };
 
     // The text system keeps its glyph pages in `textures`, which must outlive it. Null if FreeType cannot start.

@@ -178,6 +178,7 @@ namespace esia::rhi::d3d11
             c.framebufferOriginBottomLeft = false;
             c.clipSpaceYDown = false;
             c.halfPixelOffset = false;
+            c.dualSourceBlend = true;
             c.floatRenderTargets = true;
             c.sampleRenderTarget = true;
             c.timestampQueries = true;
@@ -234,6 +235,8 @@ namespace esia::rhi::d3d11
             bool ok = blend(false, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, D3D11_BLEND_ONE, D3D11_BLEND_ZERO, blends_[(int)BlendMode::Opaque]);
             ok = ok && blend(true, D3D11_BLEND_SRC_ALPHA, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Straight]);
             ok = ok && blend(true, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_INV_SRC_ALPHA, blends_[(int)BlendMode::Premultiplied]);
+            ok = ok && blend(true, D3D11_BLEND_SRC1_COLOR, D3D11_BLEND_INV_SRC1_COLOR, D3D11_BLEND_SRC1_ALPHA, D3D11_BLEND_INV_SRC1_ALPHA,
+                             blends_[(int)BlendMode::DualSourceLcd]);
 
             D3D11_RASTERIZER_DESC rd = {};
             rd.FillMode = D3D11_FILL_SOLID;
@@ -516,13 +519,13 @@ namespace esia::rhi::d3d11
 
         Pipeline CreatePipeline(const PipelineDesc& desc) override
         {
-            if (desc.program >= ShaderProgram::Count)
+            if (desc.program >= ShaderProgram::Count || (desc.blend == BlendMode::DualSourceLcd) != DualSourceProgram(desc.program))
                 return {};
             d3d::ShaderRequest vr;
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
-            vr.instanceAttribute = desc.program == ShaderProgram::Fx;   // Caps::drawFirstInstance
+            vr.instanceAttribute = DrawsInstances(desc.program);   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;
@@ -563,11 +566,11 @@ namespace esia::rhi::d3d11
                 }
                 p.layout = uiLayout_;
             }
-            else if (desc.program == ShaderProgram::Fx)
+            else if (DrawsInstances(desc.program))
             {
                 if (!fxLayout_)
                 {
-                    // the instance's index, from InstanceIndices at slot 1 (every FX vertex shader has this input)
+                    // the instance's index, from InstanceIndices at slot 1 (every FX and quad vertex shader has this input)
                     const D3D11_INPUT_ELEMENT_DESC e = {"INSTANCEINDEX", 0, DXGI_FORMAT_R32_UINT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1};
                     if (!log_.Check(dev_->CreateInputLayout(&e, 1, vs->data(), vs->size(), &fxLayout_), "CreateInputLayout (fx)"))
                         return {};
@@ -1006,7 +1009,7 @@ namespace esia::rhi::d3d11
         std::uint32_t mappedBuffer_ = 0;         // MapBuffer's, until UnmapBuffer
         std::uint32_t instanceIndexCount_ = 0;
         bool instanceIndicesBound_ = false;
-        ComPtr<ID3D11BlendState> blends_[3];   // per BlendMode
+        ComPtr<ID3D11BlendState> blends_[4];   // per BlendMode
         ComPtr<ID3D11RasterizerState> raster_;
         ComPtr<ID3D11DepthStencilState> depth_;
         ComPtr<ID3D11SamplerState> samplers_[2];

@@ -21,7 +21,7 @@ namespace glass::apple
         std::fprintf(stderr,
                      "%s: %s\n"
                      "usage: %s [--api metal] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--fixed-dt seconds]\n"
-                     "       [--frames N] [--screenshot out.png] [--font file]... [--stats] [--fullscreen]\n",
+                     "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--stats] [--fullscreen]\n",
                      app.name, problem, app.name);
         return 2;
     }
@@ -75,6 +75,12 @@ namespace glass::apple
                 o.screenshot = value;
             else if (a == "--font" && needs())
                 o.fonts.push_back(value);
+            else if (a == "--text-rendering" && needs())
+            {
+                o.textRendering = value;
+                if (!TextRenderingValid(o.textRendering, problem))
+                    return false;
+            }
             else if (app.option && app.option(a, value, usedValue))
                 i += usedValue ? 1 : 0;
             else if (problem.empty())
@@ -258,6 +264,7 @@ namespace glass::apple
 #if defined(GLASS_TEXT)
         if (std::unique_ptr<esia::text::TextSystem> ft = esia::text::CreateFreeTypeTextSystem(ctx_->Textures()))
             textSystem_ = std::make_unique<SymbolTextSystem>(std::move(ft), ctx_->Textures(), &RasterizeSfSymbol);
+        ApplyTextRendering(textSystem_.get(), opt_.textRendering);
         if (textSystem_ && !app_.loadFonts)
             text_ = textSystem_.get();
         else if (textSystem_ && (font_ = LoadFonts(*textSystem_, opt_.fonts)) != 0)
@@ -289,7 +296,7 @@ namespace glass::apple
         fp.safeArea = safeArea;
         ctx_->NewFrame(fp);
         if (text_ && app_.loadFonts)
-            text_->NewFrame({scale});
+            text_->NewFrame({scale, fp.time});
         const Clock::time_point uiStart = Clock::now();
         if (app_.frame)
         {

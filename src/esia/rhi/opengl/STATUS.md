@@ -198,6 +198,12 @@ Three things only the real driver showed, fixed on this branch: NVIDIA's ES prof
 of a headless frame never complete after a `glFlush` alone (headless frames now end with `glFinish`; hosts have
 their SwapBuffers); and the conformance scene table read a freed tolerance (fixed on `esia-core`, `3a8fe0a`).
 
+### Sub-pixel text back (2026-10-28)
+
+The owner asked for sub-pixel text again: dual-source blending is back (`GL_SRC1_COLOR` ... in core GL 3.3, GLES with
+`EXT_blend_func_extended`, which the generated `TextLcd` ESSL requires), with `Caps::dualSourceBlend` and the
+`text_lcd` scene (skipped without the extension). On the RTX 4080 SUPER: `text_lcd` passes on OpenGL and GLES.
+
 ### Core round 3 (grayscale text only)
 
 Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): the backend no longer offers

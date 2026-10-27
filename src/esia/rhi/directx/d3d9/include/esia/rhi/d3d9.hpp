@@ -13,6 +13,8 @@
 //   d3dcompiler_47.dll with the backend's SM3 prelude (esia_sm3_prelude.hlsli) and cached per process; the FX
 //   shader is compiled per batch feature mask (Caps::fxFeatureVariants): the whole shader does not fit SM3.
 // * No dual-source blending: sub-pixel glyph pages draw with their grayscale coverage.
+// * The full FX shader has no glyph shapes (ps_3_0's 32 temporary registers): a batch of them waits for its feature
+//   variant (Caps::fullFxGlyphs).
 // * Pixel centers: the backend reports Caps::halfPixelOffset and moves every vertex by half a pixel of the pass
 //   target in the vertex shaders, so the output matches the other APIs'.
 // * D3D9 has no sRGB formats, only a render state: WrapRenderTarget(..., srgb = true) makes the target BGRA8_SRGB

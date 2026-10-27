@@ -178,6 +178,12 @@ and slots rotate per host frame. `VulkanHost.TwoTargetsPerHostFrame` renders two
 frames with two in flight; its first run caught the slot rotation still counting device frames (a descriptor pool
 reset while in use, reported by the validation layer).
 
+### Sub-pixel text back (2026-10-28)
+
+The owner asked for sub-pixel text again: `Desc::dualSrcBlend` (the host enables `dualSrcBlend`; the headless device
+does where the GPU has it), `Caps::dualSourceBlend`, the `DualSourceLcd` blend factors and the TextLcd pipelines are
+back. On the RTX 4080 SUPER: `text_lcd` passes with dynamic rendering and with render passes.
+
 ### Core round 3 (grayscale text only)
 
 Sub-pixel text was removed from Esia by the owner's decision (`esia-core` round 3): no dual-source blending, no

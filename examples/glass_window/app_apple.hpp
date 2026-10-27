@@ -39,6 +39,7 @@ namespace glass::apple
         int frames = 0;
         std::string screenshot;
         std::vector<std::string> fonts;
+        std::string textRendering;   // --text-rendering
     };
 
     int Usage(const App& app, const char* problem);

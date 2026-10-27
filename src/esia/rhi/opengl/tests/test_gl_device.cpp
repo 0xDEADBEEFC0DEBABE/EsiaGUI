@@ -121,6 +121,8 @@ ESIA_TEST(GlDevice, ConformanceScenesWithoutGlErrors)
                 rhi::HeadlessDevice h = Headless(es, scene.width, scene.height, scene.format, scene.samples, coreOnly, scene.sampleable);
                 if (!h.device)
                     continue;
+                if (scene.needsDualSource && !h.device->GetCaps().dualSourceBlend)
+                    continue;
                 RenderScene(*h.device, h.target, scene, 2);
                 const std::uint32_t errors = ErrorCount(*h.device);
                 if (errors)
@@ -167,6 +169,7 @@ ESIA_TEST(GlDevice, Caps)
             // GL 3.3 has these in core; GLES 3.0 only through extensions, when the driver has them
             const GlApi gl = LoadGl();
             const bool extra = !coreOnly;
+            ESIA_CHECK(c.dualSourceBlend == (!es || (extra && HasExtension(gl, "GL_EXT_blend_func_extended"))));
             ESIA_CHECK(c.floatRenderTargets == (!es || (extra && (HasExtension(gl, "GL_EXT_color_buffer_float") || HasExtension(gl, "GL_EXT_color_buffer_half_float")))));
             ESIA_CHECK(c.timestampQueries == (!es || (extra && HasExtension(gl, "GL_EXT_disjoint_timer_query"))));
             // an sRGB target is sampled raw only with EXT_texture_sRGB_decode
@@ -613,6 +616,8 @@ ESIA_TEST(GlDevice, RendererKeepsTheContractWithGlCaps)
                 o.caps = h.device->GetCaps();
                 o.record = false;
                 rhi::NullDevice null(o);
+                if (scene.needsDualSource && !o.caps.dualSourceBlend)
+                    continue;
                 const rhi::Texture target = null.CreateHostTarget(scene.width, scene.height, scene.format, !rhi::IsSrgb(scene.format) || !coreOnly, scene.samples);
                 render::Renderer renderer(null);
                 conformance::SceneFrame f;
