@@ -1,5 +1,6 @@
-# Esia's CMake package (cmake/EsiaInstall.cmake): find_package(Esia CONFIG REQUIRED), then link esia::ui,
-# esia::text_ft, esia::backends, esia::platform_win32 / platform_x11 / platform_android ...
+# Esia's CMake package (cmake/EsiaInstall.cmake): find_package(Esia CONFIG REQUIRED), then link esia::render,
+# esia::text_ft, esia::backends, esia::platform_win32 / platform_x11 / platform_android ... (and esia::ui where the
+# widget layer was built: EsiaGUI)
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)

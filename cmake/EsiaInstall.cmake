@@ -1,7 +1,7 @@
 # Esia - `cmake --install`: the libraries, their headers and a CMake package. An application then finds them with
 #
 #   find_package(Esia CONFIG REQUIRED)   # CMAKE_PREFIX_PATH: the install prefix
-#   target_link_libraries(app PRIVATE esia::ui esia::text_ft esia::backends esia::platform_win32)
+#   target_link_libraries(app PRIVATE esia::render esia::text_ft esia::backends esia::platform_win32)   # + esia::ui (EsiaGUI)
 #
 # - the names add_subdirectory gives them (the aliases). Included at the end of the top-level CMakeLists.txt, when every
 # target exists, so the CMakeLists.txt of the libraries and backends need not know about it: the include directories in
