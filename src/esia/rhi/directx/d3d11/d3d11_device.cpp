@@ -161,6 +161,8 @@ namespace esia::rhi::d3d11
             PipelineDesc desc;
         };
 
+        bool profiling_ = false;   // this frame records timestamps (its slot's queries were free)
+
         struct ProfileSlot
         {
             ComPtr<ID3D11Query> disjoint;
@@ -586,6 +588,7 @@ namespace esia::rhi::d3d11
         bool BeginFrame(const FrameDesc&) override
         {
             ++frame_;
+            profiling_ = false;
             instanceIndicesBound_ = false;
             // with restoreHostState, what the frame changes is captured and put back (ClearState would also drop the
             // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
@@ -598,25 +601,30 @@ namespace esia::rhi::d3d11
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 if (s.pending)
                 {
-                    ReadSlot(s);   // the GPU is kProfileSlots frames behind: the old numbers are dropped if not ready
+                    ReadSlot(s);   // the GPU is kProfileSlots frames behind
                     // Still not done: nothing presented since (a headless loop, which a present would have
                     // submitted). Submit what waits now. A presenting host never gets here: flushing every frame at
                     // its end cost Direct3D 11 0.18 ms of CPU a frame, on top of the present's own submit.
                     if (s.pending)
                         ctx_->Flush();
                 }
-                s.used = 0;
-                s.pending = false;
-                s.frame.Reset(frame_);
-                ctx_->Begin(s.disjoint.Get());
-                s.frame.frameStart = Stamp();
+                // Queries whose results are still out are not begun again (the debug layer reports it, and their
+                // numbers would be lost): this frame then has no timestamps, and the slot is read when it comes round.
+                if (!s.pending)
+                {
+                    profiling_ = true;
+                    s.used = 0;
+                    s.frame.Reset(frame_);
+                    ctx_->Begin(s.disjoint.Get());
+                    s.frame.frameStart = Stamp();
+                }
             }
             return true;
         }
 
         void EndFrame() override
         {
-            if (caps_.timestampQueries)
+            if (profiling_)
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 s.frame.frameEnd = Stamp();
@@ -805,7 +813,7 @@ namespace esia::rhi::d3d11
         // ------------------------------------------------------------------ profiling
         void BeginProfile(ProfileCategory category) override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             f.openStart = Stamp();
@@ -814,7 +822,7 @@ namespace esia::rhi::d3d11
 
         void EndProfile() override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             const int end = Stamp();
