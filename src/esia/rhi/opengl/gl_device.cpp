@@ -1,5 +1,6 @@
 // Esia OpenGL backend - rhi::Device on OpenGL 3.3 core / OpenGL ES 3.0 (see gl_device.hpp)
 #include "gl_device.hpp"
+#include "esia/core/fx.hpp"
 #include "esia/render/shader_library.hpp"
 #include <algorithm>
 #include <cmath>
@@ -167,6 +168,7 @@ namespace esia::rhi::opengl
         caps_.baseVertex = gl_.DrawElementsBaseVertex != nullptr;
         caps_.runtimeEffects = false;
         caps_.fxFeatureVariants = false;
+        caps_.fullFxGlyphs = false;   // the full FX program is specialized without them (fx::kFullShaderFeatures)
         caps_.maxTextureSize = maxTex;
         // the instance texture is perRow * 24 texels wide and uploaded a whole row at a time: 4096 texels (170
         // instances, 64 KB per row) keeps a frame with a few instances from uploading a 16384-wide row
@@ -236,6 +238,9 @@ namespace esia::rhi::opengl
         for (auto& [id, b] : buffers_)
             gl_.DeleteBuffers(1, &b.id);
         for (Program& p : programs_)
+            if (p.id)
+                gl_.DeleteProgram(p.id);
+        for (auto& [mask, p] : fxPrograms_)
             if (p.id)
                 gl_.DeleteProgram(p.id);
         if (copyProgram_)
@@ -793,16 +798,23 @@ namespace esia::rhi::opengl
     }
 
     // ------------------------------------------------------------------ pipelines
-    GlDevice::Program* GlDevice::GetProgram(ShaderProgram p)
+    // The program of `p`. FX: the one for a feature mask (0: the full shader's, fx::kFullShaderFeatures) - the generated
+    // GLSL's specialization constant 0, defined right after its #version line (SPIRV_CROSS_CONSTANT_ID_0).
+    GlDevice::Program* GlDevice::GetProgram(ShaderProgram p, std::uint32_t fxFeatures)
     {
-        Program& prog = programs_[(int)p];
+        const bool isFx = p == ShaderProgram::Fx;
+        const std::uint32_t mask = fxFeatures != 0 ? fxFeatures : fx::kFullShaderFeatures;
+        Program& prog = isFx ? fxPrograms_[mask] : programs_[(int)p];
         if (prog.tried)
             return prog.id ? &prog : nullptr;
         prog.tried = true;
+        std::fill(std::begin(prog.sampler), std::end(prog.sampler), -1);
         const auto format = (shaders::Format)caps_.shaderFormat;
         const shaders::ShaderBlob* blobs[2] = {shaders::Find(format, p, shaders::Stage::Vertex), shaders::Find(format, p, shaders::Stage::Pixel)};
         if (!blobs[0] || !blobs[1])
             return nullptr;
+        char define[64];
+        std::snprintf(define, sizeof(define), "#define SPIRV_CROSS_CONSTANT_ID_0 %uu\n", mask);
         GLuint stages[2] = {};
         bool ok = true;
         const GLuint id = gl_.CreateProgram();
@@ -811,7 +823,14 @@ namespace esia::rhi::opengl
             stages[s] = gl_.CreateShader(s == 0 ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
             const GLchar* src = reinterpret_cast<const GLchar*>(blobs[s]->data);
             const GLint len = (GLint)blobs[s]->size;
-            gl_.ShaderSource(stages[s], 1, &src, &len);
+            const void* nl = std::memchr(src, '\n', (std::size_t)len);
+            const GLint head = isFx && nl ? (GLint)(static_cast<const GLchar*>(nl) - src + 1) : 0;
+            const GLchar* parts[3] = {src, define, src + head};
+            const GLint lens[3] = {head, (GLint)std::strlen(define), len - head};
+            if (head > 0)
+                gl_.ShaderSource(stages[s], 3, parts, lens);
+            else
+                gl_.ShaderSource(stages[s], 1, &src, &len);
             gl_.CompileShader(stages[s]);
             GLint status = 0;
             gl_.GetShaderiv(stages[s], GL_COMPILE_STATUS, &status);
@@ -874,14 +893,14 @@ namespace esia::rhi::opengl
 
     Pipeline GlDevice::CreatePipeline(const PipelineDesc& desc)
     {
-        if (desc.program >= ShaderProgram::Count || desc.effect != 0 || desc.fxFeatures != 0)
-            return {};   // no runtime effects, no FX variants (Caps)
+        if (desc.program >= ShaderProgram::Count || desc.effect != 0 || (desc.fxFeatures != 0 && desc.program != ShaderProgram::Fx))
+            return {};   // no runtime effects (Caps); feature masks are FX's
         if (desc.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
             return {};
         Program* prog = nullptr;
         {
             OutsideFrame guard(*this);
-            prog = GetProgram(desc.program);
+            prog = GetProgram(desc.program, desc.fxFeatures);
         }
         if (pipe_)
             UseProgram(pipe_->program->id);   // compiled inside a pass: the bound pipeline's program stays current
