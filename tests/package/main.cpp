@@ -1,9 +1,12 @@
-// A program built against an installed Esia (find_package): the core, the widgets, the FreeType text system and the
-// backends link, and frames of a window with a button render on the null device.
+// A program built against an installed Esia (find_package): the core, the renderer, the FreeType text system, the
+// backends and (where the package has it) the widget layer link, and frames of a window with a button render on the
+// null device.
 #include "esia/core/context.hpp"
 #include "esia/render/renderer.hpp"
 #include "esia/rhi/backend_registry.hpp"
+#if defined(ESIA_PACKAGE_UI)
 #include "esia/ui/ui.hpp"
+#endif
 #if defined(ESIA_PACKAGE_TEXT_FT)
 #include "esia/text/freetype.hpp"
 #endif
@@ -13,7 +16,6 @@
 
 int main()
 {
-    namespace ui = esia::ui;
     esia::rhi::RegisterBuiltinBackends();
     const esia::rhi::BackendInfo* null = esia::rhi::FindBackend("null");
     std::string error;
@@ -29,15 +31,19 @@ int main()
 #if defined(ESIA_PACKAGE_TEXT_FT)
     text = esia::text::CreateFreeTypeTextSystem(ctx.Textures());
 #endif
+#if defined(ESIA_PACKAGE_UI)
+    namespace ui = esia::ui;
     ui::UiDesc desc;
     desc.text = text.get();
     desc.density = ui::Density::Compact;
     ui::Ui u(ctx, desc);
+#endif
     esia::render::Renderer renderer(*hd.device);
     int pressed = 0;
     for (int frame = 0; frame < 3; ++frame)
     {
         ctx.NewFrame({{256, 256}, {1, 1}, 1.0 + frame / 60.0});
+#if defined(ESIA_PACKAGE_UI)
         u.NewFrame();
         if (ui::BeginWindow("Package"))
         {
@@ -46,6 +52,19 @@ int main()
             ui::EndWindow();
         }
         u.EndFrame();
+#else
+        // the core alone: a window with a button drawn as a rectangle
+        if (ctx.Begin("Package"))
+        {
+            const esia::Rect r = esia::Rect::FromSize(ctx.CursorPos(), esia::Vec2(80, 24));
+            ctx.ItemSize(r.Size());
+            const esia::Id id = ctx.GetId("OK");
+            if (ctx.ItemAdd(id, r) && ctx.ButtonBehavior(id, r).pressed)
+                ++pressed;
+            ctx.WindowDrawList().AddRectFilled(r, 0xFF3A84FFu);
+        }
+        ctx.End();
+#endif
         ctx.EndFrame();
         if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), hd.target))
         {
