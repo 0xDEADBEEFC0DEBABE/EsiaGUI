@@ -177,8 +177,11 @@ blur computed from the shapes themselves.
   cover the area swept. Text with a style moves the same way (every glyph shape, its outline pass too). A first
   attempt that blurred each edge along its own normal (one closed form per pixel) pinched curved ends and broke thin
   strokes at motions of tens of pixels; the path integral does not.
-* `fx::kVariantOnlyFeatures` (`kGlyph | kLegible | kMotion`): the features SM3's full shader leaves out; the renderer
-  and the null device decide glyph and motion variants from it.
+* `fx::kVariantOnlyFeatures` (`kGlyph | kLegible | kMotion`): the features the full FX shader leaves out on every
+  backend that can specialize it (`fx::kFullShaderFeatures`; all but Metal without function constants); the renderer
+  and the null device decide glyph and motion variants from it. Kept in, every FX pixel paid for them: ps_5_0 went
+  from 23 temporaries and ~3400 instruction slots to 25 and ~4600, and a frame of 10,000 shapes from 0.236 to 0.260 ms
+  of GPU on D3D11 (0.242 -> 0.262 D3D12, 0.209 -> 0.217 Vulkan); left out, 0.233 / 0.240 / 0.207 again.
 
 ### Verified
 
@@ -370,8 +373,8 @@ now be drawn from multi-channel signed distance fields made by Esia, as FX shape
   (parser: `distance-field=N`).
 * FX: `ShapeKind::Glyph`, feature `kGlyph` (variants of other batches leave the glyph code out), `SdGlyph`: the median
   near the edge, the true distance farther, the ink box's signed distance as a lower bound past the reach. The quad
-  and the planner's bounds come from `shape2`. Direct3D 9: the full ps_3_0 shader has no registers left for it
-  (`Caps::fullFxGlyphs` = false), so glyph batches build their variant at once.
+  and the planner's bounds come from `shape2`. The full FX shader leaves it out (`Caps::fullFxGlyphs` = false; on
+  Direct3D 9 the full ps_3_0 shader has no registers left for it), so glyph batches build their variant at once.
 * Painter: `Material()` out of `EmitShape` (shapes unchanged), `Text` / `TextBox` with a `Style`, `Style::Weight`.
   glass_window's text wrappers pass `DrawShapes` and `DrawOutline` on (outlines did not reach the inner system).
 

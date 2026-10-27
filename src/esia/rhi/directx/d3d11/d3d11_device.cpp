@@ -186,8 +186,10 @@ namespace esia::rhi::d3d11
             c.timestampQueries = true;
             c.readback = true;
             c.runtimeEffects = true;
-            // the whole FX shader fits SM5: one pipeline instead of one per feature mask
+            // the whole FX shader fits SM5: one pipeline instead of one per feature mask - but for glyph shapes,
+            // legibility and motion blur, which it leaves out (variants of their own, fx::kVariantOnlyFeatures)
             c.fxFeatureVariants = false;
+            c.fullFxGlyphs = false;
             // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
             c.drawFirstInstance = true;
             c.baseVertex = true;
@@ -527,6 +529,7 @@ namespace esia::rhi::d3d11
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
+            vr.fxFeatures = desc.program == ShaderProgram::Fx ? desc.fxFeatures : 0u;   // a variant (Caps::fullFxGlyphs)
             vr.instanceAttribute = DrawsInstances(desc.program);   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;

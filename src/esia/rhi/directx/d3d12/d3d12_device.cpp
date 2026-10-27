@@ -1,6 +1,6 @@
 // Esia - Direct3D 12 backend (see esia/rhi/d3d12.hpp). The techniques are those of WGT's
 // src/backends/d3d12_backend.cpp: recording into the host's command list, a root signature of root CBVs, an SRV
-// table and static samplers, a shader-visible descriptor ring and an upload ring per frame in flight, a PSO per
+// table and static samplers, a shader-visible descriptor heap and an upload ring per frame slot, a PSO per
 // PipelineDesc, tracked resource states with barriers where the RHI implies them (render target <-> copy source /
 // pixel-shader resource, copy destination -> pixel-shader resource), deferred releases, and timestamps resolved into
 // a readback buffer per frame slot.
@@ -182,14 +182,20 @@ namespace esia::rhi::d3d12
             std::vector<std::uint8_t> pixels;   // tightly packed; empty = clear to transparent black
         };
 
+        // A frame's memory, recycled when the GPU is done with the frame (d3d12.hpp: the submission contracts).
         struct FrameSlot
         {
+            UINT index = 0;                            // its range of timestamps
             UploadRing ring;
+            ComPtr<ID3D12DescriptorHeap> tables;       // shader-visible: the frame's texture tables
             UINT tableOffset = 0;
             std::vector<ComPtr<IUnknown>> garbage;     // released when the slot is reused
             std::vector<int> freeSrvs, freeRtvs;       // descriptors of destroyed textures, freed then too
             ComPtr<ID3D12CommandAllocator> allocator;  // own-list frames
-            UINT64 fence = 0;                          // value signaled after the slot's own-list frame
+            std::uint64_t serial = 0;                  // the order slots were taken in (0: never taken)
+            UINT64 fence = 0;                          // own list: the device's fence value after the frame
+            ComPtr<ID3D12Fence> hostFence;             // host list: the host's fence and value, or none (trust)
+            UINT64 hostValue = 0;
             int stamps = 0;
             bool profilePending = false;
             d3d::ProfileFrame profile;
@@ -207,6 +213,7 @@ namespace esia::rhi::d3d12
             c.readback = true;
             c.runtimeEffects = true;
             c.fxFeatureVariants = false;   // the whole FX shader fits SM5
+            c.fullFxGlyphs = false;        // but leaves out glyph shapes, legibility and motion blur (their own variants)
             // SV_InstanceID does not count StartInstanceLocation: an instance-rate attribute does (InstanceIndices)
             c.drawFirstInstance = true;
             c.baseVertex = true;
@@ -220,7 +227,8 @@ namespace esia::rhi::d3d12
     {
     public:
         explicit D3D12Device(const Desc& d)
-            : dev_(d.device), queue_(d.queue), log_(d.debug), caps_(MakeCaps()), slots_((std::size_t)std::max(1, d.framesInFlight))
+            : dev_(d.device), queue_(d.queue), log_(d.debug), caps_(MakeCaps()), framesInFlight_(std::max(1, d.framesInFlight)),
+              maxSlots_(std::max(framesInFlight_, d.maxFramesInFlight)), hostWaitMs_(std::max(0, d.hostFenceWaitMs))
         {
         }
 
@@ -240,14 +248,7 @@ namespace esia::rhi::d3d12
             bool ok = CreateRootSignature();
             ok = ok && srvs_.Init(dev_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kCpuSrvCapacity);
             ok = ok && rtvs_.Init(dev_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kCpuRtvCapacity);
-            if (ok)
-            {
-                D3D12_DESCRIPTOR_HEAP_DESC d = {};
-                d.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-                d.NumDescriptors = kTableDescriptorsPerFrame * (UINT)slots_.size();
-                d.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-                ok = log_.Check(dev_->CreateDescriptorHeap(&d, IID_PPV_ARGS(&tables_)), "CreateDescriptorHeap (tables)");
-            }
+            event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // waits for the device's fence and the host's
             if (ok)
             {
                 // unbound table slots read a null view (every declared texture must be valid, rhi.hpp: the renderer
@@ -263,17 +264,19 @@ namespace esia::rhi::d3d12
             if (ok && queue_)
             {
                 ok = log_.Check(dev_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_)), "CreateFence");
-                event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-                for (FrameSlot& s : slots_)
-                    ok = ok && log_.Check(dev_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&s.allocator)), "CreateCommandAllocator");
                 ok = ok && log_.Check(dev_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&immediateAllocator_)), "CreateCommandAllocator");
                 ok = ok && log_.Check(dev_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, immediateAllocator_.Get(), nullptr, IID_PPV_ARGS(&ownList_)),
                                       "CreateCommandList");
                 if (ok)
                     ownList_->Close();
             }
+            for (int i = 0; ok && i < framesInFlight_; ++i)
+                ok = MakeSlot() != nullptr;
             if (ok)
+            {
+                slot_ = slots_.front().get();   // releases deferred before the first frame go there
                 InitTimestamps();
+            }
             caps_.readback = (bool)queue_;
             DrainMessages();
             if (!ok)
@@ -283,6 +286,7 @@ namespace esia::rhi::d3d12
 
         const char* Name() const override { return "d3d12"; }
         const Caps& GetCaps() const override { return caps_; }
+        int SlotCount() const { return (int)slots_.size(); }
 
         // ------------------------------------------------------------------ resources
         Texture CreateTexture(const TextureDesc& desc, const void* data, int rowPitch) override
@@ -480,6 +484,7 @@ namespace esia::rhi::d3d12
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm5;
+            vr.fxFeatures = desc.program == ShaderProgram::Fx ? desc.fxFeatures : 0u;   // a variant (Caps::fullFxGlyphs)
             vr.instanceAttribute = DrawsInstances(desc.program);   // Caps::drawFirstInstance
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
@@ -582,18 +587,33 @@ namespace esia::rhi::d3d12
                 log_.Log(LogLevel::Error, "BeginFrame: no command list (FrameDesc::nativeContext) and no queue (Desc::queue)");
                 return false;
             }
-            // host lists: the device frames of one host frame (FrameDesc::hostFrame) share a slot, recycled
-            // framesInFlight host frames later however many targets the host renders per frame
-            const bool sharedSlot = !ownFrame_ && desc.hostFrame != 0 && desc.hostFrame == hostFrame_ && frame_ > 0;
+            ID3D12Fence* hostFence = ownFrame_ ? nullptr : static_cast<ID3D12Fence*>(desc.nativeFence);
+            if (hostFence && desc.nativeFenceValue == 0)
+            {
+                // a fence starts at 0: the frame would count as done before it ran
+                log_.Log(LogLevel::Error, "BeginFrame: FrameDesc::nativeFence with the value 0 - the frame is taken on trust");
+                hostFence = nullptr;
+            }
+            // host lists: the device frames of one host frame (FrameDesc::hostFrame) share a slot, however many
+            // targets the host renders per frame
+            const bool sharedSlot = !ownFrame_ && desc.hostFrame != 0 && desc.hostFrame == hostFrame_ && taken_ > 0;
+            if (!sharedSlot)
+            {
+                FrameSlot* taken = TakeSlot(hostFence != nullptr);
+                if (!taken)
+                    return false;
+                slot_ = taken;
+                RecycleSlot(*taken);
+                taken->serial = ++taken_;
+            }
             hostFrame_ = ownFrame_ ? 0 : desc.hostFrame;
             ++frame_;
-            if (!sharedSlot)
-                slotCursor_ = (slotCursor_ + 1) % slots_.size();   // per slot taken, not per device frame
             FrameSlot& s = Slot();
-            if (ownFrame_)
-                Wait(s.fence);   // the slot's last own-list frame; host lists: the host waited (framesInFlight)
-            if (!sharedSlot)
-                RecycleSlot(s);
+            // how the slot's frame is known to be done: the device's fence after its own list (EndFrame), else the
+            // host's fence, else trust
+            s.fence = 0;
+            s.hostFence = hostFence;
+            s.hostValue = hostFence ? desc.nativeFenceValue : 0;
             if (ownFrame_)
             {
                 s.allocator->Reset();
@@ -621,7 +641,7 @@ namespace esia::rhi::d3d12
             if (caps_.timestampQueries)
             {
                 s.profile.frameEnd = Stamp();
-                const UINT base = SlotIndex() * kMaxStamps;
+                const UINT base = s.index * kMaxStamps;
                 cl_->ResolveQueryData(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, base, (UINT)s.stamps, timestamps_.Get(), (UINT64)base * sizeof(std::uint64_t));
                 s.profilePending = s.profile.frameEnd > 0;
             }
@@ -869,13 +889,13 @@ namespace esia::rhi::d3d12
 
         bool ReadProfile(GpuProfile& out) override
         {
-            // own-list frames: every slot whose fence passed; host lists: slots are read when they are reused
-            if (queue_ && fence_)
+            // every slot whose frame a fence says is done (the device's or the host's); on trust, when it is reused
+            for (const std::unique_ptr<FrameSlot>& p : slots_)
             {
-                const UINT64 done = fence_->GetCompletedValue();
-                for (FrameSlot& s : slots_)
-                    if (s.profilePending && s.fence != 0 && s.fence <= done)
-                        ReadTimestamps(s);
+                FrameSlot& s = *p;
+                if (s.profilePending && ((s.fence != 0 && fence_ && fence_->GetCompletedValue() >= s.fence) ||
+                                         (s.hostFence && s.hostFence->GetCompletedValue() >= s.hostValue)))
+                    ReadTimestamps(s);
             }
             out = latest_;
             return latest_.valid;
@@ -993,7 +1013,7 @@ namespace esia::rhi::d3d12
             }
             D3D12_QUERY_HEAP_DESC hd = {};
             hd.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
-            hd.Count = (UINT)slots_.size() * kMaxStamps;
+            hd.Count = (UINT)maxSlots_ * kMaxStamps;   // every slot the device may make
             const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_READBACK, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
             const D3D12_RESOURCE_DESC bd = BufferResource((UINT64)hd.Count * sizeof(std::uint64_t));
             caps_.timestampQueries = q && SUCCEEDED(q->GetTimestampFrequency(&frequency_)) && frequency_ != 0 &&
@@ -1047,8 +1067,73 @@ namespace esia::rhi::d3d12
         }
 
         // ------------------------------------------------------------------ frames and submissions
-        FrameSlot& Slot() { return slots_[SlotIndex()]; }
-        UINT SlotIndex() const { return (UINT)slotCursor_; }
+        FrameSlot& Slot() { return *slot_; }
+
+        // A new slot: its descriptor heap for the texture tables, and a command allocator for own-list frames.
+        FrameSlot* MakeSlot()
+        {
+            auto s = std::make_unique<FrameSlot>();
+            s->index = (UINT)slots_.size();
+            D3D12_DESCRIPTOR_HEAP_DESC d = {};
+            d.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+            d.NumDescriptors = kTableDescriptorsPerFrame;
+            d.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+            if (!log_.Check(dev_->CreateDescriptorHeap(&d, IID_PPV_ARGS(&s->tables)), "CreateDescriptorHeap (tables)"))
+                return nullptr;
+            if (queue_ && !log_.Check(dev_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&s->allocator)), "CreateCommandAllocator"))
+                return nullptr;
+            slots_.push_back(std::move(s));
+            return slots_.back().get();
+        }
+
+        // The slot of a new frame: the oldest whose frame is done; else a new one (own-list and trusted frames up to
+        // framesInFlight, frames with a host fence up to maxFramesInFlight); else the oldest, once its frame is done.
+        FrameSlot* TakeSlot(bool hostFenced)
+        {
+            FrameSlot* oldest = nullptr;
+            FrameSlot* done = nullptr;
+            for (const std::unique_ptr<FrameSlot>& p : slots_)
+            {
+                FrameSlot* s = p.get();
+                if (!oldest || s->serial < oldest->serial)
+                    oldest = s;
+                if (Done(*s) && (!done || s->serial < done->serial))
+                    done = s;
+            }
+            if (done)
+                return done;
+            if ((int)slots_.size() < (hostFenced ? maxSlots_ : framesInFlight_))
+                if (FrameSlot* s = MakeSlot())
+                    return s;
+            return WaitDone(*oldest) ? oldest : nullptr;
+        }
+
+        // Whether the GPU is done with the slot's frame: the device's fence after an own list, the host's fence, or on
+        // trust once framesInFlight frames were taken after it.
+        bool Done(const FrameSlot& s) const
+        {
+            if (s.serial == 0)
+                return true;
+            if (s.fence != 0)
+                return fence_->GetCompletedValue() >= s.fence;
+            if (s.hostFence)
+                return s.hostFence->GetCompletedValue() >= s.hostValue;
+            return taken_ + 1 - s.serial >= (std::uint64_t)framesInFlight_;
+        }
+
+        bool WaitDone(const FrameSlot& s)
+        {
+            if (s.fence != 0)
+                return WaitFor(fence_.Get(), s.fence, INFINITE);
+            if (s.hostFence && !WaitFor(s.hostFence.Get(), s.hostValue, (DWORD)hostWaitMs_))
+            {
+                log_.Printf(LogLevel::Error, "BeginFrame: the host's fence is short of %llu after %d ms - was the list of that frame executed and the "
+                                             "fence signaled? (frame skipped)",
+                            (unsigned long long)s.hostValue, hostWaitMs_);
+                return false;
+            }
+            return true;
+        }
 
         void RecycleSlot(FrameSlot& s)
         {
@@ -1071,18 +1156,41 @@ namespace esia::rhi::d3d12
             return fenceValue_;
         }
 
-        void Wait(UINT64 value)
+        // Until `fence` reached `value`, at most `ms` (INFINITE: however long it takes); false when the time ran out. The
+        // fence's value decides, not the event: one left signaled by a wait that ran out of time ends no later wait.
+        bool WaitFor(ID3D12Fence* fence, UINT64 value, DWORD ms)
         {
-            if (!fence_ || value == 0 || fence_->GetCompletedValue() >= value)
-                return;
-            fence_->SetEventOnCompletion(value, event_);
-            WaitForSingleObject(event_, INFINITE);
+            if (!fence || value == 0)
+                return true;
+            const ULONGLONG until = GetTickCount64() + ms;
+            while (fence->GetCompletedValue() < value)
+            {
+                DWORD left = INFINITE;
+                if (ms != INFINITE)
+                {
+                    const ULONGLONG now = GetTickCount64();
+                    if (now >= until)
+                        return false;
+                    left = (DWORD)(until - now);
+                }
+                if (FAILED(fence->SetEventOnCompletion(value, event_)))
+                    return false;
+                WaitForSingleObject(event_, left);
+            }
+            return true;
         }
+
+        void Wait(UINT64 value) { WaitFor(fence_.Get(), value, INFINITE); }
 
         void WaitIdle()
         {
             if (queue_ && fence_)
                 Wait(Signal());
+            // frames on host lists with a fence: the host should have waited for them already
+            for (const std::unique_ptr<FrameSlot>& s : slots_)
+                if (s->hostFence && !WaitFor(s->hostFence.Get(), s->hostValue, (DWORD)hostWaitMs_))
+                    log_.Printf(LogLevel::Error, "the device goes while the host's fence is short of %llu: that frame may still run",
+                                (unsigned long long)s->hostValue);
             if (event_)
                 CloseHandle(event_);
             event_ = nullptr;
@@ -1213,7 +1321,7 @@ namespace esia::rhi::d3d12
             // the root arguments are bound again in every pass anyway (rhi.hpp: a pass starts with nothing bound)
             if (!rootBound_)
             {
-                ID3D12DescriptorHeap* heaps[] = {tables_.Get()};
+                ID3D12DescriptorHeap* heaps[] = {Slot().tables.Get()};
                 cl_->SetDescriptorHeaps(1, heaps);
                 cl_->SetGraphicsRootSignature(root_.Get());
                 rootBound_ = true;
@@ -1224,8 +1332,8 @@ namespace esia::rhi::d3d12
         }
 
         // The t0..t6 table of the next draw: when a binding changed since the last draw, the same bindings as the
-        // last table copied this frame are reused, else a fresh copy goes into the frame's part of the shader-visible
-        // heap (7 descriptors; 16384 per frame).
+        // last table copied this frame are reused, else a fresh copy goes into the slot's shader-visible heap (7
+        // descriptors; 16384 per frame).
         bool FlushTable()
         {
             if (!tableDirty_)
@@ -1239,9 +1347,9 @@ namespace esia::rhi::d3d12
                     log_.Log(LogLevel::Error, "out of shader-visible descriptors this frame: draw skipped");
                     return false;
                 }
-                const UINT first = SlotIndex() * kTableDescriptorsPerFrame + s.tableOffset;
+                const UINT first = s.tableOffset;
                 s.tableOffset += kTableSlots;
-                const D3D12_CPU_DESCRIPTOR_HANDLE dst = {tables_->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
+                const D3D12_CPU_DESCRIPTOR_HANDLE dst = {s.tables->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
                 // one copy of the table's descriptors (scattered sources into one range)
                 D3D12_CPU_DESCRIPTOR_HANDLE src[kTableSlots];
                 UINT ones[kTableSlots];
@@ -1252,7 +1360,7 @@ namespace esia::rhi::d3d12
                 }
                 const UINT count = kTableSlots;
                 dev_->CopyDescriptors(1, &dst, &count, kTableSlots, src, ones, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-                tableGpu_ = {tables_->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc};
+                tableGpu_ = {s.tables->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc};
                 tableFrame_ = frame_;
                 std::memcpy(tableBound_, bound_, sizeof(bound_));
             }
@@ -1305,15 +1413,14 @@ namespace esia::rhi::d3d12
             FrameSlot& s = Slot();
             if (!cl_ || s.stamps >= kMaxStamps)
                 return -1;
-            cl_->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, SlotIndex() * kMaxStamps + (UINT)s.stamps);
+            cl_->EndQuery(queries_.Get(), D3D12_QUERY_TYPE_TIMESTAMP, s.index * kMaxStamps + (UINT)s.stamps);
             return s.stamps++;
         }
 
         void ReadTimestamps(FrameSlot& s)
         {
             s.profilePending = false;
-            const std::size_t index = (std::size_t)(&s - slots_.data());
-            const SIZE_T base = index * kMaxStamps * sizeof(std::uint64_t);
+            const SIZE_T base = (SIZE_T)s.index * kMaxStamps * sizeof(std::uint64_t);
             const D3D12_RANGE range = {base, base + (SIZE_T)s.stamps * sizeof(std::uint64_t)};
             void* data = nullptr;
             if (FAILED(timestamps_->Map(0, &range, &data)))
@@ -1370,7 +1477,6 @@ namespace esia::rhi::d3d12
 
         ComPtr<ID3D12RootSignature> root_;
         DescriptorPool srvs_, rtvs_;
-        ComPtr<ID3D12DescriptorHeap> tables_;
         int nullSrv_ = -1;
         d3d::HandleTable<Tex> textures_;
         d3d::HandleTable<Buf> buffers_;
@@ -1378,10 +1484,12 @@ namespace esia::rhi::d3d12
         std::unordered_map<ID3D12Resource*, std::uint32_t> wrapped_;
         std::vector<PendingOp> pending_;
 
-        std::vector<FrameSlot> slots_;
+        const int framesInFlight_, maxSlots_, hostWaitMs_;   // Desc
+        std::vector<std::unique_ptr<FrameSlot>> slots_;
+        FrameSlot* slot_ = nullptr;     // the slot of the current (or the last) frame
+        std::uint64_t taken_ = 0;       // slots taken so far (FrameSlot::serial)
         std::uint64_t frame_ = 0;
         std::uint64_t hostFrame_ = 0;   // FrameDesc::hostFrame of the last frame (0: none, or an own-list frame)
-        std::size_t slotCursor_ = 0;    // the slot of the current (host) frame
         ComPtr<ID3D12Fence> fence_;
         UINT64 fenceValue_ = 0;
         HANDLE event_ = nullptr;
@@ -1439,6 +1547,12 @@ namespace esia::rhi::d3d12
     {
         auto* d = dynamic_cast<D3D12Device*>(&device);
         return d ? d->Wrap(resource, rtv, format, stateOnEntryAndExit) : Texture{};
+    }
+
+    int FrameSlotCount(Device& device)
+    {
+        auto* d = dynamic_cast<D3D12Device*>(&device);
+        return d ? d->SlotCount() : 0;
     }
 
     // ------------------------------------------------------------------ headless (conformance suite)

@@ -1,10 +1,15 @@
 // Direct3D 12 host integration: frames recorded into the host's command list (FrameDesc::nativeContext) for a
-// wrapped host render target that is handed back in its entry state; the host executes and waits; readback.
+// wrapped host render target that is handed back in its entry state; the host executes and waits; readback; the
+// submission contracts (on trust, with the host's fence).
 #include "esia/rhi/backend_registry.hpp"
 #include "esia/rhi/d3d12.hpp"
 #include "d3d_util.hpp"
 #include "esia_test.hpp"
 #include "scenes.hpp"
+#include <chrono>
+#include <memory>
+#include <thread>
+#include <vector>
 
 void EsiaRegisterBackend_d3d12();
 
@@ -210,4 +215,241 @@ ESIA_TEST(D3D12Host, TwoTargetsPerHostFrame)
         dev->DestroyTexture(t);
     }
     ESIA_CHECK(dev->ValidationErrors() == 0);
+}
+
+namespace
+{
+    // The host's side of the fence contract (FrameDesc::nativeFence): a device and its queue, one command list with an
+    // allocator per frame, the fence signaled after each frame's list, a gate fence the queue can be made to wait on
+    // (the GPU held back until the test opens it), and render targets of the conformance scenes' size.
+    struct FencedHost
+    {
+        static constexpr int kTargets = 3;
+        ComPtr<ID3D12Device> device;
+        ComPtr<ID3D12CommandQueue> queue;
+        ComPtr<ID3D12CommandAllocator> allocs[8];
+        ComPtr<ID3D12GraphicsCommandList> list;
+        ComPtr<ID3D12Fence> fence, gate;
+        ComPtr<ID3D12DescriptorHeap> rtvHeap;
+        ComPtr<ID3D12Resource> res[kTargets];
+        std::unique_ptr<rhi::Device> dev;
+        rhi::Texture targets[kTargets];
+
+        bool Init(int framesInFlight, int maxFramesInFlight, int hostFenceWaitMs)
+        {
+            if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device))))
+                return false;
+            D3D12_COMMAND_QUEUE_DESC qd = {};
+            qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+            ESIA_CHECK(SUCCEEDED(device->CreateCommandQueue(&qd, IID_PPV_ARGS(&queue))));
+            for (auto& a : allocs)
+                ESIA_CHECK(SUCCEEDED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&a))));
+            ESIA_CHECK(SUCCEEDED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocs[0].Get(), nullptr, IID_PPV_ARGS(&list))));
+            list->Close();
+            ESIA_CHECK(SUCCEEDED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))));
+            ESIA_CHECK(SUCCEEDED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gate))));
+            rhi::d3d12::Desc desc;
+            desc.device = device.Get();
+            desc.queue = queue.Get();
+            desc.framesInFlight = framesInFlight;
+            desc.maxFramesInFlight = maxFramesInFlight;
+            desc.hostFenceWaitMs = hostFenceWaitMs;
+            desc.debug.debugLayer = rhi::d3d::DebugLevelFromEnvironment() > 0;
+            dev = rhi::d3d12::CreateDevice(desc);
+            if (!dev)
+                return false;
+            D3D12_RESOURCE_DESC rd = {};
+            rd.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            rd.Width = 320;
+            rd.Height = 240;
+            rd.DepthOrArraySize = rd.MipLevels = 1;
+            rd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            rd.SampleDesc.Count = 1;
+            rd.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+            const D3D12_HEAP_PROPERTIES hp = {D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
+            D3D12_DESCRIPTOR_HEAP_DESC hd = {};
+            hd.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+            hd.NumDescriptors = kTargets;
+            ESIA_CHECK(SUCCEEDED(device->CreateDescriptorHeap(&hd, IID_PPV_ARGS(&rtvHeap))));
+            const UINT rtvSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+            for (int i = 0; i < kTargets; ++i)
+            {
+                ESIA_CHECK(SUCCEEDED(device->CreateCommittedResource(&hp, D3D12_HEAP_FLAG_NONE, &rd, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&res[i]))));
+                D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+                rtv.ptr += (SIZE_T)i * rtvSize;
+                device->CreateRenderTargetView(res[i].Get(), nullptr, rtv);
+                targets[i] = rhi::d3d12::WrapRenderTarget(*dev, res[i].Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_STATE_COMMON);
+                ESIA_CHECK((bool)targets[i]);
+            }
+            return true;
+        }
+
+        // Host frame `value`: `scene` recorded into target i with the fence and `value`, then (unless told not to) the
+        // list executed and the fence signaled to `value` behind it. False when the renderer did not draw the frame.
+        bool Frame(int i, std::uint64_t value, render::Renderer& renderer, conformance::SceneFrame& frame, const conformance::Scene& scene,
+                   bool execute = true)
+        {
+            ID3D12CommandAllocator* alloc = allocs[value % 8].Get();   // a test's frames never come round to one again
+            alloc->Reset();
+            list->Reset(alloc, nullptr);
+            render::RenderParams params = conformance::RenderParamsOf(scene);
+            params.frame.nativeContext = list.Get();
+            params.frame.hostFrame = value;
+            params.frame.nativeFence = fence.Get();
+            params.frame.nativeFenceValue = value;
+            const bool drawn = renderer.Render(frame.data, &frame.textures, targets[i], params);
+            list->Close();
+            if (execute)
+            {
+                ID3D12CommandList* lists[] = {list.Get()};
+                queue->ExecuteCommandLists(1, lists);
+                queue->Signal(fence.Get(), value);
+            }
+            return drawn;
+        }
+
+        void WaitFor(std::uint64_t value) const
+        {
+            while (fence->GetCompletedValue() < value)
+                Sleep(1);
+        }
+
+        bool Matches(int i, const testkit::Image& want, const conformance::Scene& scene) const
+        {
+            testkit::Image got(scene.width, scene.height);
+            return dev->ReadPixels(targets[i], rhi::IRect{0, 0, scene.width, scene.height}, got.rgba) && testkit::Compare(got, want, scene.tolerance).pass;
+        }
+
+        ~FencedHost()
+        {
+            if (dev)
+                for (const rhi::Texture t : targets)
+                    dev->DestroyTexture(t);
+        }
+    };
+
+    // The headless device's rendering of a scene: what a host target must match.
+    bool Reference(const conformance::Scene& scene, testkit::Image& want)
+    {
+        const rhi::BackendInfo* backend = rhi::FindBackend("d3d12");
+        std::string error;
+        rhi::HeadlessDevice ref = backend ? backend->createHeadless(conformance::HeadlessDescOf(scene), error) : rhi::HeadlessDevice{};
+        if (!ref.device)
+        {
+            std::printf("  skipped: no D3D12 device (%s)\n", error.c_str());
+            return false;
+        }
+        render::Renderer renderer(*ref.device);
+        conformance::SceneFrame frame;
+        conformance::BuildScene(scene, frame);
+        want = testkit::Image(scene.width, scene.height);
+        return renderer.Render(frame.data, &frame.textures, ref.target, conformance::RenderParamsOf(scene)) &&
+               ref.device->ReadPixels(ref.target, rhi::IRect{0, 0, scene.width, scene.height}, want.rgba);
+    }
+}
+
+// The fence contract: frames the GPU has not run yet keep their slots. A gate on the queue holds back three frames of
+// different scenes, recorded with one slot to start with; the device makes a slot per frame instead of writing over the
+// first frame's memory, and once the gate opens each target matches the headless device's rendering. The slots come back
+// when their fences pass, and so do the frames' timestamps.
+ESIA_TEST(D3D12Host, FencedFramesGrowTheSlots)
+{
+    EsiaRegisterBackend_d3d12();
+    const char* const names[FencedHost::kTargets] = {"shapes", "glass", "text_fields"};
+    const conformance::Scene* scenes[FencedHost::kTargets] = {};
+    testkit::Image want[FencedHost::kTargets];
+    for (int i = 0; i < FencedHost::kTargets; ++i)
+    {
+        scenes[i] = conformance::FindScene(names[i]);
+        ESIA_CHECK(scenes[i] && scenes[i]->width == 320 && scenes[i]->height == 240 && scenes[i]->format == rhi::Format::RGBA8_UNORM);
+        if (!scenes[i] || !Reference(*scenes[i], want[i]))
+            return;
+    }
+    FencedHost host;
+    if (!host.Init(1, 4, 10000))
+    {
+        std::printf("  skipped: no D3D12 device\n");
+        return;
+    }
+    host.queue->Wait(host.gate.Get(), 1);   // the GPU runs nothing until the gate opens
+    conformance::SceneFrame frames[FencedHost::kTargets];
+    std::vector<std::unique_ptr<render::Renderer>> renderers;
+    for (int i = 0; i < FencedHost::kTargets; ++i)
+    {
+        conformance::BuildScene(*scenes[i], frames[i]);
+        renderers.push_back(std::make_unique<render::Renderer>(*host.dev));
+        ESIA_CHECK(host.Frame(i, (std::uint64_t)i + 1, *renderers.back(), frames[i], *scenes[i]));
+    }
+    ESIA_CHECK(rhi::d3d12::FrameSlotCount(*host.dev) == 3);   // three frames in flight, none run
+    host.gate->Signal(1);
+    host.WaitFor(3);
+    for (int i = 0; i < FencedHost::kTargets; ++i)
+        ESIA_CHECK(host.Matches(i, want[i], *scenes[i]));
+    rhi::GpuProfile profile;
+    ESIA_CHECK(host.dev->ReadProfile(profile) && profile.valid);   // read once the fence passed, no later frame needed
+    ESIA_CHECK(host.Frame(0, 4, *renderers[0], frames[0], *scenes[0]));
+    host.WaitFor(4);
+    ESIA_CHECK(rhi::d3d12::FrameSlotCount(*host.dev) == 3);   // a slot whose fence passed came back
+    ESIA_CHECK(host.Matches(0, want[0], *scenes[0]));
+    ESIA_CHECK(host.dev->ValidationErrors() == 0);
+}
+
+// At Desc::maxFramesInFlight the device waits for the oldest frame's fence: two slots, the gate closed, the third frame
+// waits until a thread opens the gate, takes the first frame's slot, and every frame still draws what it was given.
+ESIA_TEST(D3D12Host, FencedFramesWaitAtTheCap)
+{
+    EsiaRegisterBackend_d3d12();
+    const conformance::Scene& scene = *conformance::FindScene("shapes");
+    testkit::Image want;
+    if (!Reference(scene, want))
+        return;
+    FencedHost host;
+    if (!host.Init(1, 2, 10000))
+    {
+        std::printf("  skipped: no D3D12 device\n");
+        return;
+    }
+    host.queue->Wait(host.gate.Get(), 1);
+    conformance::SceneFrame frame;
+    conformance::BuildScene(scene, frame);
+    render::Renderer renderer(*host.dev);
+    ESIA_CHECK(host.Frame(0, 1, renderer, frame, scene));
+    ESIA_CHECK(host.Frame(1, 2, renderer, frame, scene));
+    ESIA_CHECK(rhi::d3d12::FrameSlotCount(*host.dev) == 2);
+    std::thread opener([&] {
+        Sleep(200);
+        host.gate->Signal(1);
+    });
+    const auto t0 = std::chrono::steady_clock::now();
+    ESIA_CHECK(host.Frame(2, 3, renderer, frame, scene));   // waits for frame 1's fence
+    const double waited = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    opener.join();
+    ESIA_CHECK(waited >= 100.0);
+    ESIA_CHECK(rhi::d3d12::FrameSlotCount(*host.dev) == 2);
+    host.WaitFor(3);
+    for (int i = 0; i < 3; ++i)
+        ESIA_CHECK(host.Matches(i, want, scene));
+    ESIA_CHECK(host.dev->ValidationErrors() == 0);
+}
+
+// A frame whose list is never executed never reaches its fence: with every slot waiting on it, the next BeginFrame gives
+// up after Desc::hostFenceWaitMs with an error, and the renderer draws nothing rather than hanging.
+ESIA_TEST(D3D12Host, AFenceNeverReachedFailsTheFrame)
+{
+    EsiaRegisterBackend_d3d12();
+    const conformance::Scene& scene = *conformance::FindScene("shapes");
+    FencedHost host;
+    if (!host.Init(1, 1, 50))
+    {
+        std::printf("  skipped: no D3D12 device\n");
+        return;
+    }
+    conformance::SceneFrame frame;
+    conformance::BuildScene(scene, frame);
+    render::Renderer renderer(*host.dev);
+    ESIA_CHECK(host.Frame(0, 1, renderer, frame, scene, false));   // recorded, never executed
+    const std::uint32_t before = host.dev->ValidationErrors();
+    ESIA_CHECK(!host.Frame(1, 2, renderer, frame, scene, false));
+    ESIA_CHECK(host.dev->ValidationErrors() > before);
+    host.fence->Signal(2);   // the host gives the frames up: the device can go without waiting
 }
