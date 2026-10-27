@@ -121,8 +121,10 @@ ESIA_TEST(MetalDevice, NullGoldensWithMetalCaps)
     Rig r = MakeRig(hd, o);
     Caps caps = r.dev->GetCaps();
     // FX variants (where the MSL has the feature mask as a function constant) are a caps choice the goldens were
-    // recorded without; MetalDevice.FxFeatureVariants covers them
+    // recorded without, and so is a full shader without glyph shapes, legibility and motion blur (Caps::fullFxGlyphs);
+    // MetalDevice.FxFeatureVariants and the renderer's glyph-variant tests cover them
     caps.fxFeatureVariants = caps.asyncPipelines = false;
+    caps.fullFxGlyphs = true;
     r.dev->DestroyTexture(r.target);
     for (const conformance::Scene& scene : conformance::Scenes())
     {

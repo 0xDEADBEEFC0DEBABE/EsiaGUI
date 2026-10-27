@@ -174,9 +174,15 @@ After merging `esia-core` round 2 (and `3a8d164`, public headers after `<windows
   layers, failed calls). D3D9's instruction-slot notice is information now. Copy destinations are render targets
   from creation, so the renderer's zero-filled backdrop copy no longer loses its upload at the first copy (the
   "contents were dropped" warning); a copy into a texture without `CopyDst` is an error.
-* **`FrameDesc::hostFrame` on D3D12**: the device frames of one host frame share a ring slot; slots rotate per slot
-  taken. `D3D12Host.TwoTargetsPerHostFrame` renders two targets per host frame for five frames with two in flight
-  and compares both with the headless rendering.
+* **`FrameDesc::hostFrame` on D3D12**: the device frames of one host frame share a slot. `D3D12Host.TwoTargetsPerHostFrame`
+  renders two targets per host frame for five frames with two in flight and compares both with the headless rendering.
+* **The D3D12 submission contracts** (2026-10-28): own list, host list with the host's fence, host list on trust
+  (`esia/rhi/d3d12.hpp`). Slots are a pool with a descriptor heap each; with a fence a slot comes back when the fence
+  passed (its timestamps are read then too), more are made while none has (`Desc::maxFramesInFlight`, 8), and past
+  that BeginFrame waits for the oldest (`Desc::hostFenceWaitMs`, 10 s; then it fails with an error instead of hanging
+  on a list the host never executed). Tests: three frames held back by a gate on the queue grow the slots to three and
+  each target matches the headless rendering; at the cap the third frame waits for the gate a thread opens; a fence
+  never reached fails the frame after 50 ms. glass_window's D3D12 host passes its fence.
 * **D3D9 asynchronous variants** (`Caps::asyncPipelines`): FX variants compile on workers and stay `Pending` until
   `GetPipelineStatus` (render thread) makes their shaders; the full FX shader starts compiling at device creation
   (every pending batch's fallback). The single-frame D3D9 conformance run, a fresh device per scene, went from about
@@ -199,6 +205,10 @@ on all four to the pixel.
 
 Motion blur (`fx::kMotion`) is left out of SM3's full FX shader too (`fx::kVariantOnlyFeatures`): moving shapes
 take their variant; `motion_blur` passes on all four to the pixel, `ui_light` within one level.
+
+Since then the SM4 / SM5 full shader leaves the three out as well (`Caps::fullFxGlyphs = false` on D3D10 / 11 / 12,
+`ShaderRequest::fxFeatures` now passed for their variants): with them every FX pixel carried 2 more temporaries and
+~1200 more instruction slots, 10,000 shapes took 0.260 instead of 0.236 ms of GPU on D3D11.
 
 Instanced quads (glyphs, flat tiles: `QuadVS`, the instance data after the FX instances) run on all four. On D3D9 the
 instance texture is now at most 4096 texels wide: with quads after an FX row the renderer uploaded a full row of
@@ -255,9 +265,11 @@ each, no debug-layer message.
 5. **D3D9 copy destinations** are created dynamic and become render-target textures at their first
    `CopyTexture` (`StretchRect` only writes render targets); contents uploaded before that are dropped (logged).
    The renderer never uploads into its backdrop copy.
-6. **D3D12 host command lists**: the ring slot of a device frame is reused `framesInFlight` device frames later
-   without a fence (the host's frame pacing is trusted, as in WGT's backend); count one device frame per
-   `Renderer::Render`. `ReadPixels` needs `Desc::queue` and must follow the host's execution of the frame.
+6. **D3D12 host command lists**: with the host's fence (`FrameDesc::nativeFence` / `nativeFenceValue`) a frame's
+   slot is reused once the fence reached the value; while none has, the device makes another, up to
+   `Desc::maxFramesInFlight`, then waits for the oldest at most `Desc::hostFenceWaitMs` (BeginFrame fails after
+   that). Without a fence a slot is reused `framesInFlight` host frames later on trust (the host's frame pacing,
+   as in WGT's backend). `ReadPixels` needs `Desc::queue` and must follow the host's execution of the frame.
 7. **D3D10 / 11 flush at `EndFrame`** when timestamps are on, so their queries complete without a `Present`.
 8. **Wrapped host targets hold a reference** (view / resource / surface): `DestroyTexture` them before
    `ResizeBuffers` / `ResetEx`.

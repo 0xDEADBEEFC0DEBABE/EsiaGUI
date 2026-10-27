@@ -50,8 +50,10 @@ namespace esia::rhi::metal
         // by Metal's compiler per batch mask; compiled in the background where the Gpu can (the renderer draws with a
         // ready superset or the full shader meanwhile)
         const shaders::ShaderBlob* fxPs = shaders::Find(shaders::Format::Msl, ShaderProgram::Fx, shaders::Stage::Pixel);
-        caps_.fxFeatureVariants = options_.fxFeatureVariants < 0 ? (fxPs && MslDeclaresFxFeatures(reinterpret_cast<const char*>(fxPs->data)))
-                                                                 : options_.fxFeatureVariants != 0;
+        const bool specializable = fxPs && MslDeclaresFxFeatures(reinterpret_cast<const char*>(fxPs->data));
+        caps_.fxFeatureVariants = options_.fxFeatureVariants < 0 ? specializable : options_.fxFeatureVariants != 0;
+        // the full shader specialized without glyph shapes, legibility and motion blur (fx::kFullShaderFeatures)
+        caps_.fullFxGlyphs = !specializable;
         caps_.asyncPipelines = caps_.fxFeatureVariants && g.asyncPipelines;
         caps_.maxTextureSize = g.maxTextureSize;
         caps_.maxFxDataWidth = g.maxTextureSize;     // unused: FxStorage::Buffer

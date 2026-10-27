@@ -100,8 +100,8 @@ namespace glass
                 if (!wrapped_[0])
                     return false;
                 const int slot = (int)(frame_ % kFramesInFlight);
-                // the frame that used this slot kFramesInFlight frames ago must be done: Esia recycles its per-frame
-                // memory on the same schedule (Desc::framesInFlight)
+                // the frame that used this allocator kFramesInFlight frames ago must be done; Esia knows when its frames
+                // are from the fence handed over in Frame()
                 Wait(slotFence_[slot]);
                 allocators_[slot]->Reset();
                 list_->Reset(allocators_[slot].Get(), nullptr);
@@ -114,6 +114,9 @@ namespace glass
                 esia::rhi::FrameDesc f;
                 f.nativeContext = list_.Get();
                 f.hostFrame = frame_ + 1;
+                // the submission contract with a fence: the value Present() signals after this frame's list
+                f.nativeFence = fence_.Get();
+                f.nativeFenceValue = fenceValue_ + 1;
                 return f;
             }
 

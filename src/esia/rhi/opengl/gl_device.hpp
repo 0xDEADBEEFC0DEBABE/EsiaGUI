@@ -185,7 +185,7 @@ namespace esia::rhi::opengl
         bool AttachAndCheck(Tex& t);
         void Upload(const Tex& t, int x, int y, int w, int h, const void* data, int rowPitch);
         void ReleaseTex(Tex& t);
-        Program* GetProgram(ShaderProgram p);
+        Program* GetProgram(ShaderProgram p, std::uint32_t fxFeatures = 0);
         const Tex* ResolveTarget(const Tex& src);
         void Blit(const Tex& src, const Tex& dst, const IRect& srcRect, int dstX, int dstY);
         bool DrawCopy(const Tex& src, const Tex& dst, const IRect& srcRect, int dstX, int dstY);
@@ -216,6 +216,7 @@ namespace esia::rhi::opengl
         std::unordered_map<std::uint32_t, Buf, IntHash> buffers_;
         std::unordered_map<std::uint32_t, Pipe, IntHash> pipelines_;
         Program programs_[(int)ShaderProgram::Count];
+        std::unordered_map<std::uint32_t, Program> fxPrograms_;   // the FX program per feature mask (SPIRV_CROSS_CONSTANT_ID_0)
         Tex resolve_;   // single-sample copy of a multisampled source (readback, format-changing copies)
         GLuint copyProgram_ = 0;         // DrawCopy's program, built at the first sRGB -> raw copy
         bool copyTried_ = false;

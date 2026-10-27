@@ -170,8 +170,10 @@ namespace esia::rhi::d3d10
             c.readback = true;
             c.baseVertex = true;
             c.runtimeEffects = true;
-            // the whole FX shader fits SM4: one pipeline instead of one per feature mask
+            // the whole FX shader fits SM4: one pipeline instead of one per feature mask - but for glyph shapes,
+            // legibility and motion blur, which it leaves out (variants of their own, fx::kVariantOnlyFeatures)
             c.fxFeatureVariants = false;
+            c.fullFxGlyphs = false;
             c.maxTextureSize = D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             c.maxFxDataWidth = D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION;
             return c;
@@ -487,6 +489,7 @@ namespace esia::rhi::d3d10
             vr.program = desc.program;
             vr.stage = shaders::Stage::Vertex;
             vr.model = d3d::ShaderModel::Sm4;
+            vr.fxFeatures = desc.program == ShaderProgram::Fx ? desc.fxFeatures : 0u;   // a variant (Caps::fullFxGlyphs)
             d3d::ShaderRequest pr = vr;
             pr.stage = shaders::Stage::Pixel;
             d3d::Bytecode ps;

@@ -130,14 +130,16 @@ namespace esia::rhi::vulkan
             BlendMode blend;
             Format format;
             int samples;
+            std::uint32_t fxFeatures;   // Fx: the mask its specialization constant 0 gets (fx::kFullShaderFeatures or a variant's)
             bool operator==(const PipelineKey&) const = default;
         };
         struct PipelineKeyHash
         {
             std::size_t operator()(const PipelineKey& k) const
             {
-                return std::hash<std::uint64_t>()((std::uint64_t)k.program | ((std::uint64_t)k.layout << 8) | ((std::uint64_t)k.topology << 16) |
-                                                  ((std::uint64_t)k.blend << 24) | ((std::uint64_t)k.format << 32) | ((std::uint64_t)k.samples << 40));
+                return std::hash<std::uint64_t>()(((std::uint64_t)k.program | ((std::uint64_t)k.layout << 8) | ((std::uint64_t)k.topology << 16) |
+                                                   ((std::uint64_t)k.blend << 24) | ((std::uint64_t)k.format << 32) | ((std::uint64_t)k.samples << 40)) ^
+                                                  ((std::uint64_t)k.fxFeatures * 0x9E3779B97F4A7C15ull));
             }
         };
         struct CachedPipeline
