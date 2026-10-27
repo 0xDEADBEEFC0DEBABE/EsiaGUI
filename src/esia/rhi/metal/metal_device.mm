@@ -8,6 +8,7 @@
 #include "esia/rhi/metal.hpp"
 #include "esia/rhi/backend_registry.hpp"
 #include "metal_device_core.hpp"
+#include "esia/core/fx.hpp"
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include <cstdio>
@@ -153,8 +154,8 @@ namespace esia::rhi::metal
                 return lib;
             }
 
-            // esia_main; specialized to `fxFeatures` (0 = every feature) where the MSL declares the FX feature mask as
-            // function constant 0: Metal's compiler then drops the code of the features the mask leaves out
+            // esia_main; specialized to `fxFeatures` (0 = the full shader's, fx::kFullShaderFeatures) where the MSL declares
+            // the FX feature mask as function constant 0: Metal's compiler then drops the code of the features it leaves out
             id<MTLFunction> Function(const char* source, std::uint32_t fxFeatures, std::string& error)
             {
                 id<MTLLibrary> lib = Library(source, error);
@@ -163,7 +164,7 @@ namespace esia::rhi::metal
                 id<MTLFunction> f = nil;
                 if (MslDeclaresFxFeatures(source))
                 {
-                    const std::uint32_t mask = fxFeatures ? fxFeatures : 0xFFFFFFFFu;
+                    const std::uint32_t mask = fxFeatures ? fxFeatures : fx::kFullShaderFeatures;
                     MTLFunctionConstantValues* cv = [MTLFunctionConstantValues new];
                     [cv setConstantValue:&mask type:MTLDataTypeUInt atIndex:0];
                     NSError* err = nil;
