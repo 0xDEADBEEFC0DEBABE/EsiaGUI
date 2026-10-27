@@ -1,14 +1,16 @@
 # FreeType and HarfBuzz for the text system (esia_text_ft), and the optional system font libraries of esia_text.
-# Included by src/esia/CMakeLists.txt; defines esia::freetype and esia::harfbuzz (and ESIA_TEXT_DEPS_FOUND).
+# Included by src/esia/CMakeLists.txt; defines esia::freetype and esia::harfbuzz (and ESIA_TEXT_DEPS_FOUND, also as
+# the global property of that name: bundled or system).
 #
 #   ESIA_TEXT_DEPS=auto      the system's packages when both are found, else built from source (the default)
 #   ESIA_TEXT_DEPS=bundled   always built from source: the pinned archives below, fetched at configure time
 #   ESIA_TEXT_DEPS=system    the system's packages (find_package, CMAKE_PREFIX_PATH); an error when missing
 #
-# The bundled build compiles only what Esia uses: FreeType's OpenType / TrueType / CFF drivers without zlib, bzip2,
-# libpng, Brotli or HarfBuzz, and HarfBuzz's amalgamated source without glib, ICU, FreeType, Graphite or the platform
-# shapers. Both are static libraries built with their own warnings silenced, never Esia's flags, so -DESIA_WERROR=ON
-# stays about Esia's code; their headers are system includes for the same reason.
+# The bundled build compiles only what Esia uses: FreeType's OpenType / TrueType / CFF drivers, its hinters (the
+# TrueType interpreter, the CFF hinter, the autohinter) and its anti-aliasing and LCD rasterizer with the LCD filters,
+# without zlib, bzip2, libpng, Brotli or HarfBuzz; and HarfBuzz's amalgamated source without glib, ICU, FreeType,
+# Graphite or the platform shapers. Both are static libraries built with their own warnings silenced, never Esia's
+# flags, so -DESIA_WERROR=ON stays about Esia's code; their headers are system includes for the same reason.
 #
 # Offline: point FETCHCONTENT_SOURCE_DIR_ESIA_FREETYPE / FETCHCONTENT_SOURCE_DIR_ESIA_HARFBUZZ at the extracted
 # archives (the versions below), or set FETCHCONTENT_FULLY_DISCONNECTED=ON after one configure has downloaded them.
@@ -118,14 +120,22 @@ function(_esia_build_text_deps)
 
     # FreeType: its configuration headers are replaced through the include order (the generated directory comes
     # first). ftmodule.h lists the modules compiled below; ftoption.h is FreeType's own with the internal zlib and
-    # LZW readers off (they only unpack WOFF 1 and compressed PCF: a .pcf.gz is unpacked before loading).
+    # LZW readers off (they only unpack WOFF 1 and compressed PCF: a .pcf.gz is unpacked before loading) and the LCD
+    # filters on (FT_Library_SetLcdFilter: ClearType-style sub-pixel rendering; without it FreeType renders LCD
+    # glyphs its "Harmony" way, unfiltered).
     set(cfg ${esia_freetype_BINARY_DIR}/esia-config)
     file(READ ${ft}/include/freetype/config/ftoption.h _options)
     string(REGEX REPLACE "\n#define +(FT_CONFIG_OPTION_USE_ZLIB|FT_CONFIG_OPTION_USE_LZW)\n" "\n/* #undef \\1 (Esia) */\n" _options "${_options}")
+    string(REGEX REPLACE "\n/\\* #define FT_CONFIG_OPTION_SUBPIXEL_RENDERING \\*/\n" "\n#define FT_CONFIG_OPTION_SUBPIXEL_RENDERING /* Esia */\n"
+           _options "${_options}")
+    if(NOT _options MATCHES "\n#define FT_CONFIG_OPTION_SUBPIXEL_RENDERING")
+        message(FATAL_ERROR "Esia text: FreeType's ftoption.h no longer has the FT_CONFIG_OPTION_SUBPIXEL_RENDERING line this build turns on")
+    endif()
     _esia_write_if_changed(${cfg}/freetype/config/ftoption.h "${_options}")
     _esia_write_if_changed(${cfg}/freetype/config/ftmodule.h
-"/* Esia: the FreeType modules compiled in (cmake/EsiaTextDeps.cmake) - TrueType and OpenType / CFF outlines, and the
-   bitmap fonts: BDF, PCF and Windows FNT / FON */
+"/* Esia: the FreeType modules compiled in (cmake/EsiaTextDeps.cmake) - TrueType and OpenType / CFF outlines, the
+   bitmap fonts (BDF, PCF and Windows FNT / FON), the autohinter and the anti-aliasing / LCD rasterizer */
+FT_USE_MODULE( FT_Module_Class, autofit_module_class )
 FT_USE_MODULE( FT_Driver_ClassRec, tt_driver_class )
 FT_USE_MODULE( FT_Driver_ClassRec, cff_driver_class )
 FT_USE_MODULE( FT_Driver_ClassRec, bdf_driver_class )
@@ -135,6 +145,7 @@ FT_USE_MODULE( FT_Module_Class, psaux_module_class )
 FT_USE_MODULE( FT_Module_Class, psnames_module_class )
 FT_USE_MODULE( FT_Module_Class, pshinter_module_class )
 FT_USE_MODULE( FT_Module_Class, sfnt_module_class )
+FT_USE_MODULE( FT_Renderer_Class, ft_smooth_renderer_class )
 ")
     # base: the portable stdio stream and debug files, and the two API files the drivers call into (bitmaps from
     # the SFNT loader, named instances of variable fonts from the TrueType one)
@@ -153,7 +164,9 @@ FT_USE_MODULE( FT_Module_Class, sfnt_module_class )
         ${ft}/src/pshinter/pshinter.c
         ${ft}/src/bdf/bdf.c
         ${ft}/src/pcf/pcf.c
-        ${ft}/src/winfonts/winfnt.c)
+        ${ft}/src/winfonts/winfnt.c
+        ${ft}/src/autofit/autofit.c
+        ${ft}/src/smooth/smooth.c)
     target_include_directories(esia_freetype SYSTEM BEFORE PUBLIC ${cfg} ${ft}/include)
     target_compile_definitions(esia_freetype PRIVATE FT2_BUILD_LIBRARY)
     _esia_third_party_defaults(esia_freetype)
@@ -191,3 +204,4 @@ if(NOT ESIA_TEXT_DEPS_FOUND)
     enable_language(C)   # FreeType is C (file scope: enable_language cannot run inside a function)
     _esia_build_text_deps()
 endif()
+set_property(GLOBAL PROPERTY ESIA_TEXT_DEPS_FOUND ${ESIA_TEXT_DEPS_FOUND})   # the tests: which FreeType draws

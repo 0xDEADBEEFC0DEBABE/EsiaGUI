@@ -86,6 +86,27 @@ namespace esia::platform::win32
         float uiScale = 1.0f;   // multiplies the monitor's DPI scale (a user zoom): pixels per UI unit = DPI / 96 * uiScale
     };
 
+    // The user's text antialiasing for a monitor (Control Panel's font smoothing, the ClearType tuner): sub-pixel (LCD)
+    // where font smoothing is ClearType, in the stripe order the tuner set for that monitor - reversed on a monitor turned
+    // upside down, none on one turned sideways (its stripes then run vertically) or set to flat - with the tuner's
+    // ClearType level, enhanced contrast and gamma. For a text system (TextRendering::subpixel) and the renderer
+    // (RenderParams::text); FrameInfo::text follows the window from monitor to monitor.
+    struct DisplayText
+    {
+        enum class Stripes : std::uint8_t
+        {
+            None,   // grayscale antialiasing
+            Rgb,    // red, green, blue from the left
+            Bgr,
+        };
+        Stripes stripes = Stripes::None;
+        float clearTypeLevel = 1.0f;     // 0 .. 1: how much of the sub-pixel coverage, against the grayscale
+        float enhancedContrast = 0.5f;   // stem weight
+        float gamma = 1.8f;
+
+        bool operator==(const DisplayText&) const = default;
+    };
+
     // The window as the UI thread uses it for a frame (Platform::Frame).
     struct FrameInfo
     {
@@ -94,6 +115,7 @@ namespace esia::platform::win32
         float scale = 1.0f;          // pixels per UI unit: dpiScale * Desc::uiScale
         bool minimized = false;      // width and height keep the last restored size
         bool focused = false;
+        DisplayText text;            // of the window's monitor (it changes when the window moves to another one)
 
         // displaySize = pixels / scale (UI units), framebufferScale = scale: the UI renders at the native resolution.
         FrameParams Params(double time) const
@@ -178,4 +200,10 @@ namespace esia::platform::win32
     // Per-monitor v2 DPI awareness for the process, unless something set its awareness already (a manifest, an earlier
     // call). True when the process ends up per-monitor aware (v1 or v2).
     ESIA_API bool EnableDpiAwareness();
+    // Any thread: the text antialiasing of `monitor` (an HMONITOR; null: the primary monitor) - DirectWrite's rendering
+    // parameters for it, the user's font smoothing and the monitor's orientation.
+    ESIA_API DisplayText MonitorText(void* monitor);
+    // How a monitor's orientation (DEVMODE::dmDisplayOrientation: 0, 90, 180, 270 degrees as 0 .. 3) moves its stripes
+    // across the picture: reversed upside down, vertical (no horizontal sub-pixels) sideways.
+    ESIA_API DisplayText::Stripes RotatedStripes(DisplayText::Stripes stripes, int orientation);
 }

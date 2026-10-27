@@ -4,6 +4,7 @@
 #include "gpu_constants.hpp"
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 
 namespace esia::render
 {
@@ -19,26 +20,49 @@ namespace esia::render
             PxRect operator()(const Rect& r) const { return (*this)(r.min.x, r.min.y, r.max.x, r.max.y); }
         };
 
-        // Must mirror the quad expansion in FxVS (esia_fx.hlsl).
-        void InstanceExtent(const fx::Instance& in, float out[4])
+        // The shape an instance draws, before its shadow / glow: its rect (with a liquid merge's second rect), or a
+        // glyph's field (its rect is the text's box). Must mirror FxVS (esia_fx.hlsl).
+        Rect ShapeBox(const fx::Instance& in)
         {
             const std::uint32_t feat = in.flags[0];
-            float x0 = in.rect[0], y0 = in.rect[1], x1 = in.rect[2], y1 = in.rect[3];
+            if (feat & fx::kGlyph)
+                return Rect(in.shape2[0], in.shape2[1], in.shape2[2], in.shape2[3]);
+            Rect r(in.rect[0], in.rect[1], in.rect[2], in.rect[3]);
             if (feat & fx::kMerge)
+                r = r.Union(Rect(in.shape2[0], in.shape2[1], in.shape2[2], in.shape2[3]));
+            return r;
+        }
+
+        // How far a drop shadow's offset reaches: along x or y as it is, or every way when a light turns it
+        float ShadowReach(const fx::Instance& in, bool lit)
+        {
+            return lit ? std::sqrt(in.shadowParams[2] * in.shadowParams[2] + in.shadowParams[3] * in.shadowParams[3])
+                       : std::max(std::fabs(in.shadowParams[2]), std::fabs(in.shadowParams[3]));
+        }
+
+        // Must mirror the quad expansion in FxVS (esia_fx.hlsl).
+        void InstanceExtent(const fx::Instance& in, float out[4], bool lit)
+        {
+            const std::uint32_t feat = in.flags[0];
+            const Rect shape = ShapeBox(in);
+            float x0 = shape.min.x, y0 = shape.min.y, x1 = shape.max.x, y1 = shape.max.y;
+            if (feat & fx::kMotion)   // the area the shape sweeps
             {
-                x0 = std::min(x0, in.shape2[0]);
-                y0 = std::min(y0, in.shape2[1]);
-                x1 = std::max(x1, in.shape2[2]);
-                y1 = std::max(y1, in.shape2[3]);
+                const float mx = std::fabs(in.custom[0]) * 0.5f, my = std::fabs(in.custom[1]) * 0.5f;
+                x0 -= mx;
+                y0 -= my;
+                x1 += mx;
+                y1 += my;
             }
             float pad = 2.0f;
             if (feat & fx::kStroke)
                 pad = std::max(pad, in.strokeParams[0] * in.strokeParams[1] + 2.0f);
             if ((feat & fx::kShadow) && !(feat & fx::kInnerShadow))
-                pad = std::max(pad, in.shadowParams[0] * 1.6f + std::max(in.shadowParams[1], 0.0f) +
-                                        std::max(std::fabs(in.shadowParams[2]), std::fabs(in.shadowParams[3])) + 2.0f);
+                pad = std::max(pad, in.shadowParams[0] * 1.6f + std::max(in.shadowParams[1], 0.0f) + ShadowReach(in, lit) + 2.0f);
             if (feat & fx::kGlow)
                 pad = std::max(pad, in.glowParams[0] * 1.8f + 2.0f);
+            if (feat & fx::kLegible)
+                pad = std::max(pad, in.radii[3] * 1.8f + 2.0f);
             x0 -= pad;
             y0 -= pad;
             x1 += pad;
@@ -58,21 +82,24 @@ namespace esia::render
 
         // Distance beyond the shape where its shadow / glow still reaches a visible opacity (> 4%): past it the
         // tails vanish once seen through blurred glass (capture planning ignores them).
-        float InstanceCoreExtent(const fx::Instance& in)
+        float InstanceCoreExtent(const fx::Instance& in, bool lit)
         {
             const std::uint32_t feat = in.flags[0];
             float pad = 1.0f;
+            if (feat & fx::kMotion)
+                pad = std::max(pad, std::max(std::fabs(in.custom[0]), std::fabs(in.custom[1])) * 0.5f + 1.0f);
             if (feat & fx::kStroke)
                 pad = std::max(pad, in.strokeParams[0] * in.strokeParams[1] + 1.0f);
             if ((feat & fx::kShadow) && !(feat & fx::kInnerShadow) && in.shadow[3] > 0.04f)
-                pad = std::max(pad, in.shadowParams[0] * 0.5f + std::max(in.shadowParams[1], 0.0f) +
-                                        std::max(std::fabs(in.shadowParams[2]), std::fabs(in.shadowParams[3])));
+                pad = std::max(pad, in.shadowParams[0] * 0.5f + std::max(in.shadowParams[1], 0.0f) + ShadowReach(in, lit));
             if (feat & fx::kGlow)
             {
                 const float peak = in.glowParams[1] * in.glow[3];
                 if (peak > 0.04f)
                     pad = std::max(pad, in.glowParams[0] * std::sqrt(std::log(peak / 0.04f) / 2.2f));
             }
+            if ((feat & fx::kLegible) && in.radii[2] * 0.85f > 0.04f)   // the legibility halo, at its strongest
+                pad = std::max(pad, in.radii[3] * std::sqrt(std::log(in.radii[2] * 0.85f / 0.04f) / 2.2f));
             return pad;
         }
 
@@ -81,16 +108,18 @@ namespace esia::render
         // drawn). Past it a shadow's tail changes a pixel by a few levels at most, which drawing a neighbouring label
         // before or after it does not show - and a label beside a button would otherwise split every row of a form
         // into a batch of shapes and a batch of text.
-        void InstanceJoinReach(const fx::Instance& in, float out[4])
+        void InstanceJoinReach(const fx::Instance& in, float out[4], bool lit)
         {
             const std::uint32_t feat = in.flags[0];
-            float x0 = in.rect[0], y0 = in.rect[1], x1 = in.rect[2], y1 = in.rect[3];
-            if (feat & fx::kMerge)
+            const Rect shape = ShapeBox(in);
+            float x0 = shape.min.x, y0 = shape.min.y, x1 = shape.max.x, y1 = shape.max.y;
+            if (feat & fx::kMotion)
             {
-                x0 = std::min(x0, in.shape2[0]);
-                y0 = std::min(y0, in.shape2[1]);
-                x1 = std::max(x1, in.shape2[2]);
-                y1 = std::max(y1, in.shape2[3]);
+                const float mx = std::fabs(in.custom[0]) * 0.5f, my = std::fabs(in.custom[1]) * 0.5f;
+                x0 -= mx;
+                y0 -= my;
+                x1 += mx;
+                y1 += my;
             }
             const float sx0 = x0, sy0 = y0, sx1 = x1, sy1 = y1;
             float pad = 1.0f;
@@ -108,11 +137,13 @@ namespace esia::render
             y1 += pad;
             if ((feat & fx::kShadow) && !(feat & fx::kInnerShadow) && in.shadow[3] > 0.04f)
             {
+                // the shadow in its own box, offset the way it is drawn - any way when a light turns it
                 const float r = in.shadowParams[0] * 0.5f + std::max(in.shadowParams[1], 0.0f);
-                x0 = std::min(x0, sx0 + in.shadowParams[2] - r);
-                y0 = std::min(y0, sy0 + in.shadowParams[3] - r);
-                x1 = std::max(x1, sx1 + in.shadowParams[2] + r);
-                y1 = std::max(y1, sy1 + in.shadowParams[3] + r);
+                const float reach = lit ? ShadowReach(in, true) : 0.0f;
+                x0 = std::min(x0, sx0 + (lit ? -reach : in.shadowParams[2]) - r);
+                y0 = std::min(y0, sy0 + (lit ? -reach : in.shadowParams[3]) - r);
+                x1 = std::max(x1, sx1 + (lit ? reach : in.shadowParams[2]) + r);
+                y1 = std::max(y1, sy1 + (lit ? reach : in.shadowParams[3]) + r);
             }
             if (feat & fx::kMask)
             {
@@ -197,6 +228,8 @@ namespace esia::render
         lists.clear();
         geometry.clear();
         instanceRuns.clear();
+        quadRuns.clear();
+        quadCount = 0;
         direct = directGeometry;
         totalVertices = totalIndices = 0;
         pieces_.clear();
@@ -232,7 +265,7 @@ namespace esia::render
             if (last != kNoPiece)
             {
                 Piece& l = pieces_[last];   // continues the op's last piece: consecutive instances or indices of a list
-                if ((piece.inst && l.inst && l.inst + l.count == piece.inst) ||
+                if ((piece.inst && l.inst && l.inst + l.count == piece.inst) || (piece.quad && l.quad && l.quad + l.count == piece.quad) ||
                     (piece.idx && l.idx && l.idx + l.count == piece.idx && l.base == piece.base))
                 {
                     l.count += piece.count;
@@ -317,7 +350,7 @@ namespace esia::render
                     {
                         const fx::Instance& in = dl->FxInstances()[ii];
                         float e[4];
-                        InstanceExtent(in, e);
+                        InstanceExtent(in, e, lightShadows);
                         const PxRect full = map(e[0], e[1], e[2], e[3]);
                         const PxRect b = full.Intersect(clip);
                         if (b.Empty())
@@ -325,15 +358,13 @@ namespace esia::render
                         // glass keeps its clip: its capture regions are planned within it
                         // the shape plus the part of its shadow / glow that is still visible (> 4%): the faint outer
                         // tails vanish through blurred glass, so they never force a new backdrop capture
-                        PxRect shapeR = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]);
-                        if (in.flags[0] & fx::kMerge)
-                            shapeR = shapeR.Union(map(in.shape2[0], in.shape2[1], in.shape2[2], in.shape2[3]));
-                        // glass and user effects (which may call WgtBackdrop()) read the captured backdrop
-                        const bool glass = (in.flags[0] & (fx::kGlass | fx::kCustom)) != 0;
+                        const PxRect shapeR = map(ShapeBox(in));
+                        // glass, user effects (which may call WgtBackdrop()) and legible text read the captured backdrop
+                        const bool glass = (in.flags[0] & (fx::kGlass | fx::kCustom | fx::kLegible)) != 0;
                         // Liquid glass shapes are tracked apart from other content: like SwiftUI's glass effect
                         // container, neighbouring glass shares one backdrop and only sees glass it sits on.
                         const bool glassShape = (in.flags[0] & fx::kGlass) && !(in.flags[0] & fx::kCustom);
-                        const PxRect core = glassShape ? PxRect{} : shapeR.Expand(InstanceCoreExtent(in) * map.scale.x).Intersect(full).Intersect(clip);
+                        const PxRect core = glassShape ? PxRect{} : shapeR.Expand(InstanceCoreExtent(in, lightShadows) * map.scale.x).Intersect(full).Intersect(clip);
                         const PxRect gShape = glassShape ? shapeR.Intersect(clip) : PxRect{};
                         const bool cut = glass || !clip.Contains(full);
                         PxRect gRegion, gCore, g0;
@@ -346,7 +377,8 @@ namespace esia::render
                         {
                             const float glassBlurPx = std::max(in.glass[0], kGlassEnvBlur) * map.scale.x;
                             const float ambientPx = in.shape[0] > 0.0f ? (float)(1 << AmbientLevel(map.scale.x)) : 0.0f;
-                            blurPx = (in.flags[0] & fx::kCustom) ? -1.0f : std::max(glassBlurPx, ambientPx);
+                            const float legiblePx = (in.flags[0] & fx::kLegible) ? in.radii[3] * map.scale.x : 0.0f;   // as blurred as its halo is wide
+                            blurPx = (in.flags[0] & fx::kCustom) ? -1.0f : std::max({glassBlurPx, ambientPx, legiblePx});
                             // WgtSampleBackdrop reads level 0 below a 4 px frost (the rim reflection and the exposure
                             // always read blurred levels)
                             reads0 = (in.flags[0] & fx::kCustom) || ((in.flags[0] & fx::kGlass) && in.glass[0] * map.scale.x < 4.0f);
@@ -354,7 +386,8 @@ namespace esia::render
                             // frost footprint, plus the rim reflection sampled just outside the edge (GlassEnvReach)
                             const float halfMin = 0.5f * std::min(in.rect[2] - in.rect[0], in.rect[3] - in.rect[1]);
                             const float reach = in.glass[0] * 2.0f + GlassEnvReach(std::min(in.glass[2], std::max(halfMin, 1.0f))) + kGlassEnvBlur;
-                            const float margin = (isGlass ? reach : 40.0f) * map.scale.x + 16.0f;
+                            const float wide = (in.flags[0] & fx::kLegible) ? std::max(40.0f, in.radii[3] * 2.0f) : 40.0f;   // a wide halo's blur
+                            const float margin = (isGlass ? reach : wide) * map.scale.x + 16.0f;
                             gRegion = map(in.rect[0], in.rect[1], in.rect[2], in.rect[3]).Expand(margin);
                             // what glass shows of its backdrop is what lies under the shape (refraction pulls inwards):
                             // content drawn beside it after the capture would reach its frost only faintly, so it does
@@ -370,7 +403,7 @@ namespace esia::render
                         PxRect jr = b;
                         if (!glass)
                         {
-                            InstanceJoinReach(in, e);
+                            InstanceJoinReach(in, e, lightShadows);
                             jr = map(e[0], e[1], e[2], e[3]).Intersect(b);
                         }
                         int k = findJoin(jr, glass, [&](const RenderOp& o) {
@@ -473,6 +506,54 @@ namespace esia::render
                     barrier = (int)ops.size();
                     break;
                 }
+                case DrawCmdKind::Quads:
+                {
+                    // as geometry, drawn instanced: they join draws of quads only
+                    if (cmd.count == 0 || clip.Empty())
+                        break;
+                    RenderOp o;
+                    o.type = RenderOp::Draw;
+                    o.quads = true;
+                    o.clip = clip;
+                    std::copy(fade, fade + 4, o.fade);
+                    o.texture = cmd.texture;
+                    TextureInfo ti;
+                    if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
+                    {
+                        o.coverage = ti.Coverage();
+                        o.lcd = ti.Lcd();
+                    }
+                    o.quadCount = cmd.count;
+                    const PxRect whole = map(cmd.vtxBounds).Expand(1.0f);
+                    const bool cut = !clip.Contains(whole);
+                    o.bounds = whole.Intersect(clip);
+                    if (o.bounds.Empty())
+                        break;   // nothing inside the clip
+                    o.clipFree = !cut;
+                    int k = findJoin(o.bounds, false, [&](const RenderOp& x) {
+                        return x.type == RenderOp::Draw && x.quads && clipJoins(x, clip, whole, cut) && x.texture == cmd.texture &&
+                               x.coverage == o.coverage && std::equal(fade, fade + 4, x.fade);
+                    });
+                    if (k >= 0)
+                    {
+                        joinClip(ops[(std::size_t)k], clip, cut);
+                        ops[(std::size_t)k].quadCount += cmd.count;
+                        ops[(std::size_t)k].bounds = ops[(std::size_t)k].bounds.Union(o.bounds);
+                    }
+                    else
+                    {
+                        ops.push_back(o);
+                        k = (int)ops.size() - 1;
+                    }
+                    Piece pc;
+                    pc.quad = dl->Quads().data() + cmd.first;
+                    pc.count = cmd.count;
+                    pc.next = kNoPiece;
+                    link(k, pc);
+                    touch(k, o.bounds);
+                    addToLayers(o.bounds);
+                    break;
+                }
                 case DrawCmdKind::Geometry:
                 {
                     if (cmd.count == 0 || clip.Empty())
@@ -484,7 +565,10 @@ namespace esia::render
                     o.texture = cmd.texture;
                     TextureInfo ti;
                     if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
+                    {
                         o.coverage = ti.Coverage();
+                        o.lcd = ti.Lcd();
+                    }
                     o.idxCount = cmd.count;
                     const PxRect whole = VertexBounds(cmd, map);
                     const bool cut = !clip.Contains(whole);
@@ -493,7 +577,7 @@ namespace esia::render
                         break;   // nothing inside the clip
                     o.clipFree = !cut;
                     int k = findJoin(o.bounds, false, [&](const RenderOp& x) {
-                        return x.type == RenderOp::Draw && clipJoins(x, clip, whole, cut) && x.texture == cmd.texture && x.coverage == o.coverage &&
+                        return x.type == RenderOp::Draw && !x.quads && clipJoins(x, clip, whole, cut) && x.texture == cmd.texture && x.coverage == o.coverage &&
                                std::equal(fade, fade + 4, x.fade);
                     });
                     if (k >= 0)
@@ -535,6 +619,21 @@ namespace esia::render
             // it when that does (no scissor change), else the whole target.
             if (o.clipFree)
                 o.clip = k > 0 && ops[k - 1].clip.Contains(o.bounds.Intersect(screen)) ? ops[k - 1].clip : screen;
+            if (o.type == RenderOp::Draw && o.quads)
+            {
+                // the quads stay in the lists, as runs (the renderer copies them to the GPU once)
+                o.quadStart = quadCount;
+                for (std::uint32_t p = opFirst_[k]; p != kNoPiece; p = pieces_[p].next)
+                {
+                    const Piece& pc = pieces_[p];
+                    if (!quadRuns.empty() && quadRuns.back().first + quadRuns.back().count == pc.quad)
+                        quadRuns.back().count += pc.count;
+                    else
+                        quadRuns.push_back({pc.quad, pc.count});
+                    quadCount += pc.count;
+                }
+                continue;
+            }
             if (direct)
             {
                 // the instances as runs, the draws at their lists' offsets
@@ -580,7 +679,11 @@ namespace esia::render
             }
         }
         if (anyGlass)
+        {
             PlanCaptures();
+            if (keyCaptures)
+                KeyCaptures();
+        }
     }
 
     // ------------------------------------------------------------------ capture planning
@@ -655,7 +758,135 @@ namespace esia::render
         };
 
         float Area(const PxRect& r) { return r.Empty() ? 0.0f : (r.x1 - r.x0) * (r.y1 - r.y0); }
+
+        // KeyCaptures' hash: 8-byte words mixed in (a multiply-xorshift; not cryptographic - a key that matched by
+        // chance would show a stale frost for a frame).
+        inline std::uint64_t Mix(std::uint64_t h, std::uint64_t v)
+        {
+            h ^= v + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2);
+            h *= 0xBF58476D1CE4E5B9ull;
+            return h ^ (h >> 31);
+        }
+        std::uint64_t MixBytes(std::uint64_t h, const void* data, std::size_t n)
+        {
+            const auto* p = static_cast<const unsigned char*>(data);
+            for (; n >= 8; n -= 8, p += 8)
+            {
+                std::uint64_t v;
+                std::memcpy(&v, p, 8);
+                h = Mix(h, v);
+            }
+            std::uint64_t v = 0;
+            std::memcpy(&v, p, n);
+            return Mix(h, v ^ (std::uint64_t)n);
+        }
+        std::uint64_t MixRect(std::uint64_t h, const PxRect& r) { return MixBytes(h, &r, sizeof(r)); }
+        // an instance whose pixels change with the shader's clock alone: a shimmer, a light streak without a clock of
+        // its own, a user effect (it may read gTime)
+        bool Animated(const fx::Instance& in)
+        {
+            const std::uint32_t f = in.flags[0];
+            return (f & fx::kCustom) || ((f & fx::kShimmer) && in.misc[3] != 0.0f) || ((f & fx::kCaustic) && in.fill1[0] < 0.0f);
+        }
+        constexpr std::size_t kMaxKeyedBytes = 256 * 1024;   // an op with more data than this is not hashed: no reuse
         int LevelsOf(const RenderOp& op) { return op.blurPx < 0.0f ? kBackdropLevels - 1 : LevelsForBlur(op.blurPx); }
+    }
+
+    // Temporal reuse of captures (the renderer, RenderParams::targetStatic): a capture whose region, pyramid and what
+    // was drawn under it are the same as last frame's needs no new copy and blur - last frame's are still in the
+    // pyramid. Each capture's key mixes its region and pyramid with every op before it that touches the region, in
+    // order (their kind, state and data); when one of them reads the backdrop itself (glass, a user effect) or is a
+    // glow layer, what it shows depends on more than the region: then every op before the capture is mixed in.
+    void FramePlan::KeyCaptures()
+    {
+        opHash_.assign(ops.size(), 0);
+        for (std::size_t i = 0; i < ops.size(); ++i)
+        {
+            RenderOp& c = ops[i];
+            if (c.type != RenderOp::FxBatch || c.captureRegion.Empty())
+                continue;
+            std::uint64_t shape = MixRect(Mix(0x51ED270B27BB09ADull, (std::uint64_t)c.captureLevels), c.captureRegion);
+            shape = MixRect(Mix(shape, c.captureLevel0 ? 1u : 0u), c.captureLevel0Region);
+            c.captureShape = shape;
+            bool whole = false;
+            for (std::size_t k = 0; k < i && !whole; ++k)
+            {
+                const RenderOp& o = ops[k];
+                const PxRect touched = o.type == RenderOp::Callback ? o.clip : o.bounds;
+                whole = (o.type == RenderOp::LayerBegin || o.type == RenderOp::LayerEnd || (o.type == RenderOp::FxBatch && o.glass)) &&
+                        (touched.Empty() || touched.Overlaps(c.captureRegion));
+            }
+            std::uint64_t key = shape;
+            for (std::size_t k = 0; k < i; ++k)
+            {
+                const RenderOp& o = ops[k];
+                const PxRect touched = o.type == RenderOp::Callback ? o.clip : o.bounds;
+                if (!whole && !touched.Overlaps(c.captureRegion))
+                    continue;
+                const std::uint64_t h = OpHash(k);
+                if (h == 0)
+                {
+                    key = 0;
+                    break;
+                }
+                key = Mix(key, h);
+            }
+            c.captureKey = key;
+        }
+    }
+
+    // An op's hash: its kind, state and data (0: it cannot be told, see RenderOp::captureKey).
+    std::uint64_t FramePlan::OpHash(std::size_t k)
+    {
+        if (opHash_[k] != 0)
+            return opHash_[k] == 1 ? 0 : opHash_[k];
+        const RenderOp& o = ops[k];
+        std::uint64_t h = Mix(0x2545F4914F6CDD1Dull, (std::uint64_t)o.type);
+        bool known = o.type != RenderOp::Callback;
+        h = Mix(h, ((std::uint64_t)o.texture << 32) | o.effect);
+        h = Mix(h, ((std::uint64_t)o.features << 8) | (o.quads ? 1u : 0u) | (o.coverage ? 2u : 0u) | (o.lcd ? 4u : 0u) | (o.glass ? 8u : 0u));
+        h = MixRect(h, o.clip);
+        h = MixBytes(h, o.fade, sizeof(o.fade));
+        if (o.type == RenderOp::LayerBegin || o.type == RenderOp::LayerEnd)
+            h = MixBytes(MixRect(h, o.bounds), &o.layer, sizeof(o.layer));
+        std::size_t bytes = 0;
+        for (std::uint32_t p = k < opFirst_.size() ? opFirst_[k] : kNoPiece; known && p != kNoPiece; p = pieces_[p].next)
+        {
+            const Piece& pc = pieces_[p];
+            if (pc.inst)
+            {
+                for (std::uint32_t i = 0; i < pc.count && known; ++i)
+                    known = !Animated(pc.inst[i]);
+                bytes += (std::size_t)pc.count * sizeof(fx::Instance);
+                if (known && bytes <= kMaxKeyedBytes)
+                    h = MixBytes(h, pc.inst, (std::size_t)pc.count * sizeof(fx::Instance));
+            }
+            else if (pc.quad)
+            {
+                bytes += (std::size_t)pc.count * sizeof(QuadInstance);
+                if (bytes <= kMaxKeyedBytes)
+                    h = MixBytes(h, pc.quad, (std::size_t)pc.count * sizeof(QuadInstance));
+            }
+            else if (pc.idx)
+            {
+                // the triangles' vertices, through the indices: the list's (a direct plan), or the plan's copy
+                const Vertex* vtx = nullptr;
+                if (!direct)
+                    vtx = vertices.data() + pc.base;
+                else
+                    for (const ListGeometry& l : lists)
+                        if (l.firstVertex == pc.base)
+                            vtx = l.list->Vertices().data();
+                bytes += (std::size_t)pc.count * (sizeof(Vertex) + 4);
+                known = known && vtx != nullptr;
+                for (std::uint32_t i = 0; known && i < pc.count && bytes <= kMaxKeyedBytes; ++i)
+                    h = MixBytes(h, &vtx[pc.idx[i]], sizeof(Vertex));
+            }
+            known = known && bytes <= kMaxKeyedBytes;
+        }
+        h = known ? (h <= 1 ? h + 2 : h) : 1;
+        opHash_[k] = h;
+        return h == 1 ? 0 : h;
     }
 
     void FramePlan::PlanCaptures()

@@ -128,9 +128,11 @@ Rules at the boundaries:
 5. **Renderer** `Render(DrawData, TextureRegistry*, target, params)`:
    1. `Device::BeginFrame`; pending texture creates / updates / destroys go to the device;
    2. `FramePlan::Build`: merged vertex / index / instance arrays, batches, capture plan (section 5);
-   3. one upload of vertices, indices and FX instances; frame constants;
-   4. the ops run in passes: geometry and text, instanced FX batches, backdrop captures (end the pass, copy or read
-      directly, pyramid passes), glow layers, edge fades, host callbacks;
+   3. one upload of vertices, indices, FX instances and quads; frame constants;
+   4. the ops run in passes: geometry, instanced quads (text, flat tiles), instanced FX batches, backdrop captures
+      (end the pass, copy or read directly, pyramid passes - or, with `RenderParams::targetStatic` /
+      `backdropReuseFrames`, an earlier frame's capture: still in the pyramid, or copied back from where it was kept
+      aside), glow layers, edge fades, host callbacks;
    5. `Device::EndFrame`; GPU times per category arrive a few frames later.
 6. The platform applies the requests (cursor shape, IME candidate window at the caret, whether the game gets the
    mouse / keyboard) and presents.
@@ -360,16 +362,29 @@ Binding numbers, identical everywhere:
 
 `include/esia/text/text.hpp` is the interface Painter and widgets use: fonts (files, memory, fallback chain),
 `NewFrame(RasterParams)` (pixel density), `Measure`, `Draw` (glyph quads into a `DrawList`, rasterized at the
-scaled size under `PushScale`), `DrawGlyph` (icon fonts). A text system owns its glyph pages in the
-`TextureRegistry`: Alpha8 coverage, which the renderer recognizes from the page's format and draws with its text
-program (`TextGray`), so text needs no special commands; the gamma / contrast composition of WGT's grayscale text
+scaled size under `PushScale`), `DrawGlyph` (icon fonts). Glyphs are instanced quads (`DrawList::BeginQuads`,
+`QuadInstance`: 32 bytes each, expanded by `QuadVS` on the GPU), as are the Painter's flat tiles, so a frame of plain
+widgets uploads no vertices and no indices. A text system owns its glyph pages in the `TextureRegistry`: Alpha8
+coverage, which the renderer recognizes from the page's format and draws with its text program (`QuadGray`), so text
+needs no special commands; the gamma / contrast composition of WGT's grayscale text
 shader (`TextComposition`, DirectWrite's model) applies to every backend.
 
-**No sub-pixel text.** By the owner's decision, Esia antialiases text in grayscale everywhere: there is no LCD /
-ClearType text - no per-stripe RGB coverage or stripe order (RGB / BGR, OLED layouts), no dual-source blending, no
-ClearType level or contrast. It was removed in core round 3 (the RHI's `TextLcd` / `TextLcdGray` programs,
-`BlendMode::DualSourceLcd` and `Caps::dualSourceBlend` with it). What stays is sub-pixel *positioning* - the
-quarter-pixel pen phases of the rasterizer and the atlas - and the grayscale gamma / contrast composition.
+**Sub-pixel text.** Removed in core round 3 by the owner's decision and brought back on 2026-10-28 at the owner's
+request (with FreeType's rendering, `TextRendering::subpixel`): grayscale stays the default. A text system in
+sub-pixel mode rasterizes every glyph per LCD stripe - the analytic rasterizer at three times the horizontal
+resolution (`RasterizeLcd`), FreeType's with `FT_RENDER_MODE_LCD`, both through FreeType's filters (default, light,
+none) - into RGBA8 pages flagged `TextureFlags_LcdCoverage`: R / G / B the stripes' coverage in the panel's order
+(RGB or BGR), A the pixel's grayscale coverage. Shapes and outlines in those pages are gray (R = G = B = A), so flat
+widgets stay in the text's draw call. The renderer draws such pages with `TextLcd` (two outputs: the ink and an RGB
+alpha; `BlendMode::DualSourceLcd`) on the target, gray texels composed like grayscale text (no fringes on colored
+shapes), the rest with the ClearType contrast and level of `TextComposition` (gText.zw); inside glow layers, on targets
+`RenderParams::subpixelText` says are not opaque and on devices without `Caps::dualSourceBlend` (Direct3D 9, GLES
+without `EXT_blend_func_extended`, Vulkan without `dualSrcBlend`) it draws their grayscale coverage (`TextLcdGray`).
+Per-channel alpha cannot be kept in a layer's single alpha channel, so glow layers stay grayscale, as in every
+compositor. On Windows the platform layer reports the ClearType setup of the window's monitor (`FrameInfo::text`,
+DirectWrite's per-monitor parameters - the ClearType tuner): the stripe order, reversed on a monitor turned upside
+down and none on one turned sideways (where DirectWrite keeps horizontal stripes), with its level, contrast and
+gamma; glass_window follows it under `--text-rendering native`.
 
 Implementations:
 
@@ -377,10 +392,41 @@ Implementations:
   on Linux / Android / consoles. HarfBuzz shapes in design units (kerning, ligatures, marks, complex scripts),
   scaled to the size in float - unhinted, linear layout at every pixel density; per-character fallback through
   the added fonts; greedy line breaking (spaces, hyphens, CJK with a small kinsoku set, character breaks for
-  overlong words), ellipsis trimming, alignment; WGT's uniform line box. FreeType only reads the unhinted outlines;
-  they are covered by WGT's analytic rasterizer, now platform-free in `include/esia/text/glyph_raster.hpp`
+  overlong words), ellipsis trimming, alignment; WGT's uniform line box. By default FreeType only reads the unhinted
+  outlines; they are covered by WGT's analytic rasterizer, now platform-free in `include/esia/text/glyph_raster.hpp`
   (exact area coverage, 4 horizontal sub-pixel phases) and packed by `GlyphAtlas` into the
-  `TextureRegistry`. FreeType 2.14.3 and HarfBuzz 14.5.0 are built from pinned sources where the system has
+  `TextureRegistry`. `TextRendering` (`text.hpp`; `FreeTypeDesc::rendering`, `TextSystem::SetRendering`, from the
+  next `NewFrame` on; `ESIA_TEXT_RENDERING`) chooses FreeType's rendering instead: hinting (`Light`: vertical only,
+  FreeType's light autohinter; `Full`: the fonts' own instructions with the v40 interpreter - vertical, ClearType's -
+  or the classic v35 one, which moves stems sideways too; `Auto`: the autohinter in full), FreeType's rasterizer
+  (`smooth`) for the hinted or unhinted outlines, stem darkening (CFF and the autohinter), and hinted advances (`Full`
+  / `Auto`: each glyph's hinted advance at the frame's pixel density plus HarfBuzz's kerning rounded, so every pen
+  is on a whole pixel - the layout then depends on the density). Presets: `Design` (the default), `Light`, `Crisp`
+  (v35, FreeType's rasterizer, hinted advances: the classic sharp Windows look), `NativeTextRendering()` (DirectWrite's
+  v40 look on Windows, fontconfig's hintslight with stem darkening on Linux, the design on Apple and Android). Hinted
+  glyphs keep the quarter-pixel phases unless the pens are whole pixels. The FreeType build turns on
+  `FT_CONFIG_OPTION_SUBPIXEL_RENDERING` and adds the `autofit` and `smooth` modules.
+  Distance-field text (`DrawShapes`): every glyph's MTSDF (`include/esia/text/distance_field.hpp`, Esia's own
+  generator: the outline with its curves, resolved to the area it fills - overlapping contours as variable fonts keep
+  them lose their inner edges, crossings become corners -, edges colored per run, pseudo-distances per channel, the
+  true distance in A, signs from the non-zero winding, clashes flattened) is made once at 48 field pixels per em
+  (ranges 8 and 24) on RGBA8 pages flagged `TextureFlags_DistanceField`, and serves every size. Each glyph becomes an
+  FX instance of `fx::ShapeKind::Glyph` (feature `fx::kGlyph`; its field in `shape2`, the text's box in `rect`, so
+  paints, glass and shimmer span the text) made from the caller's material: `Painter::Text` / `TextBox` with a
+  `Style` give text every FX layer - fill and gradients, stroke (an outline, align 1 outside), drop and inner
+  shadows, outer and inner glows, glass, shimmer - and `Style::Weight` grows or thins the glyphs (a weight animated
+  without bitmaps). The outer layers of all glyphs (drop shadow, outer glow, a stroke outside) go before all faces.
+  `TextRendering::distanceFieldFrom` draws text of that many pixels per em and more from the fields by itself. The
+  shader takes the median of R, G, B near the edge and the true distance farther out; past the field's reach (a
+  quarter em) a lower bound from the glyph's ink box keeps glows fading (larger halos: glow layers). A blurred text
+  is a shadow without a fill; a blurred backdrop is glass without refraction.
+  Smooth motion (`TextRendering::smoothMotion`, on in `Light`, `Crisp`, `ClearType` and `native`): the text system
+  follows a text from frame to frame by its layout and the order of its draws; while its position or scale changes it
+  is drawn from the design's outline at quarter pixels across and down (glyphs of their own in the atlas), and when it
+  stops both renderings are drawn, crossfading over 0.12 s (`RasterParams::time`, else 8 frames), into the hinted one.
+  Legibility (`Style::Legible`, feature `fx::kLegible`): glyph shapes read the captured backdrop as glass does (the
+  planner gives them a capture as blurred as the halo is wide, never level 0) and grow a soft halo of the other tone
+  under all faces where the backdrop's lightness comes within half of the fill's - full within a quarter. FreeType 2.14.3 and HarfBuzz 14.5.0 are built from pinned sources where the system has
   neither (`ESIA_TEXT_DEPS=auto|bundled|system`, `cmake/EsiaTextDeps.cmake`), so the same text system runs on
   Windows too. Right-to-left words in left-to-right text are laid out right to left, and the white space and
   punctuation around them stay where they were typed (a small part of UAX #9: neutrals between two right-to-left

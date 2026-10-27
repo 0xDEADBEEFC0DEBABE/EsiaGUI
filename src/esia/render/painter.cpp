@@ -17,6 +17,24 @@ namespace esia
 
         inline Vec2 ScalePoint(Vec2 p, Vec2 o, float s) { return Vec2(o.x + (p.x - o.x) * s, o.y + (p.y - o.y) * s); }
 
+        // The material's lengths under a scale: the stroke's width, the shadow, the glows' radii, the glass's blur and
+        // refraction.
+        void ScaleLengths(fx::Instance& inst, float k)
+        {
+            if (inst.flags[0] & fx::kMotion)
+            {
+                inst.custom[0] *= k;
+                inst.custom[1] *= k;
+            }
+            inst.strokeParams[0] *= k;
+            for (float& v : inst.shadowParams)
+                v *= k;
+            inst.glowParams[0] *= k;
+            inst.glowParams[2] *= k;
+            inst.glass[1] *= k;
+            inst.glass[2] *= k;
+        }
+
         // The path Polyline / Area follow: the points (minus repeats), or a smooth curve through them sampled every
         // few pixels. Monotone cubic (Fritsch-Carlson) when x keeps increasing, so a chart never overshoots its
         // data; Catmull-Rom otherwise.
@@ -158,8 +176,9 @@ namespace esia
             float u[4], v[4];
             int nx, ny;
             bool plainMiddle, skipMiddle;
-            std::uint32_t indexCount;
-            std::uint32_t indices[54];            // the cells' triangles, from the grid's first vertex
+            std::uint32_t cellCount;
+            std::uint8_t cells[9];                // the cells drawn: x | y << 2 in the grid
+            float cellUv[9][2];                   // ... their uv, packed (QuadInstance::PackUv)
         };
         thread_local FlatTile tFlatTiles[128];
         bool SameInputs(const std::int32_t* a, const std::int32_t* b)
@@ -289,7 +308,6 @@ namespace esia
             if (kind == fx::ShapeKind::RoundRect && solidPaint && !(extra && mergeSmooth_ >= 0.0f) && FlatGeometry(bounds, s, flatFill, radii, smoothing))
                 return;
         }
-        const float scale = env_.metricsScale;
 
         fx::Instance inst;
         std::memset(&inst, 0, sizeof(inst));
@@ -318,6 +336,61 @@ namespace esia
             }
         }
 
+        feat |= Material(s, flatGlass, flatFill, inst);
+        if ((feat & (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow | fx::kInnerGlow | fx::kGlass | fx::kCustom)) == 0)
+            return;
+        if (inst.misc[0] <= 0.0f)
+            return;
+
+        inst.flags[0] = feat;
+        inst.flags[2] = (std::uint32_t)kind;
+        // layouts reserve glow room from the resting geometry: press / pop scale animations must not re-flow
+        esia::Rect restShape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
+        if (feat & fx::kMerge)
+            restShape = restShape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
+        const float restGlow = inst.glowParams[0];
+        ApplyScale(inst);
+
+        // glows stay off neighbouring items: layouts reserve room for them, and whatever still reaches a
+        // neighbour fades out before its edge (halo bounds from the layout layer)
+        if ((feat & fx::kGlow) && s.containGlow && env_.glow)
+        {
+            esia::Rect shape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
+            if (feat & fx::kMerge)
+                shape = shape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
+            env_.glow->ReportGlowReach(*dl_, restShape, restGlow * 0.75f);
+            esia::Rect bound;
+            float fade = 0.0f;
+            if (env_.glow->GlowBounds(*dl_, shape, inst.glowParams[0] * 1.8f, bound, fade))
+            {
+                feat |= fx::kHalo;
+                inst.flags[0] = feat;
+                SetRect(inst.halo, bound);
+                inst.maskParams[2] = fade;
+            }
+        }
+
+        // coarse CPU culling against the current clip rect
+        float pad = 2.0f;
+        if (feat & fx::kShadow)
+            pad = std::max(pad, inst.shadowParams[0] * 1.6f + std::max(inst.shadowParams[1], 0.0f) + std::max(std::fabs(inst.shadowParams[2]), std::fabs(inst.shadowParams[3])));
+        if (feat & fx::kGlow)
+            pad = std::max(pad, inst.glowParams[0] * 1.8f);
+        esia::Rect ext(inst.rect[0] - pad, inst.rect[1] - pad, inst.rect[2] + pad, inst.rect[3] + pad);
+        if (feat & fx::kMerge)
+            ext = ext.Union(esia::Rect(inst.shape2[0] - pad, inst.shape2[1] - pad, inst.shape2[2] + pad, inst.shape2[3] + pad));
+        const esia::Rect& clip = dl_->ClipRect();
+        if (ext.max.x < clip.min.x || ext.max.y < clip.min.y || ext.min.x > clip.max.x || ext.min.y > clip.max.y)
+            return;
+
+        Emit(inst, s.effect, s.image);
+    }
+
+    std::uint32_t Painter::Material(const Style& s, bool flatGlass, Color flatFill, fx::Instance& inst) const
+    {
+        const bool flat = env_.flat;
+        const float scale = env_.metricsScale;
+        std::uint32_t feat = 0;
         // paint
         if (flatGlass)
         {
@@ -418,6 +491,11 @@ namespace esia
             feat |= fx::kCustom;
             Set4(inst.custom, s.custom[0], s.custom[1], s.custom[2], s.custom[3]);
         }
+        else if ((s.motion.x != 0.0f || s.motion.y != 0.0f) && !flat)   // the custom row holds the motion (not with an effect)
+        {
+            feat |= fx::kMotion;
+            Set4(inst.custom, s.motion.x, s.motion.y, 0, 0);
+        }
 
         if (maskDepth_ > 0)
         {
@@ -425,54 +503,7 @@ namespace esia
             SetRect(inst.mask, masks_[maskDepth_ - 1]);
             Set4(inst.maskParams, maskRadius_[maskDepth_ - 1], env_.cornerSmoothing, 0, 0);
         }
-
-        if ((feat & (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow | fx::kInnerGlow | fx::kGlass | fx::kCustom)) == 0)
-            return;
-        if (inst.misc[0] <= 0.0f)
-            return;
-
-        inst.flags[0] = feat;
-        inst.flags[2] = (std::uint32_t)kind;
-        // layouts reserve glow room from the resting geometry: press / pop scale animations must not re-flow
-        esia::Rect restShape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
-        if (feat & fx::kMerge)
-            restShape = restShape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
-        const float restGlow = inst.glowParams[0];
-        ApplyScale(inst);
-
-        // glows stay off neighbouring items: layouts reserve room for them, and whatever still reaches a
-        // neighbour fades out before its edge (halo bounds from the layout layer)
-        if ((feat & fx::kGlow) && s.containGlow && env_.glow)
-        {
-            esia::Rect shape(inst.rect[0], inst.rect[1], inst.rect[2], inst.rect[3]);
-            if (feat & fx::kMerge)
-                shape = shape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
-            env_.glow->ReportGlowReach(*dl_, restShape, restGlow * 0.75f);
-            esia::Rect bound;
-            float fade = 0.0f;
-            if (env_.glow->GlowBounds(*dl_, shape, inst.glowParams[0] * 1.8f, bound, fade))
-            {
-                feat |= fx::kHalo;
-                inst.flags[0] = feat;
-                SetRect(inst.halo, bound);
-                inst.maskParams[2] = fade;
-            }
-        }
-
-        // coarse CPU culling against the current clip rect
-        float pad = 2.0f;
-        if (feat & fx::kShadow)
-            pad = std::max(pad, inst.shadowParams[0] * 1.6f + std::max(inst.shadowParams[1], 0.0f) + std::max(std::fabs(inst.shadowParams[2]), std::fabs(inst.shadowParams[3])));
-        if (feat & fx::kGlow)
-            pad = std::max(pad, inst.glowParams[0] * 1.8f);
-        esia::Rect ext(inst.rect[0] - pad, inst.rect[1] - pad, inst.rect[2] + pad, inst.rect[3] + pad);
-        if (feat & fx::kMerge)
-            ext = ext.Union(esia::Rect(inst.shape2[0] - pad, inst.shape2[1] - pad, inst.shape2[2] + pad, inst.shape2[3] + pad));
-        const esia::Rect& clip = dl_->ClipRect();
-        if (ext.max.x < clip.min.x || ext.max.y < clip.min.y || ext.min.x > clip.max.x || ext.min.y > clip.max.y)
-            return;
-
-        Emit(inst, s.effect, s.image);
+        return feat;
     }
 
     bool Painter::FlatGeometry(const esia::Rect& bounds, const Style& s, Color fill, const float* shapeRadii, float smoothing)
@@ -647,16 +678,15 @@ namespace esia
             const bool middle = t.nx == 4 && t.ny == 4;
             t.plainMiddle = middle && !ring && (w - 2.0f * (float)(C - P)) * (h - 2.0f * (float)(C - P)) > 48.0f * 48.0f;
             t.skipMiddle = middle && (ring || t.plainMiddle);
-            t.indexCount = 0;
+            t.cellCount = 0;
             for (int yi = 0; yi + 1 < t.ny; ++yi)
                 for (int xi = 0; xi + 1 < t.nx; ++xi)
                 {
                     if (t.skipMiddle && xi == 1 && yi == 1)
                         continue;
-                    const int a = yi * t.nx + xi;
-                    const int q[6] = {a, a + 1, a + 1 + t.nx, a, a + 1 + t.nx, a + t.nx};
-                    for (const int k : q)
-                        t.indices[t.indexCount++] = (std::uint32_t)k;
+                    t.cells[t.cellCount] = (std::uint8_t)(xi | (yi << 2));
+                    QuadInstance::PackUv(Vec2(t.u[xi], t.v[yi]), Vec2(t.u[xi + 1], t.v[yi + 1]), t.cellUv[t.cellCount]);
+                    ++t.cellCount;
                 }
             return &t;
         };
@@ -670,36 +700,27 @@ namespace esia
                 gy[k] = ((t.ny == 4 && k >= 2 ? p1.y : p0.y) + t.offY[k]) * inv;
             const std::uint32_t col = color.ToRgba8();
             if (t.plainMiddle)
+                dl_->AddQuad(0, esia::Rect(gx[1], gy[1], gx[2], gy[2]), Vec2(0.5f, 0.5f), Vec2(0.5f, 0.5f), col);
+            // the cells as quads: the grid's rects, the tile's packed uv
+            float c[2];
+            QuadInstance::PackColor(col, c);
+            DrawList::QuadWriter w = dl_->BeginQuads(t.page, t.cellCount);
+            for (std::uint32_t k = 0; k < t.cellCount; ++k)
             {
-                DrawList::PrimWriter pw = dl_->PrimReserve(0, 6, 4);
-                const Vec2 wuv(0.5f, 0.5f);
-                pw.vtx[0] = {Vec2(gx[1], gy[1]), wuv, col};
-                pw.vtx[1] = {Vec2(gx[2], gy[1]), wuv, col};
-                pw.vtx[2] = {Vec2(gx[2], gy[2]), wuv, col};
-                pw.vtx[3] = {Vec2(gx[1], gy[2]), wuv, col};
-                const std::uint32_t b = pw.base;
-                pw.idx[0] = b, pw.idx[1] = b + 1, pw.idx[2] = b + 2, pw.idx[3] = b, pw.idx[4] = b + 2, pw.idx[5] = b + 3;
-                dl_->PrimCommit(pw, 6, esia::Rect(gx[1], gy[1], gx[2], gy[2]));
+                const int xi = t.cells[k] & 3, yi = t.cells[k] >> 2;
+                QuadInstance& q = w.quad[k];
+                q.rect[0] = gx[xi];
+                q.rect[1] = gy[yi];
+                q.rect[2] = gx[xi + 1];
+                q.rect[3] = gy[yi + 1];
+                q.packed[0] = t.cellUv[k][0];
+                q.packed[1] = t.cellUv[k][1];
+                q.packed[2] = c[0];
+                q.packed[3] = c[1];
             }
-            DrawList::PrimWriter pw = dl_->PrimReserve(t.page, t.indexCount, (std::uint32_t)(t.nx * t.ny));
-            Vertex* v = pw.vtx;
-            for (int yi = 0; yi < t.ny; ++yi)
-            {
-                const float y = gy[yi], vv = t.v[yi];
-                for (int xi = 0; xi < t.nx; ++xi, ++v)
-                {
-                    v->pos.x = gx[xi];
-                    v->pos.y = y;
-                    v->uv.x = t.u[xi];
-                    v->uv.y = vv;
-                    v->color = col;
-                }
-            }
-            const std::uint32_t base = pw.base, n = t.indexCount;
-            std::uint32_t* x = pw.idx;
-            for (std::uint32_t k = 0; k < n; ++k)
-                x[k] = base + t.indices[k];
-            dl_->PrimCommit(pw, n, esia::Rect(gx[0], gy[0], gx[t.nx - 1], gy[t.ny - 1]));
+            w.written = t.cellCount;
+            w.bounds = esia::Rect(gx[0], gy[0], gx[t.nx - 1], gy[t.ny - 1]);
+            dl_->EndQuads(w);
         };
 
         const bool wantFill = fill.a > 0.0f, wantStroke = stroke.a > 0.0f && strokeWidth > 0.0f;
@@ -743,15 +764,7 @@ namespace esia
             }
             for (float& r : inst.radii)
                 r *= k;
-            inst.strokeParams[0] *= k;
-            inst.shadowParams[0] *= k;
-            inst.shadowParams[1] *= k;
-            inst.shadowParams[2] *= k;
-            inst.shadowParams[3] *= k;
-            inst.glowParams[0] *= k;
-            inst.glowParams[2] *= k;
-            inst.glass[1] *= k;
-            inst.glass[2] *= k;
+            ScaleLengths(inst, k);
         }
     }
 
@@ -814,16 +827,78 @@ namespace esia
                 at = ScalePoint(at, scaleOrigin_[i], scaleValue_[i]);
                 k *= scaleValue_[i];
             }
-            const std::size_t start = dl_->Vertices().size();
+            const std::size_t start = dl_->Vertices().size(), quadStart = dl_->Quads().size();
             if (outlined)
                 env_.text->DrawOutline(*dl_, font, at, outline, text, wrapWidth, flags, k);
             const Vec2 size = env_.text->Draw(*dl_, font, at, color, text, wrapWidth, flags, k);
-            ExcludeFromScale(start);
+            ExcludeFromScale(start, quadStart);
             return size;
         }
         if (outlined)
             env_.text->DrawOutline(*dl_, font, pos, outline, text, wrapWidth, flags, 1.0f);
         return env_.text->Draw(*dl_, font, pos, color, text, wrapWidth, flags, 1.0f);
+    }
+
+    Vec2 Painter::Text(Vec2 pos, text::FontRef font, const Style& s, std::string_view text, float wrapWidth, std::uint32_t flags)
+    {
+        if (!env_.text)
+            return Vec2(0, 0);
+        // flat drawing: glass becomes its surface under the fill, as for shapes
+        bool flatGlass = false;
+        Color flatFill = s.hasFill ? s.fill.a : Color::Clear();
+        if (env_.flat && s.hasGlass && (!s.hasFill || s.fill.kind == fx::PaintKind::Solid))
+        {
+            const Color tint = s.glass.tint, c = flatFill;
+            const Color base = Lerp(env_.flatSurface, tint.WithAlpha(env_.flatSurface.a), tint.a);
+            flatFill = Color(c.r * c.a + base.r * (1.0f - c.a), c.g * c.a + base.g * (1.0f - c.a), c.b * c.a + base.b * (1.0f - c.a),
+                             c.a + base.a * (1.0f - c.a));
+            flatGlass = true;
+        }
+        fx::Instance m;
+        std::memset(&m, 0, sizeof(m));
+        Style plain = s;
+        plain.image = 0;   // the glyph's field takes the image's uv rect
+        std::uint32_t feat = Material(plain, flatGlass, flatFill, m) & ~fx::kImage;
+        if ((feat & (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow | fx::kInnerGlow | fx::kGlass | fx::kCustom)) == 0 || m.misc[0] <= 0.0f)
+            return env_.text->Measure(font, text, wrapWidth, flags).size;
+        if (s.legible > 0.0f && (feat & fx::kFill) && !env_.flat)
+        {
+            feat |= fx::kLegible;
+            m.radii[2] = Saturate(s.legible);
+            m.radii[3] = std::max(s.legibleRadius, 0.0f);   // 0: the text system's (a sixth of the em)
+        }
+        m.flags[0] = feat;
+        if (scaleDepth_ > 0)
+        {
+            // under PushScale: drawn at the final (scaled) geometry, the material's lengths with it; PopScale skips it
+            // (the fields need no new bitmaps)
+            float k = 1.0f;
+            Vec2 at = pos;
+            for (int i = scaleDepth_ - 1; i >= 0; --i)
+            {
+                at = ScalePoint(at, scaleOrigin_[i], scaleValue_[i]);
+                k *= scaleValue_[i];
+            }
+            ScaleLengths(m, k);
+            m.radii[3] *= k;   // the legibility halo's radius (radii.z is its strength)
+            const std::size_t start = dl_->Vertices().size(), quadStart = dl_->Quads().size();
+            const Vec2 size = env_.text->DrawShapes(*dl_, font, at, m, s.effect, s.weight, text, wrapWidth, flags, k);
+            ExcludeFromScale(start, quadStart);
+            return size;
+        }
+        return env_.text->DrawShapes(*dl_, font, pos, m, s.effect, s.weight, text, wrapWidth, flags, 1.0f);
+    }
+
+    Vec2 Painter::TextBox(const esia::Rect& r, Vec2 align, text::FontRef font, const Style& s, std::string_view text, std::uint32_t flags)
+    {
+        if (!env_.text)
+            return Vec2(0, 0);
+        const bool trim = (flags & text::TextFlags_Ellipsis) != 0;
+        const float wrap = trim ? std::max(r.Width(), 1.0f) : 0.0f;
+        const text::TextMetrics m = env_.text->Measure(font, text, wrap, flags);
+        const Vec2 pos(r.min.x + (r.Width() - m.size.x) * align.x, r.min.y + (r.Height() - m.size.y) * align.y);
+        Text(pos, font, s, text, wrap, flags);
+        return m.size;
     }
 
     Vec2 Painter::TextBox(const esia::Rect& r, Vec2 align, text::FontRef font, Color color, std::string_view text, std::uint32_t flags)
@@ -855,14 +930,14 @@ namespace esia
                 at = ScalePoint(at, scaleOrigin_[i], scaleValue_[i]);
                 k *= scaleValue_[i];
             }
-            const std::size_t start = dl_->Vertices().size();
+            const std::size_t start = dl_->Vertices().size(), quadStart = dl_->Quads().size();
             if (outlined)
             {
                 outline.width *= k;
                 env_.text->DrawGlyphOutline(*dl_, text::FontRef{font.id, font.size * k}, icon, at, outline);
             }
             env_.text->DrawGlyph(*dl_, text::FontRef{font.id, font.size * k}, icon, at, color);
-            ExcludeFromScale(start);
+            ExcludeFromScale(start, quadStart);
             return;
         }
         if (outlined)
@@ -870,12 +945,14 @@ namespace esia
         env_.text->DrawGlyph(*dl_, font, icon, center, color);
     }
 
-    void Painter::ExcludeFromScale(std::size_t vtxStart)
+    void Painter::ExcludeFromScale(std::size_t vtxStart, std::size_t quadStart)
     {
-        if (dl_->Vertices().size() > vtxStart && excludedCount_ < kMaxExcluded)
+        if ((dl_->Vertices().size() > vtxStart || dl_->Quads().size() > quadStart) && excludedCount_ < kMaxExcluded)
         {
             excludedStart_[excludedCount_] = vtxStart;
             excludedEnd_[excludedCount_] = dl_->Vertices().size();
+            excludedQuadStart_[excludedCount_] = quadStart;
+            excludedQuadEnd_[excludedCount_] = dl_->Quads().size();
             ++excludedCount_;
         }
     }
@@ -1163,6 +1240,7 @@ namespace esia
         scaleOrigin_[scaleDepth_] = origin;
         scaleValue_[scaleDepth_] = scale;
         scaleVtxStart_[scaleDepth_] = dl_->Vertices().size();
+        scaleQuadStart_[scaleDepth_] = dl_->Quads().size();
         ++scaleDepth_;
     }
 
@@ -1190,7 +1268,25 @@ namespace esia
                 }
                 vtx[i].pos = ScalePoint(vtx[i].pos, o, k);
             }
-            dl_->RefreshBounds(scaleVtxStart_[scaleDepth_]);
+            QuadVector& quads = dl_->Quads();
+            ex = 0;
+            for (std::size_t i = scaleQuadStart_[scaleDepth_]; i < quads.size(); ++i)
+            {
+                while (ex < excludedCount_ && i >= excludedQuadEnd_[ex])
+                    ++ex;
+                if (ex < excludedCount_ && i >= excludedQuadStart_[ex])
+                {
+                    i = excludedQuadEnd_[ex] - 1;
+                    continue;
+                }
+                float* r = quads[i].rect;
+                const Vec2 a = ScalePoint(Vec2(r[0], r[1]), o, k), b = ScalePoint(Vec2(r[2], r[3]), o, k);
+                r[0] = a.x;
+                r[1] = a.y;
+                r[2] = b.x;
+                r[3] = b.y;
+            }
+            dl_->RefreshBounds(scaleVtxStart_[scaleDepth_], scaleQuadStart_[scaleDepth_]);
         }
         if (scaleDepth_ == 0)
             excludedCount_ = 0;

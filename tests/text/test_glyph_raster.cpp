@@ -1,5 +1,6 @@
 // The analytic rasterizer: exact area coverage (edges, sub-pixel offsets, area of arbitrary outlines), non-zero
-// winding and curve flattening within its tolerance.
+// winding and curve flattening within its tolerance; sub-pixel (LCD) coverage per stripe, its filters and the
+// grayscale coverage it keeps.
 #include "esia/text/glyph_raster.hpp"
 #include "esia_test.hpp"
 #include <algorithm>
@@ -44,6 +45,15 @@ namespace
         if (bx < 0 || by < 0 || bx >= b.width || by >= b.height)
             return 0;
         return b.pixels[(std::size_t)by * b.width + bx];
+    }
+
+    // channel c (0..3) of a sub-pixel bitmap at absolute pixel (x, y); 0 outside it
+    int Channel(const GlyphBitmap& b, int x, int y, int c)
+    {
+        const int bx = x - b.left, by = y - b.top;
+        if (bx < 0 || by < 0 || bx >= b.width || by >= b.height)
+            return 0;
+        return b.pixels[((std::size_t)by * b.width + bx) * 4 + (std::size_t)c];
     }
 
     double CoverageSum(const GlyphBitmap& b)
@@ -241,4 +251,66 @@ ESIA_TEST(Raster, EmptyAndOversizedOutlines)
     ESIA_CHECK(implicit.ContourCount() == 1 && implicit.Contour(0).size() == 3);
     implicit.Clear();
     ESIA_CHECK(implicit.ContourCount() == 0);
+}
+
+// Sub-pixel coverage keeps the grayscale coverage in A: the three stripes' mean is the pixel's area, to the last bit
+// (contours that do not overlap: where they do, each stripe is clamped on its own).
+ESIA_TEST(Raster, LcdKeepsTheGrayscaleCoverageInAlpha)
+{
+    Outline o;
+    AddCircle(o, Vec2(10.3f, 8.6f), 6.2f);
+    AddRect(o, 0.2f, 1.7f, 2.9f, 17.4f);
+    for (float phase : {0.0f, 0.25f, 0.5f, 0.75f})
+    {
+        GlyphBitmap gray, lcd;
+        ESIA_CHECK(RasterizeGray(o, phase, gray) && RasterizeLcd(o, phase, false, kLcdFilterDefault, lcd));
+        ESIA_CHECK(lcd.lcd && lcd.channels == 4 && lcd.pixels.size() == (std::size_t)lcd.width * lcd.height * 4);
+        ESIA_CHECK(lcd.left == gray.left - 1 && lcd.width == gray.width + 2 && lcd.top == gray.top && lcd.height == gray.height);
+        int worst = 0;
+        for (int y = lcd.top; y < lcd.top + lcd.height; ++y)
+            for (int x = lcd.left; x < lcd.left + lcd.width; ++x)
+                worst = std::max(worst, std::abs(Channel(lcd, x, y, 3) - At(gray, x, y)));
+        ESIA_CHECK(worst <= 1);
+        // the filter's margin: the first and last columns stay empty in every channel
+        for (int y = lcd.top; y < lcd.top + lcd.height; ++y)
+            for (int c = 0; c < 4; ++c)
+                ESIA_CHECK(Channel(lcd, lcd.left, y, c) == 0 && Channel(lcd, lcd.left + lcd.width - 1, y, c) == 0);
+    }
+}
+
+// The stripes follow an edge by thirds of a pixel, in the panel's order; the filters spread a stripe's ink to its
+// neighbours.
+ESIA_TEST(Raster, LcdStripesFollowAnEdgeByThirds)
+{
+    // a block whose left edge lies a third into pixel 10: there the left stripe is empty, the other two are covered
+    Outline o;
+    AddRect(o, 10.0f + 1.0f / 3.0f, 2.0f, 20.0f, 12.0f);
+    GlyphBitmap rgb, bgr, filtered;
+    ESIA_CHECK(RasterizeLcd(o, 0.0f, false, kLcdFilterNone, rgb) && RasterizeLcd(o, 0.0f, true, kLcdFilterNone, bgr));
+    ESIA_CHECK(Channel(rgb, 10, 5, 0) == 0 && Channel(rgb, 10, 5, 1) == 255 && Channel(rgb, 10, 5, 2) == 255);
+    ESIA_CHECK(Channel(bgr, 10, 5, 2) == 0 && Channel(bgr, 10, 5, 1) == 255 && Channel(bgr, 10, 5, 0) == 255);   // blue on the left
+    ESIA_CHECK(Channel(rgb, 10, 5, 3) == 170 && Channel(bgr, 10, 5, 3) == 170);                                     // two thirds
+    ESIA_CHECK(Channel(rgb, 9, 5, 2) == 0 && Channel(rgb, 11, 5, 0) == 255);
+    // FreeType's default filter: (77 + 8) / 256 of the neighbours' ink into the empty stripe, 8 / 256 one further
+    ESIA_CHECK(RasterizeLcd(o, 0.0f, false, kLcdFilterDefault, filtered));
+    ESIA_CHECK(Channel(filtered, 10, 5, 0) == 85 && Channel(filtered, 9, 5, 2) == 8 && Channel(filtered, 9, 5, 1) == 0);
+    ESIA_CHECK(Channel(filtered, 15, 5, 0) == 255 && Channel(filtered, 15, 5, 3) == 255);   // inside: full
+}
+
+// A filter moves ink between stripes without adding or losing any: the three channels together hold three times the
+// grayscale ink.
+ESIA_TEST(Raster, LcdFiltersKeepTheInk)
+{
+    Outline o;
+    AddCircle(o, Vec2(9.4f, 9.1f), 5.3f);
+    for (const auto* filter : {&kLcdFilterDefault, &kLcdFilterLight, &kLcdFilterNone})
+    {
+        GlyphBitmap b;
+        ESIA_CHECK(RasterizeLcd(o, 0.4f, false, *filter, b));
+        double sum[4] = {};
+        for (std::size_t i = 0; i < b.pixels.size(); ++i)
+            sum[i % 4] += b.pixels[i] / 255.0;
+        ESIA_CHECK(std::fabs((sum[0] + sum[1] + sum[2]) / 3.0 - sum[3]) < 0.01 * sum[3]);
+        ESIA_CHECK(std::fabs(sum[3] - PolygonArea(o)) < 0.01 * sum[3]);
+    }
 }

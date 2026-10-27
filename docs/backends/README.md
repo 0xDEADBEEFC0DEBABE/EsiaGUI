@@ -130,16 +130,16 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `BeginPass({target, load})` / `EndPass()` | `Load` keeps the contents, `Clear` clears to `clearColor`, `DontCare` means nothing outside what the pass draws is ever read (pyramid levels, fresh glow layers: tilers need not load them). Viewport = whole target. **Nothing is bound at the start of a pass**; scissor = whole target. |
 | `SetPipeline(p)` | Its target format and samples match the pass target. |
 | `SetScissor(rect)` | Top-left pixels, inside the target, may be empty only if no draw follows. Bottom-left APIs convert: `y = height - rect.y1`. |
-| `SetConstants(slot, data, size)` | Frame (192 bytes), Pass (32), Draw (32); multiples of 16. Inline: each draw sees the latest values; version them (ring buffer, push / root constants, `setVertexBytes`). |
+| `SetConstants(slot, data, size)` | Frame (192 bytes), Pass (32), Draw (32: the edge fade, the first instance, the UI light); multiples of 16. Inline: each draw sees the latest values; version them (ring buffer, push / root constants, `setVertexBytes`). |
 | `SetTexture(slot, tex)` | t0..t7. Never the current pass target. Bind with the sampler the shader expects (section 4). |
 | `SetFxBuffer(buf)` | t7 as a structured / storage buffer (`FxStorage::Buffer`). |
 | `SetVertexBuffer` / `SetIndexBuffer` | The frame's buffers; indices are 32-bit. Without `baseVertex` they are rebased onto one merged vertex array; with it every draw list's are as the list wrote them (`DrawIndexedBase`). |
 | `Draw(3, 0)` | Full-screen triangle, no vertex buffer: `SV_VertexID` 0..2 (Downsample, LayerComposite, Clear). |
-| `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray). |
+| `DrawIndexed(count, first)` | Triangle list of `esia::Vertex` (UiGeometry, TextGray, TextLcd, TextLcdGray). |
 | `DrawIndexedBase(count, first, base)` | Only with `baseVertex`: the same, `base` added to every index (a draw list's first vertex in the frame's vertex buffer). |
-| `DrawInstanced(4, n)` | Triangle strip, no vertex buffer, `SV_InstanceID` 0..n-1; the draw's first instance is in the Draw constants. |
-| `DrawInstancedFrom(4, n, first)` | Only with `drawFirstInstance`: the same, with the shaders' instance index starting at `first` (the Draw constants' first instance is 0). Direct3D 11 feeds it as an instance-rate attribute (`INSTANCEINDEX`, an immutable 0, 1, 2 ... buffer at slot 1, `ESIA_INSTANCE_ATTRIBUTE` in `FxVS`): `SV_InstanceID` does not count `StartInstanceLocation`. |
-| `CopyTexture(dst, x, y, src, rect)` | Outside passes; raw bits (`dst` is `src`'s format or `RawFormat(src)`); resolves a multisampled source. `(x, y)` may differ from `rect`'s position (the renderer copies captures in place, the conformance suite checks an offset): where the API resolves only whole subresources or identical rectangles (D3D11 `ResolveSubresource`, GLES blits), resolve into a temporary first. |
+| `DrawInstanced(4, n)` | Triangle strip, no vertex buffer, `SV_InstanceID` 0..n-1; the draw's first instance is in the Draw constants (the programs `DrawsInstances` names: Fx and the quads). |
+| `DrawInstancedFrom(4, n, first)` | Only with `drawFirstInstance`: the same, with the shaders' instance index starting at `first` (the Draw constants' first instance is 0). Direct3D 11 feeds it as an instance-rate attribute (`INSTANCEINDEX`, an immutable 0, 1, 2 ... buffer at slot 1, `ESIA_INSTANCE_ATTRIBUTE` in `FxVS` and `QuadVS`): `SV_InstanceID` does not count `StartInstanceLocation`. |
+| `CopyTexture(dst, x, y, src, rect)` | Outside passes; raw bits (`dst` is `src`'s format or `RawFormat(src)`); resolves a multisampled source. `(x, y)` may differ from `rect`'s position (the renderer copies captures in place, the conformance suite checks an offset; with temporal reuse it also copies regions of its own render targets - pyramid levels, the backdrop copy - to and from textures it keeps aside): where the API resolves only whole subresources or identical rectangles (D3D11 `ResolveSubresource`, GLES blits), resolve into a temporary first. |
 | `NativeRenderState()` | Inside a pass: the object host callbacks record with (table in section 1). Forget every binding afterwards. |
 | `BeginProfile(category)` / `EndProfile()` / `ReadProfile(out)` | Non-nesting scopes, inside or outside passes. Resolve timestamps a few frames later without stalling; `ReadProfile` returns the latest complete frame (`GpuProfile::totalMs`, per-category ms). With `timestampQueries = false` these are no-ops. |
 | `ReadPixels(tex, rect, rgba8)` | Tests and screenshots: waits for the GPU; RGBA8, top row first, whatever the format (float targets converted, sRGB returned as stored, multisampled resolved). |
@@ -217,6 +217,9 @@ const char* hlsl = shaders::FindSource("esia_common.hlsli");              // for
 | `Downsample` | `FullscreenVS` / `DownsamplePS` (`esia_post.hlsl`) | none (`SV_VertexID`) | list | Opaque | Frame, Pass, t0 (linear) |
 | `LayerComposite` | `FullscreenVS` / `LayerCompositePS` | none | list | Premultiplied | Frame, Pass, t0 (point), t1..t6 (linear) |
 | `Clear` | `FullscreenVS` / `ClearPS` | none | list | Opaque | Frame |
+| `QuadImage` | `QuadVS` / `UiPS` (`esia_quad.hlsl`) | none (`SV_VertexID`, `SV_InstanceID`) | strip | Straight | Frame, Draw, t0 (linear), t7 quads |
+| `QuadGray` | `QuadVS` / `TextGrayPS` | none | strip | Straight | Frame, Draw, t0 (linear, `.r`), t7 quads |
+| `QuadLcd` / `QuadLcdGray` | `QuadVS` / `TextLcdPS`, `TextLcdGrayPS` | none | strip | DualSourceLcd / Straight | Frame, Draw, t0 (linear), t7 quads |
 
 **FX instance data.** An instance is 24 float4 rows (`fx::Instance`). `FxVS` fetches the rows every pixel reads
 (rect, radii, fill0, shape, misc, flags) and passes them as flat varyings (`nointerpolation`: GLSL `flat`, MSL
@@ -226,6 +229,14 @@ the instance index and the six rows): within GL 3.3 / GLES 3.0 / D3D10 (15-16 ve
 define `ESIA_FX_FETCH_ALL=1` restores the old path (every row fetched at the start of `FxPS`, 2 varyings) for A / B
 measurements: `tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1` or `/DESIA_FX_FETCH_ALL=1` in
 `D3DCompile`; the pixels are identical, only the cost differs (do not commit a library built that way).
+
+**Quads.** Glyphs and the Painter's flat tiles are `esia::QuadInstance`s: two float4 rows - the rect, then the uv in
+1/4096 steps and the color as whole numbers (`u0 + 4096 v0`, `du + 4096 dv`, `R + 256 G + 65536 B`, `A`), exact in a
+float, so `QuadVS` decodes them with float arithmetic on every shader model, SM3 included. They follow the FX
+instances in the instance data from `gConv.w`: a row of the buffer, or a row of the instance texture, whose rows then
+hold 8 quads in the room of each FX instance (16 of its 24 texels: a power of two per row, which SM3's float modulo
+needs). The draw's first quad comes as the FX first instance does (Draw constants, or `DrawInstancedFrom`). A quad is
+32 bytes where four vertices and six indices took 104, and no index buffer is read.
 
 **The solid area.** Most pixels of a window, a card or a large button lie inside a solid rounded rectangle, away
 from its edge and its corners, where every layer of the FX shader but the fill is zero or under an opaque fill.
@@ -244,12 +255,17 @@ give them to OpenGL, GLES, Vulkan and Metal, drop that define and regenerate the
 (docs/CI.md, the Shaders workflow).
 
 Blend modes: `Opaque` = replace; `Straight` = rgb `src*srcA + dst*(1-srcA)`, alpha `src + dst*(1-srcA)`;
-`Premultiplied` = rgb and alpha `src + dst*(1-srcA)`. No dual-source blending, no depth, no stencil, no culling.
+`Premultiplied` = rgb and alpha `src + dst*(1-srcA)`; `DualSourceLcd` = rgb `src0*src1 + dst*(1-src1)`, alpha
+`src1.a + dst*(1-src1.a)` (`TextLcd` and `QuadLcd` only, which write src0.a = 1). No depth, no stencil, no culling.
 Samplers: s0 linear / clamp / no mips, s1 point / clamp / no mips.
 
-**Text is grayscale only.** By the owner's decision, Esia has no sub-pixel (LCD / ClearType) text: every glyph page
-is Alpha8 coverage drawn with `TextGray` (core round 3 removed `TextLcd`, `TextLcdGray`, `BlendMode::DualSourceLcd`
-and `Caps::dualSourceBlend`). A backend has no dual-source blend state, feature or extension to set up.
+**Sub-pixel text.** Grayscale glyph pages are Alpha8 drawn with `TextGray` (`QuadGray` for quads); sub-pixel pages
+are RGBA8 (`TextureFlags_LcdCoverage`) drawn with `TextLcd` (`QuadLcd`) and `DualSourceLcd` where
+`Caps::dualSourceBlend` is set, else with `TextLcdGray` (`QuadLcdGray`) and `Straight`. A backend with dual-source blending sets the cap, builds the `DualSourceLcd` blend
+state (its API's `SRC1` factors), enables what its API needs (GLES: `EXT_blend_func_extended`, whose `#extension`
+line the generated `TextLcd` ESSL carries; Vulkan: the `dualSrcBlend` feature) and returns an invalid pipeline for
+`TextLcd` or `QuadLcd` (`DualSourceProgram`) without `DualSourceLcd`, or the other way round. `TextLcdPS` writes `SV_Target0` and `SV_Target1`; the
+generated SPIR-V, GLSL, ESSL and MSL have them as location 0 index 0 / 1 (`color(0)` / `color(0), index(1)`).
 
 ### 4.1 Binding numbers
 
@@ -542,8 +558,10 @@ ctest --preset linux-clang -R esia_conformance                                  
   surface the frame reads but did not write - undefined after `DontCare`, stale from an earlier frame - then shows,
   where a fresh device reads zeros (llvmpipe does). The null backend's goldens are single frames: it ignores it.
 * Scenes a backend cannot run are SKIPped with the reason (the headless device refused the format / samples, no
-  device on this machine); no scene depends on an optional capability any more (`text_lcd` went with sub-pixel
-  text). A missing golden is NO GOLDEN, a failure with
+  device on this machine, `text_lcd` without `Caps::dualSourceBlend`). `text_fields` draws glyph shapes (FX
+  `ShapeKind::Glyph`, feature `kGlyph`: a distance field sampled from `gTex`); a backend whose full FX shader cannot
+  hold them sets `Caps::fullFxGlyphs = false` and builds the variants glyph batches ask for (Direct3D 9). `text_legible`
+  adds their legibility halo (`kLegible`), which reads the captured backdrop as glass does. A missing golden is NO GOLDEN, a failure with
   `--strict`. Exit code: 1 on a failure, 77 when every scene was skipped, else 0. CMake adds, per backend,
   `esia_conformance_<name>` (`--strict`) and `esia_conformance_<name>_frames` (`--frames 3 --strict`; not for null),
   both with `SKIP_RETURN_CODE 77`: a machine without the backend shows them as skipped, never as passed.

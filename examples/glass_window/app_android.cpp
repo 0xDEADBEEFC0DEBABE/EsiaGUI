@@ -53,6 +53,7 @@ namespace glass
             int frames = 0;
             std::string screenshot;
             std::vector<std::string> fonts;
+            std::string textRendering;   // --text-rendering
         };
 
         bool Parse(App& app, int argc, char** argv, Options& o, std::string& problem)
@@ -85,6 +86,12 @@ namespace glass
                     o.screenshot = value;
                 else if (a == "--font" && needs())
                     o.fonts.push_back(value);
+                else if (a == "--text-rendering" && needs())
+                {
+                    o.textRendering = value;
+                    if (!TextRenderingValid(o.textRendering, problem))
+                        return false;
+                }
                 else if (a == "--size" && needs())
                     ;   // the window is the screen
                 else if (app.option && app.option(a, value, usedValue))
@@ -470,6 +477,7 @@ namespace glass
         if (textSystem)   // kSystemSymbolsFont: Material Icons
             textSystem = std::make_unique<IconFontTextSystem>(std::move(textSystem), ReadAsset(aapp->activity->assetManager, material_icons::kAsset),
                                                               &material_icons::Map, material_icons::kScale);
+        ApplyTextRendering(textSystem.get(), opt.textRendering);
         if (textSystem && !app.loadFonts)
             text = textSystem.get();
         else if (textSystem && (font = LoadFonts(*textSystem, opt.fonts)) != 0)
@@ -523,7 +531,7 @@ namespace glass
             const double now = std::chrono::duration<double>(Clock::now() - start).count();
             ctx.NewFrame(fi.Params(opt.fixedDt > 0.0 ? (frame + 1) * opt.fixedDt : now));
             if (text && app.loadFonts)
-                text->NewFrame({fi.scale});
+                text->NewFrame({fi.scale, ctx.Input().Time()});
             const Clock::time_point uiStart = Clock::now();
             if (app.frame)
                 app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats()});

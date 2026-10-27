@@ -4,6 +4,23 @@
 
 using namespace esia;
 
+ESIA_TEST(Textures, CoverageKinds)
+{
+    const TextureInfo gray{TextureFormat::Alpha8, 4, 4}, lcd{TextureFormat::RGBA8, 4, 4, TextureFlags_LcdCoverage};
+    const TextureInfo image{TextureFormat::RGBA8, 4, 4}, flagged{TextureFormat::Alpha8, 4, 4, TextureFlags_LcdCoverage};
+    ESIA_CHECK(gray.Coverage() && !gray.Lcd());
+    ESIA_CHECK(lcd.Coverage() && lcd.Lcd());
+    ESIA_CHECK(!image.Coverage() && !image.Lcd());
+    ESIA_CHECK(flagged.Coverage() && !flagged.Lcd());   // the flag means RGBA8 pages
+    TextureRegistry reg;
+    const TextureId id = reg.Create(lcd);
+    TextureInfo back;
+    ESIA_CHECK(reg.Info(id, back) && back.Lcd());
+    std::vector<TextureChange> ch;
+    reg.TakeChanges(ch);
+    ESIA_CHECK(ch.size() == 1 && ch[0].info.flags == TextureFlags_LcdCoverage);
+}
+
 ESIA_TEST(Textures, CreateUpdateCollect)
 {
     TextureRegistry reg;

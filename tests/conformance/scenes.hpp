@@ -38,7 +38,12 @@ namespace esia::conformance
         int samples = 1;
         bool sampleable = true;                // HeadlessDesc::sampleable; false: every backdrop capture copies
         int fxInstancesPerRow = 0;             // RenderParams::maxFxInstancesPerRow (FxStorage::Texture on several rows)
+        // The frame drawn this many times on one renderer, the target cleared before each, with RenderParams::
+        // targetStatic: the last one's captures come from earlier frames (temporal reuse); it is the one checked.
+        int repeat = 1;
+        render::UiLight light;                 // RenderParams::light
         int callbacks = 0;                     // host callbacks the frame must run (SceneFrame::callbacks)
+        bool needsDualSource = false;          // sub-pixel text: skipped where Caps::dualSourceBlend is false
         // Drawing backends: after the image check, CopyTexture a region of the target to another position of a second
         // texture (resolving a multisampled target) and compare it with the target's pixels.
         bool checkCopy = false;

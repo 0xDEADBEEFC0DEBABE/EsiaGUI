@@ -22,8 +22,9 @@
 //     Vulkan render passes need no state carried across passes.
 //   * Fixed binding model (docs/backends/README.md, "Binding model"), identical in every shader:
 //       constants  Frame (b0), Pass (b1), Draw (b2)
-//       textures   t0 main texture, t1..t6 backdrop pyramid, t7 FX instance data (FxStorage::Texture)
-//       buffers    t7 FX instance data (FxStorage::Buffer: structured / storage buffer of float4)
+//       textures   t0 main texture, t1..t6 backdrop pyramid, t7 instance data (FxStorage::Texture)
+//       buffers    t7 instance data (FxStorage::Buffer: structured / storage buffer of float4): FX instances, then
+//                  the instanced quads (esia::QuadInstance)
 //       samplers   s0 linear clamp, s1 point clamp (fixed per shader; the shader manifest says which texture
 //                  uses which sampler, for APIs with combined samplers)
 //   * Coordinates are render-target pixels with the origin at the top-left, y down, for scissors, copies and
@@ -82,7 +83,7 @@ namespace esia::rhi
     {
         Vertex,        // esia::Vertex (VertexLayout::UiVertex)
         Index,         // uint32 indices
-        FxInstances,   // float4 array bound at t7 (Caps::fxStorage == FxStorage::Buffer)
+        FxInstances,   // float4 array bound at t7: FX instances and quads (Caps::fxStorage == FxStorage::Buffer)
     };
 
     struct BufferDesc
@@ -127,14 +128,35 @@ namespace esia::rhi
     enum class ShaderProgram : std::uint8_t
     {
         UiGeometry,       // UiVS + UiPS: images, lines, charts
-        TextGray,         // UiVS + TextGrayPS: Alpha8 glyph coverage (all text: Esia has no sub-pixel text)
+        TextGray,         // UiVS + TextGrayPS: Alpha8 glyph coverage
         Fx,               // FxVS + FxPS: SDF shapes, instanced quads (4 vertices, triangle strip)
         Downsample,       // FullscreenVS + DownsamplePS: one pyramid level (3 vertices)
         LayerComposite,   // FullscreenVS + LayerCompositePS: glow layer onto the target
         Clear,            // FullscreenVS + ClearPS: clears the scissor rect to transparent black
+        TextLcd,          // UiVS + TextLcdPS: sub-pixel (LCD) glyph coverage, per-channel alpha (BlendMode::DualSourceLcd)
+        TextLcdGray,      // UiVS + TextLcdGrayPS: sub-pixel pages with their grayscale coverage (layers, no dual-source)
+        // Instanced quads (esia::QuadInstance: glyphs, flat tiles; QuadVS, 4-vertex strips, rows of the instance data)
+        // with the pixel shaders of the four above
+        QuadImage,        // QuadVS + UiPS: a color texture
+        QuadGray,         // QuadVS + TextGrayPS: Alpha8 coverage
+        QuadLcd,          // QuadVS + TextLcdPS: sub-pixel coverage (BlendMode::DualSourceLcd)
+        QuadLcdGray,      // QuadVS + TextLcdGrayPS: sub-pixel pages with their grayscale coverage
         Count
     };
     ESIA_API const char* ShaderProgramName(ShaderProgram p);
+    // The programs that draw indexed UI vertices (VertexLayout::UiVertex): geometry and text.
+    constexpr bool UsesUiVertices(ShaderProgram p)
+    {
+        return p == ShaderProgram::UiGeometry || p == ShaderProgram::TextGray || p == ShaderProgram::TextLcd || p == ShaderProgram::TextLcdGray;
+    }
+    // The programs that draw instances (4-vertex strips from the instance data at t7, no vertex buffer): FX shapes and
+    // quads.
+    constexpr bool DrawsInstances(ShaderProgram p)
+    {
+        return p == ShaderProgram::Fx || (p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray);
+    }
+    // The programs with a second color output, for BlendMode::DualSourceLcd (and only they may use it).
+    constexpr bool DualSourceProgram(ShaderProgram p) { return p == ShaderProgram::TextLcd || p == ShaderProgram::QuadLcd; }
 
     enum class VertexLayout : std::uint8_t
     {
@@ -149,6 +171,9 @@ namespace esia::rhi
         Opaque,          // src
         Straight,        // rgb: src * srcA + dst * (1 - srcA); a: src + dst * (1 - srcA)
         Premultiplied,   // rgb: src + dst * (1 - srcA);        a: src + dst * (1 - srcA)
+        // rgb: src0 * src1 + dst * (1 - src1); a: src1.a + dst * (1 - src1.a) - a second color output (SV_Target1) as
+        // per-channel alpha (Caps::dualSourceBlend; the DualSourceProgram ones only, and they only with it)
+        DualSourceLcd,
     };
 
     struct PipelineDesc
@@ -256,6 +281,13 @@ namespace esia::rhi
         // 0.5 (WgtPixelPos then returns pixel centers); the backend's SM3 shader prelude moves clip-space positions
         // by half a pixel of the current target through ESIA_CLIP_POSITION (docs/backends/README.md, "Direct3D 9").
         bool halfPixelOffset = false;
+        // The full FX shader draws glyph shapes and motion blur (fx::kVariantOnlyFeatures). False (Direct3D 9: SM3 has no
+        // registers left for them): only its feature variants do - such a batch asks for its variant, built at once,
+        // whatever fxFeatureVariants says, and is not drawn if it fails.
+        bool fullFxGlyphs = true;
+        // Dual-source blending (BlendMode::DualSourceLcd): sub-pixel text. Without it sub-pixel glyph pages draw with
+        // the grayscale coverage kept in their alpha (TextLcdGray).
+        bool dualSourceBlend = true;
         // RGBA16F render targets (with blending) for the backdrop pyramid and glow layers (else RGBA8: some banding)
         bool floatRenderTargets = true;
         // Render targets the backend reports with TextureUsage_Sampled can be sampled right after their pass

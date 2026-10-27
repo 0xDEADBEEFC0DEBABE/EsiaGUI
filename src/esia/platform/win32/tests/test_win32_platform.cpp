@@ -425,3 +425,21 @@ ESIA_TEST(Win32Platform, WindowThreadAndUiThread)
     windowThread.join();
     ESIA_CHECK(platform.Hwnd() == nullptr);
 }
+
+// The text antialiasing of the window's monitor: what MonitorText says for it, re-read when the settings change; a
+// monitor's orientation moves its stripes.
+ESIA_TEST(Win32Platform, TheMonitorsTextSetup)
+{
+    Fixture f;
+    const pw::DisplayText text = pw::MonitorText(::MonitorFromWindow(f.hwnd, MONITOR_DEFAULTTONEAREST));
+    ESIA_CHECK(f.platform.Frame().text == text);
+    ESIA_CHECK(text.clearTypeLevel >= 0.0f && text.clearTypeLevel <= 1.0f && text.gamma >= 1.0f && text.gamma <= 3.0f);
+    ESIA_CHECK(pw::MonitorText(nullptr).gamma >= 1.0f);   // the primary monitor
+    f.Send(WM_SETTINGCHANGE, SPI_SETFONTSMOOTHING, 0);
+    ESIA_CHECK(f.platform.Frame().text == text);
+    using S = pw::DisplayText::Stripes;
+    ESIA_CHECK(pw::RotatedStripes(S::Rgb, DMDO_DEFAULT) == S::Rgb && pw::RotatedStripes(S::Bgr, DMDO_DEFAULT) == S::Bgr);
+    ESIA_CHECK(pw::RotatedStripes(S::Rgb, DMDO_180) == S::Bgr && pw::RotatedStripes(S::Bgr, DMDO_180) == S::Rgb);
+    ESIA_CHECK(pw::RotatedStripes(S::Rgb, DMDO_90) == S::None && pw::RotatedStripes(S::Bgr, DMDO_270) == S::None);
+    ESIA_CHECK(pw::RotatedStripes(S::None, DMDO_180) == S::None);
+}
