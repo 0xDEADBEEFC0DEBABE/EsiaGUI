@@ -81,8 +81,8 @@ namespace esia::render
         std::uint64_t frame = 0;
 
         rhi::Texture white;
-        rhi::Buffer vb, ib, fxBuf;
-        std::size_t vbCap = 0, ibCap = 0, fxCap = 0;
+        rhi::Buffer vb, ib, fxBuf, quadBuf;   // quadBuf: the quads as attributes (Caps::quadAttributes)
+        std::size_t vbCap = 0, ibCap = 0, fxCap = 0, quadCap = 0;
         rhi::Texture fxTex;
         int fxTexW = 0, fxTexH = 0, fxPerRow = 1;
         float quadStart = 0.0f;   // where the quads start in the instance data (gConv.w): a row of the buffer or texture
@@ -122,6 +122,12 @@ namespace esia::render
         // this frame
         rhi::Texture target;
         rhi::TextureDesc targetDesc;
+        // HDR output (RenderParams::hdr): the frame draws into `working`; `host` is the target it decodes from and
+        // encodes to over `hdrRegion` (through `hostCopy` where the target cannot be sampled)
+        bool hdr = false, hostRead = false;
+        rhi::Texture host, working, hostCopy;
+        rhi::TextureDesc hostDesc;
+        PxRect hdrRegion;
         int W = 0, H = 0;
         FrameConstants frameMain{}, frameLayer{};
         int layerDepth = 0;
@@ -143,7 +149,7 @@ namespace esia::render
         rhi::Format passFormat = rhi::Format::Unknown;
         int passSamples = 1;
         const FrameConstants* passFrame = nullptr;
-        bool inPass = false, frameSet = false, geometryBound = false, fxDataBound = false;
+        bool inPass = false, frameSet = false, geometryBound = false, quadsBound = false, fxDataBound = false;
         rhi::Pipeline boundPipeline;
         rhi::Texture boundTex[rhi::kTextureSlots];
         rhi::IRect boundScissor;
@@ -183,7 +189,9 @@ namespace esia::render
             textures.clear();
             Release(white);
             Release(fxTex);
-            for (rhi::Buffer* b : {&vb, &ib, &fxBuf})
+            Release(working);
+            Release(hostCopy);
+            for (rhi::Buffer* b : {&vb, &ib, &fxBuf, &quadBuf})
                 if (*b)
                 {
                     dev.DestroyBuffer(*b);
@@ -380,8 +388,21 @@ namespace esia::render
                         dev.UpdateBuffer(ib, plan.indices.data(), ibytes);
                 }
             }
-            const std::size_t n = (std::size_t)plan.fxCount, nq = (std::size_t)plan.quadCount;
+            const std::size_t n = (std::size_t)plan.fxCount;
             quadStart = 0.0f;
+            if (caps.quadAttributes && plan.quadCount > 0)
+            {
+                // the quads as instance-rate attributes (Caps::quadAttributes): a vertex buffer of their own
+                const std::size_t bytes = (std::size_t)plan.quadCount * sizeof(QuadInstance);
+                if (!EnsureBuffer(quadBuf, quadCap, bytes, rhi::BufferKind::QuadInstances, "quads"))
+                    return false;
+                auto* dst = static_cast<unsigned char*>(dev.MapBuffer(quadBuf, bytes));
+                if (!dst)
+                    return false;
+                WriteQuads(dst);
+                dev.UnmapBuffer(quadBuf);
+            }
+            const std::size_t nq = caps.quadAttributes ? 0u : (std::size_t)plan.quadCount;   // quads in the instance data
             if (n == 0 && nq == 0)
                 return true;
             const bool texture = caps.fxStorage == rhi::FxStorage::Texture;
@@ -399,7 +420,8 @@ namespace esia::render
                 if (!dst)
                     return false;
                 WriteInstances(reinterpret_cast<float*>(dst));
-                WriteQuads(dst + fxBytes);
+                if (nq > 0)
+                    WriteQuads(dst + fxBytes);
                 dev.UnmapBuffer(fxBuf);
                 quadStart = (float)(n * fx::kInstanceVec4Count);
                 return true;
@@ -415,7 +437,7 @@ namespace esia::render
             WriteInstances(staging.data());
             std::size_t q = 0;
             for (const FramePlan::QuadRun& r : plan.quadRuns)
-                for (std::uint32_t i = 0; i < r.count; ++i, ++q)
+                for (std::uint32_t i = 0; nq > 0 && i < r.count; ++i, ++q)
                     std::memcpy(staging.data() + (fxRows + q / quadsPerRow) * rowFloats + (q % quadsPerRow) * 8, &r.first[i], sizeof(QuadInstance));
             quadStart = (float)fxRows;
             if (!fxTex || fxTexW != w || fxTexH < h)
@@ -486,6 +508,94 @@ namespace esia::render
             frameLayer.time[3] = 0.0f;   // layers are composed in gamma space and converted on composite
         }
 
+        // ------------------------------------------------------------ HDR output
+        // The working target: RGBA16_FLOAT at the target's size, drawn into instead of it.
+        bool EnsureWorking()
+        {
+            if (working)
+            {
+                const rhi::TextureDesc d = dev.GetTextureDesc(working);
+                if (d.width == W && d.height == H)
+                    return true;
+                Release(working);
+            }
+            working = MakeTexture(W, H, rhi::Format::RGBA16_FLOAT,
+                                  rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled | rhi::TextureUsage_CopySrc | rhi::TextureUsage_CopyDst, "hdr-working");
+            return (bool)working;
+        }
+
+        // The pixels the frame draws on or reads from (the backdrop its glass captures), in whole pixels.
+        PxRect HdrRegion() const
+        {
+            PxRect r;
+            for (const RenderOp& op : plan.ops)
+                for (const PxRect& p : {op.bounds, op.glassRegion, op.captureRegion})
+                    if (!p.Empty())
+                        r = r.Empty() ? p : r.Union(p);
+            if (r.Empty())
+                return r;
+            r.x0 = std::max(0.0f, std::floor(r.x0));
+            r.y0 = std::max(0.0f, std::floor(r.y0));
+            r.x1 = std::min((float)W, std::ceil(r.x1));
+            r.y1 = std::min((float)H, std::ceil(r.y1));
+            return r;
+        }
+
+        static PassConstants HdrConstants(const HdrOutput& h)
+        {
+            return {{std::max(h.paperWhiteNits, 1.0f), h.encoding == HdrEncoding::Pq2020 ? 2.0f : 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 0.0f}};
+        }
+
+        // The target's region into the working target as extended sRGB (HdrDecodePS). The pass stays open for the
+        // frame's content.
+        void DecodeHdr(const HdrOutput& h)
+        {
+            rhi::Texture src = host;
+            const rhi::IRect r{(int)hdrRegion.x0, (int)hdrRegion.y0, (int)hdrRegion.x1, (int)hdrRegion.y1};
+            if (!hostRead)
+            {
+                // a target that cannot be sampled: its region copied aside first (before the frame's first pass)
+                const rhi::Format f = rhi::RawFormat(hostDesc.format);
+                if (hostCopy)
+                {
+                    const rhi::TextureDesc d = dev.GetTextureDesc(hostCopy);
+                    if (d.width != W || d.height != H || d.format != f)
+                        Release(hostCopy);
+                }
+                if (!hostCopy)
+                    hostCopy = MakeTexture(W, H, f, rhi::TextureUsage_Sampled | rhi::TextureUsage_CopyDst, "hdr-target-copy");
+                if (!hostCopy)
+                    return;
+                dev.CopyTexture(hostCopy, r.x0, r.y0, host, r);
+                src = hostCopy;
+            }
+            BeginPass(working, rhi::LoadOp::DontCare, frameMain, "hdr-decode");
+            if (!BindPipeline(GetPipeline(rhi::ShaderProgram::HdrDecode, rhi::BlendMode::Opaque)) || !SetScissor(hdrRegion))
+                return;
+            EnsureFrame();
+            const PassConstants pc = HdrConstants(h);
+            dev.SetConstants(rhi::ConstantSlot::Pass, &pc, sizeof(pc));
+            BindTexture(rhi::kSlotTexture, src);
+            dev.Draw(3, 0);
+            ++stats.drawCalls;
+        }
+
+        // The working target's region back into the target in its encoding (HdrEncodePS).
+        void EncodeHdr(const HdrOutput& h)
+        {
+            BeginPass(host, rhi::LoadOp::Load, frameMain, "hdr-encode");
+            if (BindPipeline(GetPipeline(rhi::ShaderProgram::HdrEncode, rhi::BlendMode::Opaque)) && SetScissor(hdrRegion))
+            {
+                EnsureFrame();
+                const PassConstants pc = HdrConstants(h);
+                dev.SetConstants(rhi::ConstantSlot::Pass, &pc, sizeof(pc));
+                BindTexture(rhi::kSlotTexture, working);
+                dev.Draw(3, 0);
+                ++stats.drawCalls;
+            }
+            EndPass();
+        }
+
         // ------------------------------------------------------------ passes and bindings
         void BeginPass(rhi::Texture t, rhi::LoadOp load, const FrameConstants& fc, const char* name)
         {
@@ -513,7 +623,7 @@ namespace esia::render
 
         void ForgetBindings()
         {
-            frameSet = geometryBound = fxDataBound = scissorSet = drawSet = false;
+            frameSet = geometryBound = quadsBound = fxDataBound = scissorSet = drawSet = false;
             boundPipeline = {};
             for (rhi::Texture& t : boundTex)
                 t = {};
@@ -573,7 +683,9 @@ namespace esia::render
             }
             rhi::PipelineDesc d;
             d.program = program;
-            d.layout = rhi::UsesUiVertices(program) ? rhi::VertexLayout::UiVertex : rhi::VertexLayout::None;
+            d.layout = rhi::UsesUiVertices(program)                      ? rhi::VertexLayout::UiVertex
+                       : rhi::DrawsQuads(program) && caps.quadAttributes ? rhi::VertexLayout::QuadInstance
+                                                                          : rhi::VertexLayout::None;
             d.topology = rhi::DrawsInstances(program) ? rhi::Topology::TriangleStrip : rhi::Topology::TriangleList;
             d.blend = blend;
             d.targetFormat = passFormat;
@@ -1015,6 +1127,20 @@ namespace esia::render
                 return;
             EnsureFrame();
             BindTexture(rhi::kSlotTexture, TextureOf(op.texture));
+            if (q && caps.quadAttributes)
+            {
+                // the quads' own buffer at the attributes, from the run's first quad on
+                if (!quadsBound)
+                {
+                    dev.SetVertexBuffer(quadBuf);
+                    quadsBound = true;
+                    geometryBound = false;
+                }
+                BindDraw(op.fade, 0);
+                dev.DrawInstancedFrom(4, op.quadCount, op.quadStart);
+                ++stats.drawCalls;
+                return;
+            }
             if (q)
             {
                 BindInstanceData();
@@ -1032,6 +1158,7 @@ namespace esia::render
                 dev.SetVertexBuffer(vb);
                 dev.SetIndexBuffer(ib);
                 geometryBound = true;
+                quadsBound = false;
             }
             if (plan.direct)
             {
@@ -1206,9 +1333,28 @@ namespace esia::render
             // reads it directly if it can be sampled, else it has no backdrop
             canCopy = (targetDesc.usage & rhi::TextureUsage_CopySrc) != 0;
             canRead = caps.sampleRenderTarget && targetDesc.samples == 1 && (targetDesc.usage & rhi::TextureUsage_Sampled) != 0;
+            // HDR output: a float working target, and a single-sampled target to decode from (read, or copied first)
+            hdr = params.hdr.encoding != HdrEncoding::None;
+            if (hdr && (!caps.floatRenderTargets || targetDesc.samples != 1 || (!canRead && !canCopy)))
+                return false;
             if (!dev.BeginFrame(params.frame))
                 return false;
             target = t;
+            if (hdr)
+            {
+                host = t;
+                hostDesc = targetDesc;
+                hostRead = canRead;
+                if (!EnsureWorking())
+                {
+                    dev.EndFrame();
+                    return false;
+                }
+                target = working;
+                targetDesc = dev.GetTextureDesc(working);
+                canCopy = true;
+                canRead = caps.sampleRenderTarget;
+            }
             subpixelText = params.subpixelText;
 
             ApplyTextureChanges(registry);
@@ -1231,6 +1377,8 @@ namespace esia::render
             stats.vertices = (int)plan.totalVertices;
             stats.indices = (int)plan.totalIndices;
             stats.quads = (int)plan.quadCount;
+            if (hdr)
+                hdrRegion = HdrRegion();
 
             const bool glass = plan.anyGlass && (canCopy || canRead);
             const bool surfaces = (glass || plan.anyLayer) && EnsureSurfaces(glass && canCopy, plan.anyLayer);
@@ -1267,8 +1415,13 @@ namespace esia::render
             run = RunNone;
             if (uploaded && white)
             {
+                const bool hdrPasses = hdr && !hdrRegion.Empty();
+                if (hdrPasses)
+                    DecodeHdr(params.hdr);
                 Execute();
                 EndPass();
+                if (hdrPasses)
+                    EncodeHdr(params.hdr);
             }
             stats.backdropCaptures = captures;
             dev.EndFrame();

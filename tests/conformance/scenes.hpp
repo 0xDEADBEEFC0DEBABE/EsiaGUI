@@ -42,6 +42,7 @@ namespace esia::conformance
         // targetStatic: the last one's captures come from earlier frames (temporal reuse); it is the one checked.
         int repeat = 1;
         render::UiLight light;                 // RenderParams::light
+        render::HdrOutput hdr;                 // RenderParams::hdr (with a target format to match)
         int callbacks = 0;                     // host callbacks the frame must run (SceneFrame::callbacks)
         bool needsDualSource = false;          // sub-pixel text: skipped where Caps::dualSourceBlend is false
         // Drawing backends: after the image check, CopyTexture a region of the target to another position of a second

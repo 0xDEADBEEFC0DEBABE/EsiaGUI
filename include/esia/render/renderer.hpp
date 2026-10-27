@@ -70,6 +70,29 @@ namespace esia::render
         }
     };
 
+    // How the target's pixels encode light (RenderParams::hdr).
+    enum class HdrEncoding : std::uint8_t
+    {
+        None,     // an SDR target: sRGB values (or linear light on an _SRGB format), drawn into as always
+        ScRgb,    // linear BT.709, 1.0 = 80 nits, past 1 brighter, below 0 outside BT.709: an RGBA16_FLOAT target
+                  // (Windows' HDR, DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709)
+        Pq2020,   // SMPTE ST 2084 (PQ) code values, BT.2020 primaries: an RGB10A2_UNORM target (HDR10,
+                  // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+    };
+
+    // HDR output. The UI is drawn as on an SDR target - sRGB colors, white at paper white, the same blending, glass and
+    // text - into an RGBA16_FLOAT working target: the region the frame draws in or reads from comes into it from the
+    // target as an SDR target would hold it ("extended sRGB": 1 = paper white, what lies past 1 and below 0 kept), and
+    // goes back in the target's encoding afterwards. Needs Caps::floatRenderTargets and a single-sampled target that
+    // can be sampled or copied, taken as opaque. Host draw callbacks draw into the working target.
+    struct HdrOutput
+    {
+        HdrEncoding encoding = HdrEncoding::None;
+        // The luminance of UI white (sRGB 1.0), nits: what the system shows SDR content at on that display (Windows:
+        // the monitor's SDR white level), so the UI matches the desktop. 203 is ITU-R BT.2408's graphics white.
+        float paperWhiteNits = 203.0f;
+    };
+
     struct RenderParams
     {
         rhi::FrameDesc frame;             // the backend's recording context and the host's frame number, if it needs them
@@ -92,6 +115,8 @@ namespace esia::render
         int backdropReuseFrames = 0;
         // One light for every glass rim and drop shadow (UiLight); off by default.
         UiLight light;
+        // How the target encodes light (HdrOutput); SDR by default.
+        HdrOutput hdr;
         // GPU time per category (Caps::timestampQueries). Every switch between categories costs two timestamps, so
         // after maxProfileScopes of them the rest of the frame counts in totalMs only. Off: the frame total only.
         bool profile = true;

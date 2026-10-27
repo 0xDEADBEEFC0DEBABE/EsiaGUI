@@ -84,6 +84,7 @@ namespace esia::rhi
         Vertex,        // esia::Vertex (VertexLayout::UiVertex)
         Index,         // uint32 indices
         FxInstances,   // float4 array bound at t7: FX instances and quads (Caps::fxStorage == FxStorage::Buffer)
+        QuadInstances, // esia::QuadInstance per instance (VertexLayout::QuadInstance, Caps::quadAttributes)
     };
 
     struct BufferDesc
@@ -141,6 +142,9 @@ namespace esia::rhi
         QuadGray,         // QuadVS + TextGrayPS: Alpha8 coverage
         QuadLcd,          // QuadVS + TextLcdPS: sub-pixel coverage (BlendMode::DualSourceLcd)
         QuadLcdGray,      // QuadVS + TextLcdGrayPS: sub-pixel pages with their grayscale coverage
+        // HDR output (render::HdrOutput): the target's region into the working target, and back
+        HdrDecode,        // FullscreenVS + HdrDecodePS: scRGB / PQ BT.2020 at t0 -> extended sRGB
+        HdrEncode,        // FullscreenVS + HdrEncodePS: extended sRGB at t0 -> scRGB / PQ BT.2020
         Count
     };
     ESIA_API const char* ShaderProgramName(ShaderProgram p);
@@ -150,11 +154,13 @@ namespace esia::rhi
         return p == ShaderProgram::UiGeometry || p == ShaderProgram::TextGray || p == ShaderProgram::TextLcd || p == ShaderProgram::TextLcdGray;
     }
     // The programs that draw instances (4-vertex strips from the instance data at t7, no vertex buffer): FX shapes and
-    // quads.
+    // quads (from instance-rate attributes instead on a device with Caps::quadAttributes).
     constexpr bool DrawsInstances(ShaderProgram p)
     {
         return p == ShaderProgram::Fx || (p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray);
     }
+    // The programs that draw esia::QuadInstances (glyphs, flat tiles).
+    constexpr bool DrawsQuads(ShaderProgram p) { return p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray; }
     // The programs with a second color output, for BlendMode::DualSourceLcd (and only they may use it).
     constexpr bool DualSourceProgram(ShaderProgram p) { return p == ShaderProgram::TextLcd || p == ShaderProgram::QuadLcd; }
 
@@ -162,6 +168,9 @@ namespace esia::rhi
     {
         None,       // no vertex buffer: positions come from SV_VertexID (fullscreen passes, FX quads)
         UiVertex,   // float2 pos, float2 uv, RGBA8 unorm color (20 bytes)
+        // Quads with Caps::quadAttributes: an esia::QuadInstance per instance (float4 rect, float4 packed: 32 bytes,
+        // BufferKind::QuadInstances) at attribute locations 0 and 1 (HLSL TEXCOORD4 / 5); the corner from SV_VertexID
+        QuadInstance,
     };
 
     enum class Topology : std::uint8_t { TriangleList, TriangleStrip };
@@ -320,6 +329,12 @@ namespace esia::rhi
         // change only with the edge fade: every change is a buffer update (Direct3D 11: a map with discard), and one
         // per FX batch was most of Direct3D 11's submit time. Optional.
         bool drawFirstInstance = false;
+        // Quads (DrawsQuads) take their esia::QuadInstance as instance-rate vertex attributes (VertexLayout::
+        // QuadInstance, a BufferKind::QuadInstances buffer bound with SetVertexBuffer) instead of reading it from the
+        // instance data after the FX instances: no texture upload and no texel fetches where the instance data is a
+        // texture (FxStorage::Texture: OpenGL, Direct3D 9 / 10). The quad shaders built for texture storage read them
+        // so. Draws go through DrawInstancedFrom, whose first instance offsets the attributes.
+        bool quadAttributes = false;
         // DrawIndexedBase adds a base vertex to the indices. The renderer then uploads every draw list's vertices and
         // indices as they are, each at its offset in the frame's buffers - no merged copy, no rebasing (most of the
         // submit of a frame of text). Optional.
@@ -394,7 +409,8 @@ namespace esia::rhi
         // Instance ids start at 0 in every draw; the renderer passes the first instance in the Draw constants.
         virtual void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) = 0;
         // Caps::drawFirstInstance: the shaders' instance ids start at `firstInstance` (the Draw constants' first
-        // instance is 0). The renderer calls it only on a device with the cap.
+        // instance is 0). The renderer calls it only on a device with the cap - and for quads with
+        // VertexLayout::QuadInstance (Caps::quadAttributes), whose instance-rate attributes start at `firstInstance`.
         virtual void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
         {
             (void)firstInstance;
