@@ -311,6 +311,7 @@ namespace esia::rhi::d3d9
             renderTargets_ = std::max<DWORD>(1, dc.NumSimultaneousRTs);
             psSlots_ = dc.MaxPixelShader30InstructionSlots;
             caps_.fxStorage = FxStorage::Texture;
+            caps_.quadAttributes = true;   // the quads from an instance stream, not the instance texture
             caps_.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm3;
             caps_.halfPixelOffset = true;
             caps_.fullFxGlyphs = false;   // the full ps_3_0 FX shader has no registers left for glyph shapes
@@ -348,9 +349,15 @@ namespace esia::rhi::d3d9
                                              {1, 0, D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 7},
                                              D3DDECL_END()};
             const D3DVERTEXELEMENT9 fullscreen[] = {{0, 0, D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 6}, D3DDECL_END()};
+            // quads (Caps::quadAttributes): the corner ids, and an esia::QuadInstance per instance (TEXCOORD4 / 5)
+            const D3DVERTEXELEMENT9 quads[] = {{0, 0, D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 6},
+                                               {1, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 4},
+                                               {1, 16, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 5},
+                                               D3DDECL_END()};
             bool ok = log_.Check(dev_->CreateVertexDeclaration(ui, &uiDecl_), "CreateVertexDeclaration");
             ok = ok && log_.Check(dev_->CreateVertexDeclaration(ids, &fxDecl_), "CreateVertexDeclaration");
             ok = ok && log_.Check(dev_->CreateVertexDeclaration(fullscreen, &fullscreenDecl_), "CreateVertexDeclaration");
+            ok = ok && log_.Check(dev_->CreateVertexDeclaration(quads, &quadDecl_), "CreateVertexDeclaration");
             const float corners[4] = {0, 1, 2, 3};
             ok = ok && StaticVertices(corners, sizeof(corners), cornerIds_);
             ok = ok && StaticVertices(corners, 3 * sizeof(float), fullscreenIds_);
@@ -523,7 +530,7 @@ namespace esia::rhi::d3d9
             b.desc = desc;
             const UINT size = (UINT)desc.size;
             const DWORD usage = D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY;
-            const bool ok = desc.kind == BufferKind::Vertex
+            const bool ok = desc.kind != BufferKind::Index   // vertices, or quads (Caps::quadAttributes)
                                 ? log_.Check(dev_->CreateVertexBuffer(size, usage, 0, D3DPOOL_DEFAULT, &b.vb, nullptr), "CreateVertexBuffer")
                                 : log_.Check(dev_->CreateIndexBuffer(size, usage, D3DFMT_INDEX32, D3DPOOL_DEFAULT, &b.ib, nullptr), "CreateIndexBuffer");
             return ok ? Buffer{buffers_.Add(std::move(b))} : Buffer{};
@@ -616,7 +623,10 @@ namespace esia::rhi::d3d9
             p.ps = ShaderOf(ps, false);
             if (!p.vs || !p.ps)
                 return {};
-            p.decl = desc.layout == VertexLayout::UiVertex ? uiDecl_.Get() : DrawsInstances(desc.program) ? fxDecl_.Get() : fullscreenDecl_.Get();
+            p.decl = desc.layout == VertexLayout::UiVertex       ? uiDecl_.Get()
+                     : desc.layout == VertexLayout::QuadInstance ? quadDecl_.Get()
+                     : DrawsInstances(desc.program)              ? fxDecl_.Get()
+                                                                 : fullscreenDecl_.Get();
             return Pipeline{pipelines_.Add(std::move(p))};
         }
 
@@ -842,6 +852,28 @@ namespace esia::rhi::d3d9
             dev_->SetStreamSource(0, cornerIds_.Get(), 0, sizeof(float));
             dev_->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | instanceCount);
             dev_->SetStreamSource(1, instanceIds_.Get(), 0, sizeof(float));
+            dev_->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1u);
+            dev_->SetIndices(quadIndices_.Get());
+            dev_->DrawIndexedPrimitive(D3DPT_TRIANGLESTRIP, 0, 0, 4, 0, 2);
+            dev_->SetStreamSourceFreq(0, 1);
+            dev_->SetStreamSourceFreq(1, 1);
+        }
+
+        // Quads (VertexLayout::QuadInstance): the corners repeated for every esia::QuadInstance of the bound buffer from
+        // `firstInstance` on (stream 1's offset); other instanced draws take their first instance from the constants
+        void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override
+        {
+            if (!pipe_ || pipe_->desc.layout != VertexLayout::QuadInstance)
+            {
+                DrawInstanced(vertexCount, instanceCount);
+                return;
+            }
+            const Buf* qb = buffers_.Find(vertexBuffer_);
+            if (vertexCount != 4 || instanceCount == 0 || !qb || !qb->vb || (std::size_t)(firstInstance + instanceCount) * 32u > qb->valid || !PrepareDraw())
+                return;
+            dev_->SetStreamSource(0, cornerIds_.Get(), 0, sizeof(float));
+            dev_->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | instanceCount);
+            dev_->SetStreamSource(1, qb->vb.Get(), firstInstance * 32u, 32);   // sizeof(esia::QuadInstance)
             dev_->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1u);
             dev_->SetIndices(quadIndices_.Get());
             dev_->DrawIndexedPrimitive(D3DPT_TRIANGLESTRIP, 0, 0, 4, 0, 2);
@@ -1166,7 +1198,9 @@ namespace esia::rhi::d3d9
             const Tex* t = textures_.Find(bound_[slot]);
             dev_->SetTexture(stage, t ? t->tex.Get() : nullptr);
             // s1 (point) where the shaders read gPoint: the FX instances and LayerComposite's sharp layer; else s0
-            const bool point = slot == kSlotFxData || (slot == kSlotTexture && pipe_->desc.program == ShaderProgram::LayerComposite);
+            const ShaderProgram p = pipe_->desc.program;
+            const bool point = slot == kSlotFxData ||
+                               (slot == kSlotTexture && (p == ShaderProgram::LayerComposite || p == ShaderProgram::HdrDecode || p == ShaderProgram::HdrEncode));
             const DWORD filter = point ? D3DTEXF_POINT : D3DTEXF_LINEAR;
             dev_->SetSamplerState(stage, D3DSAMP_MINFILTER, filter);
             dev_->SetSamplerState(stage, D3DSAMP_MAGFILTER, filter);
@@ -1240,7 +1274,7 @@ namespace esia::rhi::d3d9
         std::unordered_map<IDirect3DSurface9*, std::uint32_t> wrapped_;
         // shader objects and their constant tables per bytecode (the process-wide cache keeps the keys alive)
         mutable std::unordered_map<const std::vector<std::uint8_t>*, Shader> shaders_;
-        ComPtr<IDirect3DVertexDeclaration9> uiDecl_, fxDecl_, fullscreenDecl_;
+        ComPtr<IDirect3DVertexDeclaration9> uiDecl_, fxDecl_, fullscreenDecl_, quadDecl_;
         ComPtr<IDirect3DVertexBuffer9> cornerIds_, fullscreenIds_, instanceIds_;
         UINT instanceIdCount_ = 0;
         ComPtr<IDirect3DIndexBuffer9> quadIndices_;

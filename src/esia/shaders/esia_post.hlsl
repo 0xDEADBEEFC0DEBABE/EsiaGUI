@@ -1,5 +1,5 @@
-// Esia - full-screen passes: backdrop pyramid downsampling, glow-layer compositing, scissored clears.
-// Programs Downsample, LayerComposite, Clear (FullscreenVS: 3 vertices, no vertex buffer).
+// Esia - full-screen passes: backdrop pyramid downsampling, glow-layer compositing, scissored clears, HDR output.
+// Programs Downsample, LayerComposite, Clear, HdrDecode, HdrEncode (FullscreenVS: 3 vertices, no vertex buffer).
 #include "esia_common.hlsli"
 
 struct FsOut
@@ -87,4 +87,64 @@ float4 LayerCompositePS(FsOut i) : SV_Target
 float4 ClearPS(FsOut i) : SV_Target
 {
     return float4(0.0, 0.0, 0.0, 0.0);
+}
+
+// ------------------------------------------------------------------ HDR output
+// RenderParams::hdr: the UI draws into a working target holding what an SDR target would - sRGB values, 1 = paper
+// white - with what lies past them kept: values above 1 (brighter than paper white) and below 0 (outside BT.709),
+// "extended sRGB". HdrDecode brings the region the frame covers into it from the target; HdrEncode takes it back in
+// the target's encoding. gPass0.x = paper white (nits), gPass0.y = the target's encoding: 1 scRGB (linear BT.709,
+// 1 = 80 nits), 2 PQ (SMPTE ST 2084) with BT.2020 primaries.
+
+// sRGB's transfer functions continued past [0, 1]: mirrored below 0, the same curve above 1
+float3 WgtSrgbToLinearExt(float3 v)
+{
+    const float3 a = abs(v);
+    return sign(v) * (a <= 0.04045 ? a / 12.92 : pow((a + 0.055) / 1.055, 2.4));
+}
+
+float3 WgtLinearToSrgbExt(float3 l)
+{
+    const float3 a = abs(l);
+    return sign(l) * (a <= 0.0031308 ? a * 12.92 : 1.055 * pow(a, 1.0 / 2.4) - 0.055);
+}
+
+// SMPTE ST 2084: code values <-> nits
+float3 WgtPqToNits(float3 e)
+{
+    const float3 p = pow(saturate(e), 1.0 / 78.84375);
+    return 10000.0 * pow(max(p - 0.8359375, 0.0) / (18.8515625 - 18.6875 * p), 1.0 / 0.1593017578125);
+}
+
+float3 WgtNitsToPq(float3 n)
+{
+    const float3 y = pow(saturate(n / 10000.0), 0.1593017578125);
+    return pow((0.8359375 + 18.8515625 * y) / (1.0 + 18.6875 * y), 78.84375);
+}
+
+// BT.2020 <-> BT.709 primaries, linear light (ITU-R BT.2087)
+float3 WgtRec2020To709(float3 c)
+{
+    return float3(dot(c, float3(1.6605, -0.5876, -0.0728)), dot(c, float3(-0.1246, 1.1329, -0.0083)), dot(c, float3(-0.0182, -0.1006, 1.1187)));
+}
+
+float3 WgtRec709To2020(float3 c)
+{
+    return float3(dot(c, float3(0.6274, 0.3293, 0.0433)), dot(c, float3(0.0691, 0.9195, 0.0114)), dot(c, float3(0.0164, 0.0880, 0.8956)));
+}
+
+float4 HdrDecodePS(FsOut i) : SV_Target
+{
+    const float2 uv = WgtPixelPos(i.pos) * gTarget.zw;
+    const float4 c = ESIA_SAMPLE_LEVEL(gTex, gPoint, WgtRtUv(uv));
+    const float3 nits = gPass0.y > 1.5 ? WgtRec2020To709(WgtPqToNits(c.rgb)) : c.rgb * 80.0;
+    return float4(WgtLinearToSrgbExt(nits / gPass0.x), c.a);
+}
+
+float4 HdrEncodePS(FsOut i) : SV_Target
+{
+    const float2 uv = WgtPixelPos(i.pos) * gTarget.zw;
+    const float4 c = ESIA_SAMPLE_LEVEL(gTex, gPoint, WgtRtUv(uv));
+    const float3 nits = WgtSrgbToLinearExt(c.rgb) * gPass0.x;
+    return float4(gPass0.y > 1.5 ? WgtNitsToPq(WgtRec709To2020(nits)) : nits / 80.0, c.a);
 }

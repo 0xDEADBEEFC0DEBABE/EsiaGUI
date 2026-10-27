@@ -68,8 +68,10 @@ namespace glass
                 }
                 list_->Close();   // BeginFrame resets it
                 rtvSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-                if (!swap_.Create(a.factory.Get(), queue_.Get(), hwnd, width, height, kBuffers, DXGI_FORMAT_B8G8R8A8_UNORM, error))
+                format_ = o.hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
+                if (!swap_.Create(a.factory.Get(), queue_.Get(), hwnd, width, height, kBuffers, format_, error))
                     return false;
+                scRgb_ = o.hdr && swap_.SetScRgb();
                 if (FAILED(hr = swap_.Get()->QueryInterface(IID_PPV_ARGS(&swap3_))))   // GetCurrentBackBufferIndex
                 {
                     error = "no IDXGISwapChain3: " + HrText(hr);
@@ -146,7 +148,7 @@ namespace glass
                         return false;
                     device_->CreateRenderTargetView(buffers_[i].Get(), nullptr, rtv);
                     // between frames the buffers rest in PRESENT: Esia moves them to RENDER_TARGET and back itself
-                    wrapped_[i] = esia::rhi::d3d12::WrapRenderTarget(*esia_, buffers_[i].Get(), rtv, DXGI_FORMAT_B8G8R8A8_UNORM, D3D12_RESOURCE_STATE_PRESENT);
+                    wrapped_[i] = esia::rhi::d3d12::WrapRenderTarget(*esia_, buffers_[i].Get(), rtv, format_, D3D12_RESOURCE_STATE_PRESENT);
                     if (!wrapped_[i])
                         return false;
                 }
@@ -188,6 +190,7 @@ namespace glass
             UINT rtvSize_ = 0;
             FlipSwapChain swap_;
             ComPtr<IDXGISwapChain3> swap3_;
+            DXGI_FORMAT format_ = DXGI_FORMAT_B8G8R8A8_UNORM;   // R16G16B16A16_FLOAT with --hdr (scRGB)
             ComPtr<ID3D12Resource> buffers_[kBuffers];
             esia::rhi::Texture wrapped_[kBuffers];
             std::unique_ptr<esia::rhi::Device> esia_;

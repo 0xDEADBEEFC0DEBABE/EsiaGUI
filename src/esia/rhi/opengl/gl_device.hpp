@@ -67,6 +67,7 @@ namespace esia::rhi::opengl
         void DrawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex) override;
         void DrawIndexedBase(std::uint32_t indexCount, std::uint32_t firstIndex, std::uint32_t baseVertex) override;
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override;
+        void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override;
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& srcRect) override;
         void* NativeRenderState() override;
         void BeginProfile(ProfileCategory category) override;
@@ -223,7 +224,7 @@ namespace esia::rhi::opengl
         GLint copyMap_ = -1, copyEncode_ = -1;
 
         GLuint samplers_[2] = {};   // linear clamp, point clamp
-        GLuint uiVao_ = 0, emptyVao_ = 0;
+        GLuint uiVao_ = 0, emptyVao_ = 0, quadVao_ = 0;   // quadVao_: esia::QuadInstance attributes (Caps::quadAttributes)
         GLuint ubo_[3] = {};   // constants: frame, pass, draw
 
         // frame / pass
@@ -237,6 +238,8 @@ namespace esia::rhi::opengl
         GLuint drawFbo_ = kUnknown, readFbo_ = kUnknown, program_ = kUnknown, vao_ = kUnknown, activeUnit_ = kUnknown;
         GLuint unitTex_[kUnits], unitSampler_[kUnits];
         GLuint vaoVb_ = kUnknown, vaoIb_ = kUnknown;
+        GLuint quadVaoVb_ = kUnknown;                      // the buffer and the first quad of quadVao_'s pointers,
+        std::uint32_t quadVaoFirst_ = 0, quadFirst_ = 0;   // and the next quad draw's (DrawInstancedFrom)
         int scissorTest_ = -1, srgbWrite_ = -1, blend_ = -1;
 
         // timing

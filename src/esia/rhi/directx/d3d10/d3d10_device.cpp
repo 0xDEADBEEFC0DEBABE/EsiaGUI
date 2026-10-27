@@ -159,6 +159,7 @@ namespace esia::rhi::d3d10
         {
             Caps c;
             c.fxStorage = FxStorage::Texture;
+            c.quadAttributes = true;   // the quads from a per-instance vertex stream, not the instance texture
             c.shaderFormat = (std::uint8_t)shaders::Format::DxbcSm4;
             c.framebufferOriginBottomLeft = false;
             c.clipSpaceYDown = false;
@@ -431,7 +432,8 @@ namespace esia::rhi::d3d10
             bd.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE;
             switch (desc.kind)
             {
-            case BufferKind::Vertex: bd.BindFlags = D3D10_BIND_VERTEX_BUFFER; break;
+            case BufferKind::Vertex:
+            case BufferKind::QuadInstances: bd.BindFlags = D3D10_BIND_VERTEX_BUFFER; break;
             case BufferKind::Index: bd.BindFlags = D3D10_BIND_INDEX_BUFFER; break;
             case BufferKind::FxInstances: return {};   // FxStorage::Texture: the instances are an RGBA32F texture
             }
@@ -530,6 +532,20 @@ namespace esia::rhi::d3d10
                 }
                 p.layout = uiLayout_;
             }
+            else if (desc.layout == VertexLayout::QuadInstance)
+            {
+                if (!quadLayout_)
+                {
+                    // esia::QuadInstance per instance: float4 rect, float4 packed (the corner from SV_VertexID)
+                    const D3D10_INPUT_ELEMENT_DESC e[] = {
+                        {"TEXCOORD", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D10_INPUT_PER_INSTANCE_DATA, 1},
+                        {"TEXCOORD", 5, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D10_INPUT_PER_INSTANCE_DATA, 1},
+                    };
+                    if (!log_.Check(dev_->CreateInputLayout(e, 2, vs->data(), vs->size(), &quadLayout_), "CreateInputLayout"))
+                        return {};
+                }
+                p.layout = quadLayout_;
+            }
             return Pipeline{pipelines_.Add(std::move(p))};
         }
 
@@ -539,6 +555,7 @@ namespace esia::rhi::d3d10
         bool BeginFrame(const FrameDesc&) override
         {
             ++frame_;
+            profiling_ = false;
             // with restoreHostState, what the frame changes is captured and put back (ClearState would also drop the
             // host's compute, stream-output and UAV bindings, which are not); without it, start from a clean state
             if (restore_)
@@ -549,19 +566,24 @@ namespace esia::rhi::d3d10
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 if (s.pending)
-                    ReadSlot(s);   // the GPU is kProfileSlots frames behind: the old numbers are dropped if not ready
-                s.used = 0;
-                s.pending = false;
-                s.frame.Reset(frame_);
-                s.disjoint->Begin();
-                s.frame.frameStart = Stamp();
+                    ReadSlot(s);   // the GPU is kProfileSlots frames behind
+                // Queries whose results are still out are not begun again (the debug layer reports it, and their
+                // numbers would be lost): this frame then has no timestamps, and the slot is read when it comes round.
+                if (!s.pending)
+                {
+                    profiling_ = true;
+                    s.used = 0;
+                    s.frame.Reset(frame_);
+                    s.disjoint->Begin();
+                    s.frame.frameStart = Stamp();
+                }
             }
             return true;
         }
 
         void EndFrame() override
         {
-            if (caps_.timestampQueries)
+            if (profiling_)
             {
                 ProfileSlot& s = profile_[frame_ % kProfileSlots];
                 s.frame.frameEnd = Stamp();
@@ -653,7 +675,7 @@ namespace esia::rhi::d3d10
         {
             const Buf* b = buffers_.Find(buf.id);
             ID3D10Buffer* vb = b ? b->buf.Get() : nullptr;
-            const UINT stride = 20, offset = 0;   // sizeof(esia::Vertex)
+            const UINT stride = b && b->desc.kind == BufferKind::QuadInstances ? 32 : 20, offset = 0;   // esia::QuadInstance / Vertex
             dev_->IASetVertexBuffers(0, 1, &vb, &stride, &offset);
         }
 
@@ -670,6 +692,11 @@ namespace esia::rhi::d3d10
             dev_->DrawIndexed(indexCount, firstIndex, (INT)baseVertex);
         }
         void DrawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount) override { dev_->DrawInstanced(vertexCount, instanceCount, 0, 0); }
+        // quads (VertexLayout::QuadInstance): the start instance offsets their per-instance stream
+        void DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance) override
+        {
+            dev_->DrawInstanced(vertexCount, instanceCount, 0, firstInstance);
+        }
 
         void CopyTexture(Texture dst, int dstX, int dstY, Texture src, const IRect& r) override
         {
@@ -707,7 +734,7 @@ namespace esia::rhi::d3d10
         // ------------------------------------------------------------------ profiling
         void BeginProfile(ProfileCategory category) override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             f.openStart = Stamp();
@@ -716,7 +743,7 @@ namespace esia::rhi::d3d10
 
         void EndProfile() override
         {
-            if (!caps_.timestampQueries)
+            if (!profiling_)
                 return;
             d3d::ProfileFrame& f = profile_[frame_ % kProfileSlots].frame;
             const int end = Stamp();
@@ -900,7 +927,7 @@ namespace esia::rhi::d3d10
         // shader objects per bytecode (the process-wide cache keeps the bytecode, and so these keys, alive)
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D10VertexShader>> vertexShaders_;
         std::unordered_map<const std::vector<std::uint8_t>*, ComPtr<ID3D10PixelShader>> pixelShaders_;
-        ComPtr<ID3D10InputLayout> uiLayout_;
+        ComPtr<ID3D10InputLayout> uiLayout_, quadLayout_;
         ComPtr<ID3D10BlendState> blends_[4];   // per BlendMode
         ComPtr<ID3D10RasterizerState> raster_;
         ComPtr<ID3D10DepthStencilState> depth_;
@@ -913,6 +940,7 @@ namespace esia::rhi::d3d10
         Tex* pass_ = nullptr;
         std::uint64_t frame_ = 0;
         ProfileSlot profile_[kProfileSlots];
+        bool profiling_ = false;   // this frame records timestamps (its slot's queries were free)
         GpuProfile latest_;
     };
 

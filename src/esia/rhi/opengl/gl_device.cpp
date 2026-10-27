@@ -156,6 +156,7 @@ namespace esia::rhi::opengl
         srgbDecodeControl_ = has("GL_EXT_texture_sRGB_decode");
 
         caps_.fxStorage = FxStorage::Texture;
+        caps_.quadAttributes = true;   // the quads as instance-rate attributes, not texels of the instance texture
         caps_.shaderFormat = (std::uint8_t)(desc_.es ? shaders::Format::Essl300 : shaders::Format::Glsl330);
         caps_.framebufferOriginBottomLeft = true;
         caps_.clipSpaceYDown = false;
@@ -203,6 +204,13 @@ namespace esia::rhi::opengl
 
         gl_.GenVertexArrays(1, &uiVao_);
         gl_.GenVertexArrays(1, &emptyVao_);   // core profiles draw nothing without a vertex array object
+        gl_.GenVertexArrays(1, &quadVao_);
+        BindVertexArray(quadVao_);
+        for (GLuint a = 0; a < 2; ++a)
+        {
+            gl_.EnableVertexAttribArray(a);
+            gl_.VertexAttribDivisor(a, 1);   // esia::QuadInstance: rect, packed - one per instance
+        }
         BindVertexArray(uiVao_);
         for (GLuint a = 0; a < 3; ++a)
             gl_.EnableVertexAttribArray(a);
@@ -247,8 +255,8 @@ namespace esia::rhi::opengl
             gl_.DeleteProgram(copyProgram_);
         if (samplers_[0])
             gl_.DeleteSamplers(2, samplers_);
-        GLuint vaos[2] = {uiVao_, emptyVao_};
-        gl_.DeleteVertexArrays(2, vaos);
+        GLuint vaos[3] = {uiVao_, emptyVao_, quadVao_};
+        gl_.DeleteVertexArrays(3, vaos);
         if (ubo_[0])
             gl_.DeleteBuffers(3, ubo_);
         for (TimerSlot& s : timer_)
@@ -432,7 +440,7 @@ namespace esia::rhi::opengl
 
     void GlDevice::ForgetGlState()
     {
-        drawFbo_ = readFbo_ = program_ = vao_ = activeUnit_ = vaoVb_ = vaoIb_ = kUnknown;
+        drawFbo_ = readFbo_ = program_ = vao_ = activeUnit_ = vaoVb_ = vaoIb_ = quadVaoVb_ = kUnknown;
         std::fill(std::begin(unitTex_), std::end(unitTex_), kUnknown);
         std::fill(std::begin(unitSampler_), std::end(unitSampler_), kUnknown);
         scissorTest_ = srgbWrite_ = blend_ = -1;
@@ -793,6 +801,8 @@ namespace esia::rhi::opengl
             vaoVb_ = kUnknown;
         if (vaoIb_ == it->second.id)
             vaoIb_ = kUnknown;
+        if (quadVaoVb_ == it->second.id)
+            quadVaoVb_ = kUnknown;
         gl_.DeleteBuffers(1, &it->second.id);
         buffers_.erase(it);
     }
@@ -1077,6 +1087,21 @@ namespace esia::rhi::opengl
     {
         if (hostTouched_)
             RestorePassState();
+        if (pipe_->desc.layout == VertexLayout::QuadInstance)
+        {
+            // the quads from the draw's first one on (GL 3.3 / GLES 3.0 have no base instance: the pointers' offset)
+            BindVertexArray(quadVao_);
+            if (quadVaoVb_ != vb_ || quadVaoFirst_ != quadFirst_)
+            {
+                gl_.BindBuffer(GL_ARRAY_BUFFER, vb_);
+                const std::uintptr_t at = (std::uintptr_t)quadFirst_ * 32u;   // sizeof(esia::QuadInstance)
+                gl_.VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<const void*>(at));
+                gl_.VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<const void*>(at + 16));
+                quadVaoVb_ = vb_;
+                quadVaoFirst_ = quadFirst_;
+            }
+            return;
+        }
         if (pipe_->desc.layout != VertexLayout::UiVertex)
         {
             BindVertexArray(emptyVao_);
@@ -1128,6 +1153,23 @@ namespace esia::rhi::opengl
     {
         if (!inPass_ || !pipe_)
             return;
+        PrepareDraw();
+        gl_.DrawArraysInstanced(GL_TRIANGLE_STRIP, 0, (GLsizei)vertexCount, (GLsizei)instanceCount);
+    }
+
+    // Quads (VertexLayout::QuadInstance): their attributes from `firstInstance` on; other draws as DrawInstanced
+    void GlDevice::DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
+    {
+        if (!inPass_ || !pipe_)
+            return;
+        if (pipe_->desc.layout != VertexLayout::QuadInstance)
+        {
+            DrawInstanced(vertexCount, instanceCount);
+            return;
+        }
+        if (!vb_)
+            return;
+        quadFirst_ = firstInstance;
         PrepareDraw();
         gl_.DrawArraysInstanced(GL_TRIANGLE_STRIP, 0, (GLsizei)vertexCount, (GLsizei)instanceCount);
     }

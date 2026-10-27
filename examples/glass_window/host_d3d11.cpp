@@ -30,8 +30,10 @@ namespace glass
                     error = "D3D11CreateDevice failed: " + HrText(hr) + (o.debug ? " (is the debug layer installed? Graphics Tools)" : "");
                     return false;
                 }
-                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, DXGI_FORMAT_B8G8R8A8_UNORM, error))
+                const DXGI_FORMAT format = o.hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
+                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, format, error))
                     return false;
+                scRgb_ = o.hdr && swap_.SetScRgb();
                 esia::rhi::d3d11::Desc d;
                 d.device = device_.Get();
                 d.context = context_.Get();

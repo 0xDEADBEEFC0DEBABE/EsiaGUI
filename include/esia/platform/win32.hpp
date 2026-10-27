@@ -107,6 +107,16 @@ namespace esia::platform::win32
         bool operator==(const DisplayText&) const = default;
     };
 
+    // A monitor's HDR: whether Windows drives it in HDR (advanced color), and the luminance it shows SDR content at -
+    // Settings' "SDR content brightness" - in nits: the paper white of a UI on that monitor (render::HdrOutput).
+    struct DisplayHdr
+    {
+        bool enabled = false;
+        float sdrWhiteNits = 80.0f;
+
+        bool operator==(const DisplayHdr&) const = default;
+    };
+
     // The window as the UI thread uses it for a frame (Platform::Frame).
     struct FrameInfo
     {
@@ -116,6 +126,7 @@ namespace esia::platform::win32
         bool minimized = false;      // width and height keep the last restored size
         bool focused = false;
         DisplayText text;            // of the window's monitor (it changes when the window moves to another one)
+        DisplayHdr hdr;              // of the window's monitor too
 
         // displaySize = pixels / scale (UI units), framebufferScale = scale: the UI renders at the native resolution.
         FrameParams Params(double time) const
@@ -203,6 +214,8 @@ namespace esia::platform::win32
     // Any thread: the text antialiasing of `monitor` (an HMONITOR; null: the primary monitor) - DirectWrite's rendering
     // parameters for it, the user's font smoothing and the monitor's orientation.
     ESIA_API DisplayText MonitorText(void* monitor);
+    // Any thread: `monitor`'s HDR state (an HMONITOR; null: the primary monitor), from the display configuration.
+    ESIA_API DisplayHdr MonitorHdr(void* monitor);
     // How a monitor's orientation (DEVMODE::dmDisplayOrientation: 0, 90, 180, 270 degrees as 0 .. 3) moves its stripes
     // across the picture: reversed upside down, vertical (no horizontal sub-pixels) sideways.
     ESIA_API DisplayText::Stripes RotatedStripes(DisplayText::Stripes stripes, int orientation);

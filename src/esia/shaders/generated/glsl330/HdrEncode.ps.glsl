@@ -1,0 +1,63 @@
+#version 330
+
+layout(std140) uniform WgtFrame
+{
+    vec4 gXform;
+    vec4 gTarget;
+    vec4 gDisplay;
+    vec4 gTime;
+    vec4 gLevel[6];
+    vec4 gText;
+    vec4 gConv;
+} _45;
+
+layout(std140) uniform WgtPass
+{
+    vec4 gPass0;
+    vec4 gPass1;
+} _197;
+
+uniform sampler2D SPIRV_Cross_CombinedgTexgPoint;
+
+layout(location = 0) out vec4 _entryPointOutput;
+
+void main()
+{
+    vec2 _305 = gl_FragCoord.xy + _45.gConv.yy;
+    vec2 _411;
+    if (_45.gConv.x > 0.5)
+    {
+        vec2 _390 = _305;
+        _390.y = _45.gTarget.y - _305.y;
+        _411 = _390;
+    }
+    else
+    {
+        _411 = _305;
+    }
+    vec2 _267 = _411 * _45.gTarget.zw;
+    vec2 _412;
+    if (_45.gConv.x > 0.5)
+    {
+        vec2 _393 = _267;
+        _393.y = 1.0 - _267.y;
+        _412 = _393;
+    }
+    else
+    {
+        _412 = _267;
+    }
+    vec4 _273 = textureLod(SPIRV_Cross_CombinedgTexgPoint, _412, 0.0);
+    vec3 _275 = _273.xyz;
+    vec3 _335 = abs(_275);
+    vec3 _343 = pow((_335 + vec3(0.054999999701976776123046875)) * vec3(0.947867333889007568359375), vec3(2.400000095367431640625));
+    vec3 _346 = _335 * vec3(0.077399380505084991455078125);
+    bvec3 _348 = lessThanEqual(_335, vec3(0.040449999272823333740234375));
+    vec3 _279 = (sign(_275) * vec3(_348.x ? _346.x : _343.x, _348.y ? _346.y : _343.y, _348.z ? _346.z : _343.z)) * _197.gPass0.x;
+    vec3 _369 = pow(clamp(vec3(dot(_279, vec3(0.627399981021881103515625, 0.329299986362457275390625, 0.0432999990880489349365234375)), dot(_279, vec3(0.069099999964237213134765625, 0.91949999332427978515625, 0.011400000192224979400634765625)), dot(_279, vec3(0.01640000008046627044677734375, 0.087999999523162841796875, 0.895600020885467529296875))) * vec3(9.9999997473787516355514526367188e-05), vec3(0.0), vec3(1.0)), vec3(0.1593017578125));
+    vec3 _379 = pow((vec3(0.8359375) + (_369 * 18.8515625)) / (vec3(1.0) + (_369 * 18.6875)), vec3(78.84375));
+    vec3 _288 = _279 * vec3(0.012500000186264514923095703125);
+    bvec3 _289 = bvec3(_197.gPass0.y > 1.5);
+    _entryPointOutput = vec4(vec3(_289.x ? _379.x : _288.x, _289.y ? _379.y : _288.y, _289.z ? _379.z : _288.z), _273.w);
+}
+

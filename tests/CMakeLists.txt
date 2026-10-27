@@ -92,6 +92,19 @@ foreach(_b ${_esia_backends})
     endif()
 endforeach()
 
+# HDR output (render::HdrOutput): the encodings' numbers and the decode - a test per backend (ESIA_HDR_BACKEND), as
+# the conformance suite has, so a runner can leave out a driver it cannot run by its name (docs/CI.md)
+add_executable(esia_hdr_tests render/test_hdr.cpp)
+target_link_libraries(esia_hdr_tests PRIVATE esia_test_main esia::render esia::backends)
+esia_target_defaults(esia_hdr_tests)
+foreach(_b ${_esia_backends})
+    if(NOT _b STREQUAL "null")
+        add_test(NAME esia_hdr_${_b} COMMAND esia_hdr_tests)
+        set_tests_properties(esia_hdr_${_b} PROPERTIES ENVIRONMENT "ESIA_HDR_BACKEND=${_b}"
+                             SKIP_REGULAR_EXPRESSION "esia_hdr: no device ran")
+    endif()
+endforeach()
+
 # the renderer on fixed workloads (tests/bench/esia_bench.cpp): build, submit and GPU time per frame, median and 99th
 # percentile. CTest only runs it a few frames on the null device, so that it keeps working.
 if(TARGET esia_text_ft)

@@ -891,7 +891,8 @@ namespace esia::rhi::vulkan
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         switch (desc.kind)
         {
-        case BufferKind::Vertex: usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+        case BufferKind::Vertex:
+        case BufferKind::QuadInstances: usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;   // the latter unused here (no Caps::quadAttributes)
         case BufferKind::Index: usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
         case BufferKind::FxInstances: usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; break;
         }

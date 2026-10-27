@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <vector>
 
 namespace esia::platform::win32
 {
@@ -188,8 +189,73 @@ namespace esia::platform::win32
             return;
         monitor = mon;
         const DisplayText text = MonitorText(mon);
+        const DisplayHdr hdr = MonitorHdr(mon);
         std::lock_guard lock(frameMutex);
         frame.text = text;
+        frame.hdr = hdr;
+    }
+
+    namespace
+    {
+        // DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO (9) and DISPLAYCONFIG_SDR_WHITE_LEVEL (11) spelled out: older SDKs and
+        // mingw-w64's headers may lack them
+        struct AdvancedColorInfo
+        {
+            DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            UINT32 value;   // bit 0: supported, bit 1: enabled
+            UINT32 colorEncoding, bitsPerColorChannel;
+        };
+        struct SdrWhiteLevel
+        {
+            DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            ULONG level;   // 1000 = 80 nits
+        };
+    }
+
+    DisplayHdr MonitorHdr(void* monitorPtr)
+    {
+        HMONITOR mon = static_cast<HMONITOR>(monitorPtr);
+        if (!mon)
+            mon = ::MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+        DisplayHdr hdr;
+        MONITORINFOEXW mi = {};
+        mi.cbSize = sizeof(mi);
+        if (!::GetMonitorInfoW(mon, reinterpret_cast<MONITORINFO*>(&mi)))
+            return hdr;
+        UINT32 pathCount = 0, modeCount = 0;
+        if (::GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS)
+            return hdr;
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        if (::QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr) != ERROR_SUCCESS)
+            return hdr;
+        for (UINT32 i = 0; i < pathCount; ++i)
+        {
+            // the path whose source is this monitor's GDI device, then its target's color state
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME source = {};
+            source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            source.header.size = sizeof(source);
+            source.header.adapterId = paths[i].sourceInfo.adapterId;
+            source.header.id = paths[i].sourceInfo.id;
+            if (::DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS || std::wcscmp(source.viewGdiDeviceName, mi.szDevice) != 0)
+                continue;
+            AdvancedColorInfo color = {};
+            color.header.type = (DISPLAYCONFIG_DEVICE_INFO_TYPE)9;
+            color.header.size = sizeof(color);
+            color.header.adapterId = paths[i].targetInfo.adapterId;
+            color.header.id = paths[i].targetInfo.id;
+            if (::DisplayConfigGetDeviceInfo(&color.header) == ERROR_SUCCESS)
+                hdr.enabled = (color.value & 2u) != 0;
+            SdrWhiteLevel white = {};
+            white.header.type = (DISPLAYCONFIG_DEVICE_INFO_TYPE)11;
+            white.header.size = sizeof(white);
+            white.header.adapterId = paths[i].targetInfo.adapterId;
+            white.header.id = paths[i].targetInfo.id;
+            if (::DisplayConfigGetDeviceInfo(&white.header) == ERROR_SUCCESS && white.level > 0)
+                hdr.sdrWhiteNits = (float)white.level / 1000.0f * 80.0f;
+            break;
+        }
+        return hdr;
     }
 
     DisplayText::Stripes RotatedStripes(DisplayText::Stripes stripes, int orientation)

@@ -29,6 +29,9 @@ namespace glass
                     std::string& error);
         // Every reference to the buffers must be released first (wrapped RHI targets included).
         bool Resize(int width, int height);
+        // An R16G16B16A16_FLOAT swap chain's colour space: scRGB (linear BT.709, 1.0 = 80 nits) - what the desktop
+        // composes it as on an HDR monitor, and tone-maps to SDR elsewhere. False where DXGI refuses it.
+        bool SetScRgb();
         void Present(bool vsync);
         IDXGISwapChain1* Get() const { return swap_.Get(); }
 

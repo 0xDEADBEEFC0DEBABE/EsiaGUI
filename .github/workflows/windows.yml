@@ -24,11 +24,11 @@ concurrency:
 env:
   # Tests this runner cannot run, and why (docs/CI.md, section 4): excluded from ctest, listed in the summary
   NOT_RUN_D3D9: >-
-    esia_conformance_d3d9(_frames)?:the runner's Direct3D 9 device is WARP's D3D9 emulation (Warp9UM in d3d10warp.dll,
-    Hyper-V video adapter), whose ps_3_0 translator crashes on the FX pixel shader (access violation in
+    esia_conformance_d3d9(_frames)?|esia_hdr_d3d9:the runner's Direct3D 9 device is WARP's D3D9 emulation (Warp9UM in
+    d3d10warp.dll, Hyper-V video adapter), whose ps_3_0 translator crashes on the FX and HDR pixel shaders (access violation in
     d3d10warp!ShaderConv::CContext::EmitDstInstruction from Translate_TEXLDL, under DrawIndexedPrimitive)
   NOT_RUN_VULKAN: >-
-    esia_rhi_vulkan_tests|esia_conformance_vulkan.*:mesa-dist-win's lavapipe corrupts its own heap on Windows (page heap:
+    esia_rhi_vulkan_tests|esia_conformance_vulkan.*|esia_hdr_vulkan:mesa-dist-win's lavapipe corrupts its own heap on Windows (page heap:
     corrupted start stamp in RtlFreeHeap from vulkan_lvp.dll's vkFreeMemory and its queue thread, with or without the
     validation layer); the same tests are clean under AddressSanitizer with lavapipe on Linux
   # Scenes that fail only on WARP: recorded with their numbers, not hidden by a wider tolerance

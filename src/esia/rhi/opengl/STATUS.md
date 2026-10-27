@@ -76,6 +76,8 @@ warning-free with clang 18 (`-DESIA_WERROR=ON`, debug and release) and with the 
 | `runtimeEffects`, `fxFeatureVariants`, `clipSpaceYDown`, `halfPixelOffset` | no | no | | |
 | `maxTextureSize` / `maxFxDataWidth` | `GL_MAX_TEXTURE_SIZE` / min(that, 4096) | same | 16384 / 4096 | |
 
+Quads (glyphs, flat tiles) are instance-rate attributes (`Caps::quadAttributes`, 2026-10-28): a vertex array of their own with divisors 1 at locations 0 and 1, its pointers offset to the draw's first quad (GL 3.3 / GLES 3.0 have no base instance). Taking them from the instance texture had made text slower on the GPU than the vertices before it (0.016 -> 0.028 ms, RTX 4080 SUPER); now 0.012.
+
 `maxFxDataWidth` is 4096, not `GL_MAX_TEXTURE_SIZE`: the renderer uploads whole rows of the instance texture, and a
 16384-wide row is 256 KB per frame even for one instance.
 

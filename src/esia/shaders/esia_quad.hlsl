@@ -1,22 +1,22 @@
 // Esia - textured quads drawn instanced (esia::QuadInstance: glyphs, the Painter's flat tiles). QuadVS makes each
-// instance's quad from its two rows of the instance data for the pixel shaders of esia_ui.hlsl. Programs QuadImage,
-// QuadGray, QuadLcd, QuadLcdGray (UiPS, TextGrayPS, TextLcdPS, TextLcdGrayPS).
+// instance's quad from its rect and packed rows for the pixel shaders of esia_ui.hlsl. Programs QuadImage, QuadGray,
+// QuadLcd, QuadLcdGray (UiPS, TextGrayPS, TextLcdPS, TextLcdGrayPS).
 #include "esia_ui.hlsl"
 
-// The quads follow the FX instances in the instance data, from gConv.w on: a row of the buffer, or of the texture
-// (whose rows hold gConv.z FX instances of 24 texels; the quads take 16 of each instance's texels, 8 quads: a power of
-// two per row, as SM3's float modulo needs)
 #ifdef ESIA_FX_STORAGE_TEXTURE
-ESIA_TEXTURE(gFxData, t7, 10);
-float4 QuadFetch(uint quad, uint row)
+// Where the instance data is a texture (OpenGL, Direct3D 9 / 10) the quads come as instance-rate attributes
+// (rhi::Caps::quadAttributes, VertexLayout::QuadInstance): uploading them into the texture and fetching two texels a
+// vertex cost more than the vertices they replaced did.
+struct QuadVSIn
 {
-    const uint perRow = max((uint)gConv.z, 1u) * 8u;
-    return ESIA_LOAD(gFxData, int2((int)((quad % perRow) * 2u + row), (int)((uint)gConv.w + quad / perRow)));
-}
+    ESIA_VERTEX_ID(vid);
+    ESIA_LOCATION(0) float4 rect : TEXCOORD4;
+    ESIA_LOCATION(1) float4 packed : TEXCOORD5;
+};
 #else
+// The quads follow the FX instances in the instance buffer, from gConv.w on.
 ESIA_BINDING(10) StructuredBuffer<float4> gFxData : register(t7);
 float4 QuadFetch(uint quad, uint row) { return gFxData[(uint)gConv.w + quad * 2u + row]; }
-#endif
 
 struct QuadVSIn
 {
@@ -26,9 +26,14 @@ struct QuadVSIn
     uint index : INSTANCEINDEX;   // instance-rate: counts the draw's first instance (rhi::Caps::drawFirstInstance)
 #endif
 };
+#endif
 
 UiPSIn QuadVS(QuadVSIn v)
 {
+#ifdef ESIA_FX_STORAGE_TEXTURE
+    const float4 rect = v.rect;
+    const float4 packed = v.packed;
+#else
 #ifdef ESIA_INSTANCE_ATTRIBUTE
     const uint quad = v.index;
 #else
@@ -36,6 +41,7 @@ UiPSIn QuadVS(QuadVSIn v)
 #endif
     const float4 rect = QuadFetch(quad, 0u);
     const float4 packed = QuadFetch(quad, 1u);
+#endif
     // whole numbers below 2^24 (esia::QuadInstance): divided by powers of two and floored, they come apart exactly
     const float v0 = floor(packed.x / 4096.0), u0 = packed.x - v0 * 4096.0;
     const float dv = floor(packed.y / 4096.0), du = packed.y - dv * 4096.0;
