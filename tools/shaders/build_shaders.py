@@ -61,6 +61,8 @@ PROGRAMS = [
     ('QuadGray', 'esia_quad.hlsl', 'QuadVS', 'TextGrayPS'),
     ('QuadLcd', 'esia_quad.hlsl', 'QuadVS', 'TextLcdPS'),
     ('QuadLcdGray', 'esia_quad.hlsl', 'QuadVS', 'TextLcdGrayPS'),
+    ('HdrDecode', 'esia_post.hlsl', 'FullscreenVS', 'HdrDecodePS'),
+    ('HdrEncode', 'esia_post.hlsl', 'FullscreenVS', 'HdrEncodePS'),
 ]
 DUAL_SOURCE = {'TextLcdPS'}   # two color outputs for dual-source blending
 

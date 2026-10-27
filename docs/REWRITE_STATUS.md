@@ -156,6 +156,62 @@ on a row index.
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
 
+## HDR output
+
+The colour contract for HDR targets (2026-10-28): the UI looks the same on an HDR display as on an SDR one at the same
+brightness, and blends with an HDR scene under it.
+
+### What changed
+
+* `RenderParams::hdr` (`HdrOutput`): the target's encoding - `HdrEncoding::ScRgb` (linear BT.709, 1.0 = 80 nits, an
+  RGBA16_FLOAT target: Windows' HDR), `Pq2020` (SMPTE ST 2084 code values with BT.2020 primaries, an RGB10A2_UNORM
+  target: HDR10) or `None` (SDR, as before) - and `paperWhiteNits`, the luminance of UI white (default 203, ITU-R
+  BT.2408's graphics white; a host passes its monitor's SDR white so the UI matches the desktop).
+* The working target: the frame draws into an RGBA16_FLOAT texture holding what an SDR target would - sRGB values,
+  1 = paper white - with what lies past them kept ("extended sRGB": above 1 brighter, below 0 outside BT.709). So
+  blending, text gamma, glass and glow layers are those of SDR, unchanged. `HdrDecode` brings the region the frame
+  covers (its ops' bounds, glass regions and captures) into it from the target first; `HdrEncode` takes the region
+  back in the target's encoding afterwards (the sRGB curve continued past [0, 1] and mirrored below 0; PQ; the
+  BT.2087 primaries matrices). Pixels outside the region are not touched; inside it a pixel the frame does not draw
+  on goes through decode and encode unchanged. A target that cannot be sampled is copied first. Needs
+  `Caps::floatRenderTargets` and a single-sampled target; Render returns false otherwise.
+* Programs `HdrDecode` / `HdrEncode` (esia_post.hlsl, FullscreenVS; Direct3D 9 samples their t0 with points).
+* Windows: `win32::MonitorHdr` / `FrameInfo::hdr` - whether the window's monitor is in HDR (advanced color) and its
+  SDR white level in nits, from the display configuration. glass_window `--hdr`: an scRGB swap chain on Direct3D 11 /
+  12 (`DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709`) and the UI at the monitor's SDR white.
+
+### Verified
+
+* `esia_hdr_tests` on every backend built in (D3D9 / 10 / 11 / 12, OpenGL, GLES, Vulkan; Metal on macOS CI), a ctest per
+  backend (`esia_hdr_<backend>`; the Windows runner leaves out WARP's D3D9 and lavapipe, docs/CI.md): opaque
+  sRGB grays 0 / 0.25 / 0.5 / 1 come out of an scRGB and a PQ target as the transfer functions computed on the CPU say
+  (8-bit readback, within 2); a half-transparent white over the last frame's gray reads that gray back and blends to
+  sRGB 0.75, and the pixels outside the second frame's region are the first frame's to the bit.
+* Conformance scenes `hdr_scrgb` (paper white 80 nits: the target then holds linear sRGB) and `hdr_pq` (203 nits), the
+  glass scene through the working target, against D3D11's goldens: every backend within 0-7 levels, 3 frames too.
+  `hdr_scrgb` converted back to sRGB matches `glass`'s golden (mean 0.5 levels; the rest is 8-bit linear quantization).
+* glass_window `--hdr --debug` on Direct3D 11 and 12 (RTX 4080 SUPER, a monitor in HDR at an SDR white of 80 nits):
+  no debug-layer messages.
+* Cost (`esia_bench --hdr`, 1600 x 1000, frames covering the whole target, GPU ms): widgets 0.036 -> 0.054 (D3D11),
+  0.036 -> 0.055 (D3D12), 0.037 -> 0.062 (Vulkan) - the decode and the encode of the whole target; glass 0.41 ->
+  0.45, 0.39 -> 0.43, 0.53 -> 0.57 (the FP16 working target besides). CPU unchanged. A UI over part of a scene
+  pays for its region only.
+
+### Not done
+
+* Brighter-than-paper-white UI (HDR glows, highlights): the shaders still produce SDR values.
+* Vulkan, OpenGL and Metal hosts with an HDR swap chain in the example (the renderer side works on all of them).
+
+## Quads as instance attributes
+
+On OpenGL and Direct3D 9 / 10 the instanced quads (glyphs, flat tiles) went into the RGBA32F instance texture with the
+FX instances and were fetched two texels a vertex: text then cost OpenGL's GPU and Direct3D 9's submit more than the
+vertices before it. `Caps::quadAttributes` takes them as instance-rate vertex attributes instead (`VertexLayout::
+QuadInstance`, `BufferKind::QuadInstances`, `DrawInstancedFrom` from each run's first quad). Text, before the text work
+/ with it / now: OpenGL GPU 0.016 / 0.026 / 0.012 ms, Direct3D 10 GPU 0.026 / 0.018 / 0.012 ms; Direct3D 9's submit
+0.036 / 0.067 / 0.049 ms (NVIDIA's driver spends about 8 ns a quad on an instanced draw; building the frame went 0.072
+-> 0.045). The showcase and the workbench on the three: within 4% of before the text work, most of them faster.
+
 ## One UI light, motion blur
 
 The last two of the owner's picks: one light for the whole UI, which a cursor or a device's tilt can move, and motion

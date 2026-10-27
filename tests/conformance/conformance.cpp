@@ -311,6 +311,11 @@ namespace
             detail = "no dual-source blending";
             return Result::Skip;
         }
+        if (scene.hdr.encoding != render::HdrEncoding::None && !h.device->GetCaps().floatRenderTargets)
+        {
+            detail = "no float render targets (HDR output draws in one)";
+            return Result::Skip;
+        }
         adapter = h.adapter;
         const Result r = RenderAndCheck(o, backend, scene, h, detail);
         // counted after the readback: reading back is checked too

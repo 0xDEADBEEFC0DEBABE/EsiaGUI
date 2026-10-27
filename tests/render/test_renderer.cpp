@@ -878,6 +878,35 @@ ESIA_TEST(Renderer, GlyphShapesTakeTheirVariantWhereTheFullShaderLacksThem)
     ESIA_CHECK(NoErrors(dev) && Lines(dev, "features=") == 0 && Lines(dev, "draw instanced") >= 1);
 }
 
+// Caps::quadAttributes (OpenGL, Direct3D 9 / 10): the quads leave the instance texture for a buffer of their own, bound
+// at the vertex stream, and each run draws from its first quad on. Two runs with an FX shape between them that overlaps
+// both, so the three keep their order.
+ESIA_TEST(Renderer, QuadsAsInstanceAttributes)
+{
+    Caps caps;
+    caps.fxStorage = FxStorage::Texture;
+    caps.quadAttributes = true;
+    DrawList dl = MakeList();
+    for (int i = 0; i < 3; ++i)
+        dl.AddQuad(0, Rect(10.0f + 10.0f * (float)i, 10, 18.0f + 10.0f * (float)i, 18), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    Painter p(dl);
+    p.Rect(Rect(0, 0, 100, 120), Style().Fill(Color::Hex(0x336699)));
+    for (int i = 0; i < 2; ++i)
+        dl.AddQuad(0, Rect(10.0f + 10.0f * (float)i, 100, 18.0f + 10.0f * (float)i, 108), Vec2(0, 0), Vec2(1, 1), 0xFF00FF00u);
+    Setup s(caps);
+    Renderer r(s.dev);
+    ESIA_CHECK(r.Render(Data({&dl}), nullptr, s.target));
+    ESIA_CHECK(NoErrors(s.dev));
+    ESIA_CHECK(Lines(s.dev, " quads ") == 1);   // the buffer, created once
+    ESIA_CHECK(Lines(s.dev, "QuadImage") == 1 && Lines(s.dev, "draw instanced 4 x 3 from 0") == 1 && Lines(s.dev, "draw instanced 4 x 2 from 3") == 1);
+    ESIA_CHECK(Lines(s.dev, "draw instanced 4 x 1") == 1);   // the FX shape, between them
+    // without the cap the quads are instance data after the FX instance, as on the other backends
+    Setup t(Caps{});
+    Renderer r2(t.dev);
+    ESIA_CHECK(r2.Render(Data({&dl}), nullptr, t.target));
+    ESIA_CHECK(NoErrors(t.dev) && Lines(t.dev, " quads ") == 0 && Lines(t.dev, "from 3") == 0);
+}
+
 // Motion blur is code the full shader of a device like Direct3D 9 has no room for, as glyph shapes are: a moving
 // shape takes its variant at once.
 ESIA_TEST(Renderer, MovingShapesTakeTheirVariantWhereTheFullShaderLacksThem)

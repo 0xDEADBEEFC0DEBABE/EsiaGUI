@@ -123,6 +123,8 @@ ESIA_TEST(GlDevice, ConformanceScenesWithoutGlErrors)
                     continue;
                 if (scene.needsDualSource && !h.device->GetCaps().dualSourceBlend)
                     continue;
+                if (scene.hdr.encoding != render::HdrEncoding::None && !h.device->GetCaps().floatRenderTargets)
+                    continue;   // HDR output draws in a float working target
                 RenderScene(*h.device, h.target, scene, 2);
                 const std::uint32_t errors = ErrorCount(*h.device);
                 if (errors)
@@ -618,11 +620,13 @@ ESIA_TEST(GlDevice, RendererKeepsTheContractWithGlCaps)
                 rhi::NullDevice null(o);
                 if (scene.needsDualSource && !o.caps.dualSourceBlend)
                     continue;
+                if ((scene.format == rhi::Format::RGBA16_FLOAT || scene.hdr.encoding != render::HdrEncoding::None) && !o.caps.floatRenderTargets)
+                    continue;
                 const rhi::Texture target = null.CreateHostTarget(scene.width, scene.height, scene.format, !rhi::IsSrgb(scene.format) || !coreOnly, scene.samples);
                 render::Renderer renderer(null);
                 conformance::SceneFrame f;
                 conformance::BuildScene(scene, f);
-                ESIA_CHECK(renderer.Render(f.data, &f.textures, target));
+                ESIA_CHECK(renderer.Render(f.data, &f.textures, target, conformance::RenderParamsOf(scene)));
                 if (!null.Errors().empty())
                     std::printf("  %s %s: %s\n", ApiName(es), scene.name, null.Errors()[0].c_str());
                 ESIA_CHECK(null.Errors().empty());

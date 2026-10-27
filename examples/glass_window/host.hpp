@@ -34,6 +34,7 @@ namespace glass
     {
         bool vsync = true;
         bool debug = false;   // the API's debug / validation layer, messages to stderr
+        bool hdr = false;     // an scRGB (FP16) target where the host has one: Direct3D 11 / 12
     };
 
     class Host
@@ -61,6 +62,8 @@ namespace glass
         // Waits for a free buffer and wraps it; false: skip this frame (swap chain being recreated).
         virtual bool BeginFrame() = 0;
         esia::rhi::Texture Target() const { return target_; }
+        // The target holds scRGB (HostOptions::hdr granted): the renderer encodes into it (RenderParams::hdr).
+        bool ScRgb() const { return scRgb_; }
         virtual esia::rhi::FrameDesc Frame() { return {}; }
         // Submits the frame's GPU work; `capture` (optional) receives the image as RGBA8 rows, then it is presented.
         bool EndFrame(std::vector<std::uint8_t>* capture)
@@ -83,6 +86,7 @@ namespace glass
         virtual void Present() = 0;
         esia::rhi::Texture target_;
         bool vsync_ = true;
+        bool scRgb_ = false;
         std::string adapter_;
     };
 

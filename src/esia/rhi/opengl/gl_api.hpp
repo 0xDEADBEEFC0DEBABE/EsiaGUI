@@ -163,6 +163,7 @@ namespace esia::rhi::opengl
     X(void, DrawArrays, (GLenum mode, GLint first, GLsizei count))                                                              \
     X(void, DrawElements, (GLenum mode, GLsizei count, GLenum type, const void* offset))                                        \
     X(void, DrawArraysInstanced, (GLenum mode, GLint first, GLsizei count, GLsizei instances))                                  \
+    X(void, VertexAttribDivisor, (GLuint index, GLuint divisor))                                                                \
     X(void, GenQueries, (GLsizei n, GLuint * ids))                                                                              \
     X(void, DeleteQueries, (GLsizei n, const GLuint* ids))                                                                      \
     X(void, GetQueryObjectuiv, (GLuint id, GLenum pname, GLuint * value))
