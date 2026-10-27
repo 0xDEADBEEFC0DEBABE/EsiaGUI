@@ -1,5 +1,6 @@
 // Esia - Vulkan backend: the rhi::Device implementation (see vk_device.hpp)
 #include "vk_device.hpp"
+#include "esia/core/fx.hpp"
 #include "esia/render/shader_library.hpp"
 #include <algorithm>
 #include <cstdio>
@@ -148,6 +149,7 @@ namespace esia::rhi::vulkan
         caps_.baseVertex = true;   // vkCmdDrawIndexed's vertexOffset
         caps_.runtimeEffects = false;
         caps_.fxFeatureVariants = false;
+        caps_.fullFxGlyphs = false;   // the full FX pipeline is specialized without them (fx::kFullShaderFeatures)
         caps_.maxTextureSize = (int)std::min<std::uint32_t>(props_.limits.maxImageDimension2D, 1u << 30);
         caps_.maxFxDataWidth = caps_.maxTextureSize;
 
@@ -965,6 +967,11 @@ namespace esia::rhi::vulkan
         stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
         stages[1].module = ps;
         stages[1].pName = psBlob->entry;
+        // FX: the feature mask (specialization constant 0, kEsiaFxFeatures) - code for features outside it is gone
+        const VkSpecializationMapEntry featureEntry{0, 0, sizeof(std::uint32_t)};
+        const VkSpecializationInfo featureMask{1, &featureEntry, sizeof(std::uint32_t), &k.fxFeatures};
+        if (k.program == ShaderProgram::Fx)
+            stages[0].pSpecializationInfo = stages[1].pSpecializationInfo = &featureMask;
 
         // esia::Vertex: float2 pos, float2 uv, RGBA8 color (20 bytes)
         const VkVertexInputBindingDescription binding{0, 20, VK_VERTEX_INPUT_RATE_VERTEX};
@@ -1050,14 +1057,16 @@ namespace esia::rhi::vulkan
 
     Pipeline VulkanDevice::CreatePipeline(const PipelineDesc& d)
     {
-        // no runtime compilation here (Caps::runtimeEffects / fxFeatureVariants are false): the renderer falls back
-        if (d.effect != 0 || d.fxFeatures != 0 || d.program >= ShaderProgram::Count)
+        // no runtime compilation here (Caps::runtimeEffects is false): the renderer falls back. FX feature masks are
+        // the SPIR-V's specialization constant: the full shader's (fx::kFullShaderFeatures) or a variant's.
+        if (d.effect != 0 || (d.fxFeatures != 0 && d.program != ShaderProgram::Fx) || d.program >= ShaderProgram::Count)
             return {};
         if (d.blend == BlendMode::DualSourceLcd && !caps_.dualSourceBlend)
             return {};
         if (d.samples > 1 && (props_.limits.framebufferColorSampleCounts & SampleBits(d.samples)) == 0)
             return {};
-        const PipelineKey key{d.program, d.layout, d.topology, d.blend, d.targetFormat, d.samples};
+        const std::uint32_t features = d.program != ShaderProgram::Fx ? 0u : d.fxFeatures != 0 ? d.fxFeatures : fx::kFullShaderFeatures;
+        const PipelineKey key{d.program, d.layout, d.topology, d.blend, d.targetFormat, d.samples, features};
         CachedPipeline& c = pipelineEntries_[key];
         if (!c.pipeline)
         {

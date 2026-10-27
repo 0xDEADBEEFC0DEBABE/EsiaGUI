@@ -47,9 +47,12 @@ namespace esia::fx
         kMotion      = 1u << 17,
     };
 
-    // Features whose code the full FX shader of a device with rhi::Caps::fullFxGlyphs = false has no room for
-    // (Direct3D 9: SM3's registers): their batches always draw with a feature variant, built at once.
+    // Features the full FX shader leaves out where rhi::Caps::fullFxGlyphs is false (every backend but Metal without
+    // function constants): their code would cost every FX pixel registers and instructions for the few batches that
+    // use them - and SM3 has no room for it. Those batches draw with their feature variant, built at once.
     constexpr std::uint32_t kVariantOnlyFeatures = kGlyph | kLegible | kMotion;
+    // The features of the full FX shader where it leaves those out (the mask backends specialize it to).
+    constexpr std::uint32_t kFullShaderFeatures = ~kVariantOnlyFeatures;
 
     // Glyph: a glyph's distance field (MTSDF, text/distance_field.hpp) on the instance's texture - shape2 = the field's
     // extent (UI units: the quad), uvRect = its texels, radii.x / y = the multi-channel / true distance ranges (field

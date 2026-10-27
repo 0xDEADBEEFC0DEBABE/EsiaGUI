@@ -235,6 +235,12 @@ namespace esia::rhi
         // non-zero number share one slot - a host that renders several targets per frame (one Renderer::Render
         // each) passes the same number to each of them; 0 = every BeginFrame is a frame of its own.
         std::uint64_t hostFrame = 0;
+        // The host's fence for the work recorded into nativeContext (Direct3D 12: ID3D12Fence*) and the value it signals
+        // once that work has executed - the list this frame went into. With it a backend recycles the frame's slot when
+        // the fence has reached the value, not on trust `framesInFlight` frames later (esia/rhi/d3d12.hpp: the
+        // submission contracts). Ignored by the other backends for now.
+        void* nativeFence = nullptr;
+        std::uint64_t nativeFenceValue = 0;
     };
 
     // GPU time per category (non-blocking timestamps, read a few frames later).
@@ -281,9 +287,10 @@ namespace esia::rhi
         // 0.5 (WgtPixelPos then returns pixel centers); the backend's SM3 shader prelude moves clip-space positions
         // by half a pixel of the current target through ESIA_CLIP_POSITION (docs/backends/README.md, "Direct3D 9").
         bool halfPixelOffset = false;
-        // The full FX shader draws glyph shapes and motion blur (fx::kVariantOnlyFeatures). False (Direct3D 9: SM3 has no
-        // registers left for them): only its feature variants do - such a batch asks for its variant, built at once,
-        // whatever fxFeatureVariants says, and is not drawn if it fails.
+        // The full FX shader draws glyph shapes, legibility halos and motion blur (fx::kVariantOnlyFeatures). False on
+        // every backend that can specialize it (all but Metal without function constants): their code would cost every
+        // FX pixel registers and instructions, and SM3 has no room for it. Then only feature variants draw them - such
+        // a batch asks for its variant, built at once, whatever fxFeatureVariants says, and is not drawn if it fails.
         bool fullFxGlyphs = true;
         // Dual-source blending (BlendMode::DualSourceLcd): sub-pixel text. Without it sub-pixel glyph pages draw with
         // the grayscale coverage kept in their alpha (TextLcdGray).
