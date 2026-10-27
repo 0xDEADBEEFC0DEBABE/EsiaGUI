@@ -38,6 +38,7 @@ namespace glass
             std::vector<std::string> fonts;
             std::string textRendering;   // --text-rendering
             bool light = false;          // --light: one UI light at the cursor (RenderParams::light)
+            bool hdr = false;            // --hdr: an scRGB target, the UI at the monitor's SDR white (RenderParams::hdr)
         };
 
         int Usage(const App& app, const char* problem)
@@ -45,7 +46,7 @@ namespace glass
             std::fprintf(stderr,
                          "%s: %s\n"
                          "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--no-shader-cache] [--fixed-dt seconds]\n"
-                         "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--light]\n",
+                         "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--light] [--hdr]\n",
                          app.name, problem, app.name, BuiltApis().c_str());
             return 2;
         }
@@ -86,7 +87,7 @@ namespace glass
             for (const std::string& api : apis)
             {
                 std::unique_ptr<Host> h = CreateHost(api);
-                if (h && h->Init({static_cast<HWND>(platform.Hwnd())}, fi.width, fi.height, {opt.vsync, opt.debug}, error))
+                if (h && h->Init({static_cast<HWND>(platform.Hwnd())}, fi.width, fi.height, {opt.vsync, opt.debug, opt.hdr}, error))
                 {
                     host = std::move(h);
                     break;
@@ -96,6 +97,9 @@ namespace glass
             if (!host)
                 return 1;
             std::printf("%s: %s on %s, %d x %d px, scale %.2f\n", app.name, host->Name(), host->Adapter().c_str(), fi.width, fi.height, fi.scale);
+            if (opt.hdr)
+                std::printf("%s: %s, the monitor in %s, SDR white %.0f nits\n", app.name, host->ScRgb() ? "scRGB target" : "no scRGB target here",
+                            fi.hdr.enabled ? "HDR" : "SDR", (double)fi.hdr.sdrWhiteNits);
             std::fflush(stdout);
 
             esia::ContextDesc cd;
@@ -178,6 +182,11 @@ namespace glass
                 cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
                 rp.frame = host->Frame();
+                if (host->ScRgb())   // the UI at the brightness the monitor shows SDR content at
+                {
+                    rp.hdr.encoding = esia::render::HdrEncoding::ScRgb;
+                    rp.hdr.paperWhiteNits = fi.hdr.sdrWhiteNits;
+                }
                 if (opt.light && ctx.Input().MouseValid())   // the glass rims and the shadows lit from the cursor
                     rp.light = esia::render::UiLight::Point(ctx.Input().MousePos(), 240.0f);
                 if (monitorText)
@@ -251,6 +260,8 @@ namespace glass
                     o.debug = true;
                 else if (a == "--light")
                     o.light = true;
+                else if (a == "--hdr")
+                    o.hdr = true;
                 else if (a == "--no-shader-cache")
                     o.shaderCache = false;
                 else if (a == "--api" && needs())

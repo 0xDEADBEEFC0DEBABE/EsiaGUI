@@ -194,6 +194,12 @@ Verified on the RTX 4080 SUPER: clang-cl 22.1.8 and MSVC 19.44 (`/W4 /WX`) with 
 scenes); D3D12 GPU-based validation clean. Largest differences from the llvmpipe goldens: D3D9 `srgb_msaa` 33 and
 `msaa_target` 25 (under 0.02 % of the pixels), everything else 20 or less.
 
+### Quads as instance attributes (2026-10-28)
+
+Direct3D 9 and 10 take quads (glyphs, flat tiles) as instance-rate attributes (`Caps::quadAttributes`): D3D10 an input layout of two per-instance float4s (`TEXCOORD4` / `5`), the first quad through `StartInstanceLocation`; D3D9 a declaration of the corner ids and a per-instance stream from the quad buffer, the first quad as its offset. In the instance texture they had cost D3D9's submit 0.032 -> 0.063 ms and D3D10's GPU time; now D3D10 text 0.012 ms of GPU (0.026 before the text work), D3D9 0.023 (0.031). D3D9's submit stays above the vertices' (0.036 -> 0.049 ms): NVIDIA's driver spends about 8 ns per instance on an instanced draw (3-6 ns with the FX shapes' 4-byte id stream), while the text system saves more building the frame (0.072 -> 0.045 ms).
+
+D3D10 also records no timestamps in a frame whose profile slot's queries are still out (as Direct3D 11 does since cdfb07a): `glass_reused` with the debug layer had 36 warnings.
+
 ### Glyph shapes (2026-10-28)
 
 FX glyph shapes (distance-field text, `fx::kGlyph`) did not fit ps_3_0's 32 temporary registers in the full FX shader

@@ -458,7 +458,8 @@ namespace esia::rhi::d3d11
             bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
             switch (desc.kind)
             {
-            case BufferKind::Vertex: bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; break;
+            case BufferKind::Vertex:
+            case BufferKind::QuadInstances: bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; break;   // the latter unused (no Caps::quadAttributes)
             case BufferKind::Index: bd.BindFlags = D3D11_BIND_INDEX_BUFFER; break;
             case BufferKind::FxInstances:
                 bd.BindFlags = D3D11_BIND_SHADER_RESOURCE;

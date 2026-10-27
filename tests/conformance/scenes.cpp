@@ -795,6 +795,20 @@ namespace esia::conformance
             Scene& lit = add("ui_light", "one UI light (RenderParams::light): glass rims facing a point light, drop shadows falling away from it", &UiLightScene);
             lit.tolerance = glassTolerance;
             lit.light = render::UiLight::Point(Vec2(160, 120), 60.0f);
+            // HDR output: the glass scene through the float working target, encoded as scRGB with paper white at 80 nits
+            // (the target then holds linear sRGB) and as PQ with BT.2020 primaries
+            Scene& scrgb = add("hdr_scrgb", "HDR output (RenderParams::hdr): the glass scene drawn in the float working target, encoded as scRGB "
+                                             "into an RGBA16_FLOAT target",
+                               &GlassScene);
+            scrgb.format = rhi::Format::RGBA16_FLOAT;
+            scrgb.hdr.encoding = render::HdrEncoding::ScRgb;
+            scrgb.hdr.paperWhiteNits = 80.0f;
+            scrgb.tolerance = glassTolerance;
+            Scene& pq = add("hdr_pq", "HDR output: the glass scene encoded as PQ (SMPTE ST 2084, BT.2020 primaries) into an RGB10A2_UNORM target",
+                            &GlassScene);
+            pq.format = rhi::Format::RGB10A2_UNORM;
+            pq.hdr.encoding = render::HdrEncoding::Pq2020;
+            pq.tolerance = glassTolerance;
             Scene& legible = add("text_legible", "legible glyph shapes: a halo of the other tone where the captured backdrop comes close to the text's lightness", &TextLegible);
             legible.tolerance.channel = 10;   // the backdrop through its pyramid (as glass)
             legible.tolerance.fraction = 0.01;
@@ -914,6 +928,7 @@ namespace esia::conformance
         params.maxFxInstancesPerRow = scene.fxInstancesPerRow;
         params.targetStatic = scene.repeat > 1;
         params.light = scene.light;
+        params.hdr = scene.hdr;
         return params;
     }
 }

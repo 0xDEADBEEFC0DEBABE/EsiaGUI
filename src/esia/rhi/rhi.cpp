@@ -61,6 +61,8 @@ namespace esia::rhi
         case ShaderProgram::QuadGray: return "QuadGray";
         case ShaderProgram::QuadLcd: return "QuadLcd";
         case ShaderProgram::QuadLcdGray: return "QuadLcdGray";
+        case ShaderProgram::HdrDecode: return "HdrDecode";
+        case ShaderProgram::HdrEncode: return "HdrEncode";
         case ShaderProgram::Count: break;
         }
         return "?";

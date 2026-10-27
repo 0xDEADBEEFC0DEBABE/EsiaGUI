@@ -191,11 +191,13 @@ namespace esia::rhi
         }
         if (desc.kind == BufferKind::FxInstances && caps_.fxStorage != FxStorage::Buffer)
             Error("CreateBuffer: FxInstances buffer on a FxStorage::Texture device");
+        if (desc.kind == BufferKind::QuadInstances && !caps_.quadAttributes)
+            Error("CreateBuffer: QuadInstances buffer without Caps::quadAttributes");
         if (inFrame_ && passStarted_)
             Error("CreateBuffer after the frame's first pass");
         const Buffer b{next_++};
         buffers_[b.id] = desc;
-        static const char* kinds[] = {"vertex", "index", "fx"};
+        static const char* kinds[] = {"vertex", "index", "fx", "quads"};
         if (record_)
             Record(Fmt("create buffer #%u %s %zu bytes", b.id, kinds[(int)desc.kind], desc.size));
         return b;
@@ -264,7 +266,8 @@ namespace esia::rhi
             Error("CreatePipeline: bad program");
             return {};
         }
-        if (UsesUiVertices(d.program) != (d.layout == VertexLayout::UiVertex))
+        if (UsesUiVertices(d.program) != (d.layout == VertexLayout::UiVertex) ||
+            (DrawsQuads(d.program) && caps_.quadAttributes) != (d.layout == VertexLayout::QuadInstance))
             Error(Fmt("CreatePipeline: %s with the wrong vertex layout", ShaderProgramName(d.program)));
         if (DualSourceProgram(d.program) != (d.blend == BlendMode::DualSourceLcd))
             Error("CreatePipeline: TextLcd and QuadLcd need (and only they may use) dual-source blending");
@@ -461,7 +464,7 @@ namespace esia::rhi
         if (!InFrame("SetVertexBuffer"))
             return;
         auto it = buffers_.find(buf.id);
-        if (it == buffers_.end() || it->second.kind != BufferKind::Vertex)
+        if (it == buffers_.end() || (it->second.kind != BufferKind::Vertex && it->second.kind != BufferKind::QuadInstances))
             Error("SetVertexBuffer: not a vertex buffer");
         vertexBuffer_ = buf;
         if (record_)
@@ -498,7 +501,8 @@ namespace esia::rhi
         const bool ui = UsesUiVertices(p.program) || DrawsInstances(p.program);
         const bool fx = p.program == ShaderProgram::Fx;
         const bool composite = p.program == ShaderProgram::LayerComposite;
-        const bool usesPass = p.program == ShaderProgram::Downsample || composite;
+        const bool hdr = p.program == ShaderProgram::HdrDecode || p.program == ShaderProgram::HdrEncode;
+        const bool usesPass = p.program == ShaderProgram::Downsample || composite || hdr;
         if (!constantsSet_[(int)ConstantSlot::Frame])
             Error(Fmt("%s before the frame constants were set", call));
         if (usesPass && !constantsSet_[(int)ConstantSlot::Pass])
@@ -509,7 +513,13 @@ namespace esia::rhi
         for (int sl = 0; sl < slots; ++sl)
             if (!bound_[sl])
                 Error(Fmt("%s (%s): nothing bound at t%d", call, ShaderProgramName(p.program), sl));
-        if (DrawsInstances(p.program))
+        if (p.layout == VertexLayout::QuadInstance)
+        {
+            auto vb = buffers_.find(vertexBuffer_.id);
+            if (vb == buffers_.end() || vb->second.kind != BufferKind::QuadInstances)
+                Error(Fmt("%s: no quad buffer bound", call));
+        }
+        else if (DrawsInstances(p.program))
         {
             const bool data = caps_.fxStorage == FxStorage::Buffer ? (bool)fxBuffer_ : (bool)bound_[kSlotFxData];
             if (!data)
@@ -563,8 +573,10 @@ namespace esia::rhi
 
     void NullDevice::DrawInstancedFrom(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstInstance)
     {
-        if (!caps_.drawFirstInstance)
-            Error("DrawInstancedFrom without Caps::drawFirstInstance");
+        auto it = pipelines_.find(pipeline_.id);
+        const bool quads = it != pipelines_.end() && it->second.layout == VertexLayout::QuadInstance;
+        if (!caps_.drawFirstInstance && !quads)
+            Error("DrawInstancedFrom without Caps::drawFirstInstance (or quads with Caps::quadAttributes)");
         CheckDraw("DrawInstancedFrom", true);
         ++stats_.draws;
         ++stats_.instancedDraws;

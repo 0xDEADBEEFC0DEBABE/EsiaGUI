@@ -71,6 +71,15 @@ namespace glass
         return true;
     }
 
+    bool FlipSwapChain::SetScRgb()
+    {
+        ComPtr<IDXGISwapChain3> s3;
+        UINT support = 0;
+        const DXGI_COLOR_SPACE_TYPE scRgb = DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+        return SUCCEEDED(swap_.As(&s3)) && SUCCEEDED(s3->CheckColorSpaceSupport(scRgb, &support)) &&
+               (support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) && SUCCEEDED(s3->SetColorSpace1(scRgb));
+    }
+
     bool FlipSwapChain::Resize(int width, int height)
     {
         return SUCCEEDED(swap_->ResizeBuffers(0, (UINT)width, (UINT)height, DXGI_FORMAT_UNKNOWN, tearing_ ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0));
