@@ -23,6 +23,7 @@ namespace esia::text
         int left = 0, top = 0, width = 0, height = 0;   // the bitmap, in pixels from the integer pen position
         Rect ink;             // outline bounds in pixels from the pen position (optical centering of icons)
         bool color = false;   // an RGBA8 color page: the glyph has its own colors (drawn white, with the text's alpha)
+        float quadUv[2] = {0.0f, 0.0f};   // uv0 / uv1 as a QuadInstance carries them (QuadInstance::PackUv), packed once
     };
 
     struct GlyphAtlasDesc
