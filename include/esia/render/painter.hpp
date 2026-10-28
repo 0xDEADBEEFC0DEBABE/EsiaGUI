@@ -3,7 +3,9 @@
 // Painter draws signed-distance-field primitives with rich materials: gradients, strokes, soft shadows, inner
 // shadows, outer / inner glow, liquid glass, image fills, shimmer, rounded masks and bloom layers. Every shape is
 // ONE fx::Instance (24 float4) in the draw list's FX stream, drawn as one instanced quad: resolution independent,
-// anti-aliased analytically on the GPU, and its cost does not grow with its size or its number of effects.
+// anti-aliased analytically on the GPU, and its cost does not grow with its size or its number of effects. Paths
+// (Polygon, Parallelogram, RegularPolygon, Star, and Polyline / Area / Sector with a material) take any outline with
+// the same materials, their points in a few more instances; their cost grows with their points.
 //
 //   esia::Painter p(window.GetDrawList(), env);
 //   p.Rect(r, esia::Style().Radius(18).Glass(material).Shadow(Color::Black(0.25f), 24, {0, 8}));
@@ -209,6 +211,23 @@ namespace esia
         // Rounded image (SDF-masked, anti-aliased).
         void Image(TextureId tex, const esia::Rect& r, float radius, Color tint = Color::White(), Vec2 uv0 = Vec2(0, 0), Vec2 uv1 = Vec2(1, 1));
 
+        // ---------------------------------------------------------- paths: any outline, every material
+        // A polygon through `points`: any simple outline (convex or not, either winding), with everything a rounded
+        // rectangle takes - paints, strokes, shadows, glows, glass, masks, scale. The style's first radius rounds every
+        // corner (Style::Radius; each as far as its edges allow): convex corners into exact circular arcs, concave ones
+        // into fine ones. One FX instance, and one more per fx::kPathPointsPerData points: the shader measures the exact
+        // distance to every edge, so keep an outline to the points it needs (longer than fx::kPathMaxPoints it is
+        // thinned out).
+        void Polygon(const Vec2* points, int count, const Style& s);
+        // `r` slanted as CSS skewX(skewDeg) around its center: the top edge moves left by tan(skew) x height / 2, the
+        // bottom edge right (negative angles lean the other way) - a slanted tab. Corners: the style's four radii
+        // (top-left, top-right, bottom-right, bottom-left).
+        void Parallelogram(const esia::Rect& r, float skewDeg, const Style& s);
+        // A regular polygon of `sides` corners on a circle of `radius`, the first at `rotationDeg` from the top
+        // (clockwise); a star of `points` tips, its inner corners on `innerRadius`. Rounded by the style's first radius.
+        void RegularPolygon(Vec2 center, float radius, int sides, float rotationDeg, const Style& s);
+        void Star(Vec2 center, float outerRadius, float innerRadius, int points, float rotationDeg, const Style& s);
+
         // ---------------------------------------------------------------- text (PainterEnv::text)
         // `pos` = top-left of the text box. Returns its size.
         Vec2 Text(Vec2 pos, text::FontRef font, Color color, std::string_view text, float wrapWidth = 0.0f, std::uint32_t flags = 0);
@@ -233,12 +252,20 @@ namespace esia
         void HLine(float x0, float x1, float y, Color c, float thickness = 1.0f);
         // One connected stroke through `points`: mitered joins (clipped on sharp turns), round caps, anti-aliased to
         // the physical pixel. Color: s.fill's color (s.opacity applies). Glows only if `s` has a glow, as one halo.
+        // With a material geometry cannot draw - glass, a shadow, an inner glow, a stroke around the line, a gradient,
+        // an image, shimmer, noise, a user effect, motion blur - the line is an FX path instead (round joins), with
+        // all of them.
         void Polyline(const Vec2* points, int count, float thickness, const Style& s, std::uint32_t flags = PolylineFlags_None);
         // Fills between the same path and the horizontal line y = `baseline` (area charts). Solid or linear paint.
         void Area(const Vec2* points, int count, float baseline, const Paint& paint, std::uint32_t flags = PolylineFlags_None);
+        // ... with a whole material: the area as an FX path (glass, strokes, shadows ...; Style::Radius rounds its
+        // corners). A plain solid or linear fill draws as the Paint form does.
+        void Area(const Vec2* points, int count, float baseline, const Style& s, std::uint32_t flags = PolylineFlags_None);
         // A segment of a ring (a donut chart's) between two radii: flat ends, each moved `inset` in along the ring, so
         // neighbours keep a gap of the same width from the hole to the rim. Angles as Arc's. Solid, anti-aliased.
         void Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, Color color, float inset = 0.0f);
+        // ... with a whole material: an FX path (a whole ring: an FX ring), Style::Radius rounding its corners.
+        void Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, const Style& s, float inset = 0.0f);
 
         // ------------------------------------------------------------- state
         // Rounded mask applied to subsequent SDF shapes (max depth 8, innermost wins).
@@ -276,6 +303,15 @@ namespace esia
         // circles without a copy of the style)
         void EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra, float radius = -1.0f,
                        float smoothing = -1.0f);
+        // An outline as fx::ShapeKind::Path: closed (rounded by `radii`, one per point, or by `radius` at every one) or
+        // open (a line `thickness` wide)
+        void EmitPolygon(const Vec2* points, int count, const float* radii, float radius, const Style& s);
+        void EmitPolyline(const Vec2* points, int count, float thickness, const Style& s);
+        // the path instance and its points, under the scale stack: `lessen` (rounding / half thickness) and `depth`
+        // (how deep the shape goes: glass's bevel reaches no deeper) at rest
+        void EmitPath(const Vec2* points, int count, bool open, float lessen, float depth, const Style& s);
+        // glow containment, culling and the emit, shared by every shape (false: culled)
+        bool Submit(fx::Instance& inst, const Style& s, const esia::Rect& restShape, float restGlow);
         // The material rows of `inst` from `s` (paint, stroke, shadow, glow, glass, noise, shimmer, opacity, custom
         // effect, mask); its features. flatGlass: flat drawing's glass surface `flatFill` instead of the fill.
         std::uint32_t Material(const Style& s, bool flatGlass, Color flatFill, fx::Instance& inst) const;

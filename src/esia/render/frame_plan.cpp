@@ -20,6 +20,16 @@ namespace esia::render
             PxRect operator()(const Rect& r) const { return (*this)(r.min.x, r.min.y, r.max.x, r.max.y); }
         };
 
+        // The data instances that carry a path's points after it (fx::ShapeKind::Path): they go wherever the path goes,
+        // in the same piece of the same batch, never on their own (at most what is left of the command)
+        std::uint32_t PathData(const fx::Instance& in, std::uint32_t left)
+        {
+            if (!(in.flags[0] & fx::kPath) || in.flags[2] != (std::uint32_t)fx::ShapeKind::Path)
+                return 0;
+            const std::uint32_t n = (std::uint32_t)std::max(in.radii[2], 0.0f);
+            return std::min((n + fx::kPathPointsPerData - 1) / fx::kPathPointsPerData, left);
+        }
+
         // The shape an instance draws, before its shadow / glow: its rect (with a liquid merge's second rect), or a
         // glyph's field (its rect is the text's box). Must mirror FxVS (esia_fx.hlsl).
         Rect ShapeBox(const fx::Instance& in)
@@ -349,12 +359,16 @@ namespace esia::render
                     for (std::uint32_t ii = cmd.first; ii < cmd.first + cmd.count; ++ii)
                     {
                         const fx::Instance& in = dl->FxInstances()[ii];
+                        const std::uint32_t data = PathData(in, cmd.first + cmd.count - ii - 1);
                         float e[4];
                         InstanceExtent(in, e, lightShadows);
                         const PxRect full = map(e[0], e[1], e[2], e[3]);
                         const PxRect b = full.Intersect(clip);
                         if (b.Empty())
+                        {
+                            ii += data;   // a path out of sight: its points too
                             continue;
+                        }
                         // glass keeps its clip: its capture regions are planned within it
                         // the shape plus the part of its shadow / glow that is still visible (> 4%): the faint outer
                         // tails vanish through blurred glass, so they never force a new backdrop capture
@@ -416,7 +430,7 @@ namespace esia::render
                         {
                             RenderOp& o = ops[(std::size_t)k];
                             joinClip(o, clip, cut);
-                            ++o.instCount;
+                            o.instCount += 1 + data;
                             o.features |= in.flags[0];
                             o.bounds = o.bounds.Union(b);
                             o.core = o.core.Union(core);
@@ -444,7 +458,7 @@ namespace esia::render
                             std::copy(fade, fade + 4, o.fade);
                             o.texture = cmd.texture;
                             o.effect = cmd.effect;
-                            o.instCount = 1;
+                            o.instCount = 1 + data;
                             o.features = in.flags[0];
                             o.glass = glass;
                             o.glassRegion = gRegion;
@@ -455,10 +469,11 @@ namespace esia::render
                             ops.push_back(o);
                             k = (int)ops.size() - 1;
                         }
-                        link(k, Piece{&in, nullptr, 1, 0, kNoPiece});
+                        link(k, Piece{&in, nullptr, 1 + data, 0, kNoPiece});
                         touch(k, jr);
-                        ++fxCount;
+                        fxCount += 1 + (int)data;
                         addToLayers(b);
+                        ii += data;
                     }
                     break;
                 }

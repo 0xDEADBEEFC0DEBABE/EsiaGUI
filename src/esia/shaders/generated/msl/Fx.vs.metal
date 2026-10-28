@@ -59,136 +59,136 @@ struct esia_main_out
 vertex esia_main_out esia_main(constant WgtFrame& _445 [[buffer(0)]], constant WgtDraw& _51 [[buffer(2)]], const device gFxData& gFxData_1 [[buffer(10)]], uint gl_VertexIndex [[vertex_id]], uint gl_InstanceIndex [[instance_id]])
 {
     esia_main_out out = {};
-    uint _637 = gl_InstanceIndex + uint(_51.gDrawInfo.x);
-    uint _942 = _637 * 24u;
-    uint _952 = (_637 * 24u) + 6u;
-    uint _960 = (_637 * 24u) + 8u;
-    uint _976 = (_637 * 24u) + 15u;
-    uint4 _652 = uint4(gFxData_1._data[(_637 * 24u) + 23u]);
-    uint _654 = _652.x;
-    float2 _1169;
-    float2 _1171;
-    if ((_654 & _139) != 0u)
-    {
-        _1171 = fast::max(gFxData_1._data[_942].zw, gFxData_1._data[_976].zw);
-        _1169 = fast::min(gFxData_1._data[_942].xy, gFxData_1._data[_976].xy);
-    }
-    else
-    {
-        _1171 = gFxData_1._data[_942].zw;
-        _1169 = gFxData_1._data[_942].xy;
-    }
-    float2 _1168;
-    float2 _1170;
-    if ((_654 & _154) != 0u)
-    {
-        _1170 = gFxData_1._data[_976].zw;
-        _1168 = gFxData_1._data[_976].xy;
-    }
-    else
-    {
-        _1170 = _1171;
-        _1168 = _1169;
-    }
-    float2 _1180;
+    uint _646 = gl_InstanceIndex + uint(_51.gDrawInfo.x);
+    uint _957 = _646 * 24u;
+    uint _967 = (_646 * 24u) + 6u;
+    uint _975 = (_646 * 24u) + 8u;
+    uint _991 = (_646 * 24u) + 15u;
+    uint4 _661 = uint4(gFxData_1._data[(_646 * 24u) + 23u]);
+    uint _663 = _661.x;
     float2 _1185;
-    if ((_654 & _165) != 0u)
-    {
-        float2 _689 = abs(gFxData_1._data[(_637 * 24u) + 21u].xy) * 0.5;
-        _1185 = _1170 + _689;
-        _1180 = _1168 - _689;
-    }
-    else
-    {
-        _1185 = _1170;
-        _1180 = _1168;
-    }
-    float _1172;
-    if ((_654 & _189) != 0u)
-    {
-        _1172 = fast::max(2.0, (gFxData_1._data[_952].x * gFxData_1._data[_952].y) + 2.0);
-    }
-    else
-    {
-        _1172 = 2.0;
-    }
-    float _1173;
-    if (((_654 & _204) != 0u) && (!((_654 & _209) != 0u)))
-    {
-        _1173 = fast::max(_1172, (((gFxData_1._data[_960].x * 1.60000002384185791015625) + fast::max(gFxData_1._data[_960].y, 0.0)) + ((_51.gDrawInfo.w > 0.5) ? length(gFxData_1._data[_960].zw) : fast::max(abs(gFxData_1._data[_960].z), abs(gFxData_1._data[_960].w)))) + 2.0);
-    }
-    else
-    {
-        _1173 = _1172;
-    }
-    float _1174;
-    if ((_654 & _234) != 0u)
-    {
-        _1174 = fast::max(_1173, (gFxData_1._data[(_637 * 24u) + 10u].x * 1.7999999523162841796875) + 2.0);
-    }
-    else
-    {
-        _1174 = _1173;
-    }
-    float _1175;
-    if ((_654 & _248) != 0u)
-    {
-        _1175 = fast::max(_1174, (gFxData_1._data[(_637 * 24u) + 1u].w * 1.7999999523162841796875) + 2.0);
-    }
-    else
-    {
-        _1175 = _1174;
-    }
-    float2 _760 = _1180 - float2(_1175);
-    float2 _764 = _1185 + float2(_1175);
-    float2 _1186;
     float2 _1187;
-    if ((_654 & _272) != 0u)
+    if ((_663 & _139) != 0u)
     {
-        uint _1027 = (_637 * 24u) + 19u;
-        _1187 = fast::min(_764, gFxData_1._data[_1027].zw + float2(1.0));
-        _1186 = fast::max(_760, gFxData_1._data[_1027].xy - float2(1.0));
+        _1187 = fast::max(gFxData_1._data[_957].zw, gFxData_1._data[_991].zw);
+        _1185 = fast::min(gFxData_1._data[_957].xy, gFxData_1._data[_991].xy);
     }
     else
     {
-        _1187 = _764;
-        _1186 = _760;
+        _1187 = gFxData_1._data[_957].zw;
+        _1185 = gFxData_1._data[_957].xy;
     }
-    float2 _1188;
-    float2 _1189;
-    if (((_654 & _298) != 0u) && (!(((_654 & _302) != 0u) && (!((_654 & _306) != 0u)))))
+    float2 _1184;
+    float2 _1186;
+    if ((_663 & _154) != 0u)
     {
-        uint _1035 = (_637 * 24u) + 22u;
-        _1189 = fast::max(_1186, gFxData_1._data[_1035].xy - float2(1.0));
-        _1188 = fast::min(_1187, gFxData_1._data[_1035].zw + float2(1.0));
+        _1186 = gFxData_1._data[_991].zw;
+        _1184 = gFxData_1._data[_991].xy;
     }
     else
     {
-        _1189 = _1186;
-        _1188 = _1187;
+        _1186 = _1187;
+        _1184 = _1185;
     }
-    float2 _1192;
-    if ((((_652.z == 2u) && (!((_654 & _357) != 0u))) && (!((_654 & _363) != 0u))) && (!((_654 & _369) != 0u)))
+    float2 _1196;
+    float2 _1201;
+    if ((_663 & _165) != 0u)
     {
-        float2 _855 = gFxData_1._data[_976].zw - gFxData_1._data[_976].xy;
-        float _857 = length(_855);
-        float2 _865 = select(float2(1.0, 0.0), _855 / float2(_857), bool2(_857 > 9.9999997473787516355514526367188e-05));
-        float _876 = gFxData_1._data[(_637 * 24u) + 1u].x + _1175;
-        _1192 = select(gFxData_1._data[_976].xy - (_865 * _876), gFxData_1._data[_976].zw + (_865 * _876), bool2((gl_VertexIndex & 1u) != 0u)) + (float2(-_865.y, _865.x) * (((gl_VertexIndex & 2u) != 0u) ? _876 : (-_876)));
+        float2 _698 = abs(gFxData_1._data[(_646 * 24u) + 21u].xy) * 0.5;
+        _1201 = _1186 + _698;
+        _1196 = _1184 - _698;
     }
     else
     {
-        _1192 = float2(((gl_VertexIndex & 1u) != 0u) ? _1188.x : _1189.x, ((gl_VertexIndex & 2u) != 0u) ? _1188.y : _1189.y);
+        _1201 = _1186;
+        _1196 = _1184;
     }
-    out.gl_Position = float4((_1192 * _445.gXform.xy) + _445.gXform.zw, 0.0, 1.0);
-    out._entryPointOutput_local = _1192;
-    out._entryPointOutput_instance = _637;
-    out._entryPointOutput_rect = gFxData_1._data[_942];
-    out._entryPointOutput_radii = gFxData_1._data[(_637 * 24u) + 1u];
-    out._entryPointOutput_fill0 = gFxData_1._data[(_637 * 24u) + 2u];
-    out._entryPointOutput_shape = gFxData_1._data[(_637 * 24u) + 14u];
-    out._entryPointOutput_misc = gFxData_1._data[(_637 * 24u) + 17u];
-    out._entryPointOutput_flags = _652;
+    float _1188;
+    if ((_663 & _189) != 0u)
+    {
+        _1188 = fast::max(2.0, (gFxData_1._data[_967].x * gFxData_1._data[_967].y) + 2.0);
+    }
+    else
+    {
+        _1188 = 2.0;
+    }
+    float _1189;
+    if (((_663 & _204) != 0u) && (!((_663 & _209) != 0u)))
+    {
+        _1189 = fast::max(_1188, (((gFxData_1._data[_975].x * 1.60000002384185791015625) + fast::max(gFxData_1._data[_975].y, 0.0)) + ((_51.gDrawInfo.w > 0.5) ? length(gFxData_1._data[_975].zw) : fast::max(abs(gFxData_1._data[_975].z), abs(gFxData_1._data[_975].w)))) + 2.0);
+    }
+    else
+    {
+        _1189 = _1188;
+    }
+    float _1190;
+    if ((_663 & _234) != 0u)
+    {
+        _1190 = fast::max(_1189, (gFxData_1._data[(_646 * 24u) + 10u].x * 1.7999999523162841796875) + 2.0);
+    }
+    else
+    {
+        _1190 = _1189;
+    }
+    float _1191;
+    if ((_663 & _248) != 0u)
+    {
+        _1191 = fast::max(_1190, (gFxData_1._data[(_646 * 24u) + 1u].w * 1.7999999523162841796875) + 2.0);
+    }
+    else
+    {
+        _1191 = _1190;
+    }
+    float2 _769 = _1196 - float2(_1191);
+    float2 _773 = _1201 + float2(_1191);
+    float2 _1202;
+    float2 _1203;
+    if ((_663 & _272) != 0u)
+    {
+        uint _1042 = (_646 * 24u) + 19u;
+        _1203 = fast::min(_773, gFxData_1._data[_1042].zw + float2(1.0));
+        _1202 = fast::max(_769, gFxData_1._data[_1042].xy - float2(1.0));
+    }
+    else
+    {
+        _1203 = _773;
+        _1202 = _769;
+    }
+    float2 _1204;
+    float2 _1205;
+    if (((_663 & _298) != 0u) && (!(((_663 & _302) != 0u) && (!((_663 & _306) != 0u)))))
+    {
+        uint _1050 = (_646 * 24u) + 22u;
+        _1205 = fast::max(_1202, gFxData_1._data[_1050].xy - float2(1.0));
+        _1204 = fast::min(_1203, gFxData_1._data[_1050].zw + float2(1.0));
+    }
+    else
+    {
+        _1205 = _1202;
+        _1204 = _1203;
+    }
+    float2 _1208;
+    if ((((_661.z == 2u) && (!((_663 & _357) != 0u))) && (!((_663 & _363) != 0u))) && (!((_663 & _369) != 0u)))
+    {
+        float2 _864 = gFxData_1._data[_991].zw - gFxData_1._data[_991].xy;
+        float _866 = length(_864);
+        float2 _874 = select(float2(1.0, 0.0), _864 / float2(_866), bool2(_866 > 9.9999997473787516355514526367188e-05));
+        float _885 = gFxData_1._data[(_646 * 24u) + 1u].x + _1191;
+        _1208 = select(gFxData_1._data[_991].xy - (_874 * _885), gFxData_1._data[_991].zw + (_874 * _885), bool2((gl_VertexIndex & 1u) != 0u)) + (float2(-_874.y, _874.x) * (((gl_VertexIndex & 2u) != 0u) ? _885 : (-_885)));
+    }
+    else
+    {
+        _1208 = float2(((gl_VertexIndex & 1u) != 0u) ? _1204.x : _1205.x, ((gl_VertexIndex & 2u) != 0u) ? _1204.y : _1205.y);
+    }
+    out.gl_Position = select(float4((_1208 * _445.gXform.xy) + _445.gXform.zw, 0.0, 1.0), float4(-2.0, -2.0, 0.0, 1.0), bool4(_661.z == 5u));
+    out._entryPointOutput_local = _1208;
+    out._entryPointOutput_instance = _646;
+    out._entryPointOutput_rect = gFxData_1._data[_957];
+    out._entryPointOutput_radii = gFxData_1._data[(_646 * 24u) + 1u];
+    out._entryPointOutput_fill0 = gFxData_1._data[(_646 * 24u) + 2u];
+    out._entryPointOutput_shape = gFxData_1._data[(_646 * 24u) + 14u];
+    out._entryPointOutput_misc = gFxData_1._data[(_646 * 24u) + 17u];
+    out._entryPointOutput_flags = _661;
     return out;
 }
 
