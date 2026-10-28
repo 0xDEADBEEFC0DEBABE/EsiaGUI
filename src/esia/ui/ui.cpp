@@ -747,10 +747,11 @@ namespace esia::ui
             switch (look)
             {
             case GlassLook::Clear:
-                // nothing but the glass itself: its lens, rim light and hairline
+                // nothing but the glass itself: its lens, rim light and hairline - and a lighter exposure than the other
+                // looks, enough for the labels on it to keep their contrast over a backdrop of either brightness
                 m.blur = 0.0f;
                 m.tint.a = 0.0f;
-                m.legibility = 0.0f;
+                m.legibility = std::min(m.legibility, 0.5f);
                 m.saturation = std::min(m.saturation, 1.12f);
                 m.brightness = std::min(m.brightness, 0.02f);
                 break;
@@ -759,7 +760,7 @@ namespace esia::ui
                 m.blur = std::max(m.blur, 14.0f);
                 m.tint.a = Clamp(m.tint.a, 0.08f, 0.14f);
                 m.saturation = std::max(m.saturation, 1.4f);
-                m.legibility = Clamp(m.legibility, 0.2f, 0.35f);   // a gentle exposure: the backdrop's color shows
+                m.legibility = std::max(m.legibility, 0.6f);   // the backdrop's color shows; its brightness keeps the labels legible
                 break;
             default:
                 break;

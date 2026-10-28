@@ -129,6 +129,12 @@ A `Theme` (`theme.hpp`) is a plain struct holding every design token. Widgets ne
   * `Frosted`: iOS frost everywhere.
 
   `ui::Next().Look(...)` overrides it for one widget or a container.
+* **Legible over any backdrop.** Every glass surface exposes what is behind it toward its own tint's brightness
+  (`GlassMaterial::legibility`, per surface in the theme's `materials`). Dark glass over a white wallpaper stays dark
+  enough for white labels, light glass over a black one light enough for black labels, and the backdrop's color and
+  detail still come through. `Clear` exposes the least (at most 0.5), `Frosted` at least 0.6. The lenses (a dragged
+  knob, the magnifier) take none: they show what is under them as it is. `ui::Next().Legibility(v)` sets it for one
+  widget.
 
 ## 3. Styling one widget or a block
 
