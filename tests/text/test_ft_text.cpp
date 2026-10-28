@@ -4,6 +4,9 @@
 // composited on the CPU from the pages the registry received, against a golden image.
 #include "esia/text/freetype.hpp"
 #include "esia/text/system_fonts.hpp"
+#include <hb-ot.h>
+#include <hb.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -86,6 +89,68 @@ ESIA_TEST(FreeType, LoadsTheFacesOfACollection)
     ESIA_CHECK(f.ts->Measure({karla, 20.0f}, "Karla").size == f.ts->Measure({karlaFile, 20.0f}, "Karla").size);
     ESIA_CHECK(f.ts->Measure({droid, 20.0f}, "Droid").size == f.ts->Measure({f.droid, 20.0f}, "Droid").size);
     ESIA_CHECK(f.ts->Measure({karla, 20.0f}, "Karla").size != f.ts->Measure({droid, 20.0f}, "Karla").size);
+}
+
+// A variable font's named instances (face index = instance + 1 << 16): each laid out with its own advances, as FreeType
+// draws it - against HarfBuzz shaping the text at the instance set through its own API. HarfBuzz reads the instance
+// from a face index only from 3.3 on (before, it took the index for a face of a collection), so a system HarfBuzz
+// gave every instance the default's widths or none. A system font with named instances (Windows: Bahnschrift, Segoe
+// UI Variable; macOS: SF; Linux: Cantarell), else skipped.
+ESIA_TEST(FreeType, LaysOutNamedInstancesOfAVariableFont)
+{
+    std::string path;
+    for (const char* p : {"C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/SegUIVar.ttf", "/System/Library/Fonts/SFNS.ttf",
+                          "/usr/share/fonts/opentype/cantarell/Cantarell-VF.otf", "/usr/share/fonts/truetype/cantarell/Cantarell-VF.otf"})
+        if (std::filesystem::exists(p))
+        {
+            path = p;
+            break;
+        }
+    hb_blob_t* blob = path.empty() ? nullptr : hb_blob_create_from_file(path.c_str());
+    hb_face_t* face = blob ? hb_face_create(blob, 0) : nullptr;
+    const unsigned instances = face ? hb_ot_var_get_named_instance_count(face) : 0u;
+    if (instances == 0)
+    {
+        std::printf("  skipped: no variable font with named instances\n");
+        hb_face_destroy(face);
+        hb_blob_destroy(blob);
+        return;
+    }
+    Fixture f;
+    text::TextRendering rendering = f.ts->Rendering();
+    rendering.hinting = text::Hinting::None;   // the design's advances: at a size of one em per design unit, in design units
+    f.ts->SetRendering(rendering);
+    f.ts->NewFrame({});
+    const unsigned upem = hb_face_get_upem(face);
+    const char* const sample = "Hamburgefonstiv 0123";
+    float lightest = 1e30f, widest = 0.0f;
+    for (unsigned k = 0; k < instances; ++k)
+    {
+        hb_font_t* font = hb_font_create(face);
+        hb_font_set_scale(font, (int)upem, (int)upem);
+        hb_font_set_var_named_instance(font, k);
+        hb_buffer_t* buffer = hb_buffer_create();
+        hb_buffer_add_utf8(buffer, sample, -1, 0, -1);
+        hb_buffer_guess_segment_properties(buffer);
+        hb_shape(font, buffer, nullptr, 0);
+        unsigned count = 0;
+        const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &count);
+        long expected = 0;
+        for (unsigned i = 0; i < count; ++i)
+            expected += positions[i].x_advance;
+        hb_buffer_destroy(buffer);
+        hb_font_destroy(font);
+
+        const text::FontId id = f.ts->AddFontFile(path.c_str(), (int)((k + 1) << 16));
+        ESIA_CHECK(id != 0);
+        const float width = f.ts->Measure({id, (float)upem}, sample).size.x;
+        ESIA_CHECK(std::fabs(width - (float)expected) < 0.5f);
+        lightest = std::min(lightest, width);
+        widest = std::max(widest, width);
+    }
+    ESIA_CHECK(widest > lightest);   // the instances differ: not all at the default's widths
+    hb_face_destroy(face);
+    hb_blob_destroy(blob);
 }
 
 ESIA_TEST(FreeType, MetricsComeFromTheFont)

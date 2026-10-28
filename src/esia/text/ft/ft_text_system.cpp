@@ -28,6 +28,7 @@
 #include FT_DRIVER_H
 #include FT_LCD_FILTER_H
 #include FT_MODULE_H
+#include FT_MULTIPLE_MASTERS_H
 #include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
 #include <hb-ot.h>
@@ -1296,10 +1297,29 @@ namespace esia::text
                 face->colorLayers = !face->colorStrikes && detail::HasColrGlyphs(face->ft);
                 hb_blob_t* blob = face->file ? hb_blob_reference(face->file->blob)
                                              : hb_blob_create(static_cast<const char*>(data), (unsigned)size, HB_MEMORY_MODE_READONLY, nullptr, nullptr);
-                hb_face_t* hbFace = hb_face_create(blob, (unsigned)faceIndex);
+                hb_face_t* hbFace = hb_face_create(blob, (unsigned)(faceIndex & 0xFFFF));   // the face of a collection
                 hb_blob_destroy(blob);
                 face->hb = hb_font_create(hbFace);
                 hb_face_destroy(hbFace);
+                // A variable font's named instance (faceIndex >> 16, FreeType's convention): shaped with the coordinates
+                // FreeType draws with, read from FreeType - HarfBuzz reads the instance from the index only from 3.3 on,
+                // and before that took the index for a face of a collection (none: an empty face)
+                if ((faceIndex >> 16) != 0 && FT_HAS_MULTIPLE_MASTERS(face->ft))
+                {
+                    FT_MM_Var* mm = nullptr;
+                    if (FT_Get_MM_Var(face->ft, &mm) == 0)
+                    {
+                        std::vector<FT_Fixed> fixed(mm->num_axis);
+                        if (mm->num_axis > 0 && FT_Get_Var_Design_Coordinates(face->ft, mm->num_axis, fixed.data()) == 0)
+                        {
+                            std::vector<float> coords(mm->num_axis);
+                            for (FT_UInt i = 0; i < mm->num_axis; ++i)
+                                coords[i] = (float)fixed[i] / 65536.0f;
+                            hb_font_set_var_coords_design(face->hb, coords.data(), mm->num_axis);
+                        }
+                        FT_Done_MM_Var(ft_, mm);
+                    }
+                }
                 // FreeType leaves units_per_EM 0 for fonts without outlines (CBDT emoji): HarfBuzz reads it from head
                 face->upem = (float)(face->ft->units_per_EM ? face->ft->units_per_EM : std::max(hb_face_get_upem(hb_font_get_face(face->hb)), 1u));
                 hb_font_set_scale(face->hb, (int)face->upem, (int)face->upem);   // shaping in design units
