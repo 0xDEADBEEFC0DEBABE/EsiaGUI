@@ -808,6 +808,11 @@ namespace esia::render
             std::uint64_t shape = MixRect(Mix(0x51ED270B27BB09ADull, (std::uint64_t)c.captureLevels), c.captureRegion);
             shape = MixRect(Mix(shape, c.captureLevel0 ? 1u : 0u), c.captureLevel0Region);
             c.captureShape = shape;
+            if (!keyCaptureContent)
+            {
+                c.captureKey = 0;
+                continue;
+            }
             bool whole = false;
             for (std::size_t k = 0; k < i && !whole; ++k)
             {

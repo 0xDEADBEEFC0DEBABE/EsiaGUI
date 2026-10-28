@@ -1,5 +1,6 @@
 // Esia - glyph atlas (include/esia/text/glyph_atlas.hpp).
 #include "esia/text/glyph_atlas.hpp"
+#include "esia/core/draw_list.hpp"
 #include <algorithm>
 #include <cstring>
 
@@ -130,6 +131,7 @@ namespace esia::text
             const float inv = 1.0f / (float)desc_.pageSize;
             slot.uv0 = Vec2((float)x * inv, (float)y * inv);
             slot.uv1 = Vec2((float)(x + bitmap.width) * inv, (float)(y + bitmap.height) * inv);
+            QuadInstance::PackUv(slot.uv0, slot.uv1, slot.quadUv);
         }
         return &glyphs_.insert_or_assign(key, slot).first->second;
     }
