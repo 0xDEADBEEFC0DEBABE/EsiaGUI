@@ -210,7 +210,9 @@ namespace esia::text
         virtual ~TextSystem() = default;
 
         // ---- fonts
-        // Loads a font file (TTF / OTF / TTC face `faceIndex`); 0 on failure.
+        // Loads a font file (TTF / OTF / TTC face `faceIndex`); 0 on failure. FreeType's convention: the face of a
+        // collection in the low 16 bits of `faceIndex`, a variable font's named instance + 1 in the high 16 bits
+        // ((3 << 16) | 0: the third named instance of the file's only face; 0 there: the default instance).
         virtual FontId AddFontFile(const char* path, int faceIndex = 0) = 0;
         // The data must stay alive as long as the TextSystem (bundled fonts in the executable).
         virtual FontId AddFontMemory(const void* data, std::size_t size, int faceIndex = 0) = 0;
