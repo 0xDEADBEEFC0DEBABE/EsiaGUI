@@ -3,6 +3,7 @@
 #include "esia/render/painter.hpp"
 #include "esia_test.hpp"
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 using namespace esia;
@@ -493,4 +494,53 @@ ESIA_TEST(FramePlan, CallbacksAndDisplayMapping)
     ESIA_CHECK(plan.ops.size() == 2 && plan.ops[0].type == RenderOp::Callback && plan.ops[0].list == &dl);
     ESIA_CHECK(plan.ops[0].clip == (PxRect{15, 15, 165, 165}));
     ESIA_CHECK(plan.ops[1].clip == (PxRect{15, 15, 165, 165}));
+}
+
+// A path's points ride in the data instances after it (fx::ShapeKind::PathData): they stay right behind it, in its
+// batch - a glass path keeps its place, and its points with it.
+ESIA_TEST(FramePlan, PathsKeepTheirPointsBehindThem)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    Painter p(dl);
+    std::vector<Vec2> ring;
+    for (int i = 0; i < 40; ++i)
+        ring.push_back(Vec2(200, 150) + Vec2(std::cos(kTau * (float)i / 40.0f), std::sin(kTau * (float)i / 40.0f)) * 50.0f);
+    p.Rect(Rect(0, 0, 50, 50), Style().Fill(Color::White()));
+    p.Polygon(ring.data(), 40, Style().Fill(Color::White()));   // two data instances
+    FramePlan plan;
+    plan.Build(Data({&dl}), {});
+    ESIA_CHECK(Count(plan, RenderOp::FxBatch) == 1 && plan.ops[0].instCount == 4 && plan.fxCount == 4);
+    ESIA_CHECK(plan.instances.size() == 4 && plan.instances[1].flags[2] == (std::uint32_t)fx::ShapeKind::Path);
+    ESIA_CHECK(plan.instances[2].flags[2] == (std::uint32_t)fx::ShapeKind::PathData && plan.instances[3].flags[2] == (std::uint32_t)fx::ShapeKind::PathData);
+
+    // glass: a batch of its own after the background (a capture before it), its points right behind it - the plain
+    // shape after it joins it (the last op)
+    DrawList g;
+    g.Reset(Rect(0, 0, 400, 300));
+    Painter pg(g);
+    pg.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203040)));
+    pg.Polygon(ring.data(), 40, Style().Glass(Frosted()));
+    pg.Rect(Rect(300, 250, 340, 290), Style().Fill(Color::White()));
+    FramePlan gp;
+    gp.Build(Data({&g}), {});
+    int glassOps = 0;
+    for (const RenderOp& o : gp.ops)
+        if (o.type == RenderOp::FxBatch && o.glass)
+        {
+            ++glassOps;
+            ESIA_CHECK(o.instCount == 4 && (o.features & fx::kPath) && !o.captureRegion.Empty());
+            ESIA_CHECK(gp.instances[o.instStart].flags[2] == (std::uint32_t)fx::ShapeKind::Path &&
+                       gp.instances[o.instStart + 1].flags[2] == (std::uint32_t)fx::ShapeKind::PathData &&
+                       gp.instances[o.instStart + 2].flags[2] == (std::uint32_t)fx::ShapeKind::PathData);
+        }
+    ESIA_CHECK(glassOps == 1 && gp.fxCount == 5);
+
+    // a direct plan's runs keep them together too
+    FramePlan dp;
+    dp.Build(Data({&g}), {}, true);
+    std::uint32_t runs = 0;
+    for (const FramePlan::InstanceRun& r : dp.instanceRuns)
+        runs += r.count;
+    ESIA_CHECK(runs == 5);
 }
