@@ -562,7 +562,8 @@ ctest --preset linux-clang -R esia_conformance                                  
   device on this machine, `text_lcd` without `Caps::dualSourceBlend`). `text_fields` draws glyph shapes (FX
   `ShapeKind::Glyph`, feature `kGlyph`: a distance field sampled from `gTex`); a backend whose full FX shader leaves
   them out (every FX pixel would pay for their code) sets `Caps::fullFxGlyphs = false` and builds the variants glyph
-  batches ask for (all but Metal without function constants). `text_legible`
+  batches ask for (all but Metal without function constants); so are paths (`paths`, `path_rows`: `ShapeKind::Path`,
+  feature `kPath`, a polygon's points in the data instances after it, read with `FxFetch`). `text_legible`
   adds their legibility halo (`kLegible`), which reads the captured backdrop as glass does. A missing golden is NO GOLDEN, a failure with
   `--strict`. Exit code: 1 on a failure, 77 when every scene was skipped, else 0. CMake adds, per backend,
   `esia_conformance_<name>` (`--strict`) and `esia_conformance_<name>_frames` (`--frames 3 --strict`; not for null),

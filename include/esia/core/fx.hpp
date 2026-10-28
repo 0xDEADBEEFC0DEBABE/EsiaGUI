@@ -4,7 +4,8 @@
 // fx::Instance: 24 x float4 describing the geometry and the full material. It is byte-for-byte the instance of
 // WGT's include/wgt/fx.hpp, so Painter code, the planner and the shader math port unchanged; only the transport
 // differs: instead of an ImDrawList callback payload, instances live in DrawList::FxInstances() and are
-// referenced by DrawCmdKind::Fx commands (core/draw_list.hpp).
+// referenced by DrawCmdKind::Fx commands (core/draw_list.hpp). A path (any polygon or polyline, Esia's own) is one
+// instance too, with its points in data instances right after it (ShapeKind::Path).
 //
 // On the GPU the instances are not vertex attributes (24 attributes exceed the 16 that GL 3.3, GLES 3, D3D10
 // and many Vulkan / D3D9 drivers guarantee). The renderer uploads them as flat float4 arrays - a structured /
@@ -45,12 +46,15 @@ namespace esia::fx
         // in closed form (the coverage ramp averaged over the distance the edge sweeps across each pixel). The custom
         // row is a user effect's otherwise: an effect's shape is not blurred.
         kMotion      = 1u << 17,
+        // a path (with ShapeKind::Path): a polygon or a polyline through points carried by the instances after it
+        // (ShapeKind::PathData), its exact distance taken in the shader - every material on any outline
+        kPath        = 1u << 18,
     };
 
     // Features the full FX shader leaves out where rhi::Caps::fullFxGlyphs is false (every backend but Metal without
     // function constants): their code would cost every FX pixel registers and instructions for the few batches that
     // use them - and SM3 has no room for it. Those batches draw with their feature variant, built at once.
-    constexpr std::uint32_t kVariantOnlyFeatures = kGlyph | kLegible | kMotion;
+    constexpr std::uint32_t kVariantOnlyFeatures = kGlyph | kLegible | kMotion | kPath;
     // The features of the full FX shader where it leaves those out (the mask backends specialize it to).
     constexpr std::uint32_t kFullShaderFeatures = ~kVariantOnlyFeatures;
 
@@ -59,7 +63,22 @@ namespace esia::fx
     // pixels), shape.z = field pixels per UI unit, shape.w = weight (UI units the glyph grows by), rect = the whole
     // text's box (what paints, glass and shimmer span); with the feature kGlyph. TextSystem::DrawShapes makes them;
     // every material row applies (but an image fill: uvRect is the field's).
-    enum class ShapeKind : std::uint32_t { RoundRect = 0, Arc = 1, Segment = 2, Glyph = 3 };
+    //
+    // Path: the outline through n points (with the feature kPath) - closed (a polygon, any simple outline: convex or
+    // not, either winding) or open (a polyline: its distance less half its thickness, so round joins and caps). rect =
+    // the shape's bounds (what paints, glass and the quad span), radii.x = what the distance is lessened by (closed: the
+    // rounding the points were inset by - convex corners come out as circular arcs; open: half the thickness), radii.y
+    // = 0 (reserved), radii.z = n, radii.w = 1 open / 0 closed. Glass's bevel (glass.z) comes no deeper than the shape
+    // goes (Painter clamps it, as for arcs and segments): a thin shape is one rounded rod, without a crease along its
+    // middle. The points follow in ceil(n / kPathPointsPerData) instances of
+    // ShapeKind::PathData, right after the path in its list: two points per row (x0, y0, x1, y1) in rows 0 ..
+    // kPathPointsPerData / 2 - 1, the flags row marking the instance as data (its features 0). They are drawn with the
+    // path (an empty quad each) and never on their own: the planner keeps them behind it in the same batch.
+    enum class ShapeKind : std::uint32_t { RoundRect = 0, Arc = 1, Segment = 2, Glyph = 3, Path = 4, PathData = 5 };
+    // A power of two: SM3 finds a point's row with float arithmetic, exact only then (esia_fx.hlsl, PathRow).
+    constexpr std::uint32_t kPathPointsPerData = 32;
+    // The most points one path carries (Painter thins longer outlines out).
+    constexpr std::uint32_t kPathMaxPoints = 4096;
     enum class PaintKind : std::uint32_t { Solid = 0, Linear = 1, Radial = 2, Conic = 3, Spectrum = 4 };
 
     struct Instance

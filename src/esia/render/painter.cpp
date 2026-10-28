@@ -4,6 +4,7 @@
 #include "esia/text/glyph_atlas.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <optional>
 
@@ -193,6 +194,237 @@ namespace esia
             return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3] && a[4] == b[4] && a[5] == b[5] && a[6] == b[6] && a[7] == b[7] &&
                    a[8] == b[8] && a[9] == b[9];
         }
+
+        // ---------------------------------------------------------------- paths (fx::ShapeKind::Path)
+        thread_local std::vector<Vec2> tOutline, tRounded, tInset, tPlaced, tThin, tSector;
+        thread_local std::vector<float> tOutlineRadii;
+
+        inline float Cross(Vec2 a, Vec2 b) { return a.x * b.y - a.y * b.x; }
+        inline Vec2 LeftNormal(Vec2 d) { return Vec2(-d.y, d.x); }
+
+        // At most fx::kPathMaxPoints of `pts` (evenly picked, the first and the last kept): the shader takes every edge.
+        const Vec2* Thinned(const Vec2* pts, int& n, std::vector<Vec2>& scratch)
+        {
+            if (n <= (int)fx::kPathMaxPoints)
+                return pts;
+            scratch.resize(fx::kPathMaxPoints);
+            for (std::uint32_t i = 0; i < fx::kPathMaxPoints; ++i)
+                scratch[i] = pts[(std::size_t)((std::uint64_t)i * (std::uint64_t)(n - 1) / (fx::kPathMaxPoints - 1))];
+            n = (int)fx::kPathMaxPoints;
+            return scratch.data();
+        }
+
+        // A closed outline made fit for a path: no repeated points, none it runs straight through, its inside on the
+        // left of every edge (the shoelace area positive; y down, as everywhere). Each point keeps its corner's radius.
+        // False: no area left.
+        bool CleanOutline(const Vec2* pts, int n, const float* radii, float radius, std::vector<Vec2>& out, std::vector<float>& outRadii)
+        {
+            out.clear();
+            outRadii.clear();
+            for (int i = 0; i < n; ++i)
+            {
+                const Vec2 q = pts[i];
+                if (!std::isfinite(q.x) || !std::isfinite(q.y) || (!out.empty() && LengthSq(q - out.back()) < 1e-10f))
+                    continue;
+                out.push_back(q);
+                outRadii.push_back(std::max(radii ? radii[i] : radius, 0.0f));
+            }
+            while (out.size() > 1 && LengthSq(out.back() - out.front()) < 1e-10f)
+            {
+                out.pop_back();
+                outRadii.pop_back();
+            }
+            for (std::size_t i = 0; out.size() >= 3 && i < out.size();)
+            {
+                const std::size_t m = out.size();
+                const Vec2 e1 = out[i] - out[(i + m - 1) % m], e2 = out[(i + 1) % m] - out[i];
+                if (std::fabs(Cross(e1, e2)) <= 1e-6f * std::sqrt(LengthSq(e1) * LengthSq(e2)) && Dot(e1, e2) > 0.0f)
+                {
+                    out.erase(out.begin() + (std::ptrdiff_t)i);
+                    outRadii.erase(outRadii.begin() + (std::ptrdiff_t)i);
+                    i = i > 0 ? i - 1 : 0;   // the corner before it has a new neighbour
+                }
+                else
+                    ++i;
+            }
+            if (out.size() < 3)
+                return false;
+            double area = 0.0;
+            for (std::size_t i = 0; i < out.size(); ++i)
+                area += (double)Cross(out[i], out[(i + 1) % out.size()]);
+            if (std::fabs(area) < 1e-8)
+                return false;
+            if (area < 0.0)
+            {
+                std::reverse(out.begin(), out.end());
+                std::reverse(outRadii.begin(), outRadii.end());
+            }
+            return true;
+        }
+
+        // A cleaned outline with its corners rounded, inset by what the shader grows it back by (which turns every
+        // convex corner still a point into an exact arc of that radius). Each corner takes its radius as far as half of
+        // each edge beside it allows; the inset is the smallest convex one. Convex corners rounder than that and concave
+        // ones (but a curve's facets, turning under 4 degrees) get fillets as points, each within a fortieth of a pixel
+        // of its arc. Returns the inset.
+        float RoundOutline(const std::vector<Vec2>& in, std::vector<float>& radii, float pixel, std::vector<Vec2>& rounded, std::vector<Vec2>& out)
+        {
+            const std::size_t n = in.size();
+            const auto turnAt = [&](std::size_t i, Vec2& din, Vec2& dout, float& lin, float& lout) {
+                const Vec2 a = in[(i + n - 1) % n], b = in[i], c = in[(i + 1) % n];
+                lin = Length(b - a);
+                lout = Length(c - b);
+                din = (b - a) / lin;
+                dout = (c - b) / lout;
+                return std::atan2(Cross(din, dout), Dot(din, dout));   // > 0: convex
+            };
+            float inset = 1e30f;
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                Vec2 din, dout;
+                float lin, lout;
+                const float turn = turnAt(i, din, dout, lin, lout);
+                const float t = std::tan(std::fabs(turn) * 0.5f);
+                if (t > 1e-6f)
+                    radii[i] = std::min(radii[i], 0.5f * std::min(lin, lout) / t);
+                if (turn > 0.0f)
+                    inset = std::min(inset, radii[i]);
+            }
+            if (!(inset < 1e29f))
+                inset = 0.0f;
+
+            rounded.clear();
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                Vec2 din, dout;
+                float lin, lout;
+                const float turn = turnAt(i, din, dout, lin, lout);
+                const float r = radii[i];
+                const bool convex = turn > 0.0f;
+                if (r <= 1e-4f || (convex && r <= inset + 1e-4f) || (!convex && -turn < 0.07f))
+                {
+                    rounded.push_back(in[i]);
+                    continue;
+                }
+                const Vec2 t0 = in[i] - din * (r * std::tan(std::fabs(turn) * 0.5f));
+                const Vec2 center = t0 + LeftNormal(din) * (convex ? r : -r);
+                const float rp = std::max(r * pixel, 0.05f);
+                const float step = 2.0f * std::acos(std::max(1.0f - 0.025f / rp, -1.0f));
+                const int m = std::clamp((int)std::ceil(std::fabs(turn) / std::max(step, 1e-3f)), 1, 64);
+                const Vec2 from = t0 - center;
+                for (int k = 0; k <= m; ++k)
+                {
+                    const float a = turn * (float)k / (float)m, cs = std::cos(a), sn = std::sin(a);
+                    const Vec2 q = center + Vec2(from.x * cs - from.y * sn, from.x * sn + from.y * cs);
+                    if (rounded.empty() || LengthSq(q - rounded.back()) > 1e-10f)
+                        rounded.push_back(q);
+                }
+            }
+            while (rounded.size() > 1 && LengthSq(rounded.back() - rounded.front()) < 1e-10f)
+                rounded.pop_back();
+
+            // every point moved in to where the offset lines of its two edges meet; valid while no edge turned around
+            const std::size_t m = rounded.size();
+            const auto insetBy = [&](float d) {
+                out.resize(m);
+                for (std::size_t i = 0; i < m; ++i)
+                {
+                    const Vec2 a = rounded[(i + m - 1) % m], b = rounded[i], c = rounded[(i + 1) % m];
+                    const Vec2 n1 = LeftNormal((b - a) / Length(b - a)), n2 = LeftNormal((c - b) / Length(c - b));
+                    out[i] = b + (n1 + n2) * (d / std::max(1.0f + Dot(n1, n2), 1e-3f));
+                }
+                // (an edge inset to nothing is fine: a capsule's ends, a triangle as round as it gets)
+                for (std::size_t i = 0; i < m; ++i)
+                {
+                    const Vec2 was = rounded[(i + 1) % m] - rounded[i];
+                    if (Dot(out[(i + 1) % m] - out[i], was) < -1e-4f * LengthSq(was))
+                        return false;
+                }
+                return true;
+            };
+            if (inset <= 0.0f || m < 3)
+            {
+                out = rounded;
+                return 0.0f;
+            }
+            if (!insetBy(inset))
+            {
+                float lo = 0.0f, hi = inset;
+                for (int k = 0; k < 12; ++k)
+                {
+                    const float mid = (lo + hi) * 0.5f;
+                    (insetBy(mid) ? lo : hi) = mid;
+                }
+                inset = lo;
+                insetBy(inset);
+            }
+            return inset;
+        }
+
+        // The signed distance from `p` to a closed outline (negative inside, even-odd), as the shader measures it.
+        float OutlineDistance(const std::vector<Vec2>& v, Vec2 p)
+        {
+            float best = 1e30f, side = 1.0f;
+            const std::size_t n = v.size();
+            for (std::size_t i = 0, j = n - 1; i < n; j = i++)
+            {
+                const Vec2 e = v[j] - v[i], w = p - v[i];
+                const Vec2 b = w - e * Saturate(Dot(w, e) / std::max(Dot(e, e), 1e-12f));
+                best = std::min(best, Dot(b, b));
+                const bool c1 = p.y >= v[i].y, c2 = p.y < v[j].y, c3 = e.x * w.y > e.y * w.x;
+                if ((c1 && c2 && c3) || (!c1 && !c2 && !c3))
+                    side = -side;
+            }
+            return side * std::sqrt(best);
+        }
+
+        // How deep a closed outline grown by `grow` goes - the largest distance inside it from its edge: the best of a
+        // grid of probes, refined by halving steps. A lower bound: glass flattens its bevel no deeper than the shape.
+        float OutlineDepth(const std::vector<Vec2>& v, float grow)
+        {
+            esia::Rect b(v[0], v[0]);
+            for (const Vec2& q : v)
+                b = b.Union(esia::Rect(q, q));
+            const int grid = v.size() > 256 ? 6 : 10;
+            const Vec2 cell(b.Width() / (float)grid, b.Height() / (float)grid);
+            float best = -1e30f;
+            Vec2 at = b.Center();
+            for (int y = 0; y < grid; ++y)
+                for (int x = 0; x < grid; ++x)
+                {
+                    const Vec2 q(b.min.x + cell.x * ((float)x + 0.5f), b.min.y + cell.y * ((float)y + 0.5f));
+                    const float d = -OutlineDistance(v, q);
+                    if (d > best)
+                    {
+                        best = d;
+                        at = q;
+                    }
+                }
+            Vec2 step = cell * 0.5f;
+            for (int k = 0; k < 10; ++k, step = step * 0.5f)
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                    {
+                        const Vec2 q = at + Vec2(step.x * (float)dx, step.y * (float)dy);
+                        const float d = -OutlineDistance(v, q);
+                        if (d > best)
+                        {
+                            best = d;
+                            at = q;
+                        }
+                    }
+            return std::max(best + grow, 0.0f);
+        }
+
+        // What only an FX shape draws: a line or an area with any of it becomes a path.
+        bool FxOnly(const Style& s)
+        {
+            const bool shadow = s.shadowColor.a > 0.0f && (s.shadowBlur > 0.0f || s.shadowSpread != 0.0f || s.shadowOffset.x != 0.0f || s.shadowOffset.y != 0.0f);
+            const bool innerGlow = s.glowColor.a > 0.0f && s.innerGlowRadius > 0.0f && s.innerGlowIntensity > 0.0f;
+            const bool outline = s.hasFill && s.strokeWidth > 0.0f && s.strokeColor.a > 0.0f;
+            return s.hasGlass || shadow || innerGlow || outline || (s.hasFill && s.fill.kind != fx::PaintKind::Solid) || s.image != 0 ||
+                   s.shimmer > 0.0f || s.noise > 0.0f || s.effect != 0 || s.motion.x != 0.0f || s.motion.y != 0.0f;
+        }
     }
 
     Painter::Painter(DrawList& drawList, const PainterEnv& env) : dl_(&drawList), env_(env), alpha_(env.alpha) {}
@@ -285,6 +517,151 @@ namespace esia
         Rect(r, s);
     }
 
+    // ------------------------------------------------------------ paths
+    void Painter::Polygon(const Vec2* points, int count, const Style& s) { EmitPolygon(points, count, nullptr, s.radii[0], s); }
+
+    void Painter::Parallelogram(const esia::Rect& r, float skewDeg, const Style& s)
+    {
+        if (r.Empty())
+            return;
+        // CSS skewX around the center (y down): the top edge moves left, the bottom edge right
+        const float shift = std::tan(Radians(Clamp(skewDeg, -85.0f, 85.0f))) * r.Height() * 0.5f;
+        const Vec2 pts[4] = {Vec2(r.min.x - shift, r.min.y), Vec2(r.max.x - shift, r.min.y), Vec2(r.max.x + shift, r.max.y),
+                             Vec2(r.min.x + shift, r.max.y)};
+        EmitPolygon(pts, 4, s.radii, -1.0f, s);   // top-left, top-right, bottom-right, bottom-left: the style's corners
+    }
+
+    void Painter::RegularPolygon(Vec2 center, float radius, int sides, float rotationDeg, const Style& s)
+    {
+        sides = std::clamp(sides, 3, 64);
+        Vec2 pts[64];
+        for (int i = 0; i < sides; ++i)
+        {
+            const float a = Radians(rotationDeg) - kPi * 0.5f + kTau * (float)i / (float)sides;
+            pts[i] = center + Vec2(std::cos(a), std::sin(a)) * radius;
+        }
+        EmitPolygon(pts, sides, nullptr, s.radii[0], s);
+    }
+
+    void Painter::Star(Vec2 center, float outerRadius, float innerRadius, int points, float rotationDeg, const Style& s)
+    {
+        points = std::clamp(points, 2, 32);
+        Vec2 pts[64];
+        for (int i = 0; i < points * 2; ++i)
+        {
+            const float a = Radians(rotationDeg) - kPi * 0.5f + kPi * (float)i / (float)points;
+            pts[i] = center + Vec2(std::cos(a), std::sin(a)) * ((i % 2) == 0 ? outerRadius : innerRadius);
+        }
+        EmitPolygon(pts, points * 2, nullptr, s.radii[0], s);
+    }
+
+    void Painter::EmitPolygon(const Vec2* points, int count, const float* radii, float radius, const Style& s)
+    {
+        if (!points || count < 3)
+            return;
+        if (count > (int)fx::kPathMaxPoints)
+        {
+            points = Thinned(points, count, tThin);
+            radius = radii ? radii[0] : radius;
+            radii = nullptr;
+        }
+        if (!CleanOutline(points, count, radii, radius, tOutline, tOutlineRadii))
+            return;
+        const float inset = RoundOutline(tOutline, tOutlineRadii, Pixel(), tRounded, tInset);
+        int n = (int)tInset.size();
+        const Vec2* pts = Thinned(tInset.data(), n, tThin);   // fillets may have added points
+        if (n < 3)
+            return;
+        float depth = 0.0f;
+        if (s.hasGlass && !env_.flat)
+        {
+            // only glass reads it (ShapeDepth): its bevel ends where the shape is deepest
+            tRounded.assign(pts, pts + n);
+            depth = OutlineDepth(tRounded, inset);
+        }
+        EmitPath(pts, n, false, inset, depth, s);
+    }
+
+    void Painter::EmitPolyline(const Vec2* points, int count, float thickness, const Style& s)
+    {
+        if (!points || count < 2 || thickness <= 0.0f)
+            return;
+        points = Thinned(points, count, tThin);
+        const float h = thickness * 0.5f;
+        EmitPath(points, count, true, h, h, s);
+    }
+
+    void Painter::EmitPath(const Vec2* points, int count, bool open, float lessen, float depth, const Style& s)
+    {
+        const int n = std::min(count, (int)fx::kPathMaxPoints);
+        if (n < (open ? 2 : 3))
+            return;
+        // flat drawing: glass becomes its surface under the fill, as for every shape
+        bool flatGlass = false;
+        Color flatFill = s.hasFill ? s.fill.a : Color::Clear();
+        if (env_.flat && s.hasGlass && (!s.hasFill || s.fill.kind == fx::PaintKind::Solid))
+        {
+            const Color tint = s.glass.tint, c = flatFill;
+            const Color base = Lerp(env_.flatSurface, tint.WithAlpha(env_.flatSurface.a), tint.a);
+            flatFill = Color(c.r * c.a + base.r * (1.0f - c.a), c.g * c.a + base.g * (1.0f - c.a), c.b * c.a + base.b * (1.0f - c.a),
+                             c.a + base.a * (1.0f - c.a));
+            flatGlass = true;
+        }
+        // the scale stack: the points where they are drawn, the lengths with them; layouts keep the shape at rest
+        float k = 1.0f;
+        for (int j = scaleDepth_ - 1; j >= 0; --j)
+            k *= scaleValue_[j];
+        std::vector<Vec2>& placed = tPlaced;
+        placed.resize((std::size_t)n);
+        esia::Rect rest(points[0], points[0]), bounds;
+        for (int i = 0; i < n; ++i)
+        {
+            Vec2 q = points[i];
+            rest = rest.Union(esia::Rect(q, q));
+            for (int j = scaleDepth_ - 1; j >= 0; --j)
+                q = ScalePoint(q, scaleOrigin_[j], scaleValue_[j]);
+            placed[(std::size_t)i] = q;
+            bounds = i == 0 ? esia::Rect(q, q) : bounds.Union(esia::Rect(q, q));
+        }
+        rest = rest.Expanded(lessen);
+        bounds = bounds.Expanded(lessen * k);
+
+        fx::Instance inst;
+        std::memset(&inst, 0, sizeof(inst));
+        SetRect(inst.rect, bounds);
+        Set4(inst.radii, lessen * k, 0.0f, (float)n, open ? 1.0f : 0.0f);
+        const std::uint32_t feat = Material(s, flatGlass, flatFill, inst);
+        if ((feat & (fx::kFill | fx::kStroke | fx::kShadow | fx::kGlow | fx::kInnerGlow | fx::kGlass | fx::kCustom)) == 0 || inst.misc[0] <= 0.0f)
+            return;
+        // glass: its bevel no deeper than the shape goes (a crease along the middle of a thin shape otherwise)
+        if (feat & fx::kGlass)
+            inst.glass[2] = std::min(inst.glass[2], std::max(depth, 1e-3f));
+        const float restGlow = inst.glowParams[0];
+        if (k != 1.0f)
+            ScaleLengths(inst, k);
+        inst.flags[0] = feat | fx::kPath;
+        inst.flags[2] = (std::uint32_t)fx::ShapeKind::Path;
+        if (!Submit(inst, s, rest, restGlow))
+            return;
+        // the points, two to a row of the data instances right after it (the same command: the same effect and texture)
+        static_assert(fx::kPathPointsPerData * 2 * sizeof(float) <= offsetof(fx::Instance, flags), "a data instance's points stay off its flags row");
+        float row[fx::kPathPointsPerData * 2];
+        for (int first = 0; first < n; first += (int)fx::kPathPointsPerData)
+        {
+            const int m = std::min(n - first, (int)fx::kPathPointsPerData);
+            for (int i = 0; i < m; ++i)
+            {
+                row[i * 2] = placed[(std::size_t)(first + i)].x;
+                row[i * 2 + 1] = placed[(std::size_t)(first + i)].y;
+            }
+            fx::Instance d;
+            std::memset(&d, 0, sizeof(d));
+            std::memcpy(&d, row, (std::size_t)m * 2 * sizeof(float));
+            d.flags[2] = (std::uint32_t)fx::ShapeKind::PathData;
+            Emit(d, s.effect, s.image);
+        }
+    }
+
     void Painter::EmitShape(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* extra, float radius, float smoothingOverride)
     {
         if (bounds.Empty() && kind == fx::ShapeKind::RoundRect)
@@ -346,6 +723,10 @@ namespace esia
             return;
         if (inst.misc[0] <= 0.0f)
             return;
+        // glass on a ring or a line: its bevel no deeper than half its thickness (the shader clamps it to half the
+        // bounds' shorter side, which a thin shape never reaches: a crease along its middle) - one rounded rod
+        if ((feat & fx::kGlass) && (kind == fx::ShapeKind::Arc || kind == fx::ShapeKind::Segment))
+            inst.glass[2] = std::min(inst.glass[2], kind == fx::ShapeKind::Arc ? inst.radii[1] : inst.radii[0]);
 
         inst.flags[0] = feat;
         inst.flags[2] = (std::uint32_t)kind;
@@ -355,7 +736,12 @@ namespace esia
             restShape = restShape.Union(esia::Rect(inst.shape2[0], inst.shape2[1], inst.shape2[2], inst.shape2[3]));
         const float restGlow = inst.glowParams[0];
         ApplyScale(inst);
+        Submit(inst, s, restShape, restGlow);
+    }
 
+    bool Painter::Submit(fx::Instance& inst, const Style& s, const esia::Rect& restShape, float restGlow)
+    {
+        std::uint32_t feat = inst.flags[0];
         // glows stay off neighbouring items: layouts reserve room for them, and whatever still reaches a
         // neighbour fades out before its edge (halo bounds from the layout layer)
         if ((feat & fx::kGlow) && s.containGlow && env_.glow)
@@ -386,9 +772,10 @@ namespace esia
             ext = ext.Union(esia::Rect(inst.shape2[0] - pad, inst.shape2[1] - pad, inst.shape2[2] + pad, inst.shape2[3] + pad));
         const esia::Rect& clip = dl_->ClipRect();
         if (ext.max.x < clip.min.x || ext.max.y < clip.min.y || ext.min.x > clip.max.x || ext.min.y > clip.max.y)
-            return;
+            return false;
 
         Emit(inst, s.effect, s.image);
+        return true;
     }
 
     std::uint32_t Painter::Material(const Style& s, bool flatGlass, Color flatFill, fx::Instance& inst) const
@@ -993,6 +1380,20 @@ namespace esia
     {
         if (!points || count < 2 || thickness <= 0.0f)
             return;
+        if (FxOnly(s))
+        {
+            // a material only an FX shape has: the line as a path, its color still the polyline's (the fill, else the
+            // stroke's color, else white - glass alone stays clear)
+            Style line = s;
+            if (!line.hasFill && !line.hasGlass)
+            {
+                line.Fill(s.strokeColor.a > 0.0f ? s.strokeColor : Color::White());
+                line.strokeWidth = 0.0f;
+            }
+            BuildPath(points, count, flags, Pixel(), tPath);
+            EmitPolyline(tPath.data(), (int)tPath.size(), thickness, line);
+            return;
+        }
         Color col = s.hasFill ? s.fill.a : (s.strokeColor.a > 0.0f ? s.strokeColor : Color::White());
         col.a *= Saturate(s.opacity) * alpha_;
         if (col.a <= 0.0f)
@@ -1147,6 +1548,105 @@ namespace esia
                 dl_->WriteTriangle(a, b + 1, a + 1);
             }
         }
+    }
+
+    void Painter::Area(const Vec2* points, int count, float baseline, const Style& s, std::uint32_t flags)
+    {
+        if (!points || count < 2)
+            return;
+        const bool glow = s.glowColor.a > 0.0f && s.glowRadius > 0.0f && s.glowIntensity > 0.0f;
+        const bool plain = s.hasFill && (s.fill.kind == fx::PaintKind::Solid || s.fill.kind == fx::PaintKind::Linear) && !FxOnly(s) && !glow &&
+                           s.strokeWidth <= 0.0f && s.radii[0] <= 0.0f && maskDepth_ == 0;
+        if (plain)
+        {
+            // what the geometry draws as well: the geometry
+            Paint paint = s.fill;
+            paint.a.a *= Saturate(s.opacity);
+            paint.b.a *= Saturate(s.opacity);
+            Area(points, count, baseline, paint, flags);
+            return;
+        }
+        BuildPath(points, count, flags, Pixel(), tPath);
+        if (tPath.size() < 2)
+            return;
+        const float x0 = tPath.front().x, x1 = tPath.back().x;
+        tPath.push_back(Vec2(x1, baseline));
+        tPath.push_back(Vec2(x0, baseline));
+        EmitPolygon(tPath.data(), (int)tPath.size(), nullptr, s.radii[0], s);
+    }
+
+    void Painter::Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, const Style& s, float inset)
+    {
+        if (sweepRad < 0.0f)
+        {
+            startRad += sweepRad;
+            sweepRad = -sweepRad;
+        }
+        sweepRad = std::min(sweepRad, kTau);
+        innerRadius = std::max(innerRadius, 0.0f);
+        inset = std::max(inset, 0.0f);
+        if (sweepRad < 1e-4f || outerRadius <= innerRadius)
+            return;
+        if (sweepRad >= kTau - 1e-4f && inset <= 0.0f)
+        {
+            // a whole ring: the FX ring (a disc without a hole)
+            if (innerRadius <= 0.0f)
+                Circle(center, outerRadius, s);
+            else
+                Arc(center, (innerRadius + outerRadius) * 0.5f, outerRadius - innerRadius, 0.0f, kTau, s);
+            return;
+        }
+        // the ends: lines parallel to the radius at `inset`, so each radius has its own angles
+        const auto ends = [&](float r, float& a0, float& a1) {
+            const float off = r > 1e-4f ? std::asin(std::min(inset / r, 1.0f)) : 0.0f;
+            a0 = startRad + off;
+            a1 = startRad + sweepRad - off;
+        };
+        // the arcs within a fortieth of a pixel
+        const float px = Pixel();
+        const auto steps = [px](float r, float sweep) {
+            const float rp = std::max(r * px, 0.05f);
+            const float step = 2.0f * std::acos(std::max(1.0f - 0.025f / rp, -1.0f));
+            return std::clamp((int)std::ceil(sweep / std::max(step, 1e-3f)), 1, 1024);
+        };
+        const auto at = [&](float a, float r) { return center + Vec2(std::cos(a), std::sin(a)) * r; };
+        float oa0, oa1;
+        ends(outerRadius, oa0, oa1);
+        if (oa1 <= oa0)
+            return;   // narrower than its gap
+        std::vector<Vec2>& pts = tSector;
+        pts.clear();
+        const int no = steps(outerRadius, oa1 - oa0);
+        for (int i = 0; i <= no; ++i)
+            pts.push_back(at(oa0 + (oa1 - oa0) * (float)i / (float)no, outerRadius));
+        // the inner side: an arc back, or the point where the two ends meet (the center of a pie's slice)
+        const float mid = startRad + sweepRad * 0.5f;
+        float r = innerRadius;
+        if (sweepRad < kPi - 1e-3f)
+        {
+            const float apex = inset / std::sin(sweepRad * 0.5f);
+            if (r <= apex + 1e-4f)
+            {
+                pts.push_back(at(mid, apex));
+                r = -1.0f;
+            }
+        }
+        else
+            r = std::max(r, inset * 1.0001f);
+        if (r > 0.0f)
+        {
+            float ia0, ia1;
+            ends(r, ia0, ia1);
+            if (ia1 > ia0 + 1e-6f)
+            {
+                const int ni = steps(r, ia1 - ia0);
+                for (int i = ni; i >= 0; --i)
+                    pts.push_back(at(ia0 + (ia1 - ia0) * (float)i / (float)ni, r));
+            }
+            else
+                pts.push_back(at(mid, r));
+        }
+        EmitPolygon(pts.data(), (int)pts.size(), nullptr, s.radii[0], s);
     }
 
     void Painter::Sector(Vec2 center, float innerRadius, float outerRadius, float startRad, float sweepRad, Color color, float inset)
