@@ -116,9 +116,13 @@ namespace esia::ui
         m.control = Mat(2, 8, 40, 0.15f, 1.30f, 0.04f, 0.90f, Color(1, 1, 1, 0.18f), Color(0, 0, 0, 0.15f));
         m.popover = Mat(22, 8, 16, 0.20f, 1.50f, 0.04f, 0.55f, Color(1, 1, 1, 0.38f), Color(1, 1, 1, 0.60f));
         m.clear = Mat(0.6f, 14, 40, 0.50f, 1.15f, 0.02f, 1.00f, Color(1, 1, 1, 0.00f), Color(1, 1, 1, 0.65f), 0.0f);
-        m.window.legibility = 0.30f;
-        m.bar.legibility = 0.25f;
-        m.popover.legibility = 0.40f;
+        // legibility: what is behind each surface moves toward its tint's brightness, so black labels keep their contrast
+        // over a dark wallpaper too (its color and detail still come through); clear glass the least
+        m.window.legibility = 0.70f;
+        m.bar.legibility = 0.65f;
+        m.control.legibility = 0.55f;
+        m.popover.legibility = 0.75f;
+        m.clear.legibility = 0.40f;
         return t;
     }
 
@@ -172,9 +176,13 @@ namespace esia::ui
         m.control = Mat(2, 8, 40, 0.20f, 1.25f, 0.02f, 0.75f, Rgba(40, 40, 46, 0.24f), Color(1, 1, 1, 0.26f));
         m.popover = Mat(22, 8, 16, 0.20f, 1.50f, 0.00f, 0.45f, Rgba(30, 30, 34, 0.52f), Color(1, 1, 1, 0.22f));
         m.clear = Mat(0.6f, 14, 40, 0.50f, 1.15f, 0.00f, 0.85f, Color(0, 0, 0, 0.04f), Color(1, 1, 1, 0.40f), 0.0f);
-        m.window.legibility = 0.58f;   // dark glass over a bright backdrop must stay dark enough for white labels
-        m.bar.legibility = 0.30f;
-        m.popover.legibility = 0.50f;
+        // legibility: dark glass over a bright wallpaper stays dark enough for white labels - what is behind it is
+        // scaled toward the tint's brightness (its hue and detail survive); clear glass the least
+        m.window.legibility = 0.85f;
+        m.bar.legibility = 0.70f;
+        m.control.legibility = 0.60f;
+        m.popover.legibility = 0.80f;
+        m.clear.legibility = 0.50f;
         return t;
     }
 
