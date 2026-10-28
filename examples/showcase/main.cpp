@@ -149,6 +149,7 @@ float4 WgtEffect(WgtFx fx)
         bool openMenu = false;
         bool spread = false;   // --spread: panels at kSpread
         std::string openPage;
+        std::string wallpaperFile;   // --wallpaper: an image of one's own behind the windows
 
         // settings
         bool vsync = true;
@@ -1213,6 +1214,11 @@ int main(int argc, char** argv)
             d.openPage = value;
             return true;
         }
+        if (o == "--wallpaper")
+        {
+            d.wallpaperFile = value;
+            return true;
+        }
         if (o == "--text-outline")
         {
             d.textOutline = std::max(0.0f, (float)std::atof(value));
@@ -1249,8 +1255,13 @@ int main(int argc, char** argv)
 #endif
         d.glassLook = (int)look;
         d.ui = std::make_unique<ui::Ui>(ctx, desc);
-        // the wallpaper WGT's demo used, scaled down to 2560 on its longer side
+        // the wallpaper WGT's demo used, scaled down to 2560 on its longer side (or --wallpaper's)
         showcase::ImageFile wall;
+#if !defined(__ANDROID__)
+        if (!d.wallpaperFile.empty())
+            showcase::LoadImageFile(std::wstring(d.wallpaperFile.begin(), d.wallpaperFile.end()), wall, 2560);
+#endif
+        if (wall.rgba.empty())
         // (on macOS one of the system's: WGT's is a Windows file; on iOS the app bundle's, from the Mac that built it; on
         // Linux Ubuntu's, else GNOME's; on Android the APK's, from the machine that built it, else the system's built-in one)
 #if defined(__ANDROID__)
