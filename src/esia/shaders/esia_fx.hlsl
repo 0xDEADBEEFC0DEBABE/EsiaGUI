@@ -277,6 +277,19 @@ FxPSIn FxVS(FxVSIn v)
         mx = min(mx, halo.zw + 1.0);
     }
     float2 c = float2(ESIA_HAS(v.vid, 1u) ? mx.x : mn.x, ESIA_HAS(v.vid, 2u) ? mx.y : mn.y);
+    // A segment shades a band along it, not its bounding box: the box of a long diagonal line (a line across the
+    // screen) is mostly pixels it never touches. The quad turns with the segment and reaches as far around it as
+    // the box would - half the thickness and the padding to each side and past each end (a rotation: the winding
+    // stays). A mask or a halo cuts the box and motion blur sweeps it: those keep the box.
+    if (flags.z == SHAPE_SEGMENT && !FX_HAS(feat, F_MASK) && !FX_HAS(feat, F_HALO) && !FX_HAS(feat, F_MOTION))
+    {
+        const float2 ab = shape2.zw - shape2.xy;
+        const float len = length(ab);
+        const float2 d = len > 1e-4 ? ab / len : float2(1.0, 0.0);
+        const float2 n = float2(-d.y, d.x);
+        const float w = FxFetch(instance, FX_ROW_radii).x + pad;
+        c = (ESIA_HAS(v.vid, 1u) ? shape2.zw + d * w : shape2.xy - d * w) + n * (ESIA_HAS(v.vid, 2u) ? w : -w);
+    }
     o.pos = ESIA_CLIP_POSITION(float4(c * gXform.xy + gXform.zw, 0.0, 1.0));
     o.local = c;
 #ifndef ESIA_COMPACT
