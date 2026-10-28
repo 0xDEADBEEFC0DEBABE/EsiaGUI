@@ -3,7 +3,8 @@
 // the others fetched where they are read: FxPixelRows, FX_FETCH) and the pixel position (WgtPixelPos: top-left pixels
 // on every API).
 //
-// Every WGT shape (rounded rect, capsule, circle, arc, segment, liquid merge) is one GPU instance.
+// Every WGT shape (rounded rect, capsule, circle, arc, segment, liquid merge) is one GPU instance; a path (any polygon
+// or polyline, Esia's own) is one too, with its points in data instances after it.
 // The instance carries the full material: paint, stroke, drop/inner shadow, outer/inner glow,
 // liquid glass (backdrop blur + refraction + chromatic dispersion + specular rim), image fill,
 // shimmer, noise and a rounded mask. Layout must match esia::fx::Instance in include/esia/core/fx.hpp.
@@ -20,11 +21,11 @@
 [[vk::constant_id(0)]] const uint kEsiaFxFeatures = 0xFFFFFFFFu;
 #define ESIA_FX_FEATURES kEsiaFxFeatures
 #else
-// The full shader leaves out glyph shapes, their legibility halo and motion blur (fx::kFullShaderFeatures): every FX
-// pixel would carry their registers and instructions for the few batches that use them (ps_5_0: 23 temporaries and
-// ~3400 instruction slots without them, 25 and ~4600 with). Those batches take variants, built at once. SM3 could
-// not hold them anyway: its 32 temporary registers hold the full shader without them.
-#define ESIA_FX_FEATURES (0xFFFFFFFFu & ~(32768u | 65536u | 131072u))
+// The full shader leaves out glyph shapes, their legibility halo, motion blur and paths (fx::kFullShaderFeatures):
+// every FX pixel would carry their registers and instructions for the few batches that use them (ps_5_0: 23
+// temporaries and ~3400 instruction slots without them, 25 and ~4600 with). Those batches take variants, built at
+// once. SM3 could not hold them anyway: its 32 temporary registers hold the full shader without them.
+#define ESIA_FX_FEATURES (0xFFFFFFFFu & ~(32768u | 65536u | 131072u | 262144u))
 #endif
 #endif
 #define FX_HAS(feat, flag) ESIA_HAS(feat, (flag) & ESIA_FX_FEATURES)
@@ -46,6 +47,7 @@
 #define F_GLYPH        32768u
 #define F_LEGIBLE      65536u
 #define F_MOTION       131072u
+#define F_PATH         262144u
 
 // Shape kinds (esia::fx::ShapeKind) and paint kinds (esia::fx::PaintKind), compared with the flags row: plain
 // literals take the type of what they are compared with (a uint on SM4+, the float SM3 emulates it with), so
@@ -54,6 +56,8 @@
 #define SHAPE_ARC      1
 #define SHAPE_SEGMENT  2
 #define SHAPE_GLYPH    3
+#define SHAPE_PATH     4
+#define SHAPE_PATH_DATA 5   // a path's points: never drawn on its own
 
 #define PAINT_SOLID    0
 #define PAINT_LINEAR   1
@@ -65,6 +69,7 @@ struct FxInst
 {
     float4 rect;         //  0 shape bounds (min.xy, max.xy) in UI units
     float4 radii;        //  1 corner radii tl,tr,br,bl | arc: radius, half thickness | segment: half thickness
+                         //    | path: x distance less, z points, w 1 open
     float4 fill0;        //  2 paint color A (straight alpha)
     float4 fill1;        //  3 paint color B
     float4 fillParams;   //  4 linear: x=angle | radial: xy=center(0..1) z=radius(0..1) | conic: xy=center z=angle w=loop
@@ -291,6 +296,10 @@ FxPSIn FxVS(FxVSIn v)
         c = (ESIA_HAS(v.vid, 1u) ? shape2.zw + d * w : shape2.xy - d * w) + n * (ESIA_HAS(v.vid, 2u) ? w : -w);
     }
     o.pos = ESIA_CLIP_POSITION(float4(c * gXform.xy + gXform.zw, 0.0, 1.0));
+    // a path's points (fx::ShapeKind::PathData) are drawn with the path, by its pixels: their own quad is empty and
+    // outside the target
+    if (flags.z == SHAPE_PATH_DATA)
+        o.pos = ESIA_CLIP_POSITION(float4(-2.0, -2.0, 0.0, 1.0));
     o.local = c;
 #ifndef ESIA_COMPACT
     // The solid area: where a solid rounded rectangle without layers inside it (no gradient, image, glass, inner
@@ -412,6 +421,77 @@ float SdGlyph(float2 p, FxInst I)
     return max(-inside * unit, box) - I.shape.w;
 }
 
+// A path (fx::ShapeKind::Path): its points two to a row of the data instances after it, 16 rows each
+// (fx::kPathPointsPerData). The row arithmetic is in floats, floored: SM3 has no integers (its uint is a float, which
+// divides without truncating), and floats divide exactly by powers of two.
+float4 PathRow(uint index, float row)
+{
+    const float block = floor(row / 16.0);
+    return FxFetch(index + 1u + (uint)block, (uint)(row - block * 16.0));
+}
+
+// The edge a -> b for the point p: the nearest point of the path so far (as the vector from it to p and its squared
+// length), and whether the edge crosses p's row to the right of p (even-odd: inside after an odd number of them).
+void PathEdge(float2 p, float2 a, float2 b, inout float best, inout float2 bestV, inout float side)
+{
+    const float2 e = b - a, w = p - a;
+    const float2 v = w - e * saturate(dot(w, e) / max(dot(e, e), 1e-12));
+    const float dd = dot(v, v);
+    if (dd < best)
+    {
+        best = dd;
+        bestV = v;
+    }
+    const bool c1 = p.y >= a.y, c2 = p.y < b.y, c3 = e.x * w.y > e.y * w.x;
+    if ((c1 && c2 && c3) || (!c1 && !c2 && !c3))
+        side = -side;
+}
+
+// The exact distance to a path, negative inside a closed one, less radii.x (its rounding, or half a polyline's
+// thickness); `grad` its gradient (the outward normal on the outline). Loops of at most 128 rows inside one of at most
+// 16 blocks (fx::kPathMaxPoints): SM3 runs a loop 255 times at most.
+float SdPath(float2 p, FxInst I, out float2 grad)
+{
+    const float n = I.radii.z;
+    const bool open = I.radii.w > 0.5;
+    const float rows = floor((n + 1.0) * 0.5);
+    const float blocks = floor((rows + 127.0) / 128.0);
+    float best = 1e30;
+    float2 bestV = float2(0.0, -1.0);
+    float side = 1.0;
+    // a closed outline starts with the edge from its last point into its first; an open one with its first point
+    const float lastRow = floor((n - 1.0) * 0.5);
+    const float4 last = PathRow(I.index, lastRow);
+    float2 prev = (n - 1.0) - lastRow * 2.0 < 0.5 ? last.xy : last.zw;
+    if (open)
+        prev = PathRow(I.index, 0.0).xy;
+    [loop] for (float b = 0.0; b < 16.0; b += 1.0)
+    {
+        if (b >= blocks)
+            break;
+        [loop] for (float k = 0.0; k < 128.0; k += 1.0)
+        {
+            const float r = b * 128.0 + k;
+            if (r >= rows)
+                break;
+            const float4 row = PathRow(I.index, r);
+            PathEdge(p, row.xy, prev, best, bestV, side);
+            prev = row.xy;
+            if (2.0 * r + 1.0 < n)
+            {
+                PathEdge(p, row.zw, prev, best, bestV, side);
+                prev = row.zw;
+            }
+        }
+    }
+    const float d = sqrt(best);
+    grad = d > 1e-6 ? bestV / d : float2(0.0, -1.0);
+    if (open)
+        return d - I.radii.x;
+    grad *= side;
+    return side * d - I.radii.x;
+}
+
 float ShapeSD(float2 p, FxInst I)
 {
     uint kind = I.flags.z;
@@ -421,6 +501,11 @@ float ShapeSD(float2 p, FxInst I)
     [branch] if (FX_HAS(I.flags.x, F_GLYPH))
     {
         d = SdGlyph(p, I);
+    }
+    else if (FX_HAS(I.flags.x, F_PATH))
+    {
+        float2 g;
+        d = SdPath(p, I, g);
     }
     else if (kind == SHAPE_ARC)
     {
@@ -446,6 +531,13 @@ float ShapeSD(float2 p, FxInst I)
 
 float2 ShapeNormal(float2 p, FxInst I)
 {
+    // a path knows its gradient: the direction from its nearest point (one pass over the points, not four)
+    [branch] if (FX_HAS(I.flags.x, F_PATH))
+    {
+        float2 g;
+        SdPath(p, I, g);
+        return g;
+    }
     const float e = 0.5;
     float dx = ShapeSD(p + float2(e, 0), I) - ShapeSD(p - float2(e, 0), I);
     float dy = ShapeSD(p + float2(0, e), I) - ShapeSD(p - float2(0, e), I);

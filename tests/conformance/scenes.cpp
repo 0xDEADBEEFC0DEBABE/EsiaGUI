@@ -262,6 +262,45 @@ namespace esia::conformance
             GlassCards(p);
         }
 
+        // Paths (fx::ShapeKind::Path): any outline with every material, on the glass scene's wallpaper - slanted tabs of
+        // frosted and tinted glass and an outlined one with per-corner radii, a rounded triangle with a gradient and a
+        // shadow, a star of clear dispersive glass, a hexagon of frosted glass with an inner glow, an arrow whose
+        // concave corners are rounded too, a glass ring and a thick glass segment (their bevel no deeper than they
+        // are), a glass polyline (round joins), a glass area chart and a glass ring sector.
+        void Paths(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl);
+            Wallpaper(p, dl, Rect(0, 0, 320, 240));
+            GlassMaterial tab = Glass(6, 8, 14);
+            tab.tint = Color(1, 1, 1, 0.12f);
+            p.Parallelogram(Rect(14, 12, 84, 40), -18.0f, Style().Radius(6).Glass(tab));
+            GlassMaterial selected = tab;
+            selected.tint = Color(kBlue.r, kBlue.g, kBlue.b, 0.45f);
+            p.Parallelogram(Rect(88, 12, 158, 40), -18.0f, Style().Radius(6).Glass(selected).Shadow(Color::Black(0.3f), 8, Vec2(0, 3)));
+            p.Parallelogram(Rect(162, 12, 226, 40), -18.0f, Style().Radius(0, 10, 0, 10).Fill(Color::Black(0.3f)).Stroke(1.5f, Color::White(0.85f)));
+            const Vec2 tri[3] = {Vec2(272, 12), Vec2(308, 66), Vec2(236, 66)};
+            p.Polygon(tri, 3, Style().Radius(8).Fill(Paint::Linear(kOrange, kPink, 90)).Shadow(Color::Black(0.4f), 10, Vec2(0, 4)));
+            GlassMaterial clear = Glass(0, 10, 9);
+            clear.dispersion = 0.6f;
+            clear.tint = Color(1, 1, 1, 0.05f);
+            p.Star(Vec2(48, 98), 36, 16, 5, 0.0f, Style().Radius(4).Glass(clear));
+            p.RegularPolygon(Vec2(130, 98), 34, 6, 30.0f, Style().Radius(10).Glass(Glass(10, 10, 20)).InnerGlow(10, 0.4f));
+            const Vec2 arrow[7] = {Vec2(178, 86), Vec2(212, 86), Vec2(212, 70), Vec2(244, 98), Vec2(212, 126), Vec2(212, 110), Vec2(178, 110)};
+            p.Polygon(arrow, 7, Style().Radius(5).Fill(kGreen.WithAlpha(0.9f)).Stroke(2, Color::White(0.9f)));
+            p.Ring(Vec2(282, 104), 22, 12, Style().Glass(Glass(2, 10, 30)));
+            p.Line(Vec2(252, 144), Vec2(310, 144), 12, Style().Glass(Glass(2, 10, 30)));
+            const Vec2 zig[5] = {Vec2(16, 214), Vec2(40, 160), Vec2(66, 214), Vec2(92, 160), Vec2(116, 214)};
+            p.Polyline(zig, 5, 12.0f, Style().Fill(Color::White(0.1f)).Glass(Glass(3, 8, 20)));
+            const Vec2 chart[6] = {Vec2(132, 200), Vec2(152, 174), Vec2(172, 188), Vec2(192, 158), Vec2(212, 172), Vec2(232, 150)};
+            GlassMaterial area = Glass(8, 10, 24);
+            area.tint = Color(kGreen.r, kGreen.g, kGreen.b, 0.3f);
+            p.Area(chart, 6, 228.0f, Style().Radius(6).Glass(area), PolylineFlags_Smooth);
+            GlassMaterial sector = Glass(4, 10, 20);
+            sector.tint = Color(kPurple.r, kPurple.g, kPurple.b, 0.35f);
+            p.Sector(Vec2(282, 200), 16, 38, kPi, kPi * 0.75f, Style().Radius(4).Glass(sector), 2.0f);
+        }
+
         void CountCallback(const DrawList&, const DrawCmd& cmd, void*) { ++*static_cast<int*>(cmd.userData); }
 
         // The glass scene with a host callback between the backdrop's content and the first glass: the pass the host
@@ -864,6 +903,17 @@ namespace esia::conformance
                                   &Text);
             quadRows.golden = "text";
             quadRows.fxInstancesPerRow = 2;
+            Scene& paths = add("paths", "paths (fx::ShapeKind::Path): slanted tabs, polygons, a star, a hexagon, an arrow with concave corners, a glass "
+                                        "polyline, area and ring sector - fills, gradients, strokes, shadows, glows and glass on any outline; glass on a ring and "
+                                        "a segment",
+                               &Paths);
+            paths.tolerance = glassTolerance;
+            Scene& pathRows = add("path_rows", "the paths scene with 2 FX instances per row of the instance texture (FxStorage::Texture: a path's points in the "
+                                               "data instances after it, across rows)",
+                                  &Paths);
+            pathRows.golden = "paths";
+            pathRows.tolerance = glassTolerance;
+            pathRows.fxInstancesPerRow = 2;
             Scene& reused = add("glass_reused", "the glass scene three times with RenderParams::targetStatic: the third frame's captures come from the "
                                                 "pyramid or from the copies kept aside (temporal reuse), with the same pixels",
                                 &GlassScene);

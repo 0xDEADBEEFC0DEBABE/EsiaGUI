@@ -42,6 +42,10 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Glass on every shape** (2026-10-28, in Esia): polygons of any outline - slanted tabs, triangles, stars, arrows -
+as one FX path each, with every material a rounded rectangle takes, glass included; lines, areas and ring sectors with
+a material as paths too; glass on rings and lines one rounded rod.
+
 **Render-class cost, round 1** (2026-10-28, in Esia): measured against Dear ImGui's renderer on the same device and
 scenes - segments drawn as bands (a line across the screen shaded its bounding box: 1 000 of them took 3.4 ms of GPU
 time, now 0.1), text placed without its color and at any sub-pixel offset without the atlas's map (a page of text
@@ -126,6 +130,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Glass on every shape](#glass-on-every-shape)
 * [Render-class cost, round 1](#render-class-cost-round-1)
 * [One UI light, motion blur](#one-ui-light-motion-blur)
 * [Temporal reuse of the backdrop](#temporal-reuse-of-the-backdrop)
@@ -162,6 +167,58 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Glass on every shape
+
+At the owner's request: every shape Painter draws takes every material, glass included - any outline (a slanted tab, a
+star) as a new FX shape kind, and Polyline / Area / Sector with a material.
+
+### What changed
+
+* `fx::ShapeKind::Path` with the feature `fx::kPath`: a polygon (any simple outline, convex or not, either winding;
+  inside by the even-odd rule) or a polyline (its distance less half its thickness: round joins and caps), its points in
+  `ShapeKind::PathData` instances right after it, 32 each (two to a row; the flags row marks them as data). The shader
+  (`SdPath`) takes the exact distance to every edge, and the gradient with it - glass's normal in one pass over the
+  points instead of four finite differences; a data instance draws an empty quad outside the target. The planner keeps
+  the data behind their path - in its piece, its batch, out of sight with it (`PathData`) - so batching moves instances
+  as before and the shader always finds a path's points after it. The row arithmetic is in floored floats: SM3 has no
+  integers (its `uint` is a float, which divides without truncating), and its loops run 255 times at most (two nested
+  loops of at most 16 x 128 rows).
+* `kPath` is variant-only (`fx::kVariantOnlyFeatures`): the full shader and every other batch carry none of it. The
+  ps_3_0 variant of a glass path is about 3250 instruction slots.
+* Painter: `Polygon`, `Parallelogram` (CSS `skewX` around the center, the style's four radii its corners),
+  `RegularPolygon`, `Star`; `Area` and `Sector` with a `Style`; `Polyline` with a material geometry cannot draw (glass, a
+  shadow, an inner glow, an outline, a gradient, an image, shimmer, noise, an effect, motion blur) as an open path, its
+  color still the polyline's. Rounded corners: the outline is inset by the smallest convex radius, which the shader
+  takes off the distance again - every convex corner an exact circular arc; concave corners, and corners rounder than
+  that, get fillets of points within a fortieth of a pixel; each corner is as round as half of each edge beside it
+  allows (an edge inset to nothing is fine: a capsule's ends). An outline longer than 4096 points (`fx::kPathMaxPoints`)
+  is thinned out.
+* Glass on a thin shape: its bevel comes no deeper than the shape goes - half a ring's or a line's thickness, a path's
+  depth (probed on the CPU, `OutlineDepth`) - so a thin shape is one rounded rod. It was half the bounds' shorter side,
+  which a ring or a line never reaches: a crease along its middle. Painter clamps `glass.z`; done in the shader, the few
+  more instructions broke the full ps_3_0 shader on NVIDIA's Direct3D 9 (32 temporaries, 3.9k of its 4096 slots: glass
+  came out over-saturated).
+
+### Verified
+
+* Conformance scenes `paths` (slanted tabs of frosted, tinted and outlined glass with per-corner radii, a rounded
+  triangle with a gradient and a shadow, a clear dispersive star, a frosted hexagon with an inner glow, an arrow whose
+  concave corners are rounded, a glass ring and segment, a glass polyline, area and ring sector) and `path_rows` (the
+  same with 2 FX instances per row of the instance texture): Direct3D 9, 10, 11 and 12, OpenGL, GLES and Vulkan against
+  the Direct3D 11 golden within 3 levels; every other scene unchanged; ctest 41 / 41; MSVC /W4 /WX and the GNU flags
+  clean.
+* Unit tests: a path and its points in one command, both windings, two data instances for 40 points; corners inset and
+  clamped, concave fillets; the parallelogram's slant and corners; bevels clamped on rings, lines and paths; lines,
+  areas and sectors with a material as paths (a whole ring as the FX ring, a pie's slice from the center); the scale
+  stack and culling; the planner keeping the points behind their path (a plain batch, a glass batch, a direct plan).
+
+### Not done
+
+* Holes - several contours in one path: a ring is `Ring`, an annular sector `Sector`.
+* A path's cost grows with its points (every pixel of its quad visits every edge): keep an outline to the points it
+  needs. A long chart line with glass is thousands of edge visits per pixel.
+* Glyphs with glass keep the bevel of the text's box (a glyph's depth is not known).
 
 ## Render-class cost, round 1
 
