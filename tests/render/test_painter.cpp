@@ -3,8 +3,12 @@
 #include "esia/render/painter.hpp"
 #include "esia/text/glyph_atlas.hpp"
 #include "esia_test.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 using namespace esia;
 
@@ -616,4 +620,180 @@ ESIA_TEST(Painter, TextWithAStyleWithoutFieldsDrawsTheFillColor)
     Painter p(dl, env);
     p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color(1, 0.5f, 0, 0.8f)).Opacity(0.5f), "ab");
     ESIA_CHECK(text.drawn.r == 1.0f && text.drawn.g == 0.5f && std::fabs(text.drawn.a - 0.4f) < 1e-6f);
+}
+
+namespace
+{
+    // The points a path's data instances carry (fx::ShapeKind::PathData): two to a row, kPathPointsPerData each
+    std::vector<Vec2> PathPoints(const DrawList& dl, std::size_t path)
+    {
+        const fx::Instance& in = dl.FxInstances()[path];
+        const int n = (int)in.radii[2];
+        std::vector<Vec2> out;
+        for (int first = 0; first < n; first += (int)fx::kPathPointsPerData)
+        {
+            float row[fx::kPathPointsPerData * 2];
+            std::memcpy(row, &dl.FxInstances()[path + 1 + (std::size_t)first / fx::kPathPointsPerData], sizeof(row));
+            for (int i = 0; i < std::min(n - first, (int)fx::kPathPointsPerData); ++i)
+                out.push_back(Vec2(row[i * 2], row[i * 2 + 1]));
+        }
+        return out;
+    }
+}
+
+// A polygon is a path: one instance with the feature kPath, its points in the data instances right after it - in the
+// same command, so they are drawn and planned with it.
+ESIA_TEST(Painter, PolygonsArePathsWithTheirPointsAfterThem)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Vec2 tri[3] = {Vec2(50, 10), Vec2(90, 80), Vec2(10, 80)};
+    p.Polygon(tri, 3, Style().Fill(Color::White()).Shadow(Color::Black(0.3f), 8, Vec2(0, 2)));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in.size() == 2 && dl.Commands().size() == 1 && dl.Commands()[0].count == 2);
+    ESIA_CHECK(in[0].flags[2] == (std::uint32_t)fx::ShapeKind::Path && (in[0].flags[0] & fx::kPath) && (in[0].flags[0] & fx::kShadow));
+    ESIA_CHECK(in[0].rect[0] == 10 && in[0].rect[1] == 10 && in[0].rect[2] == 90 && in[0].rect[3] == 80);
+    ESIA_CHECK(in[0].radii[0] == 0 && in[0].radii[2] == 3 && in[0].radii[3] == 0);   // no rounding, three points, closed
+    ESIA_CHECK(in[1].flags[0] == 0 && in[1].flags[2] == (std::uint32_t)fx::ShapeKind::PathData);
+    const std::vector<Vec2> pts = PathPoints(dl, 0);
+    ESIA_CHECK(pts.size() == 3 && pts[0] == tri[0] && pts[1] == tri[1] && pts[2] == tri[2]);
+    // the other winding: turned around, the inside on the left of every edge as the rounding expects
+    const Vec2 back[3] = {tri[2], tri[1], tri[0]};
+    p.Polygon(back, 3, Style().Fill(Color::White()));
+    const std::vector<Vec2> turned = PathPoints(dl, 2);
+    ESIA_CHECK(turned.size() == 3 && turned[0] == tri[0] && turned[2] == tri[2]);
+    // more points than a data instance holds: one more instance per kPathPointsPerData, still one command
+    std::vector<Vec2> ring;
+    for (int i = 0; i < 40; ++i)
+        ring.push_back(Vec2(200, 150) + Vec2(std::cos(kTau * (float)i / 40.0f), std::sin(kTau * (float)i / 40.0f)) * 50.0f);
+    p.Polygon(ring.data(), 40, Style().Fill(Color::White()));
+    ESIA_CHECK(in.size() == 7 && dl.Commands().size() == 1 && in[4].radii[2] == 40);
+    ESIA_CHECK(in[5].flags[2] == (std::uint32_t)fx::ShapeKind::PathData && in[6].flags[2] == (std::uint32_t)fx::ShapeKind::PathData);
+    ESIA_CHECK(PathPoints(dl, 4).size() == 40 && PathPoints(dl, 4)[39] == ring[39]);
+    // nothing to draw, or no area: nothing
+    const Vec2 line[3] = {Vec2(0, 0), Vec2(10, 10), Vec2(20, 20)};
+    p.Polygon(line, 3, Style().Fill(Color::White()));
+    p.Polygon(tri, 3, Style());
+    ESIA_CHECK(in.size() == 7);
+}
+
+// Rounded corners: the outline is inset by the radius and the shader takes the radius off its distance again - convex
+// corners become exact arcs, the bounds stay the polygon's. A concave corner gets a fillet of points; a corner takes
+// its radius as far as its edges allow.
+ESIA_TEST(Painter, PolygonCornersAreRounded)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Vec2 box[4] = {Vec2(100, 100), Vec2(200, 100), Vec2(200, 150), Vec2(100, 150)};
+    p.Polygon(box, 4, Style().Fill(Color::White()).Radius(10));
+    const fx::Instance& r = dl.FxInstances()[0];
+    ESIA_CHECK(r.radii[0] == 10 && r.radii[2] == 4);
+    ESIA_CHECK_NEAR(r.rect[0], 100, 1e-4f);
+    ESIA_CHECK_NEAR(r.rect[3], 150, 1e-4f);
+    const std::vector<Vec2> inset = PathPoints(dl, 0);
+    ESIA_CHECK_NEAR(inset[0].x, 110, 1e-4f);
+    ESIA_CHECK_NEAR(inset[0].y, 110, 1e-4f);
+    ESIA_CHECK_NEAR(inset[2].x, 190, 1e-4f);
+    ESIA_CHECK_NEAR(inset[2].y, 140, 1e-4f);
+    // a radius larger than the shape: as round as its shorter side allows (a capsule's ends)
+    p.Polygon(box, 4, Style().Fill(Color::White()).Radius(500));
+    ESIA_CHECK_NEAR(dl.FxInstances()[2].radii[0], 25, 1e-3f);
+    // an arrow: its two concave corners rounded with fillets of points
+    const Vec2 arrow[7] = {Vec2(10, 20), Vec2(40, 20), Vec2(40, 5), Vec2(70, 30), Vec2(40, 55), Vec2(40, 40), Vec2(10, 40)};
+    p.Polygon(arrow, 7, Style().Fill(Color::White()));
+    p.Polygon(arrow, 7, Style().Fill(Color::White()).Radius(4));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in[4].radii[2] == 7 && in[6].radii[2] > 9 && in[6].radii[0] > 0.0f);
+}
+
+// A slanted rectangle (CSS skewX): the top edge moves left by tan(skew) x half the height, the bottom edge right; the
+// style's four radii are its corners.
+ESIA_TEST(Painter, ParallelogramsAreSlantedLikeCss)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Parallelogram(Rect(100, 100, 200, 140), -20.0f, Style().Fill(Color::White()));
+    const float shift = std::tan(Radians(20.0f)) * 20.0f;
+    const fx::Instance& r = dl.FxInstances()[0];
+    ESIA_CHECK_NEAR(r.rect[0], 100 - shift, 1e-3f);
+    ESIA_CHECK_NEAR(r.rect[2], 200 + shift, 1e-3f);
+    const std::vector<Vec2> pts = PathPoints(dl, 0);
+    ESIA_CHECK(pts.size() == 4);
+    ESIA_CHECK_NEAR(pts[0].x, 100 + shift, 1e-3f);   // top left: a negative angle leans right
+    ESIA_CHECK_NEAR(pts[3].x, 100 - shift, 1e-3f);   // bottom left
+    // per-corner radii: the rounded corners get fillets, the inset is the smallest convex radius (0)
+    p.Parallelogram(Rect(100, 160, 200, 200), -20.0f, Style().Fill(Color::White()).Radius(0, 8, 0, 8));
+    const fx::Instance& c = dl.FxInstances()[2];
+    ESIA_CHECK(c.radii[0] == 0 && c.radii[2] > 6);
+    p.RegularPolygon(Vec2(300, 100), 20, 6, 0.0f, Style().Fill(Color::White()));
+    p.Star(Vec2(300, 200), 30, 12, 5, 0.0f, Style().Fill(Color::White()));
+    ESIA_CHECK(dl.FxInstances()[4].radii[2] == 6 && dl.FxInstances()[6].radii[2] == 10);
+    bool top = false;   // the first corner at the top
+    for (const Vec2& q : PathPoints(dl, 4))
+        top = top || std::fabs(q.y - 80.0f) < 1e-3f;
+    ESIA_CHECK(top);
+}
+
+// Glass on a thin shape - a ring, a line, a path - is one rounded rod: its bevel no deeper than the shape goes.
+ESIA_TEST(Painter, GlassBevelsComeNoDeeperThanTheShape)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    GlassMaterial g;
+    g.bezel = 40;
+    p.Ring(Vec2(100, 100), 30, 8, Style().Glass(g));
+    p.Line(Vec2(10, 200), Vec2(100, 200), 10, Style().Glass(g));
+    p.Rect(Rect(200, 200, 300, 260), Style().Glass(g));   // the shader clamps a rectangle's: left as it is
+    const Vec2 bar[4] = {Vec2(200, 10), Vec2(380, 10), Vec2(380, 22), Vec2(200, 22)};
+    p.Polygon(bar, 4, Style().Glass(g));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in[0].glass[2] == 4 && in[1].glass[2] == 5 && in[2].glass[2] == 40);
+    ESIA_CHECK((in[3].flags[0] & fx::kGlass) && in[3].glass[2] > 5.5f && in[3].glass[2] <= 6.0f);
+}
+
+// Lines, areas and ring sectors with a material geometry cannot draw become paths; a plain one stays geometry.
+ESIA_TEST(Painter, LinesAreasAndSectorsWithAMaterialArePaths)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Vec2 pts[4] = {Vec2(0, 50), Vec2(40, 10), Vec2(80, 30), Vec2(120, 5)};
+    GlassMaterial g;
+    p.Polyline(pts, 4, 6.0f, Style().Glass(g));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in.size() == 2 && in[0].flags[2] == (std::uint32_t)fx::ShapeKind::Path && in[0].radii[3] == 1.0f && in[0].radii[0] == 3);
+    ESIA_CHECK(!(in[0].flags[0] & fx::kFill));   // glass alone stays clear
+    ESIA_CHECK_NEAR(in[0].rect[0], -3, 1e-4f);   // the bounds grown by half the thickness
+    p.Polyline(pts, 4, 6.0f, Style().Stroke(1, Color::White()).Shadow(Color::Black(0.5f), 6));   // a stroke's color is the line's
+    ESIA_CHECK(in.size() == 4 && (in[2].flags[0] & fx::kFill) && !(in[2].flags[0] & fx::kStroke) && in[2].fill0[0] == 1.0f);
+    p.Area(pts, 4, 60.0f, Style().Fill(Color::White()));   // plain: geometry
+    ESIA_CHECK(in.size() == 4 && !dl.Vertices().empty());
+    p.Area(pts, 4, 60.0f, Style().Fill(Color::White()).Radius(4).Glass(g));
+    ESIA_CHECK(in.size() == 6 && in[4].radii[3] == 0.0f);
+    ESIA_CHECK_NEAR(in[4].rect[3], 60.0f, 1e-4f);
+    p.Sector(Vec2(200, 200), 20, 40, 0.0f, kTau, Style().Glass(g));   // a whole ring: the FX ring
+    ESIA_CHECK(in.size() == 7 && in[6].flags[2] == (std::uint32_t)fx::ShapeKind::Arc && in[6].radii[0] == 30 && in[6].radii[1] == 10);
+    p.Sector(Vec2(200, 200), 0, 40, 0.0f, kPi * 0.5f, Style().Fill(Color::White()));   // a pie's slice: from the center
+    ESIA_CHECK(in.size() == 9 && in[7].flags[2] == (std::uint32_t)fx::ShapeKind::Path);
+    bool center = false;
+    for (const Vec2& q : PathPoints(dl, 7))
+        center = center || LengthSq(q - Vec2(200, 200)) < 1e-6f;
+    ESIA_CHECK(center);
+}
+
+// Paths follow the scale stack (their points where they are drawn, the material's lengths with them) and are culled
+// as a whole, their points with them.
+ESIA_TEST(Painter, PathsFollowTheScaleAndAreCulledWhole)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Vec2 tri[3] = {Vec2(0, 0), Vec2(100, 0), Vec2(0, 100)};
+    p.PushScale(Vec2(0, 0), 0.5f);
+    p.Polygon(tri, 3, Style().Fill(Color::White()).Radius(10).Shadow(Color::Black(0.3f), 8));
+    p.PopScale();
+    const fx::Instance& r = dl.FxInstances()[0];
+    ESIA_CHECK(r.radii[0] > 0.0f && r.shadowParams[0] == 4.0f);
+    ESIA_CHECK(r.rect[2] <= 50.0f + 1e-4f && r.rect[3] <= 50.0f + 1e-4f);
+    const Vec2 far[3] = {Vec2(1000, 1000), Vec2(1100, 1000), Vec2(1000, 1100)};
+    p.Polygon(far, 3, Style().Fill(Color::White()));
+    ESIA_CHECK(dl.FxInstances().size() == 2);
 }
