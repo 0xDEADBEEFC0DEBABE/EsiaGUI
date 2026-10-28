@@ -360,10 +360,12 @@ namespace esia::rhi
         virtual Buffer CreateBuffer(const BufferDesc& desc) = 0;
         // Replaces the first `size` bytes (size <= desc.size).
         virtual void UpdateBuffer(Buffer buf, const void* data, std::size_t size) = 0;
-        // UpdateBuffer written in place: the first `size` bytes to write, valid until UnmapBuffer (one buffer at a
-        // time, outside passes; null if the buffer cannot be written). The renderer writes the frame's vertices,
-        // indices and FX instances straight from the draw lists. This default stages them for UpdateBuffer;
-        // backends with mappable buffers hand out their memory.
+        // The buffer's data for the frame, written in place: `size` bytes to write, valid until UnmapBuffer (one buffer
+        // at a time, outside passes; null if the buffer cannot be written). What the buffer held before is gone (a
+        // discard), and a backend may keep the bytes for the frame they were written in only (Direct3D 12 writes them
+        // into the frame's upload memory): a frame that draws from the buffer writes it again first. The renderer writes
+        // the frame's vertices, indices and FX instances straight from the draw lists. This default stages them for
+        // UpdateBuffer; backends with mappable buffers hand out their memory.
         virtual void* MapBuffer(Buffer, std::size_t size)
         {
             if (mapStaging_.size() < size)

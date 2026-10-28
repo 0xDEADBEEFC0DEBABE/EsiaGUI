@@ -42,6 +42,12 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Render-class cost, round 1** (2026-10-28, in Esia): measured against Dear ImGui's renderer on the same device and
+scenes - segments drawn as bands (a line across the screen shaded its bounding box: 1 000 of them took 3.4 ms of GPU
+time, now 0.1), text placed without its color and at any sub-pixel offset without the atlas's map (a page of text
+builds in 0.011 ms, Dear ImGui 0.026), Direct3D 12 writing a frame's data straight into its upload ring, and an
+outside review's findings.
+
 **One UI light, motion blur** (2026-10-28, in Esia): `RenderParams::light` lights every glass rim and turns every drop
 shadow away from one point (the cursor) or direction (a device's tilt); `Style::MotionBlur` blurs a shape, its stroke
 or text along the path it moves while the frame is shown.
@@ -120,6 +126,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Render-class cost, round 1](#render-class-cost-round-1)
 * [One UI light, motion blur](#one-ui-light-motion-blur)
 * [Temporal reuse of the backdrop](#temporal-reuse-of-the-backdrop)
 * [Instanced glyphs and tiles](#instanced-glyphs-and-tiles)
@@ -155,6 +162,74 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Render-class cost, round 1
+
+The renderer against Dear ImGui's as a render class (2026-10-28): the same scenes drawn through ImDrawList and its
+renderer backends (Dear ImGui 1.92.9b, unpatched) and through Esia's Painter and Renderer, on the same host device and
+target - lines, rect outlines, filled rects, rounded rects with a stroke, circles, a page of text, short labels,
+controls and markers over a scene (a frame, a bar, a circle, two labels and a line to each) - and an outside review's
+findings (`64c1753`), each checked against the code.
+
+### What changed
+
+* A segment's FX quad lies along it (FxVS): a band of the thickness plus the padding to each side and past each end,
+  turned with the segment, instead of its bounding box - a long diagonal line (a leader line across the screen) shaded
+  every pixel of its box. A mask, a halo or motion blur keeps the box. The pixels are the same (the conformance scenes'
+  diagonal and straight lines, every backend).
+* Text: a text's cached quads carry no color - EmitQuads colors them as they go in, so a text that fades, changes its
+  tint or cross-fades (smooth motion) is no longer placed again; every glyph's atlas slot is kept per pen phase, so a
+  text drawn at other sub-pixel offsets (a label that moves with what it marks) is placed again without the atlas's map; a text
+  placed again and again without being drawn twice at one offset goes straight into the list without being kept (every
+  8th placement is, to see whether it settled); its quads keep their lines' extents, so a clip that cuts a long text
+  looks at the lines it holds only, and reserves room for their quads only (a 10 000-line text in a 100-pixel view
+  reserved 11 MiB); `GlyphSlot::quadUv` packs a slot's uv once; the layout cache is swept a few buckets a frame
+  (256), not wholly every frame once it holds more than 1024 layouts, and a layout that leaves clears its own front
+  slot only.
+* Direct3D 12: `MapBuffer` in a frame writes into the frame's upload ring (no CPU copy, no copy at the bind) and as many
+  bytes as were written - the buffer's length was the most it ever held, so one large frame made every later one copy
+  that much; descriptor tables are reused per frame by their bindings (text, shapes and images alternating copied a
+  table at every change, and 2 340 changes ran out of the frame's 16 384 descriptors). `Device::MapBuffer`'s contract
+  says what Direct3D 11's `WRITE_DISCARD` already did: what the buffer held is gone, and its bytes may last for the
+  frame only.
+* The renderer uploads no geometry when no op draws any (a chart scrolled out of its clip still uploaded its vertices);
+  captures are keyed by what was drawn under them only for `RenderParams::targetStatic` (`FramePlan::keyCaptureContent`):
+  reuse for a number of frames compares a capture's region and pyramid alone.
+* Painter: `Line` without a copy of the style; smooth paths reuse their scratch (a 1000-point curve allocated 20 times).
+
+### Verified
+
+* Every test on Windows (clang-cl, `-DESIA_WERROR=ON`): 41 / 41, the conformance suite `--strict` on D3D9 / 10 / 11 /
+  12, OpenGL, GLES and Vulkan (render passes and dynamic rendering); D3D11 and D3D12 also with the debug layers and
+  GPU-based validation (`ESIA_D3D_DEBUG=2`), one frame and three: no message. The shader library from the Shaders
+  workflow (`Fx.vs` only changed).
+* Against Dear ImGui (a scratch benchmark, not in the tree: both libraries on one D3D11 / D3D12 / Vulkan / OpenGL
+  device and an offscreen 1600 x 1000 target, RTX 4080 SUPER, the GPU waited for after every frame, medians of 3
+  alternated runs of 300 frames). Direct3D 11, ms, Esia before -> after (Dear ImGui):
+
+  | scene | build | submit | GPU |
+  | --- | --- | --- | --- |
+  | a page of text (two columns, Latin and Chinese) | 0.037 -> 0.011 (0.026) | 0.007 -> 0.006 (0.011) | 0.010 (0.023) |
+  | 3 000 labels at random positions | 0.615 -> 0.393 (0.181) | 0.029 (0.071) | 0.048 (0.133) |
+  | 10 000 lines, 1.5 px | 0.323 -> 0.242 (0.280) | 0.345 -> 0.351 (0.062) | 0.315 -> 0.231 (0.134) |
+  | 1 000 lines across the screen | 0.050 -> 0.025 (0.029) | 0.069 -> 0.037 (0.004) | 3.371 -> 0.095 (0.031) |
+  | 1 000 markers | 0.844 -> 0.418 (0.328) | 0.379 -> 0.264 (0.072) | 3.944 -> 0.186 (0.163) |
+  | controls (capsules with labels) | 0.040 -> 0.032 (0.108) | 0.027 -> 0.025 (0.031) | 0.035 (0.052) |
+  | 10 000 rounded rects with a stroke | 0.242 -> 0.239 (1.747) | 0.337 -> 0.341 (0.471) | 0.230 (1.087) |
+
+  Direct3D 12 submits less: 10 000 lines 0.477 -> 0.392 ms, the markers 0.531 -> 0.365 (one copy of the frame's data
+  fewer). The markers are 948 draws (Dear ImGui: 2): they overlap, and shapes, geometry and text are
+  three pipelines - see Not done.
+
+### Not done
+
+* One pipeline for plain shapes and text: solid rounded rects, circles, segments and fills as compact instances
+  drawn with the glyph quads (the shapes' 384-byte FX instance is most of what 10 000 lines upload, and the markers'
+  948 draws are kinds alternating, which on OpenGL cost 1.5 ms of GPU time).
+* Labels at new sub-pixel offsets every frame still build in twice Dear ImGui's time (0.39 against 0.18 ms for 3 000):
+  every glyph is put on the pixel grid at a quarter-pixel phase, which Dear ImGui does not do.
+* Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (frames in flight
+  serialize); to be measured with frames in flight, which the benchmarks do not run.
 
 ## HDR output
 

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 
 namespace esia::rhi::d3d12
 {
@@ -161,9 +162,10 @@ namespace esia::rhi::d3d12
         {
             BufferDesc desc;
             std::vector<std::uint8_t> data;   // what UpdateBuffer wrote; copied into the frame's upload ring when bound
-            std::size_t valid = 0;
+            std::size_t valid = 0;            // the bytes it holds: the most UpdateBuffer wrote, what MapBuffer last wrote
             std::uint64_t frame = 0;          // device frame of `gpu`
             D3D12_GPU_VIRTUAL_ADDRESS gpu = 0;
+            bool ringOnly = false;            // MapBuffer wrote straight into that frame's ring: `data` does not hold it
         };
 
         struct Pipe
@@ -454,17 +456,32 @@ namespace esia::rhi::d3d12
             if (!b || !data || size == 0 || size > b->desc.size)
                 return;
             std::memcpy(b->data.data(), data, size);
-            b->valid = std::max(b->valid, size);
+            b->valid = b->ringOnly ? size : std::max(b->valid, size);   // (the copy held none of what MapBuffer wrote)
+            b->ringOnly = false;
             b->frame = 0;   // copy it into the ring again at the next bind
         }
 
-        // the buffer's CPU copy itself: one copy less on its way to the ring
+        // In a frame: the frame's bytes straight into its upload ring (what the buffer held before is gone - rhi.hpp),
+        // no CPU copy and no copy at the bind; as many as were written, not the most the buffer ever held. Outside a
+        // frame (no ring to write into): the buffer's CPU copy, copied at the first bind.
         void* MapBuffer(Buffer buf, std::size_t size) override
         {
             Buf* b = buffers_.Find(buf.id);
             if (!b || size == 0 || size > b->desc.size)
                 return nullptr;
-            b->valid = std::max(b->valid, size);
+            b->valid = size;
+            if (cl_)
+            {
+                const UploadRing::Alloc a = Slot().ring.Allocate(dev_.Get(), std::max<std::size_t>(size, 16), 256);
+                if (a.cpu)
+                {
+                    b->frame = frame_;
+                    b->gpu = a.gpu;
+                    b->ringOnly = true;
+                    return a.cpu;
+                }
+            }
+            b->ringOnly = false;
             b->frame = 0;
             return b->data.data();
         }
@@ -750,7 +767,8 @@ namespace esia::rhi::d3d12
             Buf* b = buffers_.Find(buf.id);
             if (!b)
                 return;
-            const D3D12_VERTEX_BUFFER_VIEW v = {Upload(*b), (UINT)b->valid, 20};   // sizeof(esia::Vertex)
+            const D3D12_GPU_VIRTUAL_ADDRESS va = Upload(*b);
+            const D3D12_VERTEX_BUFFER_VIEW v = {va, va ? (UINT)b->valid : 0u, 20};   // sizeof(esia::Vertex); none: a null view
             cl_->IASetVertexBuffers(0, 1, &v);
         }
 
@@ -759,7 +777,8 @@ namespace esia::rhi::d3d12
             Buf* b = buffers_.Find(buf.id);
             if (!b)
                 return;
-            const D3D12_INDEX_BUFFER_VIEW v = {Upload(*b), (UINT)b->valid, DXGI_FORMAT_R32_UINT};
+            const D3D12_GPU_VIRTUAL_ADDRESS va = Upload(*b);
+            const D3D12_INDEX_BUFFER_VIEW v = {va, va ? (UINT)b->valid : 0u, DXGI_FORMAT_R32_UINT};
             cl_->IASetIndexBuffer(&v);
         }
 
@@ -1284,6 +1303,12 @@ namespace esia::rhi::d3d12
         {
             if (b.frame == frame_ && b.gpu)
                 return b.gpu;
+            if (b.ringOnly)
+            {
+                // MapBuffer's bytes were an earlier frame's (a frame that draws from it writes them again: rhi.hpp)
+                log_.Log(LogLevel::Error, "a mapped buffer bound in a later frame without being written again: draw skipped");
+                return 0;
+            }
             const UploadRing::Alloc a = Slot().ring.Allocate(dev_.Get(), std::max<std::size_t>(b.valid, 16), 256);
             if (!a.cpu)
                 return 0;
@@ -1331,9 +1356,9 @@ namespace esia::rhi::d3d12
             tableDirty_ = true;
         }
 
-        // The t0..t6 table of the next draw: when a binding changed since the last draw, the same bindings as the
-        // last table copied this frame are reused, else a fresh copy goes into the slot's shader-visible heap (7
-        // descriptors; 16384 per frame).
+        // The t0..t6 table of the next draw: when a binding changed since the last draw, a table of the same bindings
+        // copied earlier this frame is reused (text, shapes and images alternate: A, B, A), else a fresh copy goes into
+        // the slot's shader-visible heap (7 descriptors; 16384 per frame).
         bool FlushTable()
         {
             if (!tableDirty_)
@@ -1342,24 +1367,44 @@ namespace esia::rhi::d3d12
             const UINT inc = srvs_.inc;
             if (tableFrame_ != frame_ || std::memcmp(tableBound_, bound_, sizeof(bound_)) != 0)
             {
-                if (s.tableOffset + kTableSlots > kTableDescriptorsPerFrame)
+                if (tableFrame_ != frame_)
                 {
-                    log_.Log(LogLevel::Error, "out of shader-visible descriptors this frame: draw skipped");
-                    return false;
+                    frameTables_.clear();
+                    frameTableIndex_.clear();
                 }
-                const UINT first = s.tableOffset;
-                s.tableOffset += kTableSlots;
-                const D3D12_CPU_DESCRIPTOR_HANDLE dst = {s.tables->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
-                // one copy of the table's descriptors (scattered sources into one range)
-                D3D12_CPU_DESCRIPTOR_HANDLE src[kTableSlots];
-                UINT ones[kTableSlots];
-                for (UINT i = 0; i < kTableSlots; ++i)
+                std::uint64_t key = 1469598103934665603ull;   // FNV-1a of the bindings
+                for (const int b : bound_)
+                    key = (key ^ (std::uint32_t)b) * 1099511628211ull;
+                UINT first = 0;
+                const auto known = frameTableIndex_.find(key);
+                if (known != frameTableIndex_.end() && std::memcmp(frameTables_[known->second].bound, bound_, sizeof(bound_)) == 0)
+                    first = frameTables_[known->second].first;
+                else
                 {
-                    src[i] = srvs_.Cpu(bound_[i]);
-                    ones[i] = 1;
+                    if (s.tableOffset + kTableSlots > kTableDescriptorsPerFrame)
+                    {
+                        log_.Log(LogLevel::Error, "out of shader-visible descriptors this frame: draw skipped");
+                        return false;
+                    }
+                    first = s.tableOffset;
+                    s.tableOffset += kTableSlots;
+                    const D3D12_CPU_DESCRIPTOR_HANDLE dst = {s.tables->GetCPUDescriptorHandleForHeapStart().ptr + (SIZE_T)first * inc};
+                    // one copy of the table's descriptors (scattered sources into one range)
+                    D3D12_CPU_DESCRIPTOR_HANDLE src[kTableSlots];
+                    UINT ones[kTableSlots];
+                    for (UINT i = 0; i < kTableSlots; ++i)
+                    {
+                        src[i] = srvs_.Cpu(bound_[i]);
+                        ones[i] = 1;
+                    }
+                    const UINT count = kTableSlots;
+                    dev_->CopyDescriptors(1, &dst, &count, kTableSlots, src, ones, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+                    FrameTable t;
+                    std::memcpy(t.bound, bound_, sizeof(bound_));
+                    t.first = first;
+                    frameTableIndex_[key] = (std::uint32_t)frameTables_.size();
+                    frameTables_.push_back(t);
                 }
-                const UINT count = kTableSlots;
-                dev_->CopyDescriptors(1, &dst, &count, kTableSlots, src, ones, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
                 tableGpu_ = {s.tables->GetGPUDescriptorHandleForHeapStart().ptr + (UINT64)first * inc};
                 tableFrame_ = frame_;
                 std::memcpy(tableBound_, bound_, sizeof(bound_));
@@ -1527,6 +1572,14 @@ namespace esia::rhi::d3d12
         int tableBound_[kTableSlots] = {};
         D3D12_GPU_DESCRIPTOR_HANDLE tableGpu_ = {};
         std::uint64_t tableFrame_ = 0;
+        // FlushTable's tables of the frame tableFrame_, found by a hash of their bindings
+        struct FrameTable
+        {
+            int bound[kTableSlots];
+            UINT first;
+        };
+        std::vector<FrameTable> frameTables_;
+        std::unordered_map<std::uint64_t, std::uint32_t> frameTableIndex_;
     };
 
     std::unique_ptr<Device> CreateDevice(const Desc& desc, std::string* error)

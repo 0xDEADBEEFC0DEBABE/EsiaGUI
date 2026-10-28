@@ -310,9 +310,10 @@ namespace esia::render
         }
 
         // An instance as the GPU reads it: its integer row (flags) as float values (FxFetch reads every row as float4).
+        // (into write-combined memory: every byte written once, nothing read back)
         static void WriteInstance(float* dst, const fx::Instance& in)
         {
-            std::memcpy(dst, &in, sizeof(fx::Instance));
+            std::memcpy(dst, &in, sizeof(fx::Instance) - sizeof(in.flags));
             for (int k = 0; k < 4; ++k)
                 dst[(fx::kInstanceVec4Count - 1) * 4 + (std::size_t)k] = (float)in.flags[k];
         }
@@ -354,7 +355,15 @@ namespace esia::render
         {
             const std::size_t vcount = plan.direct ? plan.totalVertices : plan.vertices.size();
             const std::size_t icount = plan.direct ? plan.totalIndices : plan.indices.size();
-            if (vcount > 0)
+            // the lists' geometry only when an op draws some: all of it may lie outside its clips (a chart scrolled away)
+            bool geometry = false;
+            for (const RenderOp& op : plan.ops)
+                if (op.type == RenderOp::Draw && !op.quads && (op.idxCount > 0 || op.geometryCount > 0))
+                {
+                    geometry = true;
+                    break;
+                }
+            if (vcount > 0 && geometry)
             {
                 const std::size_t vbytes = vcount * sizeof(Vertex), ibytes = icount * sizeof(std::uint32_t);
                 if (!EnsureBuffer(vb, vbCap, vbytes, rhi::BufferKind::Vertex, "ui-vertices") ||
@@ -1366,6 +1375,7 @@ namespace esia::render
             light[2] = params.light.enabled ? 1.0f + std::max(params.light.height, 0.0f) : 0.0f;
             plan.lightShadows = params.light.enabled;
             plan.keyCaptures = reuseExact || reuseFrames > 0;
+            plan.keyCaptureContent = reuseExact;   // reuse for a number of frames compares the capture's shape only
             plan.Build(dd, [this](TextureId id, TextureInfo& out) {
                 auto it = textures.find(id);
                 if (it == textures.end())
