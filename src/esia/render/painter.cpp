@@ -35,6 +35,10 @@ namespace esia
             inst.glass[2] *= k;
         }
 
+        // BuildPath's scratch, kept from call to call: a chart's curve redrawn every frame allocates nothing once warm
+        thread_local std::vector<Vec2> tPathPoints;
+        thread_local std::vector<float> tPathSlopes, tPathTangents;
+
         // The path Polyline / Area follow: the points (minus repeats), or a smooth curve through them sampled every
         // few pixels. Monotone cubic (Fritsch-Carlson) when x keeps increasing, so a chart never overshoots its
         // data; Catmull-Rom otherwise.
@@ -46,16 +50,19 @@ namespace esia
                     out.push_back(pts[i]);
             if (!(flags & PolylineFlags_Smooth) || out.size() < 3)
                 return;
-            std::vector<Vec2> src;
-            src.swap(out);
+            std::vector<Vec2>& src = tPathPoints;
+            src.assign(out.begin(), out.end());
+            out.clear();
             const int m = (int)src.size();
             bool monotone = true;
             for (int i = 1; i < m && monotone; ++i)
                 monotone = src[(std::size_t)i].x > src[(std::size_t)i - 1].x;
-            std::vector<float> tan;
+            std::vector<float>& tan = tPathTangents;
+            tan.clear();
             if (monotone)
             {
-                std::vector<float> d((std::size_t)m - 1);
+                std::vector<float>& d = tPathSlopes;
+                d.resize((std::size_t)m - 1);
                 for (int i = 0; i < m - 1; ++i)
                     d[(std::size_t)i] = (src[(std::size_t)i + 1].y - src[(std::size_t)i].y) / (src[(std::size_t)i + 1].x - src[(std::size_t)i].x);
                 tan.resize((std::size_t)m);
@@ -244,9 +251,7 @@ namespace esia
         const float h = thickness * 0.5f;
         const esia::Rect bounds(std::min(a.x, b.x) - h, std::min(a.y, b.y) - h, std::max(a.x, b.x) + h, std::max(a.y, b.y) + h);
         const float extra[4] = {a.x, a.y, b.x, b.y};
-        Style c = s;
-        c.radii[0] = h;
-        EmitShape(fx::ShapeKind::Segment, bounds, c, extra);
+        EmitShape(fx::ShapeKind::Segment, bounds, s, extra, h);   // (the half thickness as its radius: no copy of the style)
     }
 
     void Painter::Merge(const esia::Rect& a, const esia::Rect& b, float radius, float smoothness, const Style& s)

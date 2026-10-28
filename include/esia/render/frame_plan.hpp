@@ -152,6 +152,10 @@ namespace esia::render
         int plannedCaptures = 0;
         // Build keys every capture (RenderOp::captureKey): the renderer sets it when it may reuse captures.
         bool keyCaptures = false;
+        // ... with what was drawn under it (captureKey): only for reuse while the content is the same
+        // (RenderParams::targetStatic); reuse for a number of frames needs the region and pyramid alone (captureShape,
+        // captureKey 0), without hashing what was drawn before every capture.
+        bool keyCaptureContent = true;
         // Drop shadows turn with a light (RenderParams::light): their offsets count as far in every direction.
         bool lightShadows = false;
 

@@ -65,6 +65,7 @@ namespace esia::text
         constexpr std::uint16_t kNoGlyph = 0xFFFF;          // control characters: an advance, nothing drawn (glyph ids end at 0xFFFE)
         constexpr std::size_t kLayoutCacheLimit = 1024;     // layouts kept before unused ones are dropped ...
         constexpr std::uint64_t kLayoutCacheFrames = 120;   // ... after this many frames without use
+        constexpr std::size_t kLayoutSweepBuckets = 256;    // ... looked for in this many buckets a frame
 
         bool IsBreakingSpace(char32_t c)
         {
@@ -249,27 +250,44 @@ namespace esia::text
             std::uint32_t params[5] = {};
             std::vector<PlacedGlyph> glyphs;
             TextMetrics metrics;
+            bool bitmapGlyphs = false;   // a glyph of a bitmap font among them (PlaceQuads puts those on whole pixels)
             std::uint64_t lastFrame = 0;
             // Draw's glyph quads, from its last call: positions in physical pixels from the whole pixel at the text's
             // origin, so they hold wherever the origin has the same sub-pixel offsets - the next frame, another row,
-            // another window. Valid while the atlases did not start over and the em size, the scale, those offsets
-            // and the colors are the same: the text is then copied in, not placed glyph by glyph (that was most of
-            // building a frame of labels).
+            // another window. Valid while the atlases did not start over and the em size, the scale and those offsets
+            // are the same: the text is then copied in, not placed glyph by glyph (that was most of building a frame of
+            // labels). The colors go in as the quads are copied: a text that changes color (a fade, a hover tint, the
+            // cross-fade of smooth motion) is not placed again.
             struct QuadRun
             {
                 TextureId page = 0;
                 std::uint32_t first = 0, count = 0;   // quads
                 Rect bounds{1e30f, 1e30f, -1e30f, -1e30f};   // pixels, as QuadSet::bounds
             };
+            struct QuadRow   // the quads of a line (lines go downwards): what a clip holds of a long text
+            {
+                std::uint32_t first = 0, count = 0;
+                float y0 = 1e30f, y1 = -1e30f;   // pixels, as QuadSet::bounds
+            };
             struct QuadSet
             {
-                std::vector<QuadInstance> quads;   // one per drawn glyph, its rect in pixels from the origin
+                // one per drawn glyph, its rect in pixels from the origin; packed[2] 0 and packed[3] 1 for a color
+                // glyph (drawn white, with the text's alpha), 0 for one in the text's color
+                std::vector<QuadInstance> quads;
                 std::vector<QuadRun> runs;   // one per change of atlas page
+                std::vector<QuadRow> rows;
                 Rect bounds;                 // pixels from the origin's whole pixel
                 std::uint64_t generation = 0;   // 0 = none
                 float em = 0.0f, scale = 0.0f, fx = -1.0f, fy = -1.0f;
-                std::uint32_t rgba = 0, colorRgba = 0;
                 std::uint32_t outline = 0;   // an outline's set: its width in 1/8 px
+                std::uint32_t misses = 0;    // draws placed again since the last one that found its quads here
+                // every glyph's atlas slot at each pen phase (null: not looked up yet) for slotGeneration, slotEm and
+                // slotOutline: a text drawn at other sub-pixel offsets (labels over a scene) is placed again without the
+                // atlas's map. Not for the moving sets (their glyphs have vertical phases too).
+                std::vector<std::array<const GlyphSlot*, 4>> slots;
+                std::uint64_t slotGeneration = 0;   // 0 = none
+                float slotEm = 0.0f;
+                std::uint32_t slotOutline = 0;
             };
             QuadSet fill;      // Draw's
             QuadSet outline;   // DrawOutline's (TextOutline): the glyphs grown, in the outline's color
@@ -496,20 +514,29 @@ namespace esia::text
                 lastLayout_ = nullptr;   // (it may leave the cache now)
                 // layouts unused for a while leave the cache, and wait (with their storage) to hold the next new texts:
                 // text that changes every frame (a frame rate, a timer) does not allocate once the cache is warm
+                // A few buckets a frame are looked through (sweepBucket_ goes round the map), not the whole map: a cache
+                // of many texts in use costs a frame nothing; a layout that leaves takes its front slot with it.
                 if (layouts_.size() > kLayoutCacheLimit)
                 {
-                    layoutFront_.fill(nullptr);   // it may point at what leaves
-                    for (auto it = layouts_.begin(); it != layouts_.end();)
+                    const std::size_t buckets = layouts_.bucket_count();
+                    for (std::size_t n = 0; n < kLayoutSweepBuckets && n < buckets; ++n)
                     {
-                        auto next = std::next(it);
-                        if (it->second.lastFrame + kLayoutCacheFrames < frame_)
+                        const std::size_t b = sweepBucket_++ % buckets;
+                        sweepKeys_.clear();
+                        for (auto it = layouts_.begin(b); it != layouts_.end(b); ++it)
+                            if (it->second.lastFrame + kLayoutCacheFrames < frame_)
+                                sweepKeys_.push_back(it->first);
+                        for (const std::uint64_t key : sweepKeys_)
                         {
+                            const auto it = layouts_.find(key);
+                            Layout*& front = layoutFront_[(std::size_t)(key ^ (key >> 32)) & (kLayoutFront - 1)];
+                            if (front == &it->second)
+                                front = nullptr;
                             if (spareLayouts_.size() < kLayoutCacheLimit / 4)
                                 spareLayouts_.push_back(layouts_.extract(it));
                             else
                                 layouts_.erase(it);
                         }
-                        it = next;
                     }
                 }
             }
@@ -671,16 +698,40 @@ namespace esia::text
                 const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
                 // animated scales are quantized to 1/4 px of em, so an animation does not flood the atlas
                 const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
+                // color glyphs: white with the text's alpha (an outline has none of them)
                 const std::uint32_t rgba = color.ToRgba8(), colorGlyphRgba = outlineQ ? 0u : Color::White(color.a).ToRgba8();
+                if ((rgba >> 24) == 0)
+                    return;   // nothing shows (a color glyph has the same alpha)
                 // Glyphs are placed from the whole pixel at the origin (ox, oy) by its sub-pixel offsets (fx, fy): the
                 // same offsets, the same quads wherever the text is
                 const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
                 const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
                 const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
-                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.rgba != rgba ||
-                    set.colorRgba != colorGlyphRgba || set.outline != outlineQ)
-                    PlaceQuads(layout, set, em, scale, fx, fy, rgba, colorGlyphRgba, generation, outlineQ, moving);
-                EmitQuads(dl, set, ox, oy, inv);
+                if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.outline != outlineQ)
+                {
+                    // Placed again. When the text lies inside the clip with an em to spare (its ink cannot reach past),
+                    // the quads go into the list as they are placed: a label at a new sub-pixel offset every frame
+                    // (over a moving scene) takes one pass over its glyphs, not two. A text placed again and again without
+                    // ever being drawn twice at the same offsets (that label; one text at many places in a frame) is
+                    // not kept either, but every 8th time, to see whether it settled.
+                    const bool keep = set.misses < 2 || (set.misses & 7) == 0;
+                    ++set.misses;
+                    const float margin = font.size * scale;
+                    const Vec2 size = layout.metrics.size * scale;
+                    if (dl.ClipRect().Contains(Rect(pos.x - margin, pos.y - margin, pos.x + size.x + margin, pos.y + size.y + margin)))
+                    {
+                        const QuadOut out{&dl, ox, oy, inv, rgba, colorGlyphRgba};
+                        if (keep)
+                            PlaceQuads<true>(layout, set, em, scale, fx, fy, generation, outlineQ, moving, &out);
+                        else
+                            PlaceQuads<false>(layout, set, em, scale, fx, fy, generation, outlineQ, moving, &out);
+                        return;
+                    }
+                    PlaceQuads<true>(layout, set, em, scale, fx, fy, generation, outlineQ, moving);
+                }
+                else
+                    set.misses = 0;
+                EmitQuads(dl, set, ox, oy, rs, rgba, colorGlyphRgba);
             }
 
             // Smooth motion: how much of a draw is this rendering's - 1 at rest, 0 in motion, rising while it settles.
@@ -871,19 +922,66 @@ namespace esia::text
             // width above 0
             static std::uint32_t OutlineQ(float pixels) { return pixels > 0.0f ? (std::uint32_t)std::clamp(pixels * 8.0f + 0.5f, 1.0f, 255.0f) : 0u; }
 
+            // A glyph's slot for a quad: its bitmap at this em size and pen phase - an outline's set (outlineQ > 0): grown
+            // by that width (OutlineGlyph), none for a color glyph. kNoInk when there is nothing to draw.
+            const GlyphSlot* QuadSlot(const PlacedGlyph& g, float em, int phase, int yPhase, std::uint32_t outlineQ)
+            {
+                static const GlyphSlot kNoInk{};
+                const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase, yPhase);
+                if (outlineQ > 0)
+                {
+                    if (!s || s->color)
+                        return &kNoInk;   // a color glyph (emoji) has no outline
+                    s = OutlineGlyph(g.face, g.glyph, em, phase, outlineQ, yPhase);
+                }
+                return s ? s : &kNoInk;
+            }
+
+            // Where PlaceQuads also writes the quads as it places them: `dl` (all of them in its clip), at the whole pixel
+            // (ox, oy) in UI units (inv units per pixel), in EmitQuads' colors
+            struct QuadOut
+            {
+                DrawList* dl;
+                float ox, oy, inv;
+                std::uint32_t rgba, colorRgba;
+            };
+
             // The layout's quads for these sub-pixel offsets (Draw): physical-pixel placement, the baseline on a whole
-            // pixel, the pen at a quarter-pixel phase; glyphs without ink or color left out.
-            // An outline's set (outlineQ > 0): every glyph grown by that width (OutlineGlyph), color glyphs left out.
-            void PlaceQuads(Layout& layout, Layout::QuadSet& set, float em, float scale, float fx, float fy, std::uint32_t rgba,
-                            std::uint32_t colorGlyphRgba, std::uint64_t generation, std::uint32_t outlineQ, bool moving = false)
+            // pixel, the pen at a quarter-pixel phase; glyphs without ink left out (QuadSlot). Colorless: EmitQuads
+            // colors them - or, with `out`, they go into its list too. Keep false (with `out` only): into the list
+            // alone, the set left as it was (its glyph slots aside).
+            template <bool Keep>
+            void PlaceQuads(Layout& layout, Layout::QuadSet& set, float em, float scale, float fx, float fy, std::uint64_t generation, std::uint32_t outlineQ,
+                            bool moving = false, const QuadOut* out = nullptr)
             {
                 const float rs = params_.pixelsPerUnit;
-                const bool rgbaShown = (rgba >> 24) != 0, colorShown = (colorGlyphRgba >> 24) != 0;
-                set.quads.clear();
-                set.runs.clear();
-                set.bounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
-                for (const PlacedGlyph& g : layout.glyphs)
+                if constexpr (Keep)
                 {
+                    set.quads.clear();
+                    set.quads.reserve(layout.glyphs.size());
+                    set.runs.clear();
+                    set.rows.clear();
+                    set.bounds = Rect(1e30f, 1e30f, -1e30f, -1e30f);
+                }
+                float ink[2] = {}, colored[2] = {};
+                DrawList::QuadWriter w;
+                TextureId writing = 0;   // the page of `w`, 0: none open
+                if (out)
+                {
+                    QuadInstance::PackColor(out->rgba, ink);
+                    QuadInstance::PackColor(out->colorRgba, colored);
+                }
+                if (!moving && (set.slotGeneration != generation || set.slotEm != em || set.slotOutline != outlineQ || set.slots.size() != layout.glyphs.size()))
+                {
+                    set.slots.assign(layout.glyphs.size(), std::array<const GlyphSlot*, 4>{});
+                    set.slotGeneration = generation;
+                    set.slotEm = em;
+                    set.slotOutline = outlineQ;
+                }
+                [[maybe_unused]] float rowBaseline = std::numeric_limits<float>::quiet_NaN();
+                for (std::size_t gi = 0; gi < layout.glyphs.size(); ++gi)
+                {
+                    const PlacedGlyph& g = layout.glyphs[gi];
                     const float px = fx + g.pos.x * scale * rs, py = fy + g.pos.y * scale * rs;
                     float xi = FloorPx(px);
                     int phase = (int)((px - xi) * 4.0f + 0.5f);   // 0.5 .. 4.5: truncation is the floor
@@ -894,7 +992,7 @@ namespace esia::text
                     }
                     // in motion an outline's glyph moves by quarter pixels down too (from the design's outline)
                     const bool smooth = moving && Outlined(g.face);
-                    if (faces_[g.face]->bitmap || (wholePixelPens_ && !smooth))
+                    if ((layout.bitmapGlyphs && faces_[g.face]->bitmap) || (wholePixelPens_ && !smooth))
                     {
                         // a bitmap font's pixels on the target's, or outlines hinted in both directions for a pen on a
                         // whole pixel: whole pixels, no phases
@@ -913,41 +1011,101 @@ namespace esia::text
                             yi += 1.0f;
                         }
                     }
-                    const GlyphSlot* s = Glyph(g.face, g.glyph, em, phase, yPhase);
-                    if (outlineQ > 0)
+                    const GlyphSlot* s;
+                    if (moving)
+                        s = QuadSlot(g, em, phase, yPhase, outlineQ);
+                    else
                     {
-                        if (!s || s->color || !rgbaShown)
-                            continue;   // a color glyph (emoji) has no outline
-                        s = OutlineGlyph(g.face, g.glyph, em, phase, outlineQ, yPhase);
+                        const GlyphSlot*& known = set.slots[gi][(std::size_t)phase];
+                        if (!known)
+                            known = QuadSlot(g, em, phase, yPhase, outlineQ);
+                        s = known;
                     }
-                    if (!s || !s->page || s->width <= 0 || s->height <= 0 || !(s->color ? colorShown : rgbaShown))
+                    if (!s->page || s->width <= 0 || s->height <= 0)
                         continue;
-                    if (set.runs.empty() || set.runs.back().page != s->page)
-                        set.runs.push_back({s->page, (std::uint32_t)set.quads.size(), 0});
-                    ++set.runs.back().count;
                     const Rect r(xi + (float)s->left, yi + (float)s->top, xi + (float)(s->left + s->width), yi + (float)(s->top + s->height));
-                    set.quads.emplace_back().Set(r, s->uv0, s->uv1, s->color ? colorGlyphRgba : rgba);
-                    set.bounds = set.bounds.Union(r);
-                    set.runs.back().bounds = set.runs.back().bounds.Union(r);
+                    if constexpr (Keep)
+                    {
+                        if (set.runs.empty() || set.runs.back().page != s->page)
+                            set.runs.push_back({s->page, (std::uint32_t)set.quads.size(), 0});
+                        ++set.runs.back().count;
+                        if (set.rows.empty() || g.pos.y != rowBaseline)
+                        {
+                            set.rows.push_back({(std::uint32_t)set.quads.size(), 0});
+                            rowBaseline = g.pos.y;
+                        }
+                        QuadInstance& q = set.quads.emplace_back();
+                        q.rect[0] = r.min.x;
+                        q.rect[1] = r.min.y;
+                        q.rect[2] = r.max.x;
+                        q.rect[3] = r.max.y;
+                        q.packed[0] = s->quadUv[0];
+                        q.packed[1] = s->quadUv[1];
+                        q.packed[2] = 0.0f;
+                        q.packed[3] = s->color ? 1.0f : 0.0f;
+                        set.bounds = set.bounds.Union(r);
+                        set.runs.back().bounds = set.runs.back().bounds.Union(r);
+                        Layout::QuadRow& row = set.rows.back();
+                        ++row.count;
+                        row.y0 = std::min(row.y0, r.min.y);
+                        row.y1 = std::max(row.y1, r.max.y);
+                    }
+                    if (out)
+                    {
+                        if (writing != s->page)
+                        {
+                            if (writing)
+                                out->dl->EndQuads(w);
+                            w = out->dl->BeginQuads(s->page, (std::uint32_t)(layout.glyphs.size() - gi));   // (at most the glyphs left)
+                            writing = s->page;
+                        }
+                        QuadInstance& d = w.quad[w.written++];
+                        const Rect u((r.min.x + out->ox) * out->inv, (r.min.y + out->oy) * out->inv, (r.max.x + out->ox) * out->inv,
+                                     (r.max.y + out->oy) * out->inv);
+                        d.rect[0] = u.min.x;
+                        d.rect[1] = u.min.y;
+                        d.rect[2] = u.max.x;
+                        d.rect[3] = u.max.y;
+                        const float* c = s->color ? colored : ink;
+                        d.packed[0] = s->quadUv[0];
+                        d.packed[1] = s->quadUv[1];
+                        d.packed[2] = c[0];
+                        d.packed[3] = c[1];
+                        w.bounds = w.bounds.Union(u);
+                    }
                 }
-                set.generation = generation;
-                set.em = em;
-                set.scale = scale;
-                set.fx = fx;
-                set.fy = fy;
-                set.rgba = rgba;
-                set.colorRgba = colorGlyphRgba;
-                set.outline = outlineQ;
+                if (writing)
+                    out->dl->EndQuads(w);
+                if constexpr (Keep)
+                {
+                    // the rows' extents made monotonic (a deep descender may reach below the next line's): each row's
+                    // bottom the lowest of it and the rows above, its top the highest of it and the rows below - a
+                    // search for the rows a clip holds then never misses one
+                    for (std::size_t k = 1; k < set.rows.size(); ++k)
+                        set.rows[k].y1 = std::max(set.rows[k].y1, set.rows[k - 1].y1);
+                    for (std::size_t k = set.rows.size(); k-- > 1;)
+                        set.rows[k - 1].y0 = std::min(set.rows[k - 1].y0, set.rows[k].y0);
+                    set.generation = generation;
+                    set.em = em;
+                    set.scale = scale;
+                    set.fx = fx;
+                    set.fy = fy;
+                    set.outline = outlineQ;
+                }
             }
 
-            // The quads at the whole pixel (ox, oy), in UI units; the ones outside the clip left out (none to test when
-            // the text lies inside it).
-            static void EmitQuads(DrawList& dl, const Layout::QuadSet& set, float ox, float oy, float inv)
+            // The quads at the whole pixel (ox, oy), in UI units (rs pixels per unit), in `rgba` - a color glyph's in
+            // `colorRgba`; the ones outside the clip left out (none to test when the text lies inside it).
+            static void EmitQuads(DrawList& dl, const Layout::QuadSet& set, float ox, float oy, float rs, std::uint32_t rgba, std::uint32_t colorRgba)
             {
+                const float inv = 1.0f / rs;
                 const Rect clip = dl.ClipRect();
                 const Rect all((set.bounds.min.x + ox) * inv, (set.bounds.min.y + oy) * inv, (set.bounds.max.x + ox) * inv, (set.bounds.max.y + oy) * inv);
                 if (set.runs.empty() || !all.Overlaps(clip))
                     return;
+                float ink[2], colored[2];
+                QuadInstance::PackColor(rgba, ink);
+                QuadInstance::PackColor(colorRgba, colored);
                 if (clip.Contains(all))
                 {
                     // all in view: the quads go in as a block, through local cursors (stores through the writer's
@@ -963,7 +1121,11 @@ namespace esia::text
                             d->rect[1] = (q->rect[1] + oy) * inv;
                             d->rect[2] = (q->rect[2] + ox) * inv;
                             d->rect[3] = (q->rect[3] + oy) * inv;
-                            std::memcpy(d->packed, q->packed, sizeof(d->packed));
+                            const float* c = q->packed[3] != 0.0f ? colored : ink;
+                            d->packed[0] = q->packed[0];
+                            d->packed[1] = q->packed[1];
+                            d->packed[2] = c[0];
+                            d->packed[3] = c[1];
                         }
                         w.written = run.count;
                         w.bounds = Rect((run.bounds.min.x + ox) * inv, (run.bounds.min.y + oy) * inv, (run.bounds.max.x + ox) * inv,
@@ -972,19 +1134,30 @@ namespace esia::text
                     }
                     return;
                 }
+                // a clip cuts it: only the lines it holds are looked at (a long text in a small view), and room is
+                // reserved for their quads only
+                const float cy0 = clip.min.y * rs - oy, cy1 = clip.max.y * rs - oy;   // the clip's rows in the set's pixels
+                const auto firstRow = std::partition_point(set.rows.begin(), set.rows.end(), [cy0](const Layout::QuadRow& row) { return row.y1 <= cy0; });
+                const auto endRow = std::partition_point(firstRow, set.rows.end(), [cy1](const Layout::QuadRow& row) { return row.y0 < cy1; });
+                if (firstRow == endRow)
+                    return;
+                const std::uint32_t qa = firstRow->first, qb = std::prev(endRow)->first + std::prev(endRow)->count;
                 for (const Layout::QuadRun& run : set.runs)
                 {
+                    const std::uint32_t i0 = std::max(run.first, qa), i1 = std::min(run.first + run.count, qb);
+                    if (i0 >= i1)
+                        continue;
                     DrawList::QuadWriter w;
                     bool open = false;
-                    const QuadInstance* q = set.quads.data() + run.first;
-                    for (std::uint32_t i = 0; i < run.count; ++i, ++q)
+                    const QuadInstance* q = set.quads.data() + i0;
+                    for (std::uint32_t i = i0; i < i1; ++i, ++q)
                     {
                         const Rect r((q->rect[0] + ox) * inv, (q->rect[1] + oy) * inv, (q->rect[2] + ox) * inv, (q->rect[3] + oy) * inv);
                         if (!r.Overlaps(clip))
                             continue;
                         if (!open)   // a run opens at its first quad in view (no empty command when none is)
                         {
-                            w = dl.BeginQuads(run.page, run.count - i);
+                            w = dl.BeginQuads(run.page, i1 - i);
                             open = true;
                         }
                         QuadInstance& d = w.quad[w.written++];
@@ -992,7 +1165,11 @@ namespace esia::text
                         d.rect[1] = r.min.y;
                         d.rect[2] = r.max.x;
                         d.rect[3] = r.max.y;
-                        std::memcpy(d.packed, q->packed, sizeof(d.packed));
+                        const float* c = q->packed[3] != 0.0f ? colored : ink;
+                        d.packed[0] = q->packed[0];
+                        d.packed[1] = q->packed[1];
+                        d.packed[2] = c[0];
+                        d.packed[3] = c[1];
                         w.bounds = w.bounds.Union(r);
                     }
                     if (open)
@@ -1325,6 +1502,7 @@ namespace esia::text
                     layout.glyphs.clear();
                     layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
                     layout.fill.generation = layout.outline.generation = 0;   // other glyphs: placed again
+                    layout.fill.slotGeneration = layout.outline.slotGeneration = 0;
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
@@ -1391,6 +1569,8 @@ namespace esia::text
                 layout.metrics.size = Vec2(width, lineHeight * (float)lineInfo_.size());
                 layout.metrics.baseline = baseline;
                 layout.metrics.lines = (int)lineInfo_.size();
+                layout.bitmapGlyphs = std::any_of(layout.glyphs.begin(), layout.glyphs.end(),
+                                                  [this](const PlacedGlyph& g) { return g.glyph != kNoGlyph && faces_[g.face]->bitmap; });
             }
 
             void LayoutParagraph(std::uint16_t primary, float size, std::string_view para, float maxWidth, float trimWidth, float lineHeight,
@@ -2371,8 +2551,10 @@ namespace esia::text
             std::unordered_map<std::uint64_t, Layout, IntHash> layouts_;
             Layout* lastLayout_ = nullptr;   // the last GetLayout's (a measure is followed by the draw)
             static constexpr std::size_t kLayoutFront = 256;
-            std::array<Layout*, kLayoutFront> layoutFront_{};   // layouts_ by key, direct-mapped (cleared when any leaves)
+            std::array<Layout*, kLayoutFront> layoutFront_{};   // layouts_ by key, direct-mapped (a layout leaves with its slot)
             std::vector<std::unordered_map<std::uint64_t, Layout, IntHash>::node_type> spareLayouts_;   // evicted, to be reused
+            std::size_t sweepBucket_ = 0;           // NewFrame's next bucket of layouts_ to look through for unused layouts
+            std::vector<std::uint64_t> sweepKeys_;   // ... its scratch
 
             // scratch, reused by every layout
             std::vector<CodePoint> cps_;
