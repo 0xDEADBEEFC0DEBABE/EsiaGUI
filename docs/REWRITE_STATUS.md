@@ -243,12 +243,15 @@ plain widgets, and most widgets of most frames draw what they drew the frame bef
   anything that reached into the list before it.
 * Memos are kept per draw list in the order widgets draw (a lane, `Ui::Impl::MemoLane`): a widget finds its own by its
   place, nothing is looked up, and its inputs tell whether it is its own. A lane not drawn into for 600 frames goes.
-* Button and IconButton, Toggle, Slider, Text (and TextWrapped, the headlines), a window's surface and its title keep
-  memos; so do a list row's separator, highlight, icon and label (its interaction now comes before its drawing: it draws
-  nothing), a row's right-aligned value, a navigation row's chevron, a slider row's value, a section's card (drawn after
-  its rows and moved under them: the memo lies between the `Mark` and the move), a table's cells, a tree's rows (their
-  springs first), Checkbox, Badge, ProgressBar, ProgressRing and segmented controls (after their liquid selection's
-  springs; a dozen segments at most). A memo inside another's recording draws as part of it.
+* Every widget keeps memos of what it draws - its interaction and springs come first (they draw nothing: the same
+  output), its drawing after, piece by piece where interactions come between: controls, text, windows, cards, lists,
+  tables and trees, navigation pages and bars, popups, pickers and tooltips, fields not being edited, number fields,
+  the color picker (its spectrum's texture made for the hue every frame as before: its texels are not the draw list's),
+  the dock's tabs and splitters, charts, plots (their series' points as the memo's bytes, `MemoKey::Data`: compared byte
+  for byte, not hashed) and the multi-line editor while it is not being edited. A memo inside another's recording draws
+  as part of it. Drawn every frame: what moves with time alone (the activity indicator, the island), a field or editor
+  being edited (its caret, selection and input method), a plot's crosshair, scroll edge fades (a fade breaks a
+  recording), glows fitted to their neighbours.
 * Kept measures (`MeasureMetrics`): a text measured in a lane's same place with the same font, size, wrap width and
   bytes, the text system's text coming out as it did, takes the metrics it had (`MeasureSlot`) without the layout
   cache's look-up; the layouts found so stay in the cache's use (`TextSystem::KeepLayouts`, once a frame). A button
@@ -288,7 +291,7 @@ The flat look takes 0.78 times Dear ImGui's CPU. With `ESIA_UI_MEMO=off` the sam
 ### Not done
 
 * The regular look's submit: its widgets' shadows are FX instances between the labels' quads (66 draws against 5 flat).
-* Other widgets (fields, pickers, steppers, plots, the dock's tabs ...) draw every frame; each needs its inputs named.
+* A widget added later keeps no memo until its inputs are named (the verify mode and the memo test find what is missed).
 * What a widget draws from that the memo does not see would be drawn stale: a widget keeping a memo must name every
   input of its drawing (the verify mode and the memo test find what is missed), and draw nothing whose pixels change
   without its inputs (an SVG breaks recordings: `DrawList::BreakRecording`).

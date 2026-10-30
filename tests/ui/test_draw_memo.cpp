@@ -31,6 +31,8 @@ namespace
         int count = 3, swatch = 1, pick = 1, tab = 0;
         std::string name = "Ada";
         float width = 4.5f;
+        Color color = Color(0.2f, 0.6f, 0.9f, 0.8f);
+        std::string notes = "First line\nSecond line, a little longer\nThird";
         int mode = 1;
         float rowValue = 40.0f;
 
@@ -72,11 +74,11 @@ namespace
         if (s.button >= 0)
             a.ctx.QueueInput(InputEvent::Button(MouseButton::Left, s.button == 1));
         a.ui->SetFlat(s.flat);
-        a.ctx.NewFrame({Vec2(800, 1800), s.scale, t});
+        a.ctx.NewFrame({Vec2(800, 3400), s.scale, t});
         a.ui->NewFrame();
         ui::WindowOptions wo;
         wo.pos = Vec2(20, 16);
-        wo.size = Vec2(380, 1700);
+        wo.size = Vec2(380, 3300);
         if (ui::BeginWindow("Panel", nullptr, wo))
         {
             ui::Spacer(1.0f + s.shift);
@@ -166,6 +168,20 @@ namespace
             no.label = "W";
             no.buttons = true;
             ui::NumberField("width", &a.width, no);
+            ui::ColorPickerOptions co;
+            co.width = 300.0f;
+            ui::ColorPicker("color", &a.color, co);
+            static const float kSeries[8] = {3, 5, 4, 7, 6, 8, 7, 9};
+            ui::LineChart("trend", kSeries);
+            if (ui::BeginPlot("plot"))
+            {
+                ui::PlotLine("Line", kSeries);
+                ui::PlotBars("Bars", std::span<const float>(kSeries, 4));
+                ui::EndPlot();
+            }
+            static const std::string_view kSlices[3] = {"One", "Two", "Three"};
+            ui::PieChart("pie", std::span<const float>(kSeries, 3), kSlices);
+            ui::TextEditor("notes", &a.notes);
             static const ui::TabItem kTabs[3] = {{(ui::Icon)'H', "Home"}, {(ui::Icon)'S', "Search"}, {(ui::Icon)'P', "Profile"}};
             ui::TabBar("tabs", &a.tab, kTabs);
             ui::TextWrapped(ui::TextStyle::Body, Color(0.92f, 0.92f, 0.95f),
@@ -216,14 +232,14 @@ namespace
         if (f >= 30 && f < 110)
         {
             const float k = (float)(f - 30) / 80.0f;
-            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 1580.0f * k);   // down to the section's rows, the table, the tree, the card
+            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 3180.0f * k);   // down over every widget
             if (f == 50 || f == 80)
                 s.button = 1;
             if (f == 53 || f == 95)
                 s.button = 0;
         }
         else if (f >= 110)
-            s.mouse = Vec2(700, 1760);   // out of the window
+            s.mouse = Vec2(700, 3360);   // out of the window
         if (f >= 140 && f < 170)
             s.styledRow = 2;
         if (f >= 180 && f < 260)

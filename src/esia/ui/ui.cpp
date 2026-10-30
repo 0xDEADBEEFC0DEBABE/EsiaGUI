@@ -325,7 +325,8 @@ namespace esia::ui
             std::memcpy(env_, env, sizeof(env));
             const int words = 6 + inputs.n;
             const bool same = slot.words == words && std::memcmp(slot.key, env_, 6 * sizeof(std::uint32_t)) == 0 &&
-                              std::memcmp(slot.key + 6, inputs.w, (std::size_t)inputs.n * sizeof(std::uint32_t)) == 0;
+                              std::memcmp(slot.key + 6, inputs.w, (std::size_t)inputs.n * sizeof(std::uint32_t)) == 0 &&
+                              slot.data.size() == inputs.dataSize && (inputs.dataSize == 0 || std::memcmp(slot.data.data(), inputs.data, inputs.dataSize) == 0);
             if (same && dl.CanReplay(slot.record))
             {
                 if (m.memoMode == 2)
@@ -392,6 +393,8 @@ namespace esia::ui
             }
             std::memcpy(slot.key, env_, 6 * sizeof(std::uint32_t));
             std::memcpy(slot.key + 6, inputs_.w, (std::size_t)inputs_.n * sizeof(std::uint32_t));
+            const std::uint8_t* data = static_cast<const std::uint8_t*>(inputs_.data);
+            slot.data.assign(data, data + inputs_.dataSize);
             slot.words = 6 + inputs_.n;
         }
     }

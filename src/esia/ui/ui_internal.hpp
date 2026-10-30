@@ -236,6 +236,7 @@ namespace esia::ui
         {
             std::uint32_t key[kMemoWords];
             int words = -1;   // the key's (-1: nothing kept)
+            std::vector<std::uint8_t> data;   // MemoKey::Data's bytes
             DrawRecord record;
             std::vector<text::DrawNote> notes;
         };
@@ -349,6 +350,15 @@ namespace esia::ui
             MemoKey& V(Vec2 v) { return F(v.x).F(v.y); }
             MemoKey& R(const Rect& r) { return F(r.min.x).F(r.min.y).F(r.max.x).F(r.max.y); }
             MemoKey& C(Color c) { return F(c.r).F(c.g).F(c.b).F(c.a); }
+            // one input of any size (a chart's values): compared byte for byte, kept as bytes; it must outlive the memo
+            const void* data = nullptr;
+            std::size_t dataSize = 0;
+            MemoKey& Data(const void* p, std::size_t size)
+            {
+                data = p;
+                dataSize = size;
+                return *this;
+            }
         };
         // A widget's drawing kept from the frame before: declared before the widget draws (after everything that
         // must happen every frame - interaction, springs), with every input of its drawing besides the theme, the
