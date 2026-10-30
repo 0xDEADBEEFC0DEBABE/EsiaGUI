@@ -669,8 +669,11 @@ namespace esia::text
                     return Vec2(0, 0);
                 if (color.a <= 0.0f || !(scale > 0.0f))
                     return layout->metrics.size;
+                const bool snap = (flags & TextFlags_PixelSnap) != 0;
                 if (rendering_.distanceFieldFrom > 0.0f && font.size * scale * params_.pixelsPerUnit >= rendering_.distanceFieldFrom)
                 {
+                    if (snap)
+                        pos = SnapToPixel(pos);
                     // large: the glyphs' distance fields, one per glyph for every size
                     fx::Instance m;
                     std::memset(&m, 0, sizeof(m));
@@ -683,18 +686,27 @@ namespace esia::text
                     m.flags[1] = (std::uint32_t)fx::PaintKind::Solid;
                     return DrawShapes(dl, font, pos, m, 0, 0.0f, text, wrapWidth, flags, scale);
                 }
-                // in motion: the design's outlines at quarter pixels both ways; at rest: this rendering; between: both
-                const float rest = rendering_.smoothMotion ? RestWeight(layout->fillDraws, pos, scale) : 1.0f;
+                // in motion: the design's outlines at quarter pixels both ways; at rest: this rendering; between: both.
+                // On whole pixels a text is placed the same everywhere: it never moves by a fraction to smooth.
+                const float rest = rendering_.smoothMotion && !snap ? RestWeight(layout->fillDraws, pos, scale) : 1.0f;
                 if (rest < 1.0f)
-                    DrawQuads(dl, *layout, layout->moving, font, pos, color.WithAlpha(color.a * (1.0f - rest)), scale, 0, true);
+                    DrawQuads(dl, *layout, layout->moving, font, pos, color.WithAlpha(color.a * (1.0f - rest)), scale, 0, true, false);
                 if (rest > 0.0f)
-                    DrawQuads(dl, *layout, layout->fill, font, pos, color.WithAlpha(color.a * rest), scale, 0, false);
+                    DrawQuads(dl, *layout, layout->fill, font, pos, color.WithAlpha(color.a * rest), scale, 0, false, snap);
                 return layout->metrics.size;
             }
 
+            // `pos` (UI units) at the nearest whole pixel
+            Vec2 SnapToPixel(Vec2 pos) const
+            {
+                const float rs = params_.pixelsPerUnit;
+                return Vec2(std::floor(pos.x * rs + 0.5f) / rs, std::floor(pos.y * rs + 0.5f) / rs);
+            }
+
             // The quads of `layout` at `pos` in one of its sets: placed again when anything they depend on changed.
+            // `snap`: from the nearest whole pixel (TextFlags_PixelSnap), without sub-pixel offsets.
             void DrawQuads(DrawList& dl, Layout& layout, Layout::QuadSet& set, FontRef font, Vec2 pos, Color color, float scale, std::uint32_t outlineQ,
-                           bool moving)
+                           bool moving, bool snap)
             {
                 const float rs = params_.pixelsPerUnit, inv = 1.0f / rs;
                 // animated scales are quantized to 1/4 px of em, so an animation does not flood the atlas
@@ -705,8 +717,8 @@ namespace esia::text
                     return;   // nothing shows (a color glyph has the same alpha)
                 // Glyphs are placed from the whole pixel at the origin (ox, oy) by its sub-pixel offsets (fx, fy): the
                 // same offsets, the same quads wherever the text is
-                const float ox = FloorPx(pos.x * rs), oy = FloorPx(pos.y * rs);
-                const float fx = pos.x * rs - ox, fy = pos.y * rs - oy;
+                const float ox = FloorPx(pos.x * rs + (snap ? 0.5f : 0.0f)), oy = FloorPx(pos.y * rs + (snap ? 0.5f : 0.0f));
+                const float fx = snap ? 0.0f : pos.x * rs - ox, fy = snap ? 0.0f : pos.y * rs - oy;
                 const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
                 if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.outline != outlineQ)
                 {
@@ -912,11 +924,13 @@ namespace esia::text
                     return;
                 // the placement Draw uses (the same em, origin and sub-pixel offsets, the same motion), the glyphs grown
                 const std::uint32_t width = OutlineQ(outline.width * scale * params_.pixelsPerUnit);
-                const float rest = rendering_.smoothMotion ? RestWeight(layout->outlineDraws, pos, scale) : 1.0f;
+                const bool snap = (flags & TextFlags_PixelSnap) != 0;
+                const float rest = rendering_.smoothMotion && !snap ? RestWeight(layout->outlineDraws, pos, scale) : 1.0f;
                 if (rest < 1.0f)
-                    DrawQuads(dl, *layout, layout->movingOutline, font, pos, outline.color.WithAlpha(outline.color.a * (1.0f - rest)), scale, width, true);
+                    DrawQuads(dl, *layout, layout->movingOutline, font, pos, outline.color.WithAlpha(outline.color.a * (1.0f - rest)), scale, width, true,
+                              false);
                 if (rest > 0.0f)
-                    DrawQuads(dl, *layout, layout->outline, font, pos, outline.color.WithAlpha(outline.color.a * rest), scale, width, false);
+                    DrawQuads(dl, *layout, layout->outline, font, pos, outline.color.WithAlpha(outline.color.a * rest), scale, width, false, snap);
             }
 
             // An outline's width in physical pixels as OutlineGlyph keys it: 1/8 px, at most 255 (31.875 px), 1 for any

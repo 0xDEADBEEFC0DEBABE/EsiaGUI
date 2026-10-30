@@ -14,6 +14,17 @@ namespace esia::conformance
     {
         constexpr double kTime = 1.25;
 
+        // What the scenes' painters start from: plain shapes as quads, or as FX instances while a scene with
+        // Scene::fxShapes is built (Build)
+        bool gFxShapes = false;
+
+        PainterEnv Env()
+        {
+            PainterEnv env;
+            env.quadShapes = !gFxShapes;
+            return env;
+        }
+
         // iOS dark-mode system colors
         const Color kBlue = Color::Hex(0x0A84FF), kGreen = Color::Hex(0x30D158), kIndigo = Color::Hex(0x5E5CE6), kOrange = Color::Hex(0xFF9F0A),
                     kPink = Color::Hex(0xFF375F), kPurple = Color::Hex(0xBF5AF2), kRed = Color::Hex(0xFF453A), kTeal = Color::Hex(0x40C8E0),
@@ -154,7 +165,7 @@ namespace esia::conformance
         void Shapes(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Paint::Linear(Color::Hex(0x1C1C1E), Color::Hex(0x3A3A3C))));
             // corners: square, circular, continuous, per corner, capsule
             p.Rect(Rect(12, 14, 60, 62), Style().Fill(kBlue));
@@ -181,7 +192,7 @@ namespace esia::conformance
         void Gradients(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x000000)));
             p.Rect(Rect(10, 10, 100, 60), Style().Radius(10).Fill(Paint::Linear(kBlue, kPink, 0)));
             p.Rect(Rect(115, 10, 205, 60), Style().Radius(10).Fill(Paint::Linear(kGreen, kIndigo, 45)));
@@ -213,7 +224,7 @@ namespace esia::conformance
         void Shadows(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
             p.Rect(Rect(16, 16, 96, 76), Style().Fill(Color::White()).Radius(14).Shadow(Color::Black(0.35f), 16, Vec2(0, 6)));
             p.Rect(Rect(120, 16, 200, 76), Style().Fill(Color::White()).Radius(14).Shadow(kBlue.WithAlpha(0.6f), 6, Vec2(4, 4), 3));
@@ -222,7 +233,7 @@ namespace esia::conformance
             p.Circle(Vec2(56, 150), 18, Style().Fill(kPink).Glow(kPink, 18, 0.9f));
             p.Rect(Rect(120, 132, 200, 168), Style().Fill(Color::Hex(0x1C1C1E)).Radius(12).InnerGlow(14, 0.8f).Glow(kTeal, 4, 0.5f));
             Neighbours n;
-            PainterEnv env;
+            PainterEnv env = Env();
             env.glow = &n;
             Painter contained(dl, env);
             contained.Capsule(Rect(226, 136, 294, 164), Style().Fill(kGreen).Glow(kGreen, 22, 1.0f));
@@ -257,7 +268,7 @@ namespace esia::conformance
         void GlassScene(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             Wallpaper(p, dl, Rect(0, 0, 320, 240));
             GlassCards(p);
         }
@@ -270,7 +281,7 @@ namespace esia::conformance
         void Paths(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             Wallpaper(p, dl, Rect(0, 0, 320, 240));
             GlassMaterial tab = Glass(6, 8, 14);
             tab.tint = Color(1, 1, 1, 0.12f);
@@ -310,7 +321,7 @@ namespace esia::conformance
         void CallbackCapture(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             Wallpaper(p, dl, Rect(0, 0, 320, 240));
             dl.AddCallback(&CountCallback, &f.callbacks);
             dl.PushClipRect(Rect(100, 100, 100, 140));
@@ -322,7 +333,7 @@ namespace esia::conformance
         void GlowLayers(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x05050A)));
             const TextureId atlas = MakeAtlas(f.textures);
             p.BeginGlowLayer(Color::Hex(0x40C8E0, 0.8f), 10.0f, 1.2f);
@@ -340,7 +351,7 @@ namespace esia::conformance
         void Text(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             const TextureId atlas = MakeAtlas(f.textures);
             p.Rect(Rect(0, 0, 320, 120), Style().Fill(Color::Hex(0x1C1C1E)));
             p.Rect(Rect(0, 120, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
@@ -355,7 +366,7 @@ namespace esia::conformance
         void TextLcd(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             const TextureId lcd = MakeAtlas(f.textures, true);
             p.Rect(Rect(0, 0, 320, 120), Style().Fill(Color::Hex(0x1C1C1E)));
             p.Rect(Rect(0, 120, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
@@ -527,7 +538,7 @@ namespace esia::conformance
         void TextFields(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x1C1C1E)));
             p.Rect(Rect(0, 150, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
             const FieldPage page = MakeFieldPage(f.textures);
@@ -568,7 +579,7 @@ namespace esia::conformance
         void MotionBlurScene(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x1C1C1E)));
             const Style capsule = Style().Fill(Color::Hex(0x0A84FF));
             p.Capsule(Rect(16, 14, 116, 42), capsule);
@@ -595,7 +606,7 @@ namespace esia::conformance
         void UiLightScene(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
             const Style card = Style().Radius(12).Fill(Color::Hex(0xF2F2F7)).Shadow(Color::Black(0.45f), 8, Vec2(0, 10));
             p.Rect(Rect(20, 20, 90, 80), card);
@@ -615,7 +626,7 @@ namespace esia::conformance
         void TextLegible(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Paint::Linear(Color::Black(), Color::White(), 0)));
             p.Rect(Rect(0, 160, 320, 240), Style().Fill(Color::Hex(0x808080)));
             const FieldPage page = MakeFieldPage(f.textures);
@@ -638,7 +649,7 @@ namespace esia::conformance
         void EdgeFade(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             const TextureId atlas = MakeAtlas(f.textures);
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x2C2C2E)));
             for (int col = 0; col < 2; ++col)
@@ -663,7 +674,7 @@ namespace esia::conformance
         void Clipping(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             const TextureId image = MakeImage(f.textures);
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Hex(0x1C1C1E)));
             // nested clips: the second intersects the first; a non-intersecting one replaces it
@@ -707,7 +718,7 @@ namespace esia::conformance
                 ui.Begin(names[w]);
                 Window* win = ui.CurrentWindow();
                 DrawList& dl = win->GetDrawList();
-                Painter p(dl);
+                Painter p(dl, Env());
                 // the window surface with its shadow (drawn outside the window's clip on purpose)
                 dl.PushClipRect(Rect(0, 0, 320, 240), false);
                 GlassMaterial g = Glass(10, 8, 28);
@@ -736,7 +747,7 @@ namespace esia::conformance
         {
             // 160 x 120 UI units on a 320 x 240 target: blur radii, glass reach, hairlines and glyphs in pixels
             DrawList& dl = f.NewList();
-            PainterEnv env;
+            PainterEnv env = Env();
             env.pixelScale = 2.0f;
             Painter p(dl, env);
             const TextureId atlas = MakeAtlas(f.textures);
@@ -753,7 +764,7 @@ namespace esia::conformance
         void LightStreak(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             p.Rect(Rect(0, 0, 320, 240), Style().Fill(Color::Black()));
             const Rect island(40, 40, 280, 200);
             p.Rect(island, Style().Fill(Color::Hex(0x0B0B10)).Radius(48));
@@ -773,7 +784,7 @@ namespace esia::conformance
         void Poison(SceneFrame& f)
         {
             DrawList& dl = f.NewList();
-            Painter p(dl);
+            Painter p(dl, Env());
             const Rect all(Vec2(0, 0), f.data.displaySize);
             const Color magenta = Color::Hex(0xFF00FF), green = Color::Hex(0x00FF00);
             p.Rect(all, Style().Fill(Paint::Linear(magenta, green, 90)));
@@ -794,6 +805,122 @@ namespace esia::conformance
             p.BeginGlowLayer(magenta, 16.0f, 1.0f);
             p.Rect(all, Style().Fill(green.WithAlpha(0.8f)));
             p.EndGlowLayer();
+        }
+
+        // Much content at once, at a fractional scale (1.25: the shapes' antialiasing from the derivatives there):
+        // items - a frame (a stroke inside the edge), a bar, a dot, a label and a line to the bottom each - overlapping
+        // one another, plain shapes and text interleaved (drawn as quads, in few draws); a clip that cuts the last row;
+        // strokes centered and outside on continuous corners, a stroked capsule, a stroked segment, a transparent fill
+        // under a stroke, and a fill and a stroke fading together (FX instances, between the quads).
+        void Dense(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            const TextureId atlas = MakeAtlas(f.textures);
+            const Vec2 size = f.data.displaySize;   // 256 x 192 UI units
+            p.Rect(Rect(Vec2(0, 0), size), Style().Fill(Color::Hex(0x101014)));
+            const Color colors[4] = {kRed, kTeal, kYellow, kGreen};
+            for (int i = 0; i < 24; ++i)
+            {
+                const int row = i / 8, col = i % 8;
+                if (row == 2 && col == 0)
+                    p.PushClip(Rect(0, 0, size.x, 128.0f));   // cuts the last row's labels and lines
+                const float x = 9.0f + (float)col * 29.5f + (float)row * 4.25f, y = 12.0f + (float)row * 42.3f + (float)(i % 3) * 3.7f;
+                const float w = 22.0f + (float)(i % 4) * 3.0f, h = 26.0f;
+                const Color c = colors[i % 4];
+                p.Line(Vec2(size.x * 0.5f, size.y), Vec2(x + w * 0.5f, y + h), 1.0f, Style().Fill(c.WithAlpha(0.45f)));
+                p.Rect(Rect(x, y, x + w, y + h), Style().Stroke(1.5f, c));
+                p.Rect(Rect(x - 5.0f, y + h * (float)(i % 5) / 4.0f * 0.75f, x - 2.5f, y + h), Style().Fill(kGreen).Radius(1.0f));
+                p.Circle(Vec2(x + w * 0.5f, y - 4.5f), 2.5f, Style().Fill(c));
+                Glyphs(dl, atlas, Vec2(x, y + h + 2.0f), "abc", 8.0f, Color::White(), f.data.framebufferScale.x);
+            }
+            p.PopClip();
+            p.Rect(Rect(8, 150, 58, 180), Style().Radius(8).Stroke(2, kBlue, 0.5f));
+            p.Rect(Rect(68, 150, 118, 180), Style().Fill(kIndigo.WithAlpha(0.6f)).Radius(10).Stroke(2.5f, Color::White(0.8f), 1.0f));
+            p.Capsule(Rect(128, 152, 178, 172), Style().Stroke(1.5f, kOrange));
+            p.Line(Vec2(190, 158), Vec2(240, 178), 6.0f, Style().Fill(kPurple).Stroke(1.5f, Color::White(), 1.0f));
+            p.Rect(Rect(188, 136, 248, 146), Style().Fill(kGray).Radius(3).Stroke(1.5f, kYellow).Opacity(0.6f));
+        }
+
+        // A path from `start` heading `angle` (degrees): segments `length` long, turning by `turns` (degrees) between them
+        int Turning(Vec2* out, Vec2 start, float angle, float length, const float* turns, int count)
+        {
+            out[0] = start;
+            float a = Radians(angle);
+            for (int i = 0; i <= count; ++i)
+            {
+                out[i + 1] = out[i] + Vec2(std::cos(a), std::sin(a)) * length;
+                if (i < count)
+                    a += Radians(turns[i]);
+            }
+            return count + 2;
+        }
+
+        // Polylines as quads (PainterEnv::quadShapes: a piece per segment between its joints' lines, a cap per end) or
+        // as geometry (polylines_mesh): the same pixels. On a checker, where a pixel blended twice would show: opaque
+        // and translucent lines turning by up to 115 degrees, steps on whole and half units (joints' lines through
+        // pixel centers), ends on pixel centers, a hairline and a thick line, smooth curves, a line crossing itself, a
+        // short segment between turns, and lines left to geometry either way (sharper turns, a segment too short for the
+        // turns at its ends).
+        void Polylines(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            PainterEnv env = Env();
+            env.pixelScale = f.data.framebufferScale.x;
+            Painter p(dl, env);
+            const Vec2 size = f.data.displaySize;   // 320 x 240 UI units
+            p.FillRect(Rect(Vec2(0, 0), size), Color::Hex(0x16161C));
+            for (int y = 0; y < (int)size.y; y += 10)
+                for (int x = (y / 10 % 2) * 10; x < (int)size.x; x += 20)
+                    p.FillRect(Rect((float)x, (float)y, (float)x + 10.0f, (float)y + 10.0f), Color::Hex(0x2A2A33));
+            Vec2 pts[16];
+            // opaque, turning a quarter each way; turning 110 degrees
+            const float quarter[3] = {90, -90, 90}, wide[2] = {110, -110};
+            p.Polyline(pts, Turning(pts, Vec2(10, 44), -45, 24, quarter, 3), 4.0f, Style().Fill(kBlue));
+            p.Polyline(pts, Turning(pts, Vec2(10, 76), -35, 20, wide, 2), 3.0f, Style().Fill(kTeal));
+            // translucent, turning 30 to 115 degrees
+            const float mixed[4] = {30, -60, 90, -115};
+            p.Polyline(pts, Turning(pts, Vec2(116, 60), -20, 22, mixed, 4), 7.0f, Style().Fill(kOrange.WithAlpha(0.55f)));
+            // steps on whole units (the joints' lines through pixel centers), translucent; a square wave on half units
+            const Vec2 steps[10] = {Vec2(218, 14), Vec2(236, 14), Vec2(236, 28), Vec2(254, 28), Vec2(254, 42),
+                                    Vec2(272, 42), Vec2(272, 56), Vec2(290, 56), Vec2(290, 70), Vec2(308, 70)};
+            p.Polyline(steps, 10, 3.0f, Style().Fill(kGreen.WithAlpha(0.6f)));
+            const Vec2 wave[8] = {Vec2(218.5f, 86.5f), Vec2(232.5f, 86.5f), Vec2(232.5f, 76.5f), Vec2(246.5f, 76.5f),
+                                  Vec2(246.5f, 86.5f), Vec2(260.5f, 86.5f), Vec2(260.5f, 76.5f), Vec2(274.5f, 76.5f)};
+            p.Polyline(wave, 8, 2.0f, Style().Fill(kYellow));
+            // a hairline (fainter, not thinner) and a pixel-wide line
+            const float bends[3] = {45, -90, 100}, zig[3] = {60, -60, 60};
+            p.Polyline(pts, Turning(pts, Vec2(10, 130), -30, 26, bends, 3), 0.6f, Style().Fill(Color::White()));
+            p.Polyline(pts, Turning(pts, Vec2(10, 160), -30, 22, zig, 3), 1.0f, Style().Fill(kYellow));
+            // thick and translucent: ten-sided ends
+            const float thick[2] = {40, -70};
+            p.Polyline(pts, Turning(pts, Vec2(120, 150), -40, 30, thick, 2), 16.0f, Style().Fill(kPurple.WithAlpha(0.6f)));
+            // smooth: a monotone curve (opaque) and a Catmull-Rom one (translucent)
+            const Vec2 chart[6] = {Vec2(218, 160), Vec2(238, 120), Vec2(258, 150), Vec2(278, 110), Vec2(298, 140), Vec2(310, 100)};
+            p.Polyline(chart, 6, 3.0f, Style().Fill(kPink), PolylineFlags_Smooth);
+            const Vec2 curl[5] = {Vec2(220, 100), Vec2(250, 95), Vec2(240, 125), Vec2(280, 120), Vec2(300, 100)};
+            p.Polyline(curl, 5, 5.0f, Style().Fill(kGreen.WithAlpha(0.5f)), PolylineFlags_Smooth);
+            // crossing itself: blended twice where it crosses, either way
+            const float loop[4] = {100, 100, 100, 100};
+            p.Polyline(pts, Turning(pts, Vec2(20, 200), -10, 34, loop, 4), 5.0f, Style().Fill(kIndigo.WithAlpha(0.5f)));
+            // a short segment between turns either way: its joints' lines do not cross inside it, quads
+            const Vec2 zag[4] = {Vec2(70, 234), Vec2(86, 234), Vec2(88, 231), Vec2(102, 220)};
+            p.Polyline(zag, 4, 6.0f, Style().Fill(kBlue.WithAlpha(0.7f)));
+            // geometry either way: turns sharper than 120 degrees (clipped miters), a segment too short for its turns the
+            // same way
+            const float sharp[1] = {150}, sharper[1] = {160};
+            p.Polyline(pts, Turning(pts, Vec2(118, 190), 0, 30, sharp, 1), 5.0f, Style().Fill(kRed));
+            p.Polyline(pts, Turning(pts, Vec2(160, 182), 10, 30, sharper, 1), 6.0f, Style().Fill(Color::White(0.5f)));
+            const Vec2 kink[4] = {Vec2(118, 214), Vec2(146, 214), Vec2(148, 217), Vec2(148, 234)};
+            p.Polyline(kink, 4, 10.0f, Style().Fill(kOrange));
+            // ends on pixel centers: across, down, diagonal, and a corner
+            const Vec2 across[2] = {Vec2(220.5f, 184), Vec2(300.5f, 184)}, down[2] = {Vec2(226, 196.5f), Vec2(226, 232.5f)};
+            const Vec2 diagonal[2] = {Vec2(240.5f, 196.5f), Vec2(276.5f, 232.5f)};
+            const Vec2 corner[3] = {Vec2(288.5f, 196.5f), Vec2(310.5f, 196.5f), Vec2(310.5f, 230.5f)};
+            p.Polyline(across, 2, 4.0f, Style().Fill(Color::White(0.7f)));
+            p.Polyline(down, 2, 3.0f, Style().Fill(kTeal.WithAlpha(0.6f)));
+            p.Polyline(diagonal, 2, 5.0f, Style().Fill(kYellow.WithAlpha(0.6f)));
+            p.Polyline(corner, 3, 2.5f, Style().Fill(kPink.WithAlpha(0.6f)));
         }
 
         std::vector<Scene> MakeScenes()
@@ -920,6 +1047,44 @@ namespace esia::conformance
             reused.golden = "glass";
             reused.tolerance = glassTolerance;
             reused.repeat = 3;
+            Scene& shapesFx = add("shapes_fx", "the shapes scene with its plain shapes as FX instances (PainterEnv::quadShapes off): the pixels of the quads",
+                                  &Shapes);
+            shapesFx.golden = "shapes";
+            shapesFx.fxShapes = true;
+            shapesFx.sameAs = "shapes";
+            Scene& dense = add("dense", "much content at once at scale 1.25: overlapping items (frames, bars, dots, labels, lines) - plain shapes as "
+                                        "quads among text quads, in few draws; a cut clip; centered and outside strokes on continuous corners, a stroked "
+                                        "capsule and segment, a fill and a stroke fading together",
+                               &Dense);
+            dense.scale = 1.25f;
+            Scene& denseFx = add("dense_fx", "the dense scene with its plain shapes as FX instances: the pixels of the quads", &Dense);
+            denseFx.scale = 1.25f;
+            denseFx.golden = "dense";
+            denseFx.fxShapes = true;
+            denseFx.sameAs = "dense";
+            // where the 24 translucent lines meet at the bottom a pixel is blended a dozen times over: the two ways' last bits
+            // add up to 3 levels there on llvmpipe and lavapipe (2 everywhere else)
+            denseFx.sameTolerance = {3, 0.0, 3, 0.05};
+            add("polylines", "polylines as quads drawn with the text (a piece per segment between its joints' lines, a cap per end) on a checker: "
+                             "opaque and translucent lines turning by up to 115 degrees, steps on whole and half units, ends on pixel centers, a "
+                             "hairline, a thick line, smooth curves, a line crossing itself, a short segment between turns; lines left to geometry "
+                             "(sharper turns, a segment too short for its turns)",
+                &Polylines);
+            Scene& linesMesh = add("polylines_mesh", "the polylines scene as geometry (PainterEnv::quadShapes off): the pixels of the quads", &Polylines);
+            linesMesh.golden = "polylines";
+            linesMesh.fxShapes = true;
+            linesMesh.sameAs = "polylines";
+            Scene& linesScaled = add("polylines_scaled", "the polylines scene at scale 1.5", &Polylines);
+            linesScaled.width = 480;
+            linesScaled.height = 360;
+            linesScaled.scale = 1.5f;
+            Scene& linesScaledMesh = add("polylines_scaled_mesh", "the polylines scene at scale 1.5 as geometry: the pixels of the quads", &Polylines);
+            linesScaledMesh.width = 480;
+            linesScaledMesh.height = 360;
+            linesScaledMesh.scale = 1.5f;
+            linesScaledMesh.golden = "polylines_scaled";
+            linesScaledMesh.fxShapes = true;
+            linesScaledMesh.sameAs = "polylines_scaled";
             return s;
         }
 
@@ -928,7 +1093,9 @@ namespace esia::conformance
             frame.data = DrawData();
             frame.data.displaySize = Vec2((float)scene.width / scene.scale, (float)scene.height / scene.scale);
             frame.data.framebufferScale = Vec2(scene.scale, scene.scale);
+            gFxShapes = scene.fxShapes;
             build(frame);
+            gFxShapes = false;
             frame.data.time = kTime;
             frame.data.deltaTime = 1.0f / 60.0f;
         }

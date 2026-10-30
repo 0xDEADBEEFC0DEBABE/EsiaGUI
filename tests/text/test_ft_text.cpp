@@ -795,3 +795,28 @@ ESIA_TEST(FreeType, NeutralsAroundARightToLeftWordStayInPlace)
     // the space after it is right of the whole word, then b
     ESIA_CHECK(s[4].x >= s[2].x - 1e-3f && std::fabs(s[5].x - s[4].x - space) < 1e-3f && s[6].x > s[5].x);
 }
+
+// TextFlags_PixelSnap: a text drawn at a fraction of a pixel draws exactly what it draws at the nearest pixel - at a
+// fractional pixel density too; without the flag the fraction shows (another phase of the bitmaps)
+ESIA_TEST(FreeType, PixelSnapDrawsWhatTheNearestPixelDraws)
+{
+    Fixture f;
+    const text::FontRef fr{f.droid, 16.0f};
+    for (const float density : {1.0f, 1.5f})
+    {
+        f.ts->NewFrame({density});
+        DrawList snapped = NewList(), whole = NewList(), free = NewList();
+        const Vec2 at(10.3f, 20.1f), nearest(10.0f, 20.0f);   // the nearest pixel at both densities
+        f.ts->Draw(snapped, fr, at, Color::Black(), "Esia", 0.0f, text::TextFlags_PixelSnap);
+        f.ts->Draw(whole, fr, nearest, Color::Black(), "Esia");
+        f.ts->Draw(free, fr, at, Color::Black(), "Esia");
+        const std::vector<Quad> a = Quads(snapped), b = Quads(whole), c = Quads(free);
+        ESIA_CHECK(a.size() == 4 && b.size() == 4 && c.size() == 4);
+        bool same = a.size() == b.size(), differs = false;
+        for (std::size_t i = 0; same && i < a.size(); ++i)
+            same = a[i].r == b[i].r && a[i].uv0 == b[i].uv0 && a[i].uv1 == b[i].uv1;
+        for (std::size_t i = 0; i < a.size() && i < c.size(); ++i)
+            differs = differs || !(a[i].r == c[i].r) || !(a[i].uv0 == c[i].uv0);
+        ESIA_CHECK(same && differs);
+    }
+}

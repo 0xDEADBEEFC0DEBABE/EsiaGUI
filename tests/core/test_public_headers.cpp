@@ -26,6 +26,7 @@
 #include "esia/rhi/backend_registry.hpp"
 #include "esia/rhi/null_device.hpp"
 #include "esia/rhi/rhi.hpp"
+#include "esia/svg/svg.hpp"
 #include "esia/text/freetype.hpp"
 #include "esia/text/glyph_atlas.hpp"
 #include "esia/text/glyph_raster.hpp"

@@ -1,0 +1,19 @@
+create texture #1 320x240 RGBA8_UNORM usage=7 host-target
+begin frame 1
+create texture #2 1x1 RGBA8_UNORM usage=1 white
+create buffer #3 vertex 81420 bytes
+create buffer #4 index 40428 bytes
+update buffer #3 54280 bytes
+update buffer #4 26952 bytes
+pass #1 load ui
+create pipeline #5 UiGeometry list straight RGBA8_UNORM
+pipeline #5
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 0 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 0
+texture t0 #2
+constants draw: 0 0 0 0 | 0 0 0 0
+vertex buffer #3
+index buffer #4
+draw indexed 6738 from 0
+end pass
+end frame

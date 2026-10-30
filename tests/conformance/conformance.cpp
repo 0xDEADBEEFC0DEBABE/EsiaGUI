@@ -17,6 +17,7 @@
 // --update writes the goldens from this run instead of comparing (images: only for scenes that own theirs).
 // A missing golden is reported as NO GOLDEN and fails only with --strict.
 // --out writes every rendered image (and, on a mismatch, <scene>.diff.png) or command log for inspection.
+// A scene with Scene::sameAs is also compared with that scene's image, drawn before it on the same backend.
 //
 // Exit code: 1 when a scene failed (or nothing ran), else 77 when every scene was skipped - no device for the backend
 // on this machine; CTest reports that as skipped (SKIP_RETURN_CODE), not passed - else 0.
@@ -31,6 +32,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -216,6 +218,38 @@ namespace
         return Result::Pass;
     }
 
+    // The images drawn so far that a later scene is compared with (Scene::sameAs), by backend and scene
+    std::map<std::string, testkit::Image>& Drawn()
+    {
+        static std::map<std::string, testkit::Image> drawn;
+        return drawn;
+    }
+
+    bool Compared(const char* name)
+    {
+        for (const Scene& s : Scenes())
+            if (s.sameAs && std::strcmp(s.sameAs, name) == 0)
+                return true;
+        return false;
+    }
+
+    // Scene::sameAs: against the other scene's image on this backend (none when --scene left it out)
+    Result CheckSame(const rhi::BackendInfo& backend, const Scene& scene, const testkit::Image& image, std::string& detail)
+    {
+        const auto it = Drawn().find(std::string(backend.name) + "/" + scene.sameAs);
+        if (it == Drawn().end())
+        {
+            detail += std::string("; ") + scene.sameAs + " not drawn";
+            return Result::Pass;
+        }
+        const testkit::CompareResult r = testkit::Compare(image, it->second, scene.sameTolerance);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "; against %s: max delta %d (allowed %d), %d pixel(s) over %d", scene.sameAs, r.maxDelta,
+                      scene.sameTolerance.maxDelta, (int)r.differing, scene.sameTolerance.channel);
+        detail += buf;
+        return r.pass ? Result::Pass : Result::Fail;
+    }
+
     // An empty frame that clears the target (the cross-frame mode's scene frame starts from what a fresh one holds).
     bool ClearTarget(rhi::Device& dev, rhi::Texture target)
     {
@@ -293,7 +327,11 @@ namespace
         }
         testkit::Image image(scene.width, scene.height);
         image.rgba = std::move(pixels);
-        const Result r = CheckImage(o, backend.name, scene, image, detail);
+        Result r = CheckImage(o, backend.name, scene, image, detail);
+        if (r == Result::Pass && scene.sameAs)
+            r = CheckSame(backend, scene, image, detail);
+        if (Compared(scene.name))
+            Drawn()[std::string(backend.name) + "/" + scene.name] = image;
         return r == Result::Pass && scene.checkCopy ? CheckCopy(scene, dev, h.target, image, detail) : r;
     }
 

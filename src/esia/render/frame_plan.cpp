@@ -532,8 +532,10 @@ namespace esia::render
                     o.clip = clip;
                     std::copy(fade, fade + 4, o.fade);
                     o.texture = cmd.texture;
+                    o.anyTexture = cmd.anyTexture;
+                    o.shapes = cmd.shapes;
                     TextureInfo ti;
-                    if (cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
+                    if (!cmd.anyTexture && cmd.texture != 0 && textureInfo && textureInfo(cmd.texture, ti))
                     {
                         o.coverage = ti.Coverage();
                         o.lcd = ti.Lcd();
@@ -545,15 +547,25 @@ namespace esia::render
                     if (o.bounds.Empty())
                         break;   // nothing inside the clip
                     o.clipFree = !cut;
+                    // plain shapes read no texture: they join quads on any, and a batch of them alone takes any
                     int k = findJoin(o.bounds, false, [&](const RenderOp& x) {
-                        return x.type == RenderOp::Draw && x.quads && clipJoins(x, clip, whole, cut) && x.texture == cmd.texture &&
-                               x.coverage == o.coverage && std::equal(fade, fade + 4, x.fade);
+                        return x.type == RenderOp::Draw && x.quads && clipJoins(x, clip, whole, cut) &&
+                               (o.anyTexture || x.anyTexture || (x.texture == cmd.texture && x.coverage == o.coverage)) && std::equal(fade, fade + 4, x.fade);
                     });
                     if (k >= 0)
                     {
-                        joinClip(ops[(std::size_t)k], clip, cut);
-                        ops[(std::size_t)k].quadCount += cmd.count;
-                        ops[(std::size_t)k].bounds = ops[(std::size_t)k].bounds.Union(o.bounds);
+                        RenderOp& x = ops[(std::size_t)k];
+                        joinClip(x, clip, cut);
+                        if (x.anyTexture && !o.anyTexture)
+                        {
+                            x.texture = o.texture;
+                            x.coverage = o.coverage;
+                            x.lcd = o.lcd;
+                            x.anyTexture = false;
+                        }
+                        x.quadCount += cmd.count;
+                        x.shapes = x.shapes || cmd.shapes;
+                        x.bounds = x.bounds.Union(o.bounds);
                     }
                     else
                     {

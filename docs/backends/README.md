@@ -231,13 +231,31 @@ define `ESIA_FX_FETCH_ALL=1` restores the old path (every row fetched at the sta
 measurements: `tools/shaders/build_shaders.py --define ESIA_FX_FETCH_ALL=1` or `/DESIA_FX_FETCH_ALL=1` in
 `D3DCompile`; the pixels are identical, only the cost differs (do not commit a library built that way).
 
-**Quads.** Glyphs and the Painter's flat tiles are `esia::QuadInstance`s: two float4 rows - the rect, then the uv in
-1/4096 steps and the color as whole numbers (`u0 + 4096 v0`, `du + 4096 dv`, `R + 256 G + 65536 B`, `A`), exact in a
-float, so `QuadVS` decodes them with float arithmetic on every shader model, SM3 included. They follow the FX
-instances in the instance data from `gConv.w`: a row of the buffer, or a row of the instance texture, whose rows then
-hold 8 quads in the room of each FX instance (16 of its 24 texels: a power of two per row, which SM3's float modulo
-needs). The draw's first quad comes as the FX first instance does (Draw constants, or `DrawInstancedFrom`). A quad is
-32 bytes where four vertices and six indices took 104, and no index buffer is read.
+**Quads.** Glyphs, the Painter's flat tiles, its plain shapes and its polylines are `esia::QuadInstance`s: two float4
+rows - the rect, then the uv in 1/4096 steps and the color as whole numbers (`u0 + 4096 v0`, `du + 4096 dv`, `R + 256 G
++ 65536 B`, `A`), exact in a float, so `QuadVS` decodes them with float arithmetic on every shader model, SM3 included.
+A plain shape (`esia::QuadShape`: the fill or the stroke of a rounded rectangle or of a segment, or a solid rectangle)
+keeps its fields where a textured quad's uv and alpha are: `-1 - (kind + 8 (smoothing in 1/1023 + 1024 stroke align in
+1/64))` (negative: never a uv), its radius as it is, and its stroke width in 1/64 units beside the alpha (`A + 256
+width`) - whole numbers below 2^24 again. Batches of textured quads alone draw with `QuadVS` and esia_ui.hlsl's pixel
+shaders (`QuadImage` .. `QuadLcdGray`); batches with shapes among them (`RenderOp::shapes`) with `QuadShapeVS`, which
+decodes a shape and pads its rect by a pixel (a segment's quad turns with it, as `FxVS`'s does), and pixel shaders that
+take a shape's coverage from the FX shader's own distance and antialiasing (`SdRoundRect`, `SdSegment`; `QuadShapeImage`
+.. `QuadShapeLcdGray`): a plain shape covers the same pixels as an FX instance would, from 32 bytes instead of 384, in
+the draws of the text around it. A polyline is a quad per segment and per round end (`LinePiece`, `LineCap`): there the
+fields hold the directions of the lines through its joints (diamond angles in 1/32768: no trigonometry to encode or to
+decode them), how far its quad reaches along them and an end's polygon sides (`-1 - (kind + 8 (reach + 32 joint))`, `A +
+256 (other joint | sides)`), beside half the thickness. `QuadShapeVS` puts a piece's corners on the lines its geometry's
+triangles end on (the miters); the two pieces of a joint, and an end and its piece, compute those corners from the same
+numbers with the same arithmetic, so their quads share the edge exactly, the rasterizer gives every pixel on it to one
+of them (as it does the triangles, on every API, SM3 too: no interpolated value decides it) and a translucent line is
+blended once. The pixel shaders give each pixel the alpha the geometry's triangles interpolate - flat inside, linear
+over the pixel at the edge, an end's polygonal fan likewise - so a polyline as quads has its geometry's pixels. A turn
+sharper than 120 degrees (the geometry clips that miter) or a segment too short for its turns keeps the line geometry.
+The quads follow the FX instances in the instance data from `gConv.w`: a row of the buffer, or a row of the instance
+texture, whose rows then hold 8 quads in the room of each FX instance (16 of its 24 texels: a power of two per row,
+which SM3's float modulo needs). The draw's first quad comes as the FX first instance does (Draw constants, or
+`DrawInstancedFrom`). A quad is 32 bytes where four vertices and six indices took 104, and no index buffer is read.
 
 **The solid area.** Most pixels of a window, a card or a large button lie inside a solid rounded rectangle, away
 from its edge and its corners, where every layer of the FX shader but the fill is zero or under an opaque fill.
@@ -554,6 +572,10 @@ ctest --preset linux-clang -R esia_conformance                                  
   when its host callbacks did not all run (`callback_capture`), or, for scenes with `checkCopy` (`srgb_target`,
   `msaa_target`, `glass_copy`, `srgb_msaa`), when half the target copied to another position of a second texture
   (`CopyTexture` at an offset, resolving multisampled targets) differs from the target.
+* Scenes that draw the same pixels two ways are also compared with each other on the backend (`Scene::sameAs`: no
+  channel more than 2 apart - closer than either comes to a golden from another rasterizer): `shapes_fx` with `shapes`
+  and `dense_fx` with `dense` (plain shapes as FX instances, and as quads), `polylines_mesh` with `polylines` and
+  `polylines_scaled_mesh` with `polylines_scaled` (polylines as geometry, and as quads).
 * `--frames N`: N - 1 frames of loud content (`BuildPoisonFrame`: glass and a glow layer over the whole target, more
   FX instances than any scene) on the same device and renderer, then a cleared target and the scene's frame. A
   surface the frame reads but did not write - undefined after `DontCare`, stale from an earlier frame - then shows,
@@ -570,7 +592,9 @@ ctest --preset linux-clang -R esia_conformance                                  
   both with `SKIP_RETURN_CODE 77`: a machine without the backend shows them as skipped, never as passed.
 * **Goldens.** The image goldens are in `tests/conformance/golden` (from `esia-opengl`, Mesa llvmpipe, reviewed);
   every backend compares against them. Scenes that must render like another one share its golden: `msaa_target`,
-  `glass_copy`, `callback_capture` use `glass.png`, `srgb_msaa` uses `srgb_target.png`, `fx_rows` uses `shapes.png`.
+  `glass_copy`, `callback_capture` use `glass.png`, `srgb_msaa` uses `srgb_target.png`, `fx_rows` and `shapes_fx` use
+  `shapes.png`, `dense_fx` uses `dense.png`, `polylines_mesh` and `polylines_scaled_mesh` use `polylines.png` and
+  `polylines_scaled.png`.
   After an intended rendering change, regenerate them with OpenGL on llvmpipe: `esia_conformance --backend opengl
   --golden tests/conformance/golden --update` (only scenes that own their golden are written), after reviewing the
   diff images of a run before the update. The null backend's goldens (`golden/null/*.log`, command streams) are
