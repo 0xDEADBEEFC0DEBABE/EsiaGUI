@@ -7,17 +7,24 @@
 //     render pass, and returns at the end of each. The barrier for a transition takes its source scope from the
 //     layout it leaves (each layout implies the last access), so no per-draw bookkeeping is needed.
 //   * Uploads (texture / buffer data, the zero-fill of new textures) are recorded into the frame's command buffer
-//     before its first pass, through a staging ring of the frame slot, between one barrier after everything the GPU
-//     did before and one before everything that follows. Updates outside a frame are kept on the CPU until the next
-//     frame (or readback) records them, so they never wait and work when the host owns the command buffer.
-//   * Constants go into a per-slot uniform ring and reach the shaders as dynamic uniform-buffer offsets; descriptor
-//     sets (one layout for every program, set 0 of the shader library) come from per-slot pools and are only
-//     rewritten when a texture or buffer binding changes.
+//     before its first pass, through a staging ring of the frame slot. Updates outside a frame are kept on the CPU
+//     until the next frame (or readback) records them, so they never wait and work when the host owns the command
+//     buffer. Each write waits for what it overwrites only - an image's transition from its layout, a buffer barrier
+//     on a buffer's own copy that earlier frames may still read - and one barrier after the block makes the written
+//     ranges visible to the stages that read them: nothing waits for all the work before it.
+//   * Per-frame data (MapBuffer in a frame: the vertices, indices and instances the renderer writes every frame) goes
+//     into a ring of the frame slot in device memory, so each frame in flight reads a copy of its own: written in
+//     place where the host can map device memory (Desc::mappedDeviceMemory: the BAR of a discrete GPU, unified memory),
+//     else written into the slot's staging ring and copied there - a copy that waits for nothing. UpdateBuffer's bytes
+//     go into the buffer's own copy, made at its first use.
+//   * Constants go into a per-slot uniform ring - mapped device memory where there is some, else host memory - and
+//     reach the shaders as dynamic uniform-buffer offsets; descriptor sets (one layout for every program, set 0 of the
+//     shader library) come from per-slot pools and are only rewritten when a texture or buffer binding changes.
 //   * Pipelines are cached by PipelineDesc; passes use dynamic rendering when the device has it, else render passes
 //     (per format / samples / load op) with a framebuffer per render target.
-//   * Frames in flight: a slot per frame (rings, descriptor pools, timestamp queries, and - when the backend
-//     submits itself - a command pool and a fence). Destroyed resources are released once the last frame that could
-//     use them completed.
+//   * Frames in flight: a slot per frame (staging, per-frame data and uniform rings, descriptor pools, timestamp
+//     queries, and - when the backend submits itself - a command pool and a fence). Destroyed resources are released
+//     once the last frame that could use them completed.
 #pragma once
 #include "vk_formats.hpp"
 #include "esia/base/hash.hpp"
@@ -63,6 +70,8 @@ namespace esia::rhi::vulkan
         TextureDesc GetTextureDesc(Texture tex) const override;
         Buffer CreateBuffer(const BufferDesc& desc) override;
         void UpdateBuffer(Buffer buf, const void* data, std::size_t size) override;
+        void* MapBuffer(Buffer buf, std::size_t size) override;
+        void UnmapBuffer(Buffer buf) override;
         void DestroyBuffer(Buffer buf) override;
         Pipeline CreatePipeline(const PipelineDesc& desc) override;
         void DestroyPipeline(Pipeline p) override;
@@ -118,9 +127,16 @@ namespace esia::rhi::vulkan
         };
         struct Buf
         {
-            BufferDesc desc;
+            BufferDesc desc;                  // (debugName dropped: kept in `name` while debug names are on)
+            std::string name;
+            // its own copy: UpdateBuffer's bytes, made at the first use (a buffer that is only mapped in frames has none)
             VkBuffer buffer = VK_NULL_HANDLE;
             VkDeviceMemory memory = VK_NULL_HANDLE;
+            bool used = false;                // the own copy was read or written by recorded commands (an upload waits)
+            // MapBuffer's bytes: a range of the frame slot's per-frame ring, for the device frame they were written in
+            std::uint64_t ringFrame = 0;
+            VkBuffer ringBuffer = VK_NULL_HANDLE;
+            VkDeviceSize ringOffset = 0, ringSize = 0;
         };
         struct PipelineKey
         {
@@ -148,7 +164,8 @@ namespace esia::rhi::vulkan
             int refs = 0;
         };
 
-        // A host-visible, persistently mapped buffer suballocated linearly and reset when its frame slot is reused.
+        // A buffer suballocated linearly and reset when its frame slot is reused, persistently mapped unless it is
+        // device memory the host cannot map (then written by copies from the staging ring).
         struct Chunk
         {
             VkBuffer buffer = VK_NULL_HANDLE;
@@ -156,12 +173,21 @@ namespace esia::rhi::vulkan
             std::uint8_t* mapped = nullptr;
             VkDeviceSize size = 0, used = 0;
         };
+        // Where a ring's chunks live. Device memory the host maps (Desc::mappedDeviceMemory: the BAR, unified memory) is
+        // read by the GPU at full speed and written in place; where there is none, or no room, the next choice.
+        enum class RingMemory : std::uint8_t
+        {
+            Host,           // host memory (staging)
+            DeviceMapped,   // mapped device memory, else host memory (constants)
+            Device,         // mapped device memory, else device memory written through staging (per-frame data)
+        };
         struct Ring
         {
             std::vector<Chunk> chunks;
             VkBufferUsageFlags usage = 0;
             VkDeviceSize reserved = 0;        // zero bytes kept at the start of every chunk (default constants)
             VkDeviceSize minChunk = 0;
+            RingMemory memory = RingMemory::Host;
         };
 
         struct Scope
@@ -176,7 +202,7 @@ namespace esia::rhi::vulkan
             VkCommandBuffer cmd = VK_NULL_HANDLE;
             VkFence fence = VK_NULL_HANDLE;
             bool submitted = false;           // the fence will signal (the backend submitted this slot's frame)
-            Ring staging, uniforms;
+            Ring staging, uniforms, frameData;
             std::vector<VkDescriptorPool> descriptorPools;
             std::size_t descriptorPool = 0;
             std::uint32_t setsLeft = 0;
@@ -206,7 +232,7 @@ namespace esia::rhi::vulkan
             VkPipeline pipeline = VK_NULL_HANDLE;
         };
 
-        // Collects image / memory barriers into one vkCmdPipelineBarrier.
+        // Collects image barriers into one vkCmdPipelineBarrier.
         // The image barriers sit in place up to a handful (every transition of a frame: no allocation); more (the
         // textures of a large upload) go to `more`.
         struct Barriers
@@ -216,8 +242,6 @@ namespace esia::rhi::vulkan
             VkImageMemoryBarrier inlineImages[kInline];
             std::vector<VkImageMemoryBarrier> more;
             std::uint32_t count = 0;
-            VkMemoryBarrier memory{VK_STRUCTURE_TYPE_MEMORY_BARRIER, nullptr, 0, 0};
-            bool hasMemory = false;
 
             void Add(const VkImageMemoryBarrier& b)
             {
@@ -236,7 +260,8 @@ namespace esia::rhi::vulkan
 
         // ---- helpers
         std::uint32_t FindMemoryType(std::uint32_t typeBits, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred) const;
-        bool CreateBufferObject(VkDeviceSize size, VkBufferUsageFlags usage, bool hostVisible, VkBuffer& buffer, VkDeviceMemory& memory, void** mapped);
+        bool CreateBufferObject(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
+                                VkBuffer& buffer, VkDeviceMemory& memory, void** mapped);
         void SetName(VkObjectType type, std::uint64_t handle, const char* name);
         Tex* FindTex(Texture t);
         const Tex* FindTex(Texture t) const;
@@ -259,13 +284,14 @@ namespace esia::rhi::vulkan
         void MarkWrapped(std::uint32_t id, Tex& t);
 
         bool Recording() const { return inFrame_ && !passStarted_; }
-        void BeginUploads(VkCommandBuffer cmd);
         void FlushUploads(VkCommandBuffer cmd);
-        void TransferAfterTransfer(VkCommandBuffer cmd);
+        void Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind);
         void RecordTextureData(VkCommandBuffer cmd, Ring& staging, std::uint32_t id, const IRect& r, const void* data, int rowPitch);
         void RecordTextureClear(VkCommandBuffer cmd, std::uint32_t id);
         void RecordBufferData(VkCommandBuffer cmd, Ring& staging, std::uint32_t id, const void* data, std::size_t size);
         void RecordPending(VkCommandBuffer cmd, Ring& staging);
+        bool OwnCopy(Buf& b);
+        bool Source(Buf& b, VkDescriptorBufferInfo& out);
 
         VkDescriptorSet AllocateSet();
         bool PrepareDraw();
@@ -287,6 +313,7 @@ namespace esia::rhi::vulkan
         VkPhysicalDeviceMemoryProperties memory_{};
         bool dynamicRendering_ = false;
         VkDeviceSize uboAlign_ = 256, cbStride_ = 256;
+        VkDeviceSize frameDataAlign_ = 16;   // per-frame data ranges: storage-buffer offsets, float4 rows, indices
         double timestampNs_ = 1.0;
         std::uint64_t timestampMask_ = ~0ull;
         std::vector<std::uint64_t> timestampValues_;   // ReadTimestamps' scratch, kept from frame to frame
@@ -325,17 +352,29 @@ namespace esia::rhi::vulkan
         VkFence immediateFence_ = VK_NULL_HANDLE;
         Ring immediateStaging_;
 
-        // uploads being recorded (between BeginUploads and FlushUploads)
+        // uploads being recorded (from the first write of a block to FlushUploads)
         bool uploadsOpen_ = false;
-        std::vector<std::uint32_t> uploadedImages_, uploadedBuffers_;
+        std::vector<std::uint32_t> uploadedImages_;
+        std::vector<VkBufferMemoryBarrier> uploadedBuffers_;   // the written ranges, to the access that reads them
+        VkPipelineStageFlags uploadedStages_ = 0;              // ... in these stages
+
+        // MapBuffer in a frame, until UnmapBuffer: bytes in the staging ring, copied into the per-frame ring
+        struct Mapping
+        {
+            std::uint32_t id = 0;
+            VkBuffer staging = VK_NULL_HANDLE, ring = VK_NULL_HANDLE;
+            VkDeviceSize stagingOffset = 0, ringOffset = 0, size = 0;
+        };
+        Mapping mapping_;
 
         // current pass
         std::uint32_t passTarget_ = 0;
         VkPipeline boundPipeline_ = VK_NULL_HANDLE;
         VkBuffer boundVertices_ = VK_NULL_HANDLE, boundIndices_ = VK_NULL_HANDLE;
+        VkDeviceSize vertexOffset_ = 0, indexOffset_ = 0;
         bool viewportSet_ = false;
         VkImageView views_[kSlotBackdrop0 + kBackdropLevels] = {};
-        VkBuffer fxBuffer_ = VK_NULL_HANDLE;
+        VkDescriptorBufferInfo fx_{};         // t7: the FX buffer's range
         VkBuffer cbBuffer_[3] = {};
         std::uint32_t cbOffset_[3] = {};
         bool setDirty_ = true, offsetsDirty_ = true;

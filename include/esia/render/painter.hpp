@@ -224,6 +224,14 @@ namespace esia
         // An image already where the scales put it: `r` is final (see Scaled), and no scale moves or resizes it again -
         // for a texture rasterized at the size it is drawn, as text is under PushScale (svg::Draw). Square corners.
         void UnscaledImage(TextureId tex, const esia::Rect& r, Color tint = Color::White(), Vec2 uv0 = Vec2(0, 0), Vec2 uv1 = Vec2(1, 1));
+        // A coverage tile of the text's pages (text::TextSystem::FindTile / AddTile: an SVG icon's mask, svg::Draw) as an
+        // image of it in `color`, already where the scales put it (as UnscaledImage): a quad drawn with the text around
+        // it (DrawList::AddCoverageQuad), with the pixels UnscaledImage gives an image of white texels with that coverage
+        // as their alpha - none of the text's composition. False, nothing drawn, under a mask (Masked): UnscaledImage
+        // draws an FX image there, which takes it.
+        bool UnscaledCoverage(const text::GlyphSlot& tile, const esia::Rect& r, Color color);
+        // Whether a mask is pushed (PushMask): FX shapes take it, quads drawn with the text do not.
+        bool Masked() const { return maskDepth_ > 0; }
 
         // ---------------------------------------------------------- paths: any outline, every material
         // A polygon through `points`: any simple outline (convex or not, either winding), with everything a rounded

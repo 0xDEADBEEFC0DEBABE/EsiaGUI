@@ -6,7 +6,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
+#include <vector>
 
 using namespace esia::rhi;
 
@@ -19,7 +21,8 @@ namespace
         Device* operator->() const { return h.device.get(); }
     };
 
-    Headless Make(Format format = Format::RGBA8_UNORM, int samples = 1, bool dynamicRendering = true, int w = 64, int h = 48)
+    Headless Make(Format format = Format::RGBA8_UNORM, int samples = 1, bool dynamicRendering = true, int w = 64, int h = 48,
+                  bool mappedDeviceMemory = true)
     {
         HeadlessDesc d;
         d.width = w;
@@ -28,6 +31,7 @@ namespace
         d.samples = samples;
         vulkan::HeadlessOptions o;
         o.dynamicRendering = dynamicRendering;
+        o.mappedDeviceMemory = mappedDeviceMemory;
         Headless r;
         r.h = vulkan::CreateHeadless(d, o, r.error);
         return r;
@@ -210,6 +214,81 @@ ESIA_TEST(Vulkan, UploadUpdateCopy)
     }
     d->DestroyTexture(a);
     ESIA_CHECK(vulkan::ValidationMessages(*d.h.device) == 0);
+}
+
+// Buffers written while frames that read them are still in flight (two slots, more frames): UpdateBuffer into a
+// buffer's own copy, which waits for the draws reading it, and MapBuffer into the frame's range of its slot's ring,
+// which waits for nothing (written in place in mapped device memory, and copied from staging without it) - mixed from
+// frame to frame, and once mapped outside a frame (kept for the next one). The draws read vertices, indices and FX
+// instances (degenerate: unset constants put every vertex on one point); the synchronization validation layer checks
+// every hazard between them and the writes.
+ESIA_TEST(Vulkan, BufferWritesWithFramesInFlight)
+{
+    for (bool mapped : {true, false})   // the frame's data in mapped device memory, or copied from staging
+    {
+        Headless d = Make(Format::RGBA8_UNORM, 1, true, 64, 48, mapped);
+        if (Unavailable(d))
+            return;
+        Device& dev = *d.h.device;
+        const Pipeline geometry = dev.CreatePipeline(ProgramDesc(ShaderProgram::UiGeometry, Format::RGBA8_UNORM, 1));
+        const Pipeline fx = dev.CreatePipeline(ProgramDesc(ShaderProgram::Fx, Format::RGBA8_UNORM, 1));
+        ESIA_CHECK(geometry && fx);
+        BufferDesc vd, id, fd;
+        vd.kind = BufferKind::Vertex;
+        vd.size = 6 * 20;
+        id.kind = BufferKind::Index;
+        id.size = 6 * 4;
+        fd.kind = BufferKind::FxInstances;
+        fd.size = 2 * 384;   // two FX instances of 24 float4 rows (zeros: an empty shape)
+        const Buffer vb = dev.CreateBuffer(vd), ib = dev.CreateBuffer(id), fb = dev.CreateBuffer(fd);
+        ESIA_CHECK(vb && ib && fb);
+        const std::uint32_t indices[6] = {0, 1, 2, 3, 4, 5};
+        const std::vector<std::uint8_t> zeros(fd.size, 0);
+        std::vector<std::uint8_t> vertices(vd.size);
+        auto write = [&](Buffer b, const void* data, std::size_t size, bool map) {
+            if (!map)
+            {
+                dev.UpdateBuffer(b, data, size);
+                return;
+            }
+            void* at = dev.MapBuffer(b, size);
+            ESIA_CHECK(at != nullptr);
+            if (at)
+                std::memcpy(at, data, size);
+            dev.UnmapBuffer(b);
+        };
+        write(vb, vertices.data(), vertices.size(), true);   // outside a frame: recorded by the next one
+        for (int f = 0; f < 7; ++f)
+        {
+            for (std::size_t i = 0; i < vertices.size(); ++i)
+                vertices[i] = (std::uint8_t)(i + (std::size_t)f);
+            ESIA_CHECK(dev.BeginFrame(FrameDesc{}));
+            const bool map = f % 3 == 2;
+            write(vb, vertices.data(), vertices.size(), map);
+            write(ib, indices, sizeof(indices), map || f == 4);
+            write(fb, zeros.data(), zeros.size(), map != (f == 3));
+            PassDesc p;
+            p.target = d.h.target;
+            dev.BeginPass(p);
+            dev.SetPipeline(geometry);
+            dev.SetVertexBuffer(vb);
+            dev.SetIndexBuffer(ib);
+            dev.DrawIndexed(6, 0);
+            dev.SetPipeline(fx);
+            dev.SetFxBuffer(fb);
+            dev.DrawInstanced(4, 2);
+            dev.EndPass();
+            dev.EndFrame();
+        }
+        std::vector<std::uint8_t> px;
+        ESIA_CHECK(dev.ReadPixels(d.h.target, IRect{0, 0, 1, 1}, px));
+        dev.DestroyBuffer(vb);
+        dev.DestroyBuffer(ib);
+        dev.DestroyBuffer(fb);
+        dev.DestroyPipeline(geometry);
+        dev.DestroyPipeline(fx);
+        ESIA_CHECK(vulkan::ValidationMessages(dev) == 0);
+    }
 }
 
 // The backdrop copy of an sRGB target is its RawFormat: the bits are copied, never converted.

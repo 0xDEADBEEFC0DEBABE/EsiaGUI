@@ -20,6 +20,9 @@ namespace esia::svg::detail
 {
     namespace
     {
+        constexpr int kMaxSize = 16384;               // the largest image (Rasterize), and frame
+        constexpr float kMaxOffset = 16777216.0f;     // 2^24: a frame's corner further off holds no fraction of a pixel
+
         struct Px
         {
             float r, g, b, a;   // premultiplied
@@ -232,13 +235,14 @@ namespace esia::svg::detail
             return {a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k};
         }
 
-        // the gradient's colors at pixels x0 .. x1 of row y
-        void Shade(const GradientJob& g, int y, int x0, int x1, Px* out)
+        // the gradient's colors at pixels `from` .. x1 of row y, placed from pixel x0 (a span's start: the image of a
+        // part of a drawing gives the pixels it holds the colors the whole image gives them)
+        void Shade(const GradientJob& g, int y, int x0, int from, int x1, Px* out)
         {
             const Vec2 p0 = g.inv.Apply(Vec2((float)x0 + 0.5f, (float)y + 0.5f));
             const float ddx = g.inv.a, ddy = g.inv.b;
             std::size_t seg = 0;
-            for (int x = x0; x < x1; ++x)
+            for (int x = from; x < x1; ++x)
             {
                 const float k = (float)(x - x0);
                 const float px = p0.x + ddx * k, py = p0.y + ddy * k;
@@ -293,39 +297,44 @@ namespace esia::svg::detail
             }
         }
 
-        void Composite(Px* row, const std::vector<Cells::Span>& spans, const float* cov, const PaintJob& p, int y, const float* clip, Px* scratch)
+        // the paint over the row's spans, in pixels lo .. hi (the ones the image holds)
+        void Composite(Px* row, const std::vector<Cells::Span>& spans, const float* cov, const PaintJob& p, int y, const float* clip, Px* scratch, int lo,
+                       int hi)
         {
             for (const Cells::Span& s : spans)
             {
+                const int x0 = std::max(s.x0, lo), x1 = std::min(s.x1, hi);
+                if (x0 >= x1)
+                    continue;
                 if (p.kind == PaintJob::Kind::Solid)
                 {
                     const Px c = p.solid;
                     if (s.value >= 0.0f)
                     {
                         if (!clip && s.value >= 1.0f && c.a >= 1.0f)
-                            std::fill(row + s.x0, row + s.x1, c);
+                            std::fill(row + x0, row + x1, c);
                         else if (!clip)
-                            for (int x = s.x0; x < s.x1; ++x)
+                            for (int x = x0; x < x1; ++x)
                                 Blend(row[x], c, s.value);
                         else
-                            for (int x = s.x0; x < s.x1; ++x)
+                            for (int x = x0; x < x1; ++x)
                                 Blend(row[x], c, s.value * clip[x]);
                     }
                     else if (!clip)
-                        for (int x = s.x0; x < s.x1; ++x)
+                        for (int x = x0; x < x1; ++x)
                             Blend(row[x], c, cov[x]);
                     else
-                        for (int x = s.x0; x < s.x1; ++x)
+                        for (int x = x0; x < x1; ++x)
                             Blend(row[x], c, cov[x] * clip[x]);
                     continue;
                 }
                 if (!clip && s.value >= 1.0f && p.grad.opaque)
                 {
-                    Shade(p.grad, y, s.x0, s.x1, row);   // covered by an opaque gradient: its colors, nothing to blend
+                    Shade(p.grad, y, s.x0, x0, x1, row);   // covered by an opaque gradient: its colors, nothing to blend
                     continue;
                 }
-                Shade(p.grad, y, s.x0, s.x1, scratch);
-                for (int x = s.x0; x < s.x1; ++x)
+                Shade(p.grad, y, s.x0, x0, x1, scratch);
+                for (int x = x0; x < x1; ++x)
                 {
                     const float k = (s.value >= 0.0f ? s.value : cov[x]) * (clip ? clip[x] : 1.0f);
                     Blend(row[x], scratch[x], k);
@@ -359,21 +368,38 @@ namespace esia::svg::detail
         class Renderer
         {
         public:
-            Renderer(const Tree& tree, int width, int height, const RasterOptions& o) : t_(tree), w_(width), h_(height), o_(o)
+            Renderer(const Tree& tree, int width, int height, const RasterOptions& o, bool frame)
+                : t_(tree), w_(width), h_(height), iw_(width), ih_(height), o_(o)
             {
+                current_ = o.mask ? Color(1.0f, 1.0f, 1.0f, o.currentColor.a) : o.currentColor;
                 const Rect& vp = o.viewport;
                 if (vp.Empty())
-                    view_ = ViewTransform(tree, (float)width, (float)height);
-                else
                 {
-                    // fitted into the viewport; what reaches beyond the sides of it that are inside the image is cut off
-                    // there (the image's own edges cut the rest)
-                    view_ = Affine::Translate(vp.min.x, vp.min.y) * ViewTransform(tree, vp.Width(), vp.Height());
-                    box_ = vp;
-                    sides_ = (vp.min.x > 0.0f ? 1u : 0u) | (vp.max.x < (float)width ? 2u : 0u) | (vp.min.y > 0.0f ? 4u : 0u) |
-                             (vp.max.y < (float)height ? 8u : 0u);
+                    view_ = ViewTransform(tree, (float)width, (float)height);
+                    return;
                 }
-                current_ = o.mask ? Color(1.0f, 1.0f, 1.0f, o.currentColor.a) : o.currentColor;
+                // `frame`: the drawing is made in its frame - the whole pixels around the viewport, as if they were the
+                // image - and the image holds what it shows of them: a viewport moved by whole pixels moves the pixels by
+                // as many, each the same, so an image can be any part of a larger drawing (the part svg::Draw sees through
+                // the clip rect). A frame larger than the largest image is made in the image's pixels.
+                Rect box = vp;
+                const float fx = std::floor(vp.min.x), fy = std::floor(vp.min.y);
+                const float fw = std::ceil(vp.max.x) - fx, fh = std::ceil(vp.max.y) - fy;
+                if (frame && fw >= 1.0f && fh >= 1.0f && fw <= (float)kMaxSize && fh <= (float)kMaxSize && std::fabs(fx) <= kMaxOffset &&
+                    std::fabs(fy) <= kMaxOffset)
+                {
+                    dx_ = (int)fx;
+                    dy_ = (int)fy;
+                    w_ = (int)fw;
+                    h_ = (int)fh;
+                    box = Rect(vp.min.x - fx, vp.min.y - fy, vp.max.x - fx, vp.max.y - fy);   // whole pixels off: exact
+                }
+                // fitted into the viewport; what reaches beyond the sides of it that are inside the frame is cut off there
+                // (the frame's own edges cut the rest)
+                view_ = Affine::Translate(box.min.x, box.min.y) * ViewTransform(tree, box.Width(), box.Height());
+                box_ = box;
+                sides_ = (box.min.x > 0.0f ? 1u : 0u) | (box.max.x < (float)w_ ? 2u : 0u) | (box.min.y > 0.0f ? 4u : 0u) |
+                         (box.max.y < (float)h_ ? 8u : 0u);
             }
 
             void Run(Image& out);
@@ -385,13 +411,18 @@ namespace esia::svg::detail
             ClipJob& PrepareClip(int index);
             const float* ClipRow(int index, int y);
             void DrawShape(ShapeJob& job, Px* row, int y);
+            void PassRow(int y, const std::vector<LayerJob>& layers);
+            void PassClip(int index, int y);
 
             const Tree& t_;
-            int w_, h_;
+            int w_, h_;                // the frame (every pixel coordinate below is the frame's)
+            int iw_, ih_;              // the image
+            int dx_ = 0, dy_ = 0;      // the frame's corner in the image
+            int colLo_ = 0, colHi_ = 0;   // the frame's columns the image holds (its border too)
             const RasterOptions& o_;
             Affine view_;
             Rect box_;                 // the viewport
-            std::uint32_t sides_ = 0;  // its sides inside the image: 1 left, 2 right, 4 top, 8 bottom
+            std::uint32_t sides_ = 0;  // its sides inside the frame: 1 left, 2 right, 4 top, 8 bottom
             Color current_;
             std::vector<ShapeJob> shapes_;
             std::vector<ClipJob> clips_;
@@ -579,19 +610,20 @@ namespace esia::svg::detail
             if (c.rowY == y)
                 return c.row.data();
             c.rowY = y;
-            std::fill(c.row.begin(), c.row.end(), 0.0f);
+            // the columns the image holds (no other is read)
+            std::fill(c.row.begin() + colLo_, c.row.begin() + colHi_, 0.0f);
             if (y >= c.sweep.Top() && y < c.sweep.Bottom())
             {
                 c.sweep.Row(y, cells_);
                 cells_.Resolve(spans_, cov_.data(), false);
                 for (const Cells::Span& s : spans_)
-                    for (int x = s.x0; x < s.x1; ++x)
+                    for (int x = std::max(s.x0, colLo_), x1 = std::min(s.x1, colHi_); x < x1; ++x)
                         c.row[(std::size_t)x] = s.value >= 0.0f ? s.value : cov_[(std::size_t)x];
             }
             if (c.parent >= 0)
             {
                 const float* p = ClipRow(c.parent, y);
-                for (int x = 0; x < w_; ++x)
+                for (int x = colLo_; x < colHi_; ++x)
                     c.row[(std::size_t)x] *= p[x];
             }
             return c.row.data();
@@ -658,23 +690,83 @@ namespace esia::svg::detail
                 Sweep& sweep = stroke ? job.stroke : job.fill;
                 if (!(stroke ? job.hasStroke : job.hasFill) || y < sweep.Top() || y >= sweep.Bottom())
                     continue;
+                // the whole row's coverage (the same as when all of the frame is the image), painted where the image is
                 sweep.Row(y, cells_);
                 cells_.Resolve(spans_, cov_.data(), job.crisp);
                 if (!spans_.empty())
-                    Composite(row, spans_, cov_.data(), stroke ? job.strokePaint : job.fillPaint, y, clip, scratch_.data());
+                    Composite(row, spans_, cov_.data(), stroke ? job.strokePaint : job.fillPaint, y, clip, scratch_.data(), colLo_, colHi_);
             }
+        }
+
+        // Row y of the frame above the image, passed over as Run draws it: each sweep a drawn row would reach passes
+        // over it (Sweep::Pass), in Run's order - the shapes and layers that row reaches, their clips and the clips'.
+        void Renderer::PassRow(int y, const std::vector<LayerJob>& layers)
+        {
+            std::size_t depth = 0;
+            for (std::size_t i = 0; i < t_.ops.size(); ++i)
+            {
+                const Op& op = t_.ops[i];
+                if (op.kind == OpKind::Shape)
+                {
+                    ShapeJob& job = shapes_[op.index];
+                    if (!(job.hasFill || job.hasStroke) || y < job.top || y >= job.bottom)
+                        continue;
+                    if (job.clip >= 0)
+                        PassClip(job.clip, y);
+                    if (job.hasFill && y >= job.fill.Top() && y < job.fill.Bottom())
+                        job.fill.Pass(y);
+                    if (job.hasStroke && y >= job.stroke.Top() && y < job.stroke.Bottom())
+                        job.stroke.Pass(y);
+                }
+                else if (op.kind == OpKind::Begin)
+                {
+                    const LayerJob& l = layers[op.index];
+                    if (l.empty || y < l.top || y >= l.bottom)
+                    {
+                        i = op.match;   // past its End
+                        continue;
+                    }
+                    ++depth;
+                }
+                else if (depth > 0)
+                {
+                    const LayerJob& l = layers[op.index];
+                    if (l.clip >= 0)
+                        PassClip(l.clip, y);
+                    --depth;
+                }
+            }
+        }
+
+        void Renderer::PassClip(int index, int y)
+        {
+            ClipJob& c = clips_[(std::size_t)index];
+            if (c.rowY == y)
+                return;
+            c.rowY = y;
+            if (y >= c.sweep.Top() && y < c.sweep.Bottom())
+                c.sweep.Pass(y);
+            if (c.parent >= 0)
+                PassClip(c.parent, y);
         }
 
         void Renderer::Run(Image& out)
         {
             const int b = std::max(0, o_.border);
-            const int ow = w_ + 2 * b, oh = h_ + 2 * b;
+            const int ow = iw_ + 2 * b, oh = ih_ + 2 * b;
             out.width = ow;
             out.height = oh;
             out.pixels.assign((std::size_t)ow * (std::size_t)oh * 4, 0);
             if (o_.mask)
                 for (std::size_t i = 0; i < out.pixels.size(); i += 4)
                     out.pixels[i] = out.pixels[i + 1] = out.pixels[i + 2] = 255;   // white, so filtering keeps it white
+            // the frame's rows and columns the image holds - its border too: where the frame goes on beyond the image,
+            // the border holds those pixels (the image of a part of a drawing filters at its edges as the whole does)
+            const int rowLo = std::max(0, -dy_ - b), rowHi = std::min(h_, ih_ - dy_ + b);
+            colLo_ = std::max(0, -dx_ - b);
+            colHi_ = std::min(w_, iw_ - dx_ + b);
+            if (rowLo >= rowHi || colLo_ >= colHi_)
+                return;   // the frame is outside the image: transparent
 
             shapes_.resize(t_.shapes.size());
             clips_.resize(t_.clips.size());
@@ -734,6 +826,14 @@ namespace esia::svg::detail
 
             if (none)
                 return;   // nothing drawn: transparent
+            // what of the drawing the image holds
+            const int first = top;
+            top = std::max(top, rowLo), bottom = std::min(bottom, rowHi), left = std::max(left, colLo_), right = std::min(right, colHi_);
+            if (top >= bottom || left >= right)
+                return;
+            // the rows above it passed over as the whole image draws them (each of its rows is the whole image's)
+            for (int y = first; y < top; ++y)
+                PassRow(y, layers);
             std::vector<std::vector<Px>> rows((std::size_t)maxDepth + 1, std::vector<Px>((std::size_t)w_ + 1, Px{0.0f, 0.0f, 0.0f, 0.0f}));
             std::vector<std::uint8_t> full((std::size_t)oh, 0);   // rows inked across all the drawing's columns
             for (int y = top; y < bottom; ++y)
@@ -758,7 +858,9 @@ namespace esia::svg::detail
                             continue;
                         }
                         ++depth;
-                        std::fill(rows[depth].begin() + l.zl, rows[depth].begin() + l.zr, Px{0.0f, 0.0f, 0.0f, 0.0f});
+                        const int z0 = std::max(l.zl, colLo_), z1 = std::min(l.zr, colHi_);
+                        if (z0 < z1)
+                            std::fill(rows[depth].begin() + z0, rows[depth].begin() + z1, Px{0.0f, 0.0f, 0.0f, 0.0f});
                     }
                     else if (depth > 0)
                     {
@@ -766,7 +868,7 @@ namespace esia::svg::detail
                         const float* clip = l.clip >= 0 ? ClipRow(l.clip, y) : nullptr;
                         const Px* src = rows[depth].data();
                         Px* dst = rows[depth - 1].data();
-                        for (int x = l.left; x < l.right; ++x)
+                        for (int x = std::max(l.left, colLo_), x1 = std::min(l.right, colHi_); x < x1; ++x)
                         {
                             const float k = l.opacity * (clip ? clip[x] : 1.0f);
                             if (k > 0.0f && src[x].a > 0.0f)
@@ -777,9 +879,9 @@ namespace esia::svg::detail
                 }
 
                 // straight alpha, 8 bits
-                std::uint8_t* dst = out.pixels.data() + ((std::size_t)(y + b) * (std::size_t)ow + (std::size_t)(b + left)) * 4;
+                std::uint8_t* dst = out.pixels.data() + ((std::size_t)(y + dy_ + b) * (std::size_t)ow + (std::size_t)(left + dx_ + b)) * 4;
                 const int ink = Straighten(rows[0].data() + left, dst, right - left, o_.mask);
-                full[(std::size_t)(y + b)] = ink == right - left ? 1 : 0;
+                full[(std::size_t)(y + dy_ + b)] = ink == right - left ? 1 : 0;
             }
 
             if (o_.mask)
@@ -789,8 +891,8 @@ namespace esia::svg::detail
             // texels a 3 x 3 window of alpha marks (rows of "alpha here or beside" ORed with the rows above and below).
             std::uint8_t* px = out.pixels.data();
             const auto at = [&](int x, int y) { return px + ((std::size_t)y * (std::size_t)ow + (std::size_t)x) * 4; };
-            const int x0 = std::max(0, b + left - 1), x1 = std::min(ow, b + right + 1);
-            const int y0 = std::max(0, b + top - 1), y1 = std::min(oh, b + bottom + 1);
+            const int x0 = std::max(0, left + dx_ + b - 1), x1 = std::min(ow, right + dx_ + b + 1);
+            const int y0 = std::max(0, top + dy_ + b - 1), y1 = std::min(oh, bottom + dy_ + b + 1);
             // "alpha here or beside", for three rows at a time
             struct Marks
             {
@@ -864,9 +966,9 @@ namespace esia::svg::detail
         }
     }
 
-    bool Render(const Tree& tree, int width, int height, const RasterOptions& options, Image& out)
+    bool Render(const Tree& tree, int width, int height, const RasterOptions& options, Image& out, bool frame)
     {
-        Renderer r(tree, width, height, options);
+        Renderer r(tree, width, height, options, frame);
         r.Run(out);
         return true;
     }

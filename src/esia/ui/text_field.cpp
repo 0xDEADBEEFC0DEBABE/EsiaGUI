@@ -5,6 +5,7 @@
 // bytes and always sit on caret stops.
 #include "ui_internal.hpp"
 #include <algorithm>
+#include <optional>
 
 namespace esia::ui
 {
@@ -408,6 +409,17 @@ namespace esia::ui
 
         Painter p = GetPainter();
         const float focus = Anim(fid, 0x40, active ? 1.0f : 0.0f, SpringFast());
+        std::optional<DrawMemo> memo;
+        MemoKey k;
+        if (!active)
+        {
+            const bool placeholderShown = shown.empty() && !placeholder.empty();
+            k.R(r).F(focus).F(x0).F(innerW).F(originX).F(textTop).F(padX).U((o.background ? 1u : 0u) | (placeholderShown ? 2u : 0u)).U(o.icon);
+            k.U64(MeasureMetrics(f, placeholderShown ? placeholder : std::string_view(shown)).layout);
+            memo.emplace(k);
+        }
+        if (!memo || !memo->Replayed())
+        {
         if (o.background)
         {
             Style fs = Style().Radius(ItemRadius(Sc(12)));
@@ -452,13 +464,20 @@ namespace esia::ui
             c.RequestTextInput(Rect(originX + caretX, textTop, originX + caretX + 1.0f, textTop + lineH));
         }
         p.PopClip();
+        }
+        memo.reset();   // (the clear button keeps one of its own)
 
         if (showClear)
         {
             const Vec2 cc(r.max.x - padX - Sc(8), r.Center().y);
             const InteractState it = InteractImpl(Salt(fid, 0xC1EA), Rect::FromCenter(cc, Vec2(Sc(22), Sc(22))), InteractFlags_None);
-            p.Circle(cc, Sc(8.5f), Style().Fill(pc.tertiaryLabel.Fade(0.9f + 0.1f * it.hover)));
-            DrawIcon(p, cc, icons::Close, Sc(8), T().dark ? Color::Black(0.8f) : Color::White());
+            MemoKey ck;
+            ck.V(cc).F(it.hover);
+            if (DrawMemo cm(ck); !cm.Replayed())
+            {
+                p.Circle(cc, Sc(8.5f), Style().Fill(pc.tertiaryLabel.Fade(0.9f + 0.1f * it.hover)));
+                DrawIcon(p, cc, icons::Close, Sc(8), T().dark ? Color::Black(0.8f) : Color::White());
+            }
             if (it.pressed)
             {
                 if (active)

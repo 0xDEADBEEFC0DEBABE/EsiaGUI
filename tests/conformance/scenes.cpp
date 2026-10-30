@@ -380,6 +380,83 @@ namespace esia::conformance
             p.EndGlowLayer();
         }
 
+        // ------------------------------------------------------------------ plain coverage
+        // The test atlas's coverage as an image: white texels with it as their alpha (an Alpha8 page's R, a sub-pixel
+        // page's A) - what svg::Draw draws an icon's mask from when it is not in the text's pages.
+        TextureId MakeCoverageImage(TextureRegistry& reg, bool lcd)
+        {
+            std::vector<std::uint8_t> px((std::size_t)kAtlasW * kAtlasH * 4);
+            for (int y = 0; y < kAtlasH; ++y)
+                for (int x = 0; x < kAtlasW; ++x)
+                {
+                    const int g = x / kCell;
+                    const float lx = (float)(x % kCell) + 0.5f, ly = (float)y + 0.5f;
+                    const float cov = lcd ? (Coverage(g, lx - 1.0f / 3.0f, ly) + Coverage(g, lx, ly) + Coverage(g, lx + 1.0f / 3.0f, ly)) / 3.0f
+                                          : Coverage(g, lx, ly);
+                    std::uint8_t* p = px.data() + ((std::size_t)y * kAtlasW + (std::size_t)x) * 4;
+                    p[0] = p[1] = p[2] = 255;
+                    p[3] = (std::uint8_t)std::lround(cov * 255.0f);
+                }
+            TextureInfo info;
+            info.width = kAtlasW;
+            info.height = kAtlasH;
+            return reg.Create(info, px.data());
+        }
+
+        // Glyph cells of a page as plain coverage (QuadInstance::SetCoverage: an SVG icon's mask in the text's pages) among
+        // the glyphs - or, `images`, as images of the same coverage (the textured geometry svg::Draw draws otherwise): the
+        // same pixels, in light and dark ink, translucent, on both kinds of page, in an edge fade and a glow layer.
+        void CoverageQuads(SceneFrame& f, bool images)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            const TextureId gray = MakeAtlas(f.textures), lcd = MakeAtlas(f.textures, true);
+            const TextureId grayImage = images ? MakeCoverageImage(f.textures, false) : 0, lcdImage = images ? MakeCoverageImage(f.textures, true) : 0;
+            p.Rect(Rect(0, 0, 320, 120), Style().Fill(Color::Hex(0x1C1C1E)));
+            p.Rect(Rect(0, 120, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
+            p.Rect(Rect(240, 70, 320, 170), Style().Fill(Paint::Linear(kOrange, kIndigo, 60)));
+            // cell `g` of a page at (x, y), its texels on pixels
+            const auto icon = [&](bool onLcd, int g, float x, float y, Color c) {
+                const Vec2 uv0((float)g / kCells, 0.0f), uv1((float)(g + 1) / kCells, 1.0f);
+                const Rect r(x, y, x + (float)kCell, y + (float)kAtlasH);
+                if (images)
+                    dl.AddImage(onLcd ? lcdImage : grayImage, r, uv0, uv1, c.ToRgba8());
+                else
+                    dl.AddCoverageQuad(onLcd ? lcd : gray, r, uv0, uv1, c.ToRgba8());
+            };
+            const Color light[4] = {Color::White(), kYellow, kGray, Color::White(0.6f)};
+            const Color dark[4] = {Color::Black(), kBlue, kRed, Color::Black(0.6f)};
+            // among glyphs of their page; on a sub-pixel page beside gray glyphs (sub-pixel text is grayscale without
+            // dual-source blending: it comes in the glow layer below, grayscale everywhere)
+            for (int i = 0; i < 4; ++i)
+            {
+                Glyphs(dl, gray, Vec2(8.0f + (float)i * 58.0f, 8.0f), "ab", 32, Color::White());
+                icon(false, i + 2, 44.0f + (float)i * 58.0f, 8.0f, light[i]);
+                Glyphs(dl, gray, Vec2(8.0f + (float)i * 58.0f, 128.0f), "ab", 32, Color::Black());
+                icon(true, i + 4, 44.0f + (float)i * 58.0f, 128.0f, dark[i]);
+            }
+            icon(false, 0, 30.0f, 170.0f, Color::Black());
+            icon(false, 1, 50.0f, 170.0f, kBlue);
+            icon(true, 5, 70.0f, 170.0f, kRed);
+            // translucent over a gradient, on both pages
+            icon(false, 7, 250.0f, 80.0f, Color::White(0.5f));
+            icon(true, 6, 280.0f, 120.0f, Color::Black(0.4f));
+            // an edge fade over a column of them
+            p.BeginEdgeFade(Rect(100, 46, 140, 118), 20.0f, 20.0f);
+            for (int k = 0; k < 2; ++k)
+                icon(k == 1, k + 1, 100.0f + (float)k * 18.0f, 50.0f, Color::White());
+            p.EndEdgeFade();
+            // inside a glow layer (sub-pixel pages there: their grayscale coverage), each among glyphs of its page
+            p.BeginGlowLayer(Color::Hex(0x30D158, 0.7f), 6.0f);
+            icon(false, 3, 160.0f, 190.0f, kGreen);
+            Glyphs(dl, gray, Vec2(178.0f, 190.0f), "c", 32, kGreen);
+            icon(true, 7, 200.0f, 190.0f, Color::White());
+            Glyphs(dl, lcd, Vec2(218.0f, 190.0f), "d", 32, Color::White());
+            p.EndGlowLayer();
+        }
+        void CoverageScene(SceneFrame& f) { CoverageQuads(f, false); }
+        void CoverageImageScene(SceneFrame& f) { CoverageQuads(f, true); }
+
         // ------------------------------------------------------------------ glyph fields
         // Three glyphs as distance fields (MTSDF, made here as a text system makes them: 48 field pixels per em,
         // ranges 8 and 24) on one page: an E (right angles), an O (curves, a hole), a star (acute corners).
@@ -952,6 +1029,14 @@ namespace esia::conformance
             add("text", "text quads from an Alpha8 test atlas (grayscale text program, gamma / contrast composition) on dark and light", &Text);
             Scene& lcd = add("text_lcd", "sub-pixel text pages (dual-source blending) and their grayscale fallback inside glow layers", &TextLcd);
             lcd.needsDualSource = true;
+            add("coverage", "plain coverage in glyph pages among the glyphs (QuadInstance::SetCoverage: SVG icons with the text), Alpha8 and sub-pixel "
+                            "pages, light and dark ink, translucent, in an edge fade and a glow layer",
+                &CoverageScene);
+            Scene& coverageImage = add("coverage_image", "the coverage scene with images of that coverage (white texels, its alpha) in place of the quads: "
+                                                         "the same pixels",
+                                       &CoverageImageScene);
+            coverageImage.golden = "coverage";
+            coverageImage.sameAs = "coverage";
             add("text_fields", "distance-field glyph shapes (FX): plain at three sizes, magnified, an outline and a glow under the faces, a gradient across a run, a drop shadow, weight",
                 &TextFields);
             Scene& motion = add("motion_blur", "motion blur (fx::kMotion): a capsule, a circle, a stroked card and outlined glyph shapes moving while the "

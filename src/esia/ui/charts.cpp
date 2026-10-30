@@ -54,6 +54,12 @@ namespace esia::ui
         }
         const Color t = Tint(o.tint);
         const std::uint32_t flags = o.smooth ? PolylineFlags_Smooth : PolylineFlags_None;
+        MemoKey k;
+        k.R(r).F(th).F(dot).C(t).U(flags | (o.fill ? 1u << 8 : 0u) | (o.glow ? 1u << 9 : 0u) | (o.lastPoint ? 1u << 10 : 0u));
+        k.Data(pts.data(), (std::size_t)count * sizeof(Vec2));
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return;
         Painter p = GetPainter();
         if (o.fill)
             p.Area(pts.data(), count, r.max.y, Paint::Linear(t.Fade(0.30f), t.Fade(0.0f), 90), flags);

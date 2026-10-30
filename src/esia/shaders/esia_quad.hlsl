@@ -5,7 +5,8 @@
 // also take a shape's coverage - the FX shader's fill or stroke of the same distance (SdRoundRect / SdSegment, the
 // same antialiasing), so a plain shape covers the same pixels as its FX instance would - or a polyline's piece or end,
 // with its geometry's pixels and coverage (programs QuadShapeImage .. QuadShapeLcdGray: QuadImagePS, QuadGrayPS,
-// QuadLcdPS, QuadLcdGrayPS).
+// QuadLcdPS, QuadLcdGrayPS). They also tell plain coverage in a glyph page (an SVG icon's alpha) from the glyphs: drawn
+// as an image of it, without text's composition.
 #include "esia_ui.hlsl"
 
 #ifdef ESIA_FX_STORAGE_TEXTURE
@@ -168,8 +169,14 @@ QuadPSIn QuadShapeVS(QuadVSIn v)
     }
     else
     {
+        // a textured quad: a glyph or a tile (kind -1), or plain coverage (-2: its alpha + 256, QuadInstance::SetCoverage)
         pos = float2(right ? rect.z : rect.x, bottom ? rect.w : rect.y);
         o.kind = float2(-1.0, 0.0);
+        [branch] if (packed.w > 255.5)
+        {
+            o.col.a = (packed.w - 256.0) / 255.0;
+            o.kind.x = -2.0;
+        }
         o.uv = QuadUv(packed, right, bottom);
     }
     o.pos = ESIA_CLIP_POSITION(float4(pos * gXform.xy + gXform.zw, 0.0, 1.0));
@@ -228,6 +235,13 @@ float QuadShapeAlpha(QuadPSIn i)
     return i.col.a * QuadShapeCoverage(i) * WgtEdgeFade(WgtPixelPos(i.pos).y);
 }
 
+// Plain coverage (kind -2, esia::QuadInstance::SetCoverage: an image's alpha kept in a coverage page): the color with
+// the coverage as its alpha - UiColor's for an image of white texels with that alpha - none of text's composition
+float4 QuadCoverageColor(QuadPSIn i, float cov)
+{
+    return UiColor(i.col, float4(1.0, 1.0, 1.0, cov), i.pos);
+}
+
 // The texel is read before the branch (a shape's reads the texture somewhere and drops it).
 float4 QuadImagePS(QuadPSIn i) : SV_Target
 {
@@ -242,6 +256,8 @@ float4 QuadGrayPS(QuadPSIn i) : SV_Target
     const float4 t = ESIA_SAMPLE(gTex, gLinear, i.uv);
     [branch] if (i.kind.x > -0.5)
         return WgtOutputStraight(float4(i.col.rgb, QuadShapeAlpha(i)));
+    [branch] if (i.kind.x < -1.5)
+        return QuadCoverageColor(i, t.r);
     return TextGrayColor(i.col, t.r, i.pos);
 }
 
@@ -250,14 +266,19 @@ float4 QuadLcdGrayPS(QuadPSIn i) : SV_Target
     const float4 t = ESIA_SAMPLE(gTex, gLinear, i.uv);
     [branch] if (i.kind.x > -0.5)
         return WgtOutputStraight(float4(i.col.rgb, QuadShapeAlpha(i)));
+    [branch] if (i.kind.x < -1.5)
+        return QuadCoverageColor(i, t.a);
     return TextGrayColor(i.col, t.a, i.pos);
 }
 
-// a shape among sub-pixel text: the same alpha in every channel (dual-source blending then blends as straight alpha)
+// a shape among sub-pixel text, or plain coverage in its page (gray, R = G = B = A): the same alpha in every channel
+// (dual-source blending then blends as straight alpha)
 TextLcdOut QuadLcdPS(QuadPSIn i)
 {
     const float4 t = ESIA_SAMPLE(gTex, gLinear, i.uv);
     [branch] if (i.kind.x > -0.5)
         return TextLcdOutput(i.col, QuadShapeAlpha(i).xxx);
+    [branch] if (i.kind.x < -1.5)
+        return TextLcdOutput(i.col, QuadCoverageColor(i, t.a).aaa);
     return TextLcdColor(i.col, t, i.pos);
 }

@@ -65,7 +65,8 @@ namespace esia::ui
             const float iconW = icon.icon ? Sc(t.metrics.iconTile) + Sc(12) : 0.0f;
             const text::FontRef f = Font(TextStyle::Body);
             const std::string_view shown = VisibleLabel(label);
-            const Vec2 ts = MeasureText(f, shown);
+            const text::TextMetrics lm = MeasureMetrics(f, shown);
+            const Vec2 ts = lm.size;
 
             // ---- measure: label vs accessory
             const float rowW = s->x1 - s->x0;
@@ -102,42 +103,52 @@ namespace esia::ui
             L.rect = Rect(s->x0, pos.y, s->x1, pos.y + h);
             L.id = c.GetId(idOverride.empty() ? label : idOverride);
 
-            Painter p = GetPainter();
-            if (s->rows > 0)
-                p.HLine(s->x0 + pad + iconW, s->x1, L.rect.min.y, pc.separator, std::max(1.0f, Sc(t.metrics.hairline) * 0.75f));
+            const bool separator = s->rows > 0;
             s->rows++;
-
+            float hl = 0.0f;
             if (interactive)
             {
                 L.it = InteractImpl(L.id, L.rect, InteractFlags_None);
                 L.visible = L.it.visible;
-                const float hl = std::max(L.it.hover * 0.55f, L.it.press);
+                hl = std::max(L.it.hover * 0.55f, L.it.press);
+            }
+            else
+                L.visible = c.ItemAdd(L.id, L.rect);
+
+            // ---- place
+            const float x0 = L.rect.min.x + pad;
+            const float labelY = L.stacked ? L.rect.min.y + vPad : std::floor(L.rect.Center().y - ts.y * 0.5f + 0.5f);
+            const float x = x0 + iconW;
+            const float labelRoom = L.stacked ? avail : std::max(labelW, 0.0f);
+            L.labelLine = Rect(x, labelY, x + avail, labelY + ts.y);
+            L.labelWidth = std::min(ts.x, labelRoom);
+
+            // ---- draw: the separator, the highlight, the icon, the label (a row at rest appends last frame's drawing)
+            MemoKey k;
+            k.R(L.rect).U((separator ? 1u : 0u) | (L.visible ? 2u : 0u) | (L.stacked ? 4u : 0u)).F(hl).R(s->mask).U(icon.icon).C(icon.color);
+            k.U64(lm.layout).C(labelColor).F(labelY).F(labelRoom);
+            DrawMemo memo(k);
+            if (!memo.Replayed())
+            {
+                Painter p = GetPainter();
+                if (separator)
+                    p.HLine(s->x0 + pad + iconW, s->x1, L.rect.min.y, pc.separator, std::max(1.0f, Sc(t.metrics.hairline) * 0.75f));
                 if (L.visible && hl > 0.01f)
                 {
                     p.PushMask(s->mask, ItemRadius(Sc(t.metrics.cardRadius)));
                     p.Rect(L.rect, Style().Fill(pc.highlight.Fade(hl * 1.3f)));
                     p.PopMask();
                 }
+                if (icon.icon && L.visible)
+                {
+                    const float tile = Sc(t.metrics.iconTile);
+                    const float iconCy = L.stacked ? labelY + ts.y * 0.5f : L.rect.Center().y;
+                    IconTile(p, Rect::FromCenter(Vec2(x0 + tile * 0.5f, iconCy), Vec2(tile, tile)), icon.icon, icon.color);
+                }
+                if (L.visible && labelRoom > 0.0f && !shown.empty())
+                    p.TextBox(Rect(x, labelY, x + labelRoom, labelY + ts.y), Vec2(0.0f, 0.0f), f, labelColor.a > 0 ? labelColor : LabelOr(pc.label), shown,
+                              text::TextFlags_Ellipsis);
             }
-            else
-                L.visible = c.ItemAdd(L.id, L.rect);
-
-            // ---- place
-            float x = L.rect.min.x + pad;
-            const float labelY = L.stacked ? L.rect.min.y + vPad : std::floor(L.rect.Center().y - ts.y * 0.5f + 0.5f);
-            if (icon.icon && L.visible)
-            {
-                const float tile = Sc(t.metrics.iconTile);
-                const float iconCy = L.stacked ? labelY + ts.y * 0.5f : L.rect.Center().y;
-                IconTile(p, Rect::FromCenter(Vec2(x + tile * 0.5f, iconCy), Vec2(tile, tile)), icon.icon, icon.color);
-            }
-            x += iconW;
-            const float labelRoom = L.stacked ? avail : std::max(labelW, 0.0f);
-            L.labelLine = Rect(x, labelY, x + avail, labelY + ts.y);
-            L.labelWidth = std::min(ts.x, labelRoom);
-            if (L.visible && labelRoom > 0.0f && !shown.empty())
-                p.TextBox(Rect(x, labelY, x + labelRoom, labelY + ts.y), Vec2(0.0f, 0.0f), f, labelColor.a > 0 ? labelColor : LabelOr(pc.label), shown,
-                          text::TextFlags_Ellipsis);
             if (L.stacked)
             {
                 const float y2 = labelY + ts.y + lineGap;
@@ -160,8 +171,14 @@ namespace esia::ui
             const Rect r(L.accessory.min.x, L.accessory.min.y, L.accessory.max.x - rightInset, L.accessory.max.y);
             if (r.Width() <= 1.0f || text.empty())
                 return;
+            const text::FontRef f = Font(TextStyle::Body);
+            MemoKey k;
+            k.R(r).C(color).U64(MeasureMetrics(f, text).layout);
+            DrawMemo memo(k);
+            if (memo.Replayed())
+                return;
             Painter p = GetPainter();
-            p.TextBox(r, Vec2(1.0f, 0.5f), Font(TextStyle::Body), color, text, text::TextFlags_Ellipsis);
+            p.TextBox(r, Vec2(1.0f, 0.5f), f, color, text, text::TextFlags_Ellipsis);
         }
 
         // Footnote text inset like the rows' labels, wrapping inside that inset.
@@ -259,9 +276,15 @@ namespace esia::ui
             DrawList& dl = c.WindowDrawList();
             const std::size_t from = dl.Mark();
             {
-                Painter p = GetPainter();
-                Style cs = Style().Radius(ItemRadius(Sc(t.metrics.cardRadius)));
-                p.Rect(card, SurfaceFill(cs, FillOr(t.colors.cardSurface)));
+                MemoKey k;
+                k.R(card);
+                DrawMemo memo(k);
+                if (!memo.Replayed())
+                {
+                    Painter p = GetPainter();
+                    Style cs = Style().Radius(ItemRadius(Sc(t.metrics.cardRadius)));
+                    p.Rect(card, SurfaceFill(cs, FillOr(t.colors.cardSurface)));
+                }
             }
             MoveCommands(dl, from, s.mark);
         }
@@ -298,9 +321,17 @@ namespace esia::ui
         if (!L.visible)
             return false;
         const Palette& pc = C();
-        Painter p = GetPainter();
         const float cy = L.stacked ? L.accessory.Center().y : L.rect.Center().y;
-        DrawIcon(p, Vec2(L.accessory.max.x - chevronW * 0.5f, cy), icons::ChevronRight, Sc(11), pc.tertiaryLabel);
+        {
+            MemoKey k;
+            k.F(L.accessory.max.x - chevronW * 0.5f).F(cy);
+            DrawMemo memo(k);
+            if (!memo.Replayed())
+            {
+                Painter p = GetPainter();
+                DrawIcon(p, Vec2(L.accessory.max.x - chevronW * 0.5f, cy), icons::ChevronRight, Sc(11), pc.tertiaryLabel);
+            }
+        }
         if (detailW > 0.0f)
             RightText(L, detail, pc.secondaryLabel, chevronW + Sc(8));
         return L.it.pressed;
@@ -362,8 +393,15 @@ namespace esia::ui
         {
             char buf[64];
             std::snprintf(buf, sizeof(buf), format, (double)Clamp(*value, lo, hi));
-            Painter p = GetPainter();
-            p.TextBox(valueRect, Vec2(1.0f, 0.5f), Font(TextStyle::Body), LabelOr(C().secondaryLabel), buf, text::TextFlags_Ellipsis);
+            const text::FontRef f = Font(TextStyle::Body);
+            MemoKey k;
+            k.R(valueRect).U64(MeasureMetrics(f, buf).layout);
+            DrawMemo memo(k);
+            if (!memo.Replayed())
+            {
+                Painter p = GetPainter();
+                p.TextBox(valueRect, Vec2(1.0f, 0.5f), f, LabelOr(C().secondaryLabel), buf, text::TextFlags_Ellipsis);
+            }
         }
         return changed;
     }

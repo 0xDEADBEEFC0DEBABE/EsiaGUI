@@ -65,12 +65,13 @@ namespace esia
 
     // A quad as the instanced quad programs read it (rhi::ShaderProgram::QuadImage .. QuadLcdGray, QuadShapeImage ..
     // QuadShapeLcdGray): two float4 rows of the frame's instance data, 32 bytes where a quad of vertices and indices
-    // takes 104 - a textured quad (a glyph, a flat tile: Set) or a plain shape (SetShape), so that shapes and the text
-    // among them draw in one draw. Whole numbers and plain floats, exact in a float, so every shader model decodes them
-    // (SM3 without integers too):
+    // takes 104 - a textured quad (a glyph, a flat tile: Set; a coverage tile drawn as an image: SetCoverage) or a plain
+    // shape (SetShape), so that shapes and the text among them draw in one draw. Whole numbers and plain floats, exact in
+    // a float, so every shader model decodes them (SM3 without integers too):
     //   rect     x0, y0, x1, y1 (UI units); a segment's end points
     //   packed   a textured quad: u0 + 4096 v0, (u1 - u0) + 4096 (v1 - v0) (its uv in 1/4096 - exact for whole texels of
     //            power-of-two textures up to 4096 wide, as glyph pages and tiles are), R + 256 G + 65536 B, A (0 .. 255)
+    //            + 256 for plain coverage (SetCoverage)
     //            a shape: -1 - (kind + 8 (smoothing in 1/1023 + 1024 stroke align in 1/64)), its radius (any float),
     //            R + 256 G + 65536 B, A + 256 stroke width (in 1/64 UI units, below 1024)
     //            a polyline's piece or end: -1 - (kind + 8 (reach + 32 joint)), half its thickness, R + 256 G + 65536 B,
@@ -90,6 +91,17 @@ namespace esia
             PackUv(uv0, uv1, packed);
             PackColor(color, packed + 2);
         }
+        // A textured quad on a coverage page (Alpha8, or a sub-pixel page's gray) whose texels are plain coverage - a
+        // tile of an image's alpha (svg::Draw's icons in the text's pages): drawn in `color` with the texel as its alpha,
+        // the pixels an image of white texels with that alpha gives, none of text's composition (gamma, enhanced
+        // contrast: render::TextComposition). Drawn by the programs that tell quads apart (QuadShape*: the command's
+        // DrawCmd::shapes).
+        void SetCoverage(const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
+        {
+            Set(r, uv0, uv1, color);
+            packed[3] += 256.0f;
+        }
+        bool IsCoverage() const { return packed[0] >= 0.0f && packed[3] >= 256.0f; }
         // `r`: the rectangle, or a segment's end points (min = the first, max = the second). Smoothing and align from 0 to
         // 1, the stroke's width below 1024 UI units.
         void SetShape(QuadShape kind, const Rect& r, float radius, float smoothing, float strokeWidth, float strokeAlign, std::uint32_t color)
@@ -226,7 +238,9 @@ namespace esia
         // Quads: plain shapes only so far (they read no texture) - quads on any texture join them, and the first textured
         // one gives the command its texture
         bool anyTexture = false;
-        bool shapes = false;         // Quads: plain shapes among them (the programs that draw shapes; text alone: lighter ones)
+        // Quads: plain shapes or plain coverage among them (the programs that draw shapes and tell quads apart; text
+        // alone: lighter ones)
+        bool shapes = false;
         std::uint32_t first = 0;
         std::uint32_t count = 0;
         EffectId effect = 0;         // Fx
@@ -238,6 +252,39 @@ namespace esia
         // than writing them did. Quads: the bounds of its quads.
         std::uint32_t vtxFirst = 0, vtxEnd = 0;
         Rect vtxBounds{1e30f, 1e30f, -1e30f, -1e30f};
+    };
+
+    // A stretch of a list's output, kept to be appended again as it was (DrawList::Replay): what a widget drew last
+    // frame, when nothing it draws from has changed (the widget layer's draw memo). Its ranges and indices are its own
+    // (from 0): appended anywhere, they are moved to where it goes.
+    struct DrawRecord
+    {
+        // the list where the stretch began: its last command (none: hadLast false) and whether a primitive could join
+        // it (mergeOk: after a Mark it cannot; contiguous: its range ends where the list's array does); the clip and
+        // texture in use
+        DrawCmd before;
+        bool hadLast = false, mergeOk = false, contiguous = false;
+        Rect clip;
+        TextureId texture = 0;
+        // what the stretch added to that command (took): primitives (addCount, the bounds of what they cover), its
+        // texture and kinds after them, the end of its vertices from the stretch's first (-1: as it was)
+        bool took = false;
+        std::uint32_t addCount = 0;
+        Rect addBounds{1e30f, 1e30f, -1e30f, -1e30f};
+        TextureId textureAfter = 0;
+        bool anyTextureAfter = false, shapesAfter = false;
+        std::int64_t vtxEnd = -1;
+        // the stretch: its vertices, its indices (from its first vertex), quads, FX instances and commands (ranges from
+        // the stretch's starts)
+        VertexVector vtx;
+        IndexVector idx;
+        QuadVector quads;
+        std::vector<fx::Instance> fx;
+        std::vector<DrawCmd> cmds;
+
+        void Clear();
+        // the same stretch, appended the same way (the widget layer's check of its memos)
+        bool operator==(const DrawRecord& o) const;
     };
 
     class ESIA_API DrawList
@@ -291,6 +338,9 @@ namespace esia
         void EndQuads(const QuadWriter& w);
         // One quad (an image of a glyph or a tile); nothing for an empty rect or a transparent color.
         void AddQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color);
+        // One quad of plain coverage on a coverage page (QuadInstance::SetCoverage: an image's alpha in the text's pages),
+        // in the command of the text on that page; nothing for an empty rect or a transparent color.
+        void AddCoverageQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color);
         // A plain shape (QuadInstance::SetShape) in the current clip rect: it joins the quads before it whatever their
         // texture, so a shape among labels takes no draw of its own. Nothing for a transparent color. `bounds`: what
         // it draws on, as QuadInstance::Bounds gives it (a caller that knows them saves decoding them).
@@ -363,6 +413,24 @@ namespace esia
         std::vector<fx::FadeParams>& Fades() { return fades_; }
         bool Empty() const { return cmds_.empty(); }
 
+        // ---- recording (DrawRecord)
+        // Records what is added from here, until EndRecord; one recording at a time.
+        void BeginRecord();
+        // Ends it: true with the stretch in `out` when it can be appended again - it did not reach into what lay
+        // before it (a Mark, moved commands, bounds refreshed there, a clip or texture popped from below its start),
+        // left the clip and texture stacks as it found them and added no layer, fade or callback. Either way the list
+        // is what it would be unrecorded.
+        bool EndRecord(DrawRecord& out);
+        bool Recording() const { return rec_.active; }
+        // What is drawn now depends on more than the drawing's own inputs (an SVG drawing's place in its atlas: an image
+        // the first frame, a tile in the text's pages after): a recording going on is not kept.
+        void BreakRecording() { rec_.broken = rec_.broken || rec_.active; }
+        // Whether `rec` can be appended here: the list is in the state it began in - its last command the same but for
+        // its ranges (and taking primitives the same way), the same clip and texture in use.
+        bool CanReplay(const DrawRecord& rec) const;
+        // Appends `rec` as it was recorded (CanReplay first): the list is then what drawing it again would have made.
+        void Replay(const DrawRecord& rec);
+
     private:
         DrawCmd& Geometry() { return Geometry(CurrentTexture()); }   // current geometry command (opens one when the state changed)
         DrawCmd& Geometry(TextureId texture);
@@ -381,6 +449,21 @@ namespace esia
         std::vector<Rect> clipStack_{Rect(-8192, -8192, 8192, 8192)};
         std::vector<TextureId> textureStack_;
         std::size_t mergeBarrier_ = 0;   // commands before this index take no more primitives (Mark)
+
+        // the recording (BeginRecord): where it began, and whether anything reached into what lay before it
+        struct RecordState
+        {
+            bool active = false, broken = false;
+            bool refreshed = false;   // RefreshBounds recomputed the command before the stretch
+            bool restored = false;    // its bounds given back already (MoveCommands moves it: its index is gone)
+            std::size_t vtx = 0, idx = 0, quads = 0, fx = 0, cmds = 0, layers = 0, fades = 0;
+            std::size_t clipDepth = 0, textureDepth = 0, mergeBarrier = 0;
+            // the command before the stretch as it began; its bounds gather what the stretch adds meanwhile
+            DrawCmd before;
+            bool hadLast = false, mergeOk = false, contiguous = false;
+        };
+        RecordState rec_;
+        bool Contiguous(const DrawCmd& c) const;
     };
 
     // One frame of output: draw lists in back-to-front order.
