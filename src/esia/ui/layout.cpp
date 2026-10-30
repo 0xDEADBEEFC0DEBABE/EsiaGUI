@@ -60,8 +60,16 @@ namespace esia::ui
             origin_ = origin;
             width_ = std::max(region.max.x - origin.x, 1.0f);
             horizontal_ = kind == LayoutKind::Adaptive ? FitsInRow(last_, horizontal_) : kind != LayoutKind::VStack;
-            Vec2 size;
-            Arrange(last_, regions_, places_, size);
+            // last frame's arrangement holds while its children and everything else it depends on are the same (a
+            // page at rest arranges nothing)
+            const ArrangeKey key = Key();
+            if (!arranged_ || lastChanged_ || !(key == arrangedKey_))
+            {
+                Arrange(last_, regions_, places_, arrangedSize_);
+                arrangedKey_ = key;
+                arranged_ = true;
+                lastChanged_ = false;
+            }
             now_.clear();
             if (springs_.size() < regions_.size())
                 springs_.resize(regions_.size());
@@ -87,9 +95,16 @@ namespace esia::ui
         Vec2 End(float* baseline) override
         {
             // this frame's measurements size the container; next frame places with them (the lists trade places
-            // and keep their storage: a frame allocates nothing)
+            // and keep their storage: a frame allocates nothing). Measured as last frame: Begin's arrangement is this
+            // one.
             Vec2 size;
-            Arrange(now_, endRegions_, endPlaces_, size);
+            if (arranged_ && SameChildren(now_, last_))
+                size = arrangedSize_;
+            else
+            {
+                Arrange(now_, endRegions_, endPlaces_, size);
+                lastChanged_ = true;
+            }
             last_.swap(now_);
             now_.clear();
             measured_ = true;
@@ -99,6 +114,32 @@ namespace esia::ui
         }
 
     private:
+        // what Arrange reads besides the children
+        struct ArrangeKey
+        {
+            Vec2 origin;
+            float width, spacing, lineSpacing, minColumn, cellHeight, aspect, minFill;
+            int columns, maxColumns;
+            LayoutKind kind;
+            Align align, justify;
+            bool horizontal;
+            bool operator==(const ArrangeKey&) const = default;
+        };
+        ArrangeKey Key() const
+        {
+            return {origin_, width_, spacing, lineSpacing, minColumn, cellHeight, aspect, minFill, columns, maxColumns, kind, align, justify, horizontal_};
+        }
+        // the same measurements for Arrange
+        static bool SameChildren(const std::vector<LayoutChild>& a, const std::vector<LayoutChild>& b)
+        {
+            if (a.size() != b.size())
+                return false;
+            for (std::size_t i = 0; i < a.size(); ++i)
+                if (a[i].size != b[i].size || a[i].fill != b[i].fill || a[i].overflow != b[i].overflow || a[i].flex != b[i].flex || a[i].span != b[i].span)
+                    return false;
+            return true;
+        }
+
         struct SlotSpring
         {
             SpringState x, y;
@@ -443,6 +484,9 @@ namespace esia::ui
         bool hasPendingGlow_ = false;
         std::vector<Rect> regions_;
         std::vector<Vec2> places_;
+        ArrangeKey arrangedKey_{};   // Begin's arrangement (regions_, places_, arrangedSize_) was made for these and last_
+        Vec2 arrangedSize_;
+        bool arranged_ = false, lastChanged_ = true;
         std::vector<SlotSpring> springs_;
         // scratch kept from frame to frame: End's arrangement, the grid's and the flow's working lists
         struct FlowLine
