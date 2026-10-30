@@ -276,40 +276,47 @@ namespace esia::ui
                 if (b.hovered || s.dragging)
                     c.SetMouseCursor(MouseCursor::ResizeEW);
 
-                // the field: a well, filled in proportion to the value when the range is finite
-                Style ws = Style().Radius(radius);
-                SurfaceFill(ws, FillOr(pc.tertiaryFill));
-                p.Rect(field, ws);
-                if (ranged)
+                // the field: a well, filled in proportion to the value when the range is finite (its spring first, then
+                // its drawing in a memo)
+                const float fill = ranged ? Anim(id, 0xF1, (float)std::clamp((*value - o.min) / (o.max - o.min), 0.0, 1.0),
+                                                 s.dragging ? Spring{0.08f, 1.0f} : SpringStd())
+                                          : 0.0f;
+                const text::FontRef f = Font(TextStyle::Callout);
+                const text::FontRef lf = Font(FontWeight::Semibold, T().type.size[(int)TextStyle::Footnote]);
+                const text::TextMetrics lm = MeasureMetrics(lf, o.label);
+                const std::string shown = FormatValue(*value, o.format, integer);
+                const text::TextMetrics vm = MeasureMetrics(f, shown);
+                MemoKey k;
+                k.R(field).F(radius).F(hover).F(fill).U(ranged ? 1u : 0u).C(o.labelColor).U64(lm.layout).U64(vm.layout);
+                if (DrawMemo memo(k); !memo.Replayed())
                 {
-                    const double frac = std::clamp((*value - o.min) / (o.max - o.min), 0.0, 1.0);
-                    const float shown = Anim(id, 0xF1, (float)frac, s.dragging ? Spring{0.08f, 1.0f} : SpringStd());
-                    if (shown > 0.001f)
+                    Style ws = Style().Radius(radius);
+                    SurfaceFill(ws, FillOr(pc.tertiaryFill));
+                    p.Rect(field, ws);
+                    if (ranged && fill > 0.001f)
                     {
                         p.PushMask(field, radius);
-                        p.FillRect(Rect(field.min.x, field.min.y, field.min.x + field.Width() * shown, field.max.y), Accent().Fade(0.22f + 0.08f * hover));
+                        p.FillRect(Rect(field.min.x, field.min.y, field.min.x + field.Width() * fill, field.max.y), Accent().Fade(0.22f + 0.08f * hover));
                         p.PopMask();
                     }
-                }
-                if (hover > 0.01f)
-                    p.Rect(field, Style().Radius(radius).Fill(pc.highlight.Fade(hover * 0.6f)));
+                    if (hover > 0.01f)
+                        p.Rect(field, Style().Radius(radius).Fill(pc.highlight.Fade(hover * 0.6f)));
 
-                // the label on the left, the value in the middle
-                const text::FontRef f = Font(TextStyle::Callout);
-                float textLeft = field.min.x + Sc(8);
-                if (!o.label.empty())
-                {
-                    const text::FontRef lf = Font(FontWeight::Semibold, T().type.size[(int)TextStyle::Footnote]);
-                    const Vec2 ls = MeasureText(lf, o.label);
-                    p.Text(Vec2(textLeft, std::floor(field.Center().y - ls.y * 0.5f + 0.5f)), lf, o.labelColor.a > 0 ? o.labelColor : pc.secondaryLabel, o.label);
-                    textLeft += ls.x + Sc(6);
+                    // the label on the left, the value in the middle
+                    float textLeft = field.min.x + Sc(8);
+                    if (!o.label.empty())
+                    {
+                        const Vec2 ls = lm.size;
+                        p.Text(Vec2(textLeft, std::floor(field.Center().y - ls.y * 0.5f + 0.5f)), lf, o.labelColor.a > 0 ? o.labelColor : pc.secondaryLabel,
+                               o.label);
+                        textLeft += ls.x + Sc(6);
+                    }
+                    const Vec2 ts = vm.size;
+                    const float right = field.max.x - Sc(8);
+                    const float x = o.label.empty() ? std::max(textLeft, field.Center().x - ts.x * 0.5f) : std::max(textLeft, right - ts.x);
+                    p.TextBox(Rect(x, std::floor(field.Center().y - ts.y * 0.5f + 0.5f), right, std::floor(field.Center().y - ts.y * 0.5f + 0.5f) + ts.y),
+                              Vec2(0, 0), f, LabelOr(pc.label), shown, text::TextFlags_Ellipsis);
                 }
-                const std::string shown = FormatValue(*value, o.format, integer);
-                const Vec2 ts = MeasureText(f, shown);
-                const float right = field.max.x - Sc(8);
-                const float x = o.label.empty() ? std::max(textLeft, field.Center().x - ts.x * 0.5f) : std::max(textLeft, right - ts.x);
-                p.TextBox(Rect(x, std::floor(field.Center().y - ts.y * 0.5f + 0.5f), right, std::floor(field.Center().y - ts.y * 0.5f + 0.5f) + ts.y), Vec2(0, 0), f,
-                          LabelOr(pc.label), shown, text::TextFlags_Ellipsis);
             }
 
             if (o.buttons)
@@ -322,14 +329,19 @@ namespace esia::ui
                     set(*value - step * mul);
                 if (b.pressed)
                     set(*value + step * mul);
-                const Color fg = LabelOr(pc.label);
-                for (const InteractState* it : {&a, &b})
+                MemoKey k;
+                k.R(r).F(bw).F(a.hover).F(a.press).F(b.hover).F(b.press).U((*value > o.min ? 1u : 0u) | (*value < o.max ? 2u : 0u));
+                if (DrawMemo memo(k); !memo.Replayed())
                 {
-                    const Rect br = it->rect.Expanded(-Sc(2));
-                    p.Circle(br.Center(), br.Height() * 0.5f, Surface(pc.fill.Fade(0.6f + 0.5f * it->hover + 0.6f * it->press)));
+                    const Color fg = LabelOr(pc.label);
+                    for (const InteractState* it : {&a, &b})
+                    {
+                        const Rect br = it->rect.Expanded(-Sc(2));
+                        p.Circle(br.Center(), br.Height() * 0.5f, Surface(pc.fill.Fade(0.6f + 0.5f * it->hover + 0.6f * it->press)));
+                    }
+                    DrawIcon(p, left.Center(), icons::Remove, Sc(12), *value > o.min ? fg : fg.Fade(0.35f));
+                    DrawIcon(p, right.Center(), icons::Add, Sc(12), *value < o.max ? fg : fg.Fade(0.35f));
                 }
-                DrawIcon(p, left.Center(), icons::Remove, Sc(12), *value > o.min ? fg : fg.Fade(0.35f));
-                DrawIcon(p, right.Center(), icons::Add, Sc(12), *value < o.max ? fg : fg.Fade(0.35f));
             }
             return changed;
         }

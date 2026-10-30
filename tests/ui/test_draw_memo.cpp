@@ -29,6 +29,8 @@ namespace
         bool check = false;
         bool airplane = false;
         int count = 3, swatch = 1, pick = 1, tab = 0;
+        std::string name = "Ada";
+        float width = 4.5f;
         int mode = 1;
         float rowValue = 40.0f;
 
@@ -157,6 +159,13 @@ namespace
             }
             static const std::string_view kSizes[3] = {"Small", "Medium", "Large"};
             ui::Picker("size", &a.pick, kSizes);
+            ui::TextField("name", &a.name, "Your name");
+            ui::NumberOptions no;
+            no.min = 0.0;
+            no.max = 10.0;
+            no.label = "W";
+            no.buttons = true;
+            ui::NumberField("width", &a.width, no);
             static const ui::TabItem kTabs[3] = {{(ui::Icon)'H', "Home"}, {(ui::Icon)'S', "Search"}, {(ui::Icon)'P', "Profile"}};
             ui::TabBar("tabs", &a.tab, kTabs);
             ui::TextWrapped(ui::TextStyle::Body, Color(0.92f, 0.92f, 0.95f),
