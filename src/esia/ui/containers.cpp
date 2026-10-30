@@ -474,28 +474,34 @@ namespace esia::ui
         const bool focused = c.FocusedWindow() == w;
         const float focusT = Anim(id, 0x78, focused ? 1.0f : 0.0f, t.motion.gentle);
         {
-            Painter bg = GetPainter();
-            Style ws;
-            ws.Radius(radius);
-            if (!(flags & WindowFlags_NoShadow))
-                ws.Shadow(pc.shadow.Fade(0.9f + 0.5f * focusT), Sc(34 + 14 * focusT), Vec2(0, Sc(14 + 6 * focusT)));
-            if (((o.flags & WindowFlags_Solid) && !LookClear()) || m.flat)   // flat: every window is solid
-                ws.Fill(FillOr(t.dark ? Color::Hex(0x1C1C1E) : Color::Hex(0xF2F2F7))).Stroke(1.0f, pc.separator.Fade(0.6f));
-            else
+            MemoKey sk;
+            sk.R(wr).F(radius).F(focusT).F(alpha).U(flags).U(o.flags);
+            DrawMemo surface(sk);
+            if (!surface.Replayed())
             {
-                if (o.flags & WindowFlags_ClearGlass)
-                    PushStyle(ItemStyle().Look(GlassLook::Clear));
-                GlassMaterial gm = SurfaceMaterial(t.materials.window, pc.windowSurface);
-                if (o.flags & WindowFlags_ClearGlass)
-                    PopStyle();
-                // "materialize": frost and lensing ramp in with the appear animation
-                gm.blur *= 0.35f + 0.65f * alpha;
-                gm.refraction *= alpha;
-                ws.Glass(gm);
+                Painter bg = GetPainter();
+                Style ws;
+                ws.Radius(radius);
+                if (!(flags & WindowFlags_NoShadow))
+                    ws.Shadow(pc.shadow.Fade(0.9f + 0.5f * focusT), Sc(34 + 14 * focusT), Vec2(0, Sc(14 + 6 * focusT)));
+                if (((o.flags & WindowFlags_Solid) && !LookClear()) || m.flat)   // flat: every window is solid
+                    ws.Fill(FillOr(t.dark ? Color::Hex(0x1C1C1E) : Color::Hex(0xF2F2F7))).Stroke(1.0f, pc.separator.Fade(0.6f));
+                else
+                {
+                    if (o.flags & WindowFlags_ClearGlass)
+                        PushStyle(ItemStyle().Look(GlassLook::Clear));
+                    GlassMaterial gm = SurfaceMaterial(t.materials.window, pc.windowSurface);
+                    if (o.flags & WindowFlags_ClearGlass)
+                        PopStyle();
+                    // "materialize": frost and lensing ramp in with the appear animation
+                    gm.blur *= 0.35f + 0.65f * alpha;
+                    gm.refraction *= alpha;
+                    ws.Glass(gm);
+                }
+                // the shadow lives outside the window rectangle: the window's clip must not cut it square
+                ScopedUnclip unclip(wr, ShadowExtent(Sc(48), Vec2(0, Sc(20))));
+                bg.Rect(wr, ws);
             }
-            // the shadow lives outside the window rectangle: the window's clip must not cut it square
-            ScopedUnclip unclip(wr, ShadowExtent(Sc(48), Vec2(0, Sc(20))));
-            bg.Rect(wr, ws);
         }
 
         // ----------------------------------------------------------- header
@@ -535,11 +541,15 @@ namespace esia::ui
             }
             const std::string_view shown = VisibleLabel(title);
             const text::FontRef tf = Font(TextStyle::Title3);
-            const Vec2 ts = MeasureText(tf, shown);
+            const text::TextMetrics tm = MeasureMetrics(tf, shown);
+            const Vec2 ts = tm.size;
             const float ty = !o.subtitle.empty() ? cy - ts.y * 0.5f - Sc(4) : cy - ts.y * 0.5f;
             // title and subtitle end before the close button (ellipsized), never under it
             const float tr = closable ? closeR.min.x - Sc(8) : wr.max.x - pad;
-            if (tr > tx)
+            MemoKey hk;
+            hk.F(tx).F(ty).F(tr).U64(tm.layout).U64(!o.subtitle.empty() ? MeasureMetrics(Font(TextStyle::Footnote), o.subtitle).layout : 0u);
+            DrawMemo header(hk);
+            if (tr > tx && !header.Replayed())
             {
                 p.TextBox(Rect(std::floor(tx), std::floor(ty), tr, std::floor(ty) + ts.y), Vec2(0, 0), tf, LabelOr(pc.label), shown, text::TextFlags_Ellipsis);
                 if (!o.subtitle.empty())

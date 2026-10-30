@@ -221,11 +221,15 @@ namespace esia::ui
                     s.x.value = rel.x;
                     s.y.value = rel.y;
                 }
-                const float dt = M().dt;
-                s.x.Step(rel.x, kReflow, dt);
-                s.y.Step(rel.y, kReflow, dt);
-                if (s.x.value != rel.x || s.y.value != rel.y)
-                    M().animating = true;
+                if (s.x.value != rel.x || s.x.velocity != 0.0f || s.y.value != rel.y || s.y.velocity != 0.0f)
+                {
+                    // (at rest a step changes nothing: most children of most frames)
+                    const float dt = M().dt;
+                    s.x.Step(rel.x, kReflow, dt);
+                    s.y.Step(rel.y, kReflow, dt);
+                    if (s.x.value != rel.x || s.y.value != rel.y)
+                        M().animating = true;
+                }
                 pos = origin_ + Vec2(std::floor(s.x.value + 0.5f), std::floor(s.y.value + 0.5f));
             }
             region = region.Translated(pos - place);
@@ -604,6 +608,7 @@ namespace esia::ui
             void ReportGlowReach(const DrawList& dl, const Rect& restShape, float reach) override
             {
                 Ui::Impl& m = M();
+                ++m.glowCalls;   // (a draw memo keeps no drawing that told this)
                 if (!m.layouts.empty() && m.layouts.back().list == &dl && reach > 0.0f)
                     m.layouts.back().layout->ReportGlow(restShape, restShape.Expanded(reach));
             }
@@ -612,6 +617,7 @@ namespace esia::ui
             // nor the containers it is in), and fades out over the gap before it.
             bool GlowBounds(const DrawList& dl, const Rect& shape, float extent, Rect& bound, float& fade) override
             {
+                ++M().glowCalls;   // (it reads last frame's neighbours: a draw memo keeps no drawing that asked)
                 Context& c = *M().ctx;
                 const Window* w = c.CurrentWindow();
                 if (!w || &w->GetDrawList() != &dl)

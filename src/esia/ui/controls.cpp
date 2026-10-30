@@ -22,7 +22,7 @@ namespace esia::ui
             MarkFill();   // wrapping text stretches to the width it is offered (auto layout)
             wrapWidth = std::max(c.ContentRegionAvail().x, 1.0f);
         }
-        text::TextMetrics tm = m.text && !str.empty() ? m.text->Measure(f, str, wrapWidth) : text::TextMetrics{};
+        text::TextMetrics tm = MeasureMetrics(f, str, wrapWidth);
         if (!wrap && !InLayoutContainer())
         {
             // Text never runs past its container: wider than what is left of its line (after SameLine items too),
@@ -31,12 +31,17 @@ namespace esia::ui
             if (room > 0.0f && tm.size.x > room + 0.5f && m.text)
             {
                 wrapWidth = std::max(room, f.size * 4.0f);
-                tm = m.text->Measure(f, str, wrapWidth);
+                tm = MeasureMetrics(f, str, wrapWidth);
             }
         }
         const Vec2 size(tm.size.x, std::max(tm.size.y, f.size));
         c.ItemSize(size, tm.baseline > 0.0f ? tm.baseline : -1.0f);
         if (!c.ItemAdd(0, Rect::FromSize(pos, size)) || str.empty())
+            return;
+        MemoKey k;
+        k.V(pos).U(f.id).F(f.size).C(color).F(wrapWidth).U64(tm.layout);
+        DrawMemo memo(k);
+        if (memo.Replayed())
             return;
         Painter p = GetPainter();
         p.Text(pos, f, color, str, wrapWidth);
@@ -242,8 +247,15 @@ namespace esia::ui
             return {tint, c.onAccent};
         }
 
-        void DrawButton(const InteractState& it, const ButtonOptions& o, std::string_view label, Icon icon, bool circle)
+        // `lm`: the label's metrics (MeasureMetrics with the button's font)
+        void DrawButton(const InteractState& it, const ButtonOptions& o, std::string_view label, const text::TextMetrics& lm, Icon icon, bool circle)
         {
+            MemoKey k;
+            k.R(it.rect).F(it.hover).F(it.press).C(o.tint).U64(lm.layout).U(icon);
+            k.U((std::uint32_t)o.kind | (std::uint32_t)o.size << 8 | (o.capsule ? 1u << 16 : 0u) | (o.glow ? 1u << 17 : 0u) | (circle ? 1u << 18 : 0u));
+            DrawMemo memo(k);
+            if (memo.Replayed())
+                return;
             const ButtonMetrics bm = MetricsFor(o.size);
             ButtonColors bc = ColorsFor(o);
             const Theme& t = T();
@@ -332,7 +344,7 @@ namespace esia::ui
             if (o.kind == ButtonKind::Plain)
                 fg = fg.Fade(1.0f - 0.4f * it.press);
             const float iconSize = f.size * 1.1f;
-            const Vec2 ts = MeasureText(f, label);
+            const Vec2 ts = lm.size;
             const float gap = (icon && !label.empty()) ? Dt(7) : 0.0f;
             const float iconW = icon ? iconSize : 0.0f;
             float x = r.Center().x - (iconW + gap + ts.x) * 0.5f;
@@ -353,7 +365,8 @@ namespace esia::ui
         const ButtonMetrics bm = MetricsFor(o.size);
         const std::string_view shown = VisibleLabel(label);
         const text::FontRef f = Font(FontWeight::Semibold, bm.font);
-        const Vec2 ts = MeasureText(f, shown);
+        const text::TextMetrics lm = MeasureMetrics(f, shown);
+        const Vec2 ts = lm.size;
         const float iconW = o.icon ? f.size * 1.1f + (!shown.empty() ? Sc(7) : 0.0f) : 0.0f;
         float width = ts.x + iconW + Sc(bm.padX) * 2.0f;
         if (o.width > 0.0f)
@@ -364,7 +377,7 @@ namespace esia::ui
         Ctx().ItemSize(Vec2(width, Sc(bm.height)));
         if (!it.visible)
             return false;
-        DrawButton(it, o, shown, o.icon, false);
+        DrawButton(it, o, shown, lm, o.icon, false);
         return it.pressed;
     }
 
@@ -376,7 +389,7 @@ namespace esia::ui
         Ctx().ItemSize(Vec2(d, d));
         if (!it.visible)
             return false;
-        DrawButton(it, o, {}, icon, true);
+        DrawButton(it, o, {}, text::TextMetrics{}, icon, true);
         return it.pressed;
     }
 
@@ -404,6 +417,11 @@ namespace esia::ui
         const float pos = ControlSpring(it, 0, *value ? 1.0f : 0.0f, kKnob, vel);
         const float colorT = Saturate(ControlSpring(it, 2, *value ? 1.0f : 0.0f, kColor));
         const float lens = ControlPulse(it, 4, it.held, changed);
+        MemoKey k;
+        k.R(r).F(pos).F(vel).F(colorT).F(lens).F(it.press).U(*value ? 1u : 0u);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return changed;
 
         const float pad = Dt(2);
         const float kd = r.Height() - pad * 2.0f;
@@ -617,6 +635,11 @@ namespace esia::ui
         float vel;
         const float shown = ControlSpring(it, 0, frac, it.held ? kFollow : kGlide, vel);
         const float press = ControlPulse(it, 2, it.held, it.pressed);
+        MemoKey k;
+        k.R(r).F(shown).F(vel).F(press).C(o.tint).U(o.minIcon).U(o.maxIcon);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return changed;
 
         Painter p = GetPainter();
         const float cy = r.Center().y;

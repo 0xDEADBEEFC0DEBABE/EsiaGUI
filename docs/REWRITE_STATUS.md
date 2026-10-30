@@ -42,6 +42,11 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Draw memos: widgets at rest draw nothing** (2026-10-30): a widget whose drawing has nothing new to draw from - its
+rect, state, colors, label, the theme, the style - appends last frame's drawing again, byte for byte what drawing it
+makes; texts measured again the same way are not looked up. Plain widgets at last under Dear ImGui by more than 20 %:
+flat CPU 0.039 -> 0.025 ms against Dear ImGui's 0.032, regular 0.055 -> 0.041.
+
 **Draw lists recorded and appended again** (2026-10-30, in Esia): a stretch of a draw list - what a widget drew -
 kept as a `DrawRecord` and appended again where the list is in the state it began in, byte for byte what drawing it
 again makes, with the text system's records of where texts were drawn (`DrawNote`) left as the draws would leave them:
@@ -171,6 +176,7 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Draw memos: widgets at rest draw nothing](#draw-memos-widgets-at-rest-draw-nothing)
 * [Draw lists recorded and appended again](#draw-lists-recorded-and-appended-again)
 * [Glass shading cost](#glass-shading-cost)
 * [Vulkan frames in flight](#vulkan-frames-in-flight)
@@ -216,6 +222,71 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Draw memos: widgets at rest draw nothing
+
+The goal of "CPU of plain widgets" (20 % under Dear ImGui) needed a lighter widget layer: drawing a widget again -
+its Painter, its shapes' tiles looked up, its text placed or copied, every primitive merged - was a third of a frame of
+plain widgets, and most widgets of most frames draw what they drew the frame before (2026-10-30).
+
+### What changed (`ui.cpp`, `ui_internal.hpp`, `controls.cpp`, `containers.cpp`, `layout.cpp`)
+
+* `detail::DrawMemo`: a widget declares one after what must happen every frame (interaction, springs), with its own
+  inputs to its drawing (`MemoKey`: its rect, hover and press, its springs' values, colors, options, its label's layout
+  - `TextMetrics::layout` -, word by word; floats by their bits). The memo adds what every drawing is drawn from: a
+  serial of the theme, density, sizes, look, flat drawing, fonts and scales (compared byte for byte each frame), the
+  style in scope (`StyleEntry::hash`, its fields and opacity) and the text system's `DrawGeneration`. When all of it is
+  as it was and the draw list is in the state the drawing began in last frame (`DrawList::CanReplay`), the drawing is
+  appended again (`DrawList::Replay`) with its texts' smooth-motion records (`TextSystem::ReplayDraws`: each at rest
+  where it was) and the widget draws nothing; else its drawing is recorded for the next frame, and kept unless it
+  cannot be appended again: a text in motion or settling, a glow fitted to its neighbours (`GlowContainment`'s calls),
+  anything that reached into the list before it.
+* Memos are kept per draw list in the order widgets draw (a lane, `Ui::Impl::MemoLane`): a widget finds its own by its
+  place, nothing is looked up, and its inputs tell whether it is its own. A lane not drawn into for 600 frames goes.
+* Button and IconButton, Toggle, Slider, Text (and TextWrapped, the headlines), a window's surface and its title keep
+  memos. A memo inside another's recording draws as part of it.
+* Kept measures (`MeasureMetrics`): a text measured in a lane's same place with the same font, size, wrap width and
+  bytes, the text system's text coming out as it did, takes the metrics it had (`MeasureSlot`) without the layout
+  cache's look-up; the layouts found so stay in the cache's use (`TextSystem::KeepLayouts`, once a frame). A button
+  measures its label once (its draw took the metrics again).
+* `UiDesc::drawMemo` (on), `ESIA_UI_MEMO=off` / `verify`: every widget drawn and compared with what would have been
+  appended (and every kept measure with the text system's), the differences counted in `Ui::MemoStats().mismatches`
+  and reported on stderr.
+* Also: a layout slot at rest steps no spring (`BoxLayout::Slot`); a widget's few quads are appended without the C
+  runtime's memcpy.
+
+### Verified
+
+* `DrawMemo.TheSameDrawDataAsDrawingEveryWidget` / `TheSameDrawDataWithTextInMotion` (`esia_ui_memo_tests`, FreeType
+  and the test fonts): 440 frames of a panel of labels, buttons, switches, sliders, an icon button and a paragraph - at
+  rest, the mouse across the rows with a click and a drag, a style on one button, the theme's transition to light and
+  back, a second scale, content moving by fractions of a pixel, the flat look - with memos on and off, every frame's draw
+  data byte for byte the same; "verify" finds no difference. With smooth motion the texts that moved are drawn while they
+  settle (8 frames), the rest appended.
+* showcase and workbench, 400 frames each with `ESIA_UI_MEMO=verify` (Direct3D 11): no difference.
+
+### Measured (rcbench's widget scene, Direct3D 11, RTX 4080 SUPER, medians of 7 alternated runs)
+
+Four windows of rows of a label, a button, a switch and a slider, and a paragraph; ids made outside the frame.
+
+| ms per frame | build | submit | CPU |
+| --- | --- | --- | --- |
+| Dear ImGui 1.92.9b | 0.0265 | 0.0054 | 0.0317 |
+| Esia flat, before | 0.0338 | 0.0049 | 0.0389 |
+| Esia flat, memos | 0.0195 | 0.0050 | 0.0246 |
+| Esia regular, before | 0.0350 | 0.0200 | 0.0550 |
+| Esia regular, memos | 0.0210 | 0.0199 | 0.0408 |
+
+The flat look takes 0.78 times Dear ImGui's CPU. With `ESIA_UI_MEMO=off` the same binary builds as before (0.0329 /
+0.0341).
+
+### Not done
+
+* The regular look's submit: its widgets' shadows are FX instances between the labels' quads (66 draws against 5 flat).
+* Other widgets (lists, tables, fields, pickers, segmented controls ...) draw every frame; each needs its inputs named.
+* What a widget draws from that the memo does not see would be drawn stale: a widget keeping a memo must name every
+  input of its drawing (the verify mode and the memo test find what is missed), and draw nothing whose pixels change
+  without its inputs (an SVG breaks recordings: `DrawList::BreakRecording`).
 
 ## Draw lists recorded and appended again
 
@@ -1562,6 +1633,8 @@ Dear ImGui's Direct3D 11 backend always saves and restores the host's state; wit
 about 0.004 ms more.
 
 ### Not reached: 20% under Dear ImGui
+
+(Reached on 2026-10-30: "Draw memos: widgets at rest draw nothing".)
 
 20% under Dear ImGui's 0.051 ms is 0.041. With nothing drawn (the Painter's shapes and the text skipped: a benchmark
 switch, not committed) the flat scene still takes 0.034 ms to build and 0.005 to submit: the widgets' own work -
