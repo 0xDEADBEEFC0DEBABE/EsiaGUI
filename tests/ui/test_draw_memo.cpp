@@ -26,6 +26,7 @@ namespace
         bool toggles[6] = {true, false, true, false, true, false};
         float values[6] = {0.10f, 0.25f, 0.40f, 0.55f, 0.70f, 0.85f};
         bool rowToggle = true;
+        bool check = false;
         float rowValue = 40.0f;
 
         App(int memo, bool smoothMotion)
@@ -90,6 +91,12 @@ namespace
                 ui::EndStack();
             }
             ui::IconButton("icon", (ui::Icon)'Q');
+            ui::BeginHStack("extras");
+            ui::Checkbox("Remember", &a.check);
+            ui::Badge("12");
+            ui::ProgressRing(a.values[0]);
+            ui::EndStack();
+            ui::ProgressBar(a.values[1]);
             if (ui::BeginSection("Settings", "A footer under the rows."))
             {
                 ui::RowValue("Version", "1.2.3");

@@ -485,7 +485,8 @@ namespace esia::ui
         Context& c = Ctx();
         const std::string_view shown = VisibleLabel(label);
         const text::FontRef f = Font(TextStyle::Body);
-        const Vec2 ts = MeasureText(f, shown);
+        const text::TextMetrics lm = MeasureMetrics(f, shown);
+        const Vec2 ts = lm.size;
         const float d = Sc(Sizes().checkbox);
         const Vec2 size(d + (ts.x > 0 ? Sc(10) + ts.x : 0), std::max(d, ts.y));
         const InteractState it = InteractImpl(c.GetId(label), Rect::FromSize(c.CursorPos(), size), InteractFlags_None);
@@ -499,6 +500,11 @@ namespace esia::ui
         const float on = Saturate(Anim(it.id, 0x11, *value ? 1.0f : 0.0f, Spring{0.26f, 1.0f}));
         const float draw = Saturate(Anim(it.id, 0x12, *value ? 1.0f : 0.0f, Spring{0.36f, 0.92f}));
         const float pop = LiquidPulse(it.id, it.held, it.pressed, 0.12f);
+        MemoKey k;
+        k.R(it.rect).F(it.press).F(on).F(draw).F(pop).U64(lm.layout);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return it.pressed;
         Painter p = GetPainter();
         const Vec2 cc(it.rect.min.x + d * 0.5f, it.rect.Center().y);
         p.PushScale(cc, 1.0f - 0.10f * it.press + 0.10f * pop * (1.0f - it.press));
@@ -759,6 +765,11 @@ namespace esia::ui
         if (!c.ItemAdd(0, Rect::FromSize(pos, size)))
             return;
         const float shown = Anim(id, 0x70, Saturate(fraction), SpringStd());
+        MemoKey k;
+        k.V(pos).V(size).F(shown).C(o.tint).U(o.glow ? 1u : 0u);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return;
         Painter p = GetPainter();
         const Rect r = Rect::FromSize(pos, size);
         DrawPill(p, r, Surface(FillOr(C().fill)));
@@ -784,6 +795,11 @@ namespace esia::ui
         if (!c.ItemAdd(0, Rect::FromSize(pos, Vec2(d, d))))
             return;
         const float shown = Anim(id, 0x71, Saturate(fraction), SpringStd());
+        MemoKey k;
+        k.V(pos).F(d).F(th).F(shown).C(o.tint).U(o.glow ? 1u : 0u);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return;
         const Vec2 center(pos.x + d * 0.5f, pos.y + d * 0.5f);
         const float rad = (d - th) * 0.5f;
         const Color t = Tint(o.tint);
@@ -828,11 +844,17 @@ namespace esia::ui
         ItemScope scope;
         Context& c = Ctx();
         const text::FontRef f = Font(FontWeight::Semibold, 11.5f);
-        const Vec2 ts = MeasureText(f, text);
+        const text::TextMetrics tm = MeasureMetrics(f, text);
+        const Vec2 ts = tm.size;
         const Vec2 size(std::max(ts.x + Sc(14), Sc(20)), Sc(20));
         const Vec2 pos = c.CursorPos();
         c.ItemSize(size);
         if (!c.ItemAdd(0, Rect::FromSize(pos, size)))
+            return;
+        MemoKey k;
+        k.V(pos).V(size).C(tint).U64(tm.layout);
+        DrawMemo memo(k);
+        if (memo.Replayed())
             return;
         const Color t = tint.a > 0 ? tint : FillOr(AccentOr(C().red));   // the explicit color wins over the style
         Painter p = GetPainter();
