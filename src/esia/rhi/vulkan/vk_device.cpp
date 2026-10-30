@@ -593,12 +593,20 @@ namespace esia::rhi::vulkan
     // in place where the ring is mapped device memory (no command at all), else copied from the staging ring. The next
     // frame's uploads do not wait for the frame before to finish.
 
-    // A buffer range written by the block: made visible to the stages that read its kind when the block ends.
-    void VulkanDevice::Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind)
+    // A buffer range written by the block: made visible to the stages that read its kind when the block ends. A range of
+    // the frame slot's ring (`ring`) to the vertex input too: the ring holds every kind, and a vertex buffer bound in it
+    // is read - as the validation layers see an indexed draw - from its offset to the ring's end, over the ranges of the
+    // other kinds after it.
+    void VulkanDevice::Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind, bool ring)
     {
         VkBufferMemoryBarrier b{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         VkPipelineStageFlags stages;
         ReadScope(kind, stages, b.dstAccessMask);
+        if (ring)
+        {
+            stages |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            b.dstAccessMask |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        }
         b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.buffer = buffer;
@@ -1048,7 +1056,7 @@ namespace esia::rhi::vulkan
         {
             const VkBufferCopy region{m.stagingOffset, m.ringOffset, m.size};
             vk_.vkCmdCopyBuffer(cmd_, m.staging, m.ring, 1, &region);
-            Uploaded(m.ring, m.ringOffset, m.size, b->desc.kind);
+            Uploaded(m.ring, m.ringOffset, m.size, b->desc.kind, true);
         }
         b->ringFrame = frame_;
         b->ringBuffer = m.ring;
