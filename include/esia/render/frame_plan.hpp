@@ -65,6 +65,8 @@ namespace esia::render
         std::uint32_t geometryFirst = 0, geometryCount = 0;   // direct plans: into FramePlan::geometry
         bool quads = false;          // instanced quads (DrawCmdKind::Quads): quadCount of the frame's quads from quadStart
         std::uint32_t quadStart = 0, quadCount = 0;
+        bool anyTexture = false;     // ... plain shapes only so far (DrawCmd::anyTexture): quads on any texture join them
+        bool shapes = false;         // ... plain shapes among them (DrawCmd::shapes): the shape quad programs
         bool coverage = false;       // glyph coverage texture: a text pipeline
         bool lcd = false;            // ... of sub-pixel coverage (TextureFlags_LcdCoverage): the dual-source one
         // FxBatch

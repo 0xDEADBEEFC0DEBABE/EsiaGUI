@@ -1,10 +1,11 @@
 // Esia - draw lists: what the UI core produces and the renderer consumes.
 //
-// A DrawList holds ordinary indexed geometry (lines, charts, images - `Vertex` triangles), textured quads drawn
-// instanced (glyphs, the Painter's flat tiles - `QuadInstance`) and the FX command stream (SDF shapes as
+// A DrawList holds ordinary indexed geometry (lines, charts, images - `Vertex` triangles), quads drawn instanced
+// (glyphs, the Painter's flat tiles and plain shapes - `QuadInstance`) and the FX command stream (SDF shapes as
 // fx::Instance, glow-layer and edge-fade brackets, host callbacks) in one ordered command list, each command with its
 // clip rect. Consecutive geometry with the same clip and texture merges into one command, so do consecutive quads
-// with the same clip and texture, and consecutive FX shapes with the same clip, texture and effect.
+// with the same clip and texture (a plain shape reads no texture: it joins quads on any), and consecutive FX shapes
+// with the same clip, texture and effect.
 //
 // Indices are 32-bit and local to the list (0 = the list's first vertex); the renderer rebases them when it
 // concatenates lists, so backends never need a base-vertex draw.
@@ -46,12 +47,34 @@ namespace esia
     using VertexVector = std::vector<Vertex, UninitAllocator<Vertex>>;
     using IndexVector = std::vector<std::uint32_t, UninitAllocator<std::uint32_t>>;
 
-    // A textured quad as the instanced quad programs read it (rhi::ShaderProgram::QuadImage .. QuadLcdGray): two float4
-    // rows of the frame's instance data, 32 bytes where a quad of vertices and indices takes 104. Its uv in 1/4096
-    // steps - exact for whole texels of power-of-two textures up to 4096 wide, as glyph pages and tiles are - and its
-    // color as whole numbers, all exact in a float, so every shader model decodes them (SM3 without integers too):
-    //   rect     x0, y0, x1, y1 (UI units)
-    //   packed   u0 + 4096 v0, (u1 - u0) + 4096 (v1 - v0) (uv in 1/4096), R + 256 G + 65536 B, A (0 .. 255)
+    // What a quad that is a plain shape draws (QuadInstance::SetShape): the fill or the stroke of a rounded rectangle
+    // (one radius on every corner, the continuous corners of fx::ShapeKind::RoundRect) or of a segment (round caps; its
+    // stroke runs round the capsule) - the coverage the FX shader gives the same shape's fill or stroke, from the same
+    // distance (esia_quad.hlsl) - or a solid rectangle, or a polyline's piece or round end: the pixels and the coverage its
+    // geometry's triangles give them (Painter::Polyline).
+    enum class QuadShape : std::uint32_t
+    {
+        Fill = 0,            // rect: the rectangle; the radius of its corners
+        Stroke = 1,          // ... its stroke: the stroke's width and align (0 inside .. 1 outside)
+        SegmentFill = 2,     // rect: the end points (x0, y0, x1, y1); the radius: half the thickness
+        SegmentStroke = 3,
+        Solid = 4,           // rect: the rectangle's pixels as two triangles cover them, without antialiasing (geometry's)
+        LinePiece = 5,       // a polyline's segment between the lines of its two joints (SetLinePiece): rect its end points
+        LineCap = 6,         // a polyline's round end (SetLineCap): rect the end and the point before it
+    };
+
+    // A quad as the instanced quad programs read it (rhi::ShaderProgram::QuadImage .. QuadLcdGray, QuadShapeImage ..
+    // QuadShapeLcdGray): two float4 rows of the frame's instance data, 32 bytes where a quad of vertices and indices
+    // takes 104 - a textured quad (a glyph, a flat tile: Set) or a plain shape (SetShape), so that shapes and the text
+    // among them draw in one draw. Whole numbers and plain floats, exact in a float, so every shader model decodes them
+    // (SM3 without integers too):
+    //   rect     x0, y0, x1, y1 (UI units); a segment's end points
+    //   packed   a textured quad: u0 + 4096 v0, (u1 - u0) + 4096 (v1 - v0) (its uv in 1/4096 - exact for whole texels of
+    //            power-of-two textures up to 4096 wide, as glyph pages and tiles are), R + 256 G + 65536 B, A (0 .. 255)
+    //            a shape: -1 - (kind + 8 (smoothing in 1/1023 + 1024 stroke align in 1/64)), its radius (any float),
+    //            R + 256 G + 65536 B, A + 256 stroke width (in 1/64 UI units, below 1024)
+    //            a polyline's piece or end: -1 - (kind + 8 (reach + 32 joint)), half its thickness, R + 256 G + 65536 B,
+    //            A + 256 (the piece's other joint | the end's sides); a joint: its line's direction (LineDirection)
     // uv1 >= uv0: no mirrored quads (images that need them are geometry).
     struct QuadInstance
     {
@@ -66,6 +89,102 @@ namespace esia
             rect[3] = r.max.y;
             PackUv(uv0, uv1, packed);
             PackColor(color, packed + 2);
+        }
+        // `r`: the rectangle, or a segment's end points (min = the first, max = the second). Smoothing and align from 0 to
+        // 1, the stroke's width below 1024 UI units.
+        void SetShape(QuadShape kind, const Rect& r, float radius, float smoothing, float strokeWidth, float strokeAlign, std::uint32_t color)
+        {
+            rect[0] = r.min.x;
+            rect[1] = r.min.y;
+            rect[2] = r.max.x;
+            rect[3] = r.max.y;
+            const std::uint32_t s = (std::uint32_t)((smoothing > 1.0f ? 1.0f : smoothing > 0.0f ? smoothing : 0.0f) * 1023.0f + 0.5f);
+            const std::uint32_t a = (std::uint32_t)((strokeAlign > 1.0f ? 1.0f : strokeAlign > 0.0f ? strokeAlign : 0.0f) * 64.0f + 0.5f);
+            const std::uint32_t w = (std::uint32_t)((strokeWidth < 1023.98f ? (strokeWidth > 0.0f ? strokeWidth : 0.0f) : 1023.98f) * 64.0f + 0.5f);
+            packed[0] = -1.0f - (float)((std::uint32_t)kind + 8u * (s + 1024u * a));
+            packed[1] = radius;
+            packed[2] = (float)(color & 0xFFFFFFu);
+            packed[3] = (float)((color >> 24) + 256u * w);
+        }
+        // A polyline's piece (QuadShape::LinePiece): the segment from `a` to `b`, `halfWidth` either side of it, between
+        // the lines through its ends in the directions `jointA` and `jointB` (LineDirection: the lines its geometry's
+        // triangles end on, shared with the pieces before and after). The quad reaches along them (1 + reach / 16) times
+        // the line's half thickness and half pixel of antialiasing, either side (reach 0 .. 31).
+        void SetLinePiece(Vec2 a, Vec2 b, float halfWidth, std::uint32_t jointA, std::uint32_t jointB, std::uint32_t reach, std::uint32_t color)
+        {
+            SetLine(QuadShape::LinePiece, a, b, halfWidth, jointA, reach, jointB, color);
+        }
+        // Its round end (QuadShape::LineCap): half a polygon of `sides` sides (3 .. 12) around `end`, away from `prev`,
+        // beyond the line through `end` in the direction `joint` (the end piece's, as far along it).
+        void SetLineCap(Vec2 end, Vec2 prev, float halfWidth, std::uint32_t joint, std::uint32_t reach, std::uint32_t sides, std::uint32_t color)
+        {
+            SetLine(QuadShape::LineCap, end, prev, halfWidth, joint, reach, sides, color);
+        }
+        void SetLine(QuadShape kind, Vec2 a, Vec2 b, float halfWidth, std::uint32_t joint, std::uint32_t reach, std::uint32_t other, std::uint32_t color)
+        {
+            rect[0] = a.x;
+            rect[1] = a.y;
+            rect[2] = b.x;
+            rect[3] = b.y;
+            packed[0] = -1.0f - (float)((std::uint32_t)kind + 8u * ((reach & 31u) + 32u * (joint & 0xFFFFu)));
+            packed[1] = halfWidth;
+            packed[2] = (float)(color & 0xFFFFFFu);
+            packed[3] = (float)((color >> 24) + 256u * (other & 0xFFFFu));
+        }
+        // A line's direction in 16 bits, the same for both of its senses: its diamond angle - y / (|x| + y) on the upper
+        // half-plane, 0 to 2 for half a turn - in steps of 1/32768. Exact to decode (esia_quad.hlsl: the vector
+        // (1 - d, d) or (1 - d, 2 - d), normalized), no trigonometry either way; at most 3e-5 radians off.
+        static std::uint32_t LineDirection(Vec2 v) { return (std::uint32_t)LineDirectionCode(v); }
+        // ... as a float (a whole number, exact): the diamond angle around the whole turn is 1 - x / (|x| + |y|) above
+        // the x axis and 3 + x / (|x| + |y|) below it; half a turn later it is 2 more, so 2 apart - 65536 steps - is the
+        // same line, and the steps wrap at 65536 (one division and a sign, no branch: the joints of a line across a
+        // chart turn either way at random).
+        static float LineDirectionCode(Vec2 v)
+        {
+            // (a statement each: no compiler fuses the product and the sum - every level of the polyline loops computes
+            // this alike, render/line_kernels.cpp)
+            const float s = (v.x < 0.0f ? -v.x : v.x) + (v.y < 0.0f ? -v.y : v.y);
+            const float p = v.x / (s > 1e-30f ? s : 1e-30f);
+            const float t = 1.0f - (v.y < 0.0f ? -p : p);
+            const float scaled = t * 32768.0f;
+            const float steps = (scaled + 12582912.0f) - 12582912.0f;   // rounded: 1.5 2^23, whole floats
+            return steps >= 65536.0f ? steps - 65536.0f : steps;
+        }
+        bool IsShape() const { return packed[0] < 0.0f; }
+        // a shape's fields (SetShape's, after the rounding to their steps)
+        std::uint32_t ShapeCode() const { return (std::uint32_t)(-packed[0]) - 1u; }
+        QuadShape Shape() const { return (QuadShape)(ShapeCode() & 7u); }
+        float Radius() const { return packed[1]; }
+        float Smoothing() const { return (float)((ShapeCode() >> 3) & 1023u) / 1023.0f; }
+        float StrokeAlign() const { return (float)(ShapeCode() >> 13) / 64.0f; }
+        float StrokeWidth() const { return (float)((std::uint32_t)packed[3] >> 8) / 64.0f; }
+        std::uint32_t Alpha() const { return (std::uint32_t)packed[3] & 255u; }
+        // a polyline's piece or end (SetLine's): its (first) joint's direction, its reach, the piece's other joint | the sides
+        std::uint32_t LineJoint() const { return ShapeCode() >> 8; }
+        std::uint32_t LineReach() const { return (ShapeCode() >> 3) & 31u; }
+        std::uint32_t LineOther() const { return (std::uint32_t)packed[3] >> 8; }
+        // What it draws on (UI units): a textured quad its rect; a shape's reach, with the part of a stroke outside the
+        // edge (the antialiasing's pixel around it is the renderer's); a polyline's piece as far as its miters go, its
+        // end the half disc
+        Rect Bounds() const
+        {
+            if (!IsShape())
+                return Rect(rect[0], rect[1], rect[2], rect[3]);
+            const QuadShape kind = Shape();
+            if (kind == QuadShape::LineCap)
+                return Rect(rect[0] - packed[1], rect[1] - packed[1], rect[0] + packed[1], rect[1] + packed[1]);
+            if (kind == QuadShape::LinePiece)
+            {
+                const float e = packed[1] * (1.0f + (float)LineReach() / 16.0f);
+                return Rect((rect[0] < rect[2] ? rect[0] : rect[2]) - e, (rect[1] < rect[3] ? rect[1] : rect[3]) - e,
+                            (rect[0] > rect[2] ? rect[0] : rect[2]) + e, (rect[1] > rect[3] ? rect[1] : rect[3]) + e);
+            }
+            const float out = (kind == QuadShape::Stroke || kind == QuadShape::SegmentStroke) ? StrokeWidth() * StrokeAlign() : 0.0f;
+            if (kind != QuadShape::SegmentFill && kind != QuadShape::SegmentStroke)
+                return Rect(rect[0] - out, rect[1] - out, rect[2] + out, rect[3] + out);
+            const float e = Radius() + out;
+            return Rect((rect[0] < rect[2] ? rect[0] : rect[2]) - e, (rect[1] < rect[3] ? rect[1] : rect[3]) - e,
+                        (rect[0] > rect[2] ? rect[0] : rect[2]) + e, (rect[1] > rect[3] ? rect[1] : rect[3]) + e);
         }
         static void PackUv(Vec2 uv0, Vec2 uv1, float* out)
         {
@@ -104,6 +223,10 @@ namespace esia
         DrawCmdKind kind = DrawCmdKind::Geometry;
         Rect clip;
         TextureId texture = 0;       // Geometry / Quads / Fx: 0 = white
+        // Quads: plain shapes only so far (they read no texture) - quads on any texture join them, and the first textured
+        // one gives the command its texture
+        bool anyTexture = false;
+        bool shapes = false;         // Quads: plain shapes among them (the programs that draw shapes; text alone: lighter ones)
         std::uint32_t first = 0;
         std::uint32_t count = 0;
         EffectId effect = 0;         // Fx
@@ -168,6 +291,17 @@ namespace esia
         void EndQuads(const QuadWriter& w);
         // One quad (an image of a glyph or a tile); nothing for an empty rect or a transparent color.
         void AddQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color);
+        // A plain shape (QuadInstance::SetShape) in the current clip rect: it joins the quads before it whatever their
+        // texture, so a shape among labels takes no draw of its own. Nothing for a transparent color. `bounds`: what
+        // it draws on, as QuadInstance::Bounds gives it (a caller that knows them saves decoding them).
+        void AddShapeQuad(const QuadInstance& shape) { AddShapeQuad(shape, shape.Bounds()); }
+        void AddShapeQuad(const QuadInstance& shape, const Rect& bounds);
+        // Shapes of one color in one go (a polyline's pieces and ends), `bounds` holding all of them; nothing for a
+        // transparent color.
+        void AddShapeQuads(const QuadInstance* shapes, std::size_t count, const Rect& bounds);
+        // ... written in place: room for `count` shapes at the end of the quads, in a command that draws them, for the
+        // caller to fill - every one of them, in a color that is not transparent.
+        QuadInstance* AppendShapeQuads(std::size_t count, const Rect& bounds);
         // Room for `vertexCount` vertices and `indexCount` indices written in place (the indices count from `base`),
         // then PrimCommit with their bounds: what WriteVertex / WriteIndex do one at a time. The current clip and
         // texture; nothing else may be added in between.
@@ -232,7 +366,8 @@ namespace esia
     private:
         DrawCmd& Geometry() { return Geometry(CurrentTexture()); }   // current geometry command (opens one when the state changed)
         DrawCmd& Geometry(TextureId texture);
-        DrawCmd& QuadCommand(TextureId texture);   // the current quad command on `texture` (opens one when the state changed)
+        // the current quad command on `texture` (opens one when the state changed); a shape's (`shape`) takes any texture
+        DrawCmd& QuadCommand(TextureId texture, bool shape = false);
         void Reserve(std::uint32_t indexCount, std::uint32_t vertexCount);
         DrawCmd& Push(DrawCmdKind kind);
 

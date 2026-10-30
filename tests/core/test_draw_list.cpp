@@ -1,5 +1,6 @@
 #include "esia/core/draw_list.hpp"
 #include "esia_test.hpp"
+#include <cmath>
 #include <cstring>
 
 using namespace esia;
@@ -215,4 +216,77 @@ ESIA_TEST(DrawList, MoveCommandsUnderEarlierContent)
     ESIA_CHECK(c.size() == 7 && c[5].first == 18 && c[6].first == 2);
     dl.AddFx(shape);
     ESIA_CHECK(c.size() == 7 && c[6].count == 2);          // ... but new commands merge again
+}
+
+// A shape's fields packed into the quad's two rows (QuadInstance::SetShape): kind, smoothing in 1/1023 and stroke align
+// in 1/64 in one negative number, the radius as it is, the stroke width in 1/64 beside the alpha - every one a whole
+// number below 2^24, exact in a float; a glyph's packed uv is never negative.
+ESIA_TEST(DrawList, ShapeQuadsPackTheirFields)
+{
+    QuadInstance q;
+    q.SetShape(QuadShape::SegmentStroke, Rect(Vec2(5, 6), Vec2(-7, 8)), 2.75f, 0.6f, 1.5f, 0.5f, 0x80402010u);
+    ESIA_CHECK(q.IsShape() && q.Shape() == QuadShape::SegmentStroke && q.Radius() == 2.75f);
+    ESIA_CHECK(std::fabs(q.Smoothing() - 0.6f) < 0.5f / 1023.0f && q.StrokeWidth() == 1.5f && q.StrokeAlign() == 0.5f && q.Alpha() == 0x80u);
+    ESIA_CHECK(q.packed[2] == (float)0x402010 && q.rect[2] == -7.0f);
+    q.SetShape(QuadShape::Stroke, Rect(0, 0, 10, 10), 4.0f, 1.0f, 1023.0f, 1.0f, 0xFFFFFFFFu);   // the largest fields
+    ESIA_CHECK(q.Shape() == QuadShape::Stroke && q.Smoothing() == 1.0f && q.StrokeAlign() == 1.0f && q.StrokeWidth() == 1023.0f && q.Alpha() == 255u);
+    ESIA_CHECK(-q.packed[0] - 1.0f < 16777216.0f && q.packed[3] < 16777216.0f);
+    ESIA_CHECK(q.Bounds() == Rect(-1023, -1023, 1033, 1033));   // the stroke all outside
+    QuadInstance g;
+    g.Set(Rect(0, 0, 4, 4), Vec2(0, 0), Vec2(0.5f, 0.5f), 0xFFFFFFFFu);
+    ESIA_CHECK(!g.IsShape() && g.Bounds() == Rect(0, 0, 4, 4));
+}
+
+// A polyline's piece and end (QuadInstance::SetLinePiece / SetLineCap): the joints' angles, the reach, the end's sides
+// and the alpha come back whole from their largest values (the code just below 2^24); a piece's bounds go as far as its
+// reach past its end points, an end's are its half disc's.
+ESIA_TEST(DrawList, LineQuadsPackTheirFields)
+{
+    QuadInstance q;
+    q.SetLinePiece(Vec2(5, 6), Vec2(-7, 8), 2.0f, 65535u, 65535u, 31u, 0xFFFFFFFFu);
+    ESIA_CHECK(q.IsShape() && q.Shape() == QuadShape::LinePiece && q.Radius() == 2.0f && q.Alpha() == 255u);
+    ESIA_CHECK(q.LineJoint() == 65535u && q.LineReach() == 31u && q.LineOther() == 65535u);
+    ESIA_CHECK(-q.packed[0] - 1.0f < 16777216.0f && q.packed[3] < 16777216.0f);
+    q.SetLinePiece(Vec2(5, 6), Vec2(-7, 8), 2.0f, 16384u, 0u, 8u, 0x80FFFFFFu);
+    ESIA_CHECK(q.LineJoint() == 16384u && q.LineReach() == 8u && q.LineOther() == 0u && q.Alpha() == 0x80u);
+    ESIA_CHECK(q.Bounds() == Rect(-10, 3, 8, 11));   // 1.5 half thicknesses past the end points
+    q.SetLineCap(Vec2(5, 6), Vec2(-7, 8), 2.0f, 32768u, 3u, 12u, 0xFF0000FFu);
+    ESIA_CHECK(q.Shape() == QuadShape::LineCap && q.LineJoint() == 32768u && q.LineReach() == 3u && q.LineOther() == 12u);
+    ESIA_CHECK(q.Bounds() == Rect(3, 4, 7, 8));
+}
+
+// A plain shape is a quad that reads no texture (QuadInstance::SetShape): it joins the quads before it whatever their
+// texture, a command of shapes alone takes the texture of the first textured quad, and the command's bounds hold what
+// the shapes reach - the part of a stroke outside the edge, a segment's thickness round its end points.
+ESIA_TEST(DrawList, ShapeQuadsJoinQuadsOnAnyTexture)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    QuadInstance fill, line, seg, clear;
+    fill.SetShape(QuadShape::Fill, Rect(10, 10, 50, 30), 4.0f, 0.6f, 0.0f, 0.0f, 0xFF0000FFu);
+    line.SetShape(QuadShape::Stroke, Rect(10, 10, 50, 30), 4.0f, 0.6f, 2.0f, 1.0f, 0xFFFFFFFFu);    // 2 wide, outside
+    seg.SetShape(QuadShape::SegmentFill, Rect(Vec2(100, 80), Vec2(60, 40)), 3.0f, 0.0f, 0.0f, 0.0f, 0xFF00FF00u);   // end points
+    clear.SetShape(QuadShape::Fill, Rect(0, 0, 5, 5), 0.0f, 0.0f, 0.0f, 0.0f, 0x00FFFFFFu);
+    dl.AddShapeQuad(fill);
+    dl.AddShapeQuad(line);
+    ESIA_CHECK(dl.Commands().size() == 1 && dl.Commands()[0].anyTexture && dl.Commands()[0].texture == 0);
+    dl.AddQuad(42, Rect(12, 12, 18, 22), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);   // a glyph: its page for the command
+    dl.AddShapeQuad(seg);
+    dl.AddQuad(42, Rect(20, 12, 26, 22), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    dl.AddShapeQuad(clear);   // transparent: nothing
+    ESIA_CHECK(dl.Commands().size() == 1 && dl.Quads().size() == 5);
+    const DrawCmd& c = dl.Commands()[0];
+    ESIA_CHECK(c.kind == DrawCmdKind::Quads && c.count == 5 && c.texture == 42 && !c.anyTexture && c.shapes);
+    ESIA_CHECK(c.vtxBounds == Rect(8, 8, 103, 83));
+    ESIA_CHECK(dl.Quads()[1].IsShape() && dl.Quads()[1].Shape() == QuadShape::Stroke && !dl.Quads()[2].IsShape());
+    ESIA_CHECK(dl.Quads()[3].rect[0] == 100.0f && dl.Quads()[3].rect[3] == 40.0f);   // the end points as they came
+    // quads on another page: a command of their own; a shape after them joins it
+    dl.AddQuad(43, Rect(30, 12, 36, 22), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+    dl.AddShapeQuad(fill);
+    ESIA_CHECK(dl.Commands().size() == 2 && dl.Commands()[1].texture == 43 && dl.Commands()[1].count == 2 && dl.Commands()[1].shapes);
+    // another clip: another command, of shapes alone until a glyph comes
+    dl.PushClipRect(Rect(0, 0, 100, 100));
+    dl.AddShapeQuad(fill);
+    ESIA_CHECK(dl.Commands().size() == 3 && dl.Commands()[2].anyTexture);
+    dl.PopClipRect();
 }

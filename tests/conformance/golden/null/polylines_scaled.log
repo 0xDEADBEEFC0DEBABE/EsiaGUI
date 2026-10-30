@@ -1,0 +1,25 @@
+create texture #1 480x360 RGBA8_UNORM usage=7 host-target
+begin frame 1
+create texture #2 1x1 RGBA8_UNORM usage=1 white
+create buffer #3 vertex 26460 bytes
+create buffer #4 index 22464 bytes
+update buffer #3 17640 bytes
+update buffer #4 14976 bytes
+create buffer #5 fx 22320 bytes
+update buffer #5 14880 bytes
+pass #1 load ui
+create pipeline #6 QuadShapeImage strip straight RGBA8_UNORM
+pipeline #6
+scissor [0,0 480x360]
+constants frame: 0.00625 -0.00833333 -1 1 | 480 360 0.00208333 0.00277778 | 0 0 1.5 1.5 | 1.25 0.0166667 0 0 | 480 360 0.00208333 0.00277778 | 240 180 0.00416667 0.00555556 | 120 90 0.00833333 0.0111111 | 60 45 0.0166667 0.0222222 | 30 23 0.0333333 0.0434783 | 15 12 0.0666667 0.0833333 | 1.8 0.5 0.5 1 | 0 0 0 0
+texture t0 #2
+fx buffer #5
+constants draw: 0 0 0 0 | 0 0 0 0
+draw instanced 4 x 465
+create pipeline #7 UiGeometry list straight RGBA8_UNORM
+pipeline #7
+vertex buffer #3
+index buffer #4
+draw indexed 3744 from 0
+end pass
+end frame
