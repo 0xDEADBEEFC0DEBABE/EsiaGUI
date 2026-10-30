@@ -270,7 +270,7 @@ namespace esia::text
                 std::uint32_t first = 0, count = 0;
                 float y0 = 1e30f, y1 = -1e30f;   // pixels, as QuadSet::bounds
             };
-            struct QuadSet
+            struct Placed
             {
                 // one per drawn glyph, its rect in pixels from the origin; packed[2] 0 and packed[3] 1 for a color
                 // glyph (drawn white, with the text's alpha), 0 for one in the text's color
@@ -278,17 +278,34 @@ namespace esia::text
                 std::vector<QuadRun> runs;   // one per change of atlas page
                 std::vector<QuadRow> rows;
                 Rect bounds;                 // pixels from the origin's whole pixel
+            };
+            struct QuadSet : Placed
+            {
                 std::uint64_t generation = 0;   // 0 = none
                 float em = 0.0f, scale = 0.0f, fx = -1.0f, fy = -1.0f;
                 std::uint32_t outline = 0;   // an outline's set: its width in 1/8 px
                 std::uint32_t misses = 0;    // draws placed again since the last one that found its quads here
                 // every glyph's atlas slot at each pen phase (null: not looked up yet) for slotGeneration, slotEm and
                 // slotOutline: a text drawn at other sub-pixel offsets (labels over a scene) is placed again without the
-                // atlas's map. Not for the moving sets (their glyphs have vertical phases too).
+                // atlas's map. The moving sets' at each pen phase and vertical phase (-1 .. 3): movingSlots.
                 std::vector<std::array<const GlyphSlot*, 4>> slots;
+                std::vector<std::array<const GlyphSlot*, 20>> movingSlots;
                 std::uint64_t slotGeneration = 0;   // 0 = none
                 float slotEm = 0.0f;
                 std::uint32_t slotOutline = 0;
+                // Placements by rounding class - a text drawn at many sub-pixel offsets (labels over a scene, the same
+                // name on many of them): a glyph's quad depends only on the quarter pixel its pen rounds to across and
+                // the whole pixel its line rounds to down, so between the offsets where one of them changes (xBreaks,
+                // yBreaks: 0 .. 1, sorted) the whole placement is the same, and is copied in as a text placed before.
+                // Valid for classGeneration, classEm, classScale, classRs, classOutline.
+                std::vector<float> xBreaks, yBreaks;
+                std::vector<std::int32_t> classIndex;   // x class * (yBreaks + 1) + y class -> classes; -1: not placed
+                std::vector<Placed> classes;
+                std::uint32_t classCount = 0;        // classes in use (the others keep their storage)
+                std::int32_t classScore = 0;         // -64 .. 64: whether this text's offsets come back (DrawQuads)
+                std::uint64_t classGeneration = 0;   // 0 = none
+                float classEm = 0.0f, classScale = 0.0f, classRs = 0.0f;
+                std::uint32_t classOutline = 0;
             };
             QuadSet fill;      // Draw's
             QuadSet outline;   // DrawOutline's (TextOutline): the glyphs grown, in the outline's color
@@ -712,7 +729,7 @@ namespace esia::text
                 // animated scales are quantized to 1/4 px of em, so an animation does not flood the atlas
                 const float em = scale == 1.0f ? font.size * rs : std::floor(font.size * scale * rs * 4.0f + 0.5f) * 0.25f;
                 // color glyphs: white with the text's alpha (an outline has none of them)
-                const std::uint32_t rgba = color.ToRgba8(), colorGlyphRgba = outlineQ ? 0u : Color::White(color.a).ToRgba8();
+                const std::uint32_t rgba = color.ToRgba8(), colorGlyphRgba = outlineQ ? 0u : (rgba | 0x00FFFFFFu);
                 if ((rgba >> 24) == 0)
                     return;   // nothing shows (a color glyph has the same alpha)
                 // Glyphs are placed from the whole pixel at the origin (ox, oy) by its sub-pixel offsets (fx, fy): the
@@ -722,12 +739,33 @@ namespace esia::text
                 const std::uint64_t generation = (((std::uint64_t)atlas_.Resets() << 32) | (std::uint32_t)colorAtlas_.Resets()) + 1u;
                 if (set.generation != generation || set.em != em || set.scale != scale || set.fx != fx || set.fy != fy || set.outline != outlineQ)
                 {
+                    // Other sub-pixel offsets: the placement of their rounding class when it was kept. Classes are kept
+                    // while the text's offsets come back (classScore: +4 a class found, -1 one placed); a text whose
+                    // offsets do not (a label that moves on, another text every few frames) is placed as below and its
+                    // classes neither looked up nor kept, but every 16th time, to see whether they do now.
+                    std::int32_t* index = nullptr;
+                    if (layout.glyphs.size() <= kClassGlyphs && (set.classScore > -32 || (set.misses & 15) == 0))
+                    {
+                        ClassBreaks(layout, set, em, scale, generation, outlineQ, moving);
+                        const std::size_t cx = (std::size_t)(std::upper_bound(set.xBreaks.begin(), set.xBreaks.end(), fx) - set.xBreaks.begin());
+                        const std::size_t cy = (std::size_t)(std::upper_bound(set.yBreaks.begin(), set.yBreaks.end(), fy) - set.yBreaks.begin());
+                        index = &set.classIndex[cx * (set.yBreaks.size() + 1) + cy];
+                        if (*index >= 0)
+                        {
+                            set.classScore = std::min(set.classScore + 4, 64);
+                            EmitQuads(dl, set.classes[(std::size_t)*index], ox, oy, rs, rgba, colorGlyphRgba);
+                            return;
+                        }
+                        set.classScore = std::max(set.classScore - 1, -64);
+                        if (set.classScore < 0 && (set.misses & 15) != 0)
+                            index = nullptr;
+                    }
                     // Placed again. When the text lies inside the clip with an em to spare (its ink cannot reach past),
                     // the quads go into the list as they are placed: a label at a new sub-pixel offset every frame
                     // (over a moving scene) takes one pass over its glyphs, not two. A text placed again and again without
                     // ever being drawn twice at the same offsets (that label; one text at many places in a frame) is
-                    // not kept either, but every 8th time, to see whether it settled.
-                    const bool keep = set.misses < 2 || (set.misses & 7) == 0;
+                    // not kept either, but every 8th time, to see whether it settled - or for its class.
+                    const bool keep = index || set.misses < 2 || (set.misses & 7) == 0;
                     ++set.misses;
                     const float margin = font.size * scale;
                     const Vec2 size = layout.metrics.size * scale;
@@ -738,12 +776,29 @@ namespace esia::text
                             PlaceQuads<true>(layout, set, em, scale, fx, fy, generation, outlineQ, moving, &out);
                         else
                             PlaceQuads<false>(layout, set, em, scale, fx, fy, generation, outlineQ, moving, &out);
-                        return;
                     }
-                    PlaceQuads<true>(layout, set, em, scale, fx, fy, generation, outlineQ, moving);
+                    else
+                    {
+                        PlaceQuads<true>(layout, set, em, scale, fx, fy, generation, outlineQ, moving);
+                        EmitQuads(dl, set, ox, oy, rs, rgba, colorGlyphRgba);
+                    }
+                    if (index)
+                    {
+                        // kept for its class
+                        if (set.classCount == kMaxClasses)
+                        {
+                            // drawn at more offsets than are kept: the classes start over
+                            std::fill(set.classIndex.begin(), set.classIndex.end(), -1);
+                            set.classCount = 0;
+                        }
+                        if (set.classes.size() <= set.classCount)
+                            set.classes.emplace_back();
+                        static_cast<Layout::Placed&>(set.classes[set.classCount]) = static_cast<const Layout::Placed&>(set);
+                        *index = (std::int32_t)set.classCount++;
+                    }
+                    return;
                 }
-                else
-                    set.misses = 0;
+                set.misses = 0;
                 EmitQuads(dl, set, ox, oy, rs, rgba, colorGlyphRgba);
             }
 
@@ -866,6 +921,51 @@ namespace esia::text
                 return !f.bitmap && !f.colorStrikes && !f.colorLayers;
             }
 
+            // The offsets where PlaceQuads puts a glyph of `layout` elsewhere (QuadSet::xBreaks, yBreaks) for these em,
+            // scale, density and atlases - made again, the placements dropped, when one of them changed. A pen goes to
+            // the nearest quarter pixel (to the next one at fx + pen = n + 1/8, 3/8 ...), a whole-pixel pen and a line
+            // to the nearest pixel (at n + 1/2); in motion an outline's line to the nearest quarter pixel too.
+            void ClassBreaks(const Layout& layout, Layout::QuadSet& set, float em, float scale, std::uint64_t generation, std::uint32_t outlineQ, bool moving)
+            {
+                const float rs = params_.pixelsPerUnit;
+                if (set.classGeneration == generation && set.classEm == em && set.classScale == scale && set.classRs == rs && set.classOutline == outlineQ)
+                    return;
+                set.classGeneration = generation;
+                set.classEm = em;
+                set.classScale = scale;
+                set.classRs = rs;
+                set.classOutline = outlineQ;
+                set.xBreaks.clear();
+                set.yBreaks.clear();
+                // the pens' and lines' offsets as PlaceQuads computes them (fx + g.pos.x * scale * rs, in floats)
+                const auto at = [](double edge, float pen) {
+                    const double v = edge - (double)pen;
+                    return (float)(v - std::floor(v));
+                };
+                for (const PlacedGlyph& g : layout.glyphs)
+                {
+                    const bool smooth = moving && Outlined(g.face);
+                    const float px = g.pos.x * scale * rs, py = g.pos.y * scale * rs;
+                    if ((layout.bitmapGlyphs && faces_[g.face]->bitmap) || (wholePixelPens_ && !smooth))
+                        set.xBreaks.push_back(at(0.5, px));
+                    else
+                        for (int k = 1; k < 8; k += 2)
+                            set.xBreaks.push_back(at(k * 0.125, px));
+                    if (smooth)
+                        for (int k = 1; k < 8; k += 2)
+                            set.yBreaks.push_back(at(k * 0.125, py));
+                    else
+                        set.yBreaks.push_back(at(0.5, py));
+                }
+                for (std::vector<float>* b : {&set.xBreaks, &set.yBreaks})
+                {
+                    std::sort(b->begin(), b->end());
+                    b->erase(std::unique(b->begin(), b->end()), b->end());
+                }
+                set.classIndex.assign((set.xBreaks.size() + 1) * (set.yBreaks.size() + 1), -1);
+                set.classCount = 0;
+            }
+
             // The glyph's distance field (MTSDF at kFieldEm pixels per em, the design's outline), made the first time.
             const GlyphSlot* FieldGlyph(std::uint16_t face, std::uint16_t glyph)
             {
@@ -986,9 +1086,13 @@ namespace esia::text
                     QuadInstance::PackColor(out->rgba, ink);
                     QuadInstance::PackColor(out->colorRgba, colored);
                 }
-                if (!moving && (set.slotGeneration != generation || set.slotEm != em || set.slotOutline != outlineQ || set.slots.size() != layout.glyphs.size()))
+                if (set.slotGeneration != generation || set.slotEm != em || set.slotOutline != outlineQ ||
+                    (moving ? set.movingSlots.size() : set.slots.size()) != layout.glyphs.size())
                 {
-                    set.slots.assign(layout.glyphs.size(), std::array<const GlyphSlot*, 4>{});
+                    if (moving)
+                        set.movingSlots.assign(layout.glyphs.size(), std::array<const GlyphSlot*, 20>{});
+                    else
+                        set.slots.assign(layout.glyphs.size(), std::array<const GlyphSlot*, 4>{});
                     set.slotGeneration = generation;
                     set.slotEm = em;
                     set.slotOutline = outlineQ;
@@ -1026,16 +1130,10 @@ namespace esia::text
                             yi += 1.0f;
                         }
                     }
-                    const GlyphSlot* s;
-                    if (moving)
-                        s = QuadSlot(g, em, phase, yPhase, outlineQ);
-                    else
-                    {
-                        const GlyphSlot*& known = set.slots[gi][(std::size_t)phase];
-                        if (!known)
-                            known = QuadSlot(g, em, phase, yPhase, outlineQ);
-                        s = known;
-                    }
+                    const GlyphSlot*& known = moving ? set.movingSlots[gi][(std::size_t)(phase + 4 * (yPhase + 1))] : set.slots[gi][(std::size_t)phase];
+                    if (!known)
+                        known = QuadSlot(g, em, phase, yPhase, outlineQ);
+                    const GlyphSlot* s = known;
                     if (!s->page || s->width <= 0 || s->height <= 0)
                         continue;
                     const Rect r(xi + (float)s->left, yi + (float)s->top, xi + (float)(s->left + s->width), yi + (float)(s->top + s->height));
@@ -1111,7 +1209,7 @@ namespace esia::text
 
             // The quads at the whole pixel (ox, oy), in UI units (rs pixels per unit), in `rgba` - a color glyph's in
             // `colorRgba`; the ones outside the clip left out (none to test when the text lies inside it).
-            static void EmitQuads(DrawList& dl, const Layout::QuadSet& set, float ox, float oy, float rs, std::uint32_t rgba, std::uint32_t colorRgba)
+            static void EmitQuads(DrawList& dl, const Layout::Placed& set, float ox, float oy, float rs, std::uint32_t rgba, std::uint32_t colorRgba)
             {
                 const float inv = 1.0f / rs;
                 const Rect clip = dl.ClipRect();
@@ -1464,9 +1562,11 @@ namespace esia::text
             }
 
             // A text's key: its parameters and its bytes, 8 at a time (FNV-1a went byte by byte)
-            static std::uint64_t LayoutKey(const std::uint32_t (&params)[5], std::string_view text)
+            // The part of a layout's key from its parameters: the same for every text of a font, size and wrap width
+            // (GetLayout keeps the last one)
+            static std::uint64_t ParamsKey(const std::uint32_t (&params)[5])
             {
-                std::uint64_t h = 0x9E3779B97F4A7C15ull ^ text.size();
+                std::uint64_t h = 0x9E3779B97F4A7C15ull;
                 const auto mix = [&h](std::uint64_t v) {
                     h ^= v * 0xBF58476D1CE4E5B9ull;
                     h = (h ^ (h >> 29)) * 0x94D049BB133111EBull;
@@ -1474,21 +1574,30 @@ namespace esia::text
                 mix(((std::uint64_t)params[0] << 32) | params[1]);
                 mix(((std::uint64_t)params[2] << 32) | params[3]);
                 mix(params[4]);
+                return h;
+            }
+
+            // ... and the text's: a multiply per 8 bytes, the mixing at the end
+            static std::uint64_t LayoutKey(std::uint64_t h, std::string_view text)
+            {
+                h ^= (std::uint64_t)text.size() * 0x9E3779B97F4A7C15ull;
                 const char* p = text.data();
                 std::size_t n = text.size();
                 for (; n >= 8; p += 8, n -= 8)
                 {
                     std::uint64_t v;
                     std::memcpy(&v, p, 8);
-                    mix(v);
+                    h = (h ^ v) * 0xBF58476D1CE4E5B9ull;
+                    h ^= h >> 29;
                 }
                 if (n > 0)
                 {
                     std::uint64_t v = 0;
                     std::memcpy(&v, p, n);
-                    mix(v);
+                    h = (h ^ v) * 0xBF58476D1CE4E5B9ull;
                 }
-                return h ^ (h >> 31);
+                h = (h ^ (h >> 32)) * 0x94D049BB133111EBull;
+                return h ^ (h >> 29);
             }
 
             Layout* GetLayout(FontRef font, std::string_view text, float wrapWidth, std::uint32_t flags)
@@ -1503,7 +1612,12 @@ namespace esia::text
                     lastLayout_->lastFrame = frame_;
                     return lastLayout_;
                 }
-                const std::uint64_t key = LayoutKey(params, text);
+                if (std::memcmp(lastParams_, params, sizeof(params)) != 0)
+                {
+                    std::memcpy(lastParams_, params, sizeof(params));
+                    lastParamsKey_ = ParamsKey(params);
+                }
+                const std::uint64_t key = LayoutKey(lastParamsKey_, text);
                 // the front: a layout found here without the map's buckets (most texts of a frame)
                 Layout*& front = layoutFront_[(std::size_t)(key ^ (key >> 32)) & (kLayoutFront - 1)];
                 if (front && front->text == text && std::memcmp(front->params, params, sizeof(params)) == 0)
@@ -1535,8 +1649,12 @@ namespace esia::text
                     std::memcpy(layout.params, params, sizeof(params));
                     layout.glyphs.clear();
                     layout.glyphs.reserve(text.size() + 3);   // at most a glyph per byte (and an ellipsis): no regrowth
-                    layout.fill.generation = layout.outline.generation = 0;   // other glyphs: placed again
-                    layout.fill.slotGeneration = layout.outline.slotGeneration = 0;
+                    // other glyphs: placed again (the moving sets too - their placements were the old text's)
+                    for (Layout::QuadSet* s : {&layout.fill, &layout.outline, &layout.moving, &layout.movingOutline})
+                    {
+                        s->generation = s->slotGeneration = s->classGeneration = 0;
+                        s->classScore = 0;
+                    }
                     BuildLayout(font, text, wrapWidth, flags, layout);
                 }
                 layout.lastFrame = frame_;
@@ -2584,8 +2702,14 @@ namespace esia::text
             std::uint64_t frame_ = 0;
             std::unordered_map<std::uint64_t, Layout, IntHash> layouts_;
             Layout* lastLayout_ = nullptr;   // the last GetLayout's (a measure is followed by the draw)
+            std::uint32_t lastParams_[5] = {};   // ... its parameters' key (ParamsKey): most texts of a frame share them
+            std::uint64_t lastParamsKey_ = ParamsKey(lastParams_);
             static constexpr std::size_t kLayoutFront = 256;
             std::array<Layout*, kLayoutFront> layoutFront_{};   // layouts_ by key, direct-mapped (a layout leaves with its slot)
+            // QuadSet's rounding classes: for texts of up to kClassGlyphs glyphs (longer ones are placed again), at most
+            // kMaxClasses kept per set
+            static constexpr std::size_t kClassGlyphs = 64;
+            static constexpr std::uint32_t kMaxClasses = 256;
             std::vector<std::unordered_map<std::uint64_t, Layout, IntHash>::node_type> spareLayouts_;   // evicted, to be reused
             std::size_t sweepBucket_ = 0;           // NewFrame's next bucket of layouts_ to look through for unused layouts
             std::vector<std::uint64_t> sweepKeys_;   // ... its scratch

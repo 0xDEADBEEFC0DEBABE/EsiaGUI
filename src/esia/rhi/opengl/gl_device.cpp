@@ -339,13 +339,11 @@ namespace esia::rhi::opengl
         g.GetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &s.packBuffer);
         g.GetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &s.unpackBuffer);
         g.GetIntegerv(GL_ACTIVE_TEXTURE, &s.activeTexture);
-        for (int u = 0; u < kUnits; ++u)
-        {
-            g.ActiveTexture(GL_TEXTURE0 + (GLenum)u);
-            g.GetIntegerv(GL_TEXTURE_BINDING_2D, &s.tex[u]);
-            g.GetIntegerv(GL_SAMPLER_BINDING, &s.sampler[u]);
-        }
-        g.ActiveTexture((GLenum)s.activeTexture);
+        // the units' bindings when the device first binds to them (SaveUnit): asking about a unit takes making it
+        // active first, and a query after any call is a round trip to a threaded driver (NVIDIA's) - asked here about
+        // every unit, that was most of a small frame's submit. The queries below come with no call between them.
+        s.savedUnits = 0;
+        savingUnits_ = true;
         for (GLuint i = 0; i < 3; ++i)
         {
             g.GetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, i, &s.ubo[i]);
@@ -388,12 +386,14 @@ namespace esia::rhi::opengl
         auto enable = [&](GLenum cap, bool on) { on ? g.Enable(cap) : g.Disable(cap); };
         g.UseProgram((GLuint)s.program);
         for (int u = 0; u < kUnits; ++u)
-        {
-            g.ActiveTexture(GL_TEXTURE0 + (GLenum)u);
-            g.BindTexture(GL_TEXTURE_2D, (GLuint)s.tex[u]);
-            g.BindSampler((GLuint)u, (GLuint)s.sampler[u]);
-        }
+            if (s.savedUnits & (1u << u))
+            {
+                g.ActiveTexture(GL_TEXTURE0 + (GLenum)u);
+                g.BindTexture(GL_TEXTURE_2D, (GLuint)s.tex[u]);
+                g.BindSampler((GLuint)u, (GLuint)s.sampler[u]);
+            }
         g.ActiveTexture((GLenum)s.activeTexture);
+        savingUnits_ = false;
         g.BindVertexArray((GLuint)s.vao);
         g.BindBuffer(GL_ARRAY_BUFFER, (GLuint)s.arrayBuffer);
         g.BindBuffer(GL_COPY_WRITE_BUFFER, (GLuint)s.copyWriteBuffer);
@@ -488,6 +488,8 @@ namespace esia::rhi::opengl
     {
         if (unitTex_[unit] == tex)
             return;
+        if (savingUnits_ && !(frameState_.savedUnits & (1u << unit)))
+            SaveUnit(unit);
         if (activeUnit_ != (GLuint)unit)
         {
             gl_.ActiveTexture(GL_TEXTURE0 + (GLenum)unit);
@@ -501,9 +503,24 @@ namespace esia::rhi::opengl
     {
         if (unitSampler_[unit] != sampler)
         {
+            if (savingUnits_ && !(frameState_.savedUnits & (1u << unit)))
+                SaveUnit(unit);
             gl_.BindSampler((GLuint)unit, sampler);
             unitSampler_[unit] = sampler;
         }
+    }
+
+    // The host's texture and sampler on `unit` (RestoreHostState puts them back), before the device first changes it
+    void GlDevice::SaveUnit(int unit)
+    {
+        if (activeUnit_ != (GLuint)unit)
+        {
+            gl_.ActiveTexture(GL_TEXTURE0 + (GLenum)unit);
+            activeUnit_ = (GLuint)unit;
+        }
+        gl_.GetIntegerv(GL_TEXTURE_BINDING_2D, &frameState_.tex[unit]);
+        gl_.GetIntegerv(GL_SAMPLER_BINDING, &frameState_.sampler[unit]);
+        frameState_.savedUnits |= 1u << unit;
     }
 
     void GlDevice::SetScissorTest(bool on)

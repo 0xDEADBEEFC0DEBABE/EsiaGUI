@@ -376,6 +376,18 @@ ESIA_TEST(GlDevice, HostStateIsRestored)
         gl.GenFramebuffers(1, &fbo);
         gl.GenBuffers(1, &buf);
         gl.GenVertexArrays(1, &vao);
+        // a texture of the host's on every unit the device may use (and beyond), samplers on some: the device saves a
+        // unit when it first binds to it
+        constexpr int kHostUnits = 16;
+        GLuint unitTex[kHostUnits] = {}, sampler = 0;
+        gl.GenTextures(kHostUnits, unitTex);
+        gl.GenSamplers(1, &sampler);
+        for (int u = 0; u < kHostUnits; ++u)
+        {
+            gl.ActiveTexture(GL_TEXTURE0 + (GLenum)u);
+            gl.BindTexture(GL_TEXTURE_2D, unitTex[u]);
+            gl.BindSampler((GLuint)u, u % 3 == 0 ? sampler : 0u);
+        }
         gl.ActiveTexture(GL_TEXTURE0 + 3);
         gl.BindTexture(GL_TEXTURE_2D, tex);
         gl.TexImage2D(GL_TEXTURE_2D, 0, (GLint)GL_RGBA8, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -427,6 +439,15 @@ ESIA_TEST(GlDevice, HostStateIsRestored)
             gl.GetFloatv(GL_COLOR_CLEAR_VALUE, color);
             ok &= color[1] == 0.5f;
             ok &= gl.IsEnabled(GL_SCISSOR_TEST) && gl.IsEnabled(GL_BLEND) && gl.IsEnabled(GL_CULL_FACE);
+            for (int u = 0; u < kHostUnits; ++u)
+            {
+                gl.ActiveTexture(GL_TEXTURE0 + (GLenum)u);
+                gl.GetIntegerv(GL_TEXTURE_BINDING_2D, v);
+                ok &= v[0] == (GLint)(u == 3 ? tex : unitTex[u]);
+                gl.GetIntegerv(GL_SAMPLER_BINDING, v);
+                ok &= v[0] == (GLint)(u % 3 == 0 ? sampler : 0u);
+            }
+            gl.ActiveTexture(GL_TEXTURE0 + 3);
             if (!ok)
                 std::printf("  %s: host state changed by %s\n", ApiName(es), when);
             ESIA_CHECK(ok);
@@ -445,6 +466,8 @@ ESIA_TEST(GlDevice, HostStateIsRestored)
         gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
         gl.DeleteFramebuffers(1, &fbo);
         gl.DeleteTextures(1, &tex);
+        gl.DeleteTextures(kHostUnits, unitTex);
+        gl.DeleteSamplers(1, &sampler);
         gl.DeleteBuffers(1, &buf);
         gl.DeleteVertexArrays(1, &vao);
     }
