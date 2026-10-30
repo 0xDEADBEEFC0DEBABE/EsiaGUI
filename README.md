@@ -49,7 +49,7 @@ from ImGui to Esia means writing it again with `esia::ui`.
 | Motion | none: a change shows on the next frame | springs on every control: the switch's knob, the segmented control's lens, momentum scrolling, panels, the island |
 | Rendering | hands the host triangles (`ImDrawData`), drawn in one pass by any renderer that can draw textured triangles with a scissor | its own renderer, several passes per frame (backdrop captures, a blur pyramid, glow layers), through its RHI on Direct3D 9 - 12, OpenGL / ES, Vulkan or Metal |
 | GPU cost | a fraction of a millisecond | real, because the glass reads back and blurs what is behind it. The showcase with seven panels at 2808 x 2100 takes about 0.8 ms of GPU time per frame on an RTX 4080 SUPER (Direct3D 11, the picture above), and ran at about 170 fps at 3024 x 1890 on an M3 Pro (2026-10-01); each backdrop capture breaks the render pass, which tile-based GPUs feel most. Flat drawing (`UiDesc::flat`: no glass or shadows) halves a tool's: the workbench 0.20 -> 0.11 ms at 1600 x 1000 |
-| CPU cost | small: 0.05 - 0.08 ms to build and submit a frame of a few hundred widgets or 3300 glyphs (Direct3D 11, on the machine of the comparison) | text: less than Dear ImGui's (0.068 ms against 0.076 for 3300 glyphs); plain widgets: more (0.077 ms, 0.064 flat, against 0.052: springs, styles, layout); the glass scene: 0.20 ms against 0.37 for WGT, Dear ImGui with the same glass ([REWRITE_STATUS.md](docs/REWRITE_STATUS.md), "Text against Dear ImGui") |
+| CPU cost | small: 0.02 - 0.08 ms to build and submit a frame of a few hundred widgets or 3300 glyphs (Direct3D 11, on the machine of the comparison) | text: less than Dear ImGui's (0.068 ms against 0.076 for 3300 glyphs); plain widgets: less with flat drawing (0.024 ms against 0.031 for Dear ImGui 1.92.9b: widgets at rest append last frame's drawing), more in the regular look (0.041 ms: its shadows' draws); the glass scene: 0.20 ms against 0.37 for WGT, Dear ImGui with the same glass ([REWRITE_STATUS.md](docs/REWRITE_STATUS.md), "Text against Dear ImGui", "Draw memos") |
 | Text | its font atlas (stb_truetype, or FreeType). Text is not shaped, so scripts that need shaping (Arabic, Devanagari and the other Indic scripts) do not come out right, and there is no right-to-left | FreeType + HarfBuzz shaping, the system's fonts with a fallback chain for every major script, editing by grapheme, IME composition in the field (Windows, macOS, iOS), color emoji (bitmap and COLR fonts: Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji). A line in one direction is right; mixed directions wait for the bidi algorithm |
 | Widgets | a large set: tables, trees, number inputs and drags, color pickers, plots, multi-line text, docking, multiple viewports; extensions add more (ImPlot, node editors) | iOS-style: buttons, switches, sliders, steppers, segmented controls, inset grouped lists, navigation stacks, tab and search bars, menus, pickers, tooltips, text fields, a line chart, the island and the dock. For tools: number and vector fields (scrub, type an expression), a color picker, tables (only the rows in view are drawn: a million rows; sort, resize, select), trees, a multi-line editor, docking, plots (lines, areas, scatter, bars, histograms; a legend, a crosshair, pan and zoom) and a donut chart. Fewer plot kinds than ImPlot, no node editors, no multiple viewports |
 | Debugging UI code | items with one id highlighted, with a message, under the mouse (`io.ConfigDebugHighlightIdConflicts`, on by default); the Metrics / Debugger window (windows, draw commands, internal state), the ID Stack Tool, the Item Picker, a debug log, error recovery | a debug build reports, once each and outlined in red: two items with one id, two scroll areas with one id, an item laid out where it cannot be seen ([UI_CORE.md](docs/UI_CORE.md) section 16); no debugger windows |
@@ -63,9 +63,9 @@ from ImGui to Esia means writing it again with `esia::ui`.
 
 * how the UI looks and moves: liquid glass, springs on every control, light and dark themes that cross-fade;
 * correct text in every major script, with the system's fonts and color emoji;
-* less CPU where frames are heavy: a frame of text costs less than Dear ImGui's (0.068 ms against 0.076), the glass
-  showcase about half of what WGT's Dear ImGui took (0.20 ms against 0.37), with less GPU time too (0.40 ms against
-  0.44, Direct3D 11);
+* less CPU than Dear ImGui for text and flat widgets: a frame of text 0.068 ms against 0.076, a frame of plain widgets
+  drawn flat 0.024 ms against 0.031 (widgets at rest append last frame's drawing); the glass showcase about half of
+  what WGT's Dear ImGui took (0.20 ms against 0.37), with less GPU time too (0.40 ms against 0.44, Direct3D 11);
 * appearance in one line each: dark or light, the glass look, the accent, a compact density for tools, styles per
   widget or per block rather than one global style;
 * one renderer for Direct3D 9 - 12, OpenGL / ES, Vulkan and Metal, tested against the same golden images on each,
@@ -75,10 +75,10 @@ from ImGui to Esia means writing it again with `esia::ui`.
 **Weaknesses of Esia:**
 
 * GPU time: the glass reads back and blurs what is behind it - about 0.8 ms for the seven-panel showcase at
-  2808 x 2100 on an RTX 4080 SUPER - and plain widgets take about twice Dear ImGui's (0.051 ms against 0.025), 1.2
-  times with flat drawing (`UiDesc::flat`: no glass or shadows, 0.030 ms);
-* plain widgets take more CPU than Dear ImGui's, flat or not (0.077 ms, 0.064 flat, against 0.052): springs,
-  styles, layout and hit records, and shapes and glyphs written as vertices on the CPU;
+  2808 x 2100 on an RTX 4080 SUPER - and plain widgets with their shadows take 2.5 times Dear ImGui's (0.043 ms against
+  0.017 at 1600 x 1000), as much with flat drawing (`UiDesc::flat`: no glass or shadows, 0.016 ms);
+* plain widgets in the regular look take more CPU than Dear ImGui's (0.041 ms against 0.031): their shadows are FX
+  instances between the labels' quads, 66 draws where flat drawing has 5;
 * a smaller widget set: no node editors, no multiple viewports, and fewer plots than ImPlot (no log or time axes, no
   second y axis, no heatmaps or error bars);
 * integration: FreeType and HarfBuzz (downloaded and built with Esia when the system has none); platform layers for

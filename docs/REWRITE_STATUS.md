@@ -44,8 +44,9 @@ Vulkan; COLR color emoji; scrolling by touch from any item.
 
 **Draw memos: widgets at rest draw nothing** (2026-10-30): a widget whose drawing has nothing new to draw from - its
 rect, state, colors, label, the theme, the style - appends last frame's drawing again, byte for byte what drawing it
-makes; texts measured again the same way are not looked up. Plain widgets at last under Dear ImGui by more than 20 %:
-flat CPU 0.039 -> 0.025 ms against Dear ImGui's 0.032, regular 0.055 -> 0.041.
+makes; texts measured again the same way are not looked up. Flat plain widgets at last more than 20 % under Dear
+ImGui's CPU: 0.039 -> 0.024 ms against 0.031; the regular look 0.055 -> 0.041 (its shadows' 66 draws). Every frame's
+image is the one drawn before, byte for byte.
 
 **Draw lists recorded and appended again** (2026-10-30, in Esia): a stretch of a draw list - what a widget drew -
 kept as a `DrawRecord` and appended again where the list is in the state it began in, byte for byte what drawing it
@@ -277,20 +278,23 @@ plain widgets, and most widgets of most frames draw what they drew the frame bef
 
 Four windows of rows of a label, a button, a switch and a slider, and a paragraph; ids made outside the frame.
 
-| ms per frame | build | submit | CPU |
-| --- | --- | --- | --- |
-| Dear ImGui 1.92.9b | 0.0265 | 0.0054 | 0.0317 |
-| Esia flat, before | 0.0338 | 0.0049 | 0.0389 |
-| Esia flat, memos | 0.0195 | 0.0050 | 0.0246 |
-| Esia regular, before | 0.0350 | 0.0200 | 0.0550 |
-| Esia regular, memos | 0.0210 | 0.0199 | 0.0408 |
+| ms per frame | build | submit | CPU | GPU | draws |
+| --- | --- | --- | --- | --- | --- |
+| Dear ImGui 1.92.9b | 0.0261 | 0.0052 | 0.0312 | 0.0172 | 8 |
+| Esia flat, before (f457f1f) | 0.0339 | 0.0048 | 0.0387 | 0.0164 | 5 |
+| Esia flat, memos | 0.0195 | 0.0049 | 0.0244 | 0.0164 | 5 |
+| Esia regular, before (f457f1f) | 0.0353 | 0.0194 | 0.0546 | 0.0430 | 66 |
+| Esia regular, memos | 0.0210 | 0.0198 | 0.0407 | 0.0428 | 66 |
 
-The flat look takes 0.78 times Dear ImGui's CPU. With `ESIA_UI_MEMO=off` the same binary builds as before (0.0329 /
-0.0341).
+The flat look takes 0.78 times Dear ImGui's CPU, the regular look 1.30 times (its submit: 66 draws). With
+`ESIA_UI_MEMO=off` the same binary builds as before (0.0326 flat, 0.0338 regular). The last frame of each look
+(`--shot`) is the image f457f1f draws, byte for byte, as are rcbench's render-class scenes.
 
 ### Not done
 
 * The regular look's submit: its widgets' shadows are FX instances between the labels' quads (66 draws against 5 flat).
+  Drawing them as quads with the labels - one draw - was tried and left out: a quad's antialiasing is not the FX
+  instance's to the last level, and what is drawn stays as it was.
 * A widget added later keeps no memo until its inputs are named (the verify mode and the memo test find what is missed).
 * What a widget draws from that the memo does not see would be drawn stale: a widget keeping a memo must name every
   input of its drawing (the verify mode and the memo test find what is missed), and draw nothing whose pixels change
@@ -1642,7 +1646,8 @@ about 0.004 ms more.
 
 ### Not reached: 20% under Dear ImGui
 
-(Reached on 2026-10-30: "Draw memos: widgets at rest draw nothing".)
+(Reached for the flat look on 2026-10-30: "Draw memos: widgets at rest draw nothing"; the regular look takes 1.3 times
+Dear ImGui's CPU, its shadows' draws.)
 
 20% under Dear ImGui's 0.051 ms is 0.041. With nothing drawn (the Painter's shapes and the text skipped: a benchmark
 switch, not committed) the flat scene still takes 0.034 ms to build and 0.005 to submit: the widgets' own work -
