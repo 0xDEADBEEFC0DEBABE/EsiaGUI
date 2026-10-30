@@ -20,6 +20,14 @@ using namespace esia::rhi;
 // delete forward to these.
 namespace
 {
+    // Tests of the FX instance encoding and of what is drawn from it: their plain shapes stay FX instances
+    // (PainterEnv::quadShapes; the quads have tests of their own)
+    PainterEnv Fx(PainterEnv env = {})
+    {
+        env.quadShapes = false;
+        return env;
+    }
+
     bool g_countAllocations = false;
     long g_allocations = 0;
 }
@@ -117,7 +125,7 @@ namespace
     // wallpaper + a glass card
     void GlassScene(DrawList& dl, float blur)
     {
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
         p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(blur)));
     }
@@ -127,7 +135,7 @@ ESIA_TEST(Renderer, GeometryAndFx)
 {
     Setup s;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 110, 60), Style().Fill(Color::Hex(0x0A84FF)).Radius(12));
     dl.AddRectFilled(Rect(150, 10, 200, 60), 0xFF00FF00u);
     Renderer r(s.dev);
@@ -199,7 +207,7 @@ ESIA_TEST(Renderer, OnlyTheClearGlassRegionIsCopied)
     // and only the control's region is copied for level 0
     Setup s;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
     p.Rect(Rect(20, 20, 250, 280), Style().Radius(24).Glass(Glass(12)));
     p.Circle(Vec2(330, 150), 16, Style().Glass(Glass(0)));
@@ -223,7 +231,7 @@ ESIA_TEST(Renderer, SrgbTargetsCopyRawAndEncodeTheirOutput)
 {
     Setup s(Caps{}, Format::RGBA8_SRGB, false);
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.BeginGlowLayer(Color::White(), 8);
     p.Rect(Rect(20, 20, 60, 60), Style().Fill(Color::White()));
     p.EndGlowLayer();
@@ -248,7 +256,7 @@ ESIA_TEST(Renderer, CaptureBudget)
 {
     Setup s;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     for (int i = 0; i < 3; ++i)
     {
         const float x = 20.0f + 120.0f * (float)i;
@@ -268,7 +276,7 @@ ESIA_TEST(Renderer, GlowLayer)
 {
     Setup s;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.BeginGlowLayer(Color::Hex(0x00FFFF, 0.5f), 12.0f, 1.5f);
     p.Rect(Rect(100, 100, 200, 140), Style().Fill(Color::White()).Radius(8));
     p.EndGlowLayer();
@@ -292,7 +300,7 @@ ESIA_TEST(Renderer, TextDrawsWithTheGrayscaleProgram)
         TextureRegistry reg;
         const TextureId page = reg.Create({TextureFormat::Alpha8, 64, 64});
         DrawList dl = MakeList();
-        Painter p(dl);
+        Painter p(dl, Fx());
         if (inLayer)
             p.BeginGlowLayer(Color::White(), 6);
         dl.AddImage(page, Rect(10, 10, 20, 20), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
@@ -318,7 +326,7 @@ ESIA_TEST(Renderer, SubpixelTextPrograms)
         TextureRegistry reg;
         const TextureId page = reg.Create({TextureFormat::RGBA8, 64, 64, TextureFlags_LcdCoverage});
         DrawList dl = MakeList();
-        Painter p(dl);
+        Painter p(dl, Fx());
         if (inLayer)
             p.BeginGlowLayer(Color::White(), 6);
         dl.AddImage(page, Rect(10, 10, 20, 20), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
@@ -364,7 +372,7 @@ ESIA_TEST(Renderer, TextureRegistryReachesTheDevice)
 ESIA_TEST(Renderer, InstanceDataAsBufferOrTexture)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     for (int i = 0; i < 5; ++i)
         p.Rect(Rect(10.0f + 30.0f * (float)i, 10, 30.0f + 30.0f * (float)i, 30), Style().Fill(Color::White()).Glow(Color::White(), 4));
     const std::uint32_t feat = dl.FxInstances()[0].flags[0];
@@ -454,7 +462,7 @@ ESIA_TEST(Renderer, CallbacksGetTheNativeStateAndStateIsRebound)
 {
     Setup s;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     static int calls = 0;
     calls = 0;
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
@@ -474,7 +482,7 @@ ESIA_TEST(Renderer, ProfileRunsDoNotNest)
     DrawList dl = MakeList();
     GlassScene(dl, 10);
     dl.AddRectFilled(Rect(0, 0, 5, 5), 0xFFFFFFFFu);
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.BeginGlowLayer(Color::White(), 6);
     p.Rect(Rect(10, 10, 20, 20), Style().Fill(Color::White()));
     p.EndGlowLayer();
@@ -514,7 +522,7 @@ ESIA_TEST(Renderer, ProjectionFollowsTheApiConventions)
 ESIA_TEST(Renderer, UserEffectsNeedRuntimeCompilation)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
     {
         Setup s;
@@ -547,7 +555,7 @@ ESIA_TEST(Renderer, UserEffectsStartCompilingAtTheNextFrame)
     Renderer r(s.dev);
     r.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return fx.fill; }");
     DrawList plain = MakeList();
-    Painter pp(plain);
+    Painter pp(plain, Fx());
     pp.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()));
     r.Render(Data({&plain}), nullptr, s.target);
     ESIA_CHECK(NoErrors(s.dev));
@@ -556,7 +564,7 @@ ESIA_TEST(Renderer, UserEffectsStartCompilingAtTheNextFrame)
     // then the shape's own batch draws with its own pipeline and scissor
     ESIA_CHECK(Lines(s.dev, "scissor [0,0 0x0]") == 1 && Lines(s.dev, "draw instanced 4 x 1") == 2);
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
     r.Render(Data({&dl}), nullptr, s.target);
     ESIA_CHECK(NoErrors(s.dev));
@@ -581,7 +589,7 @@ ESIA_TEST(Renderer, ReleasesEverythingAndSkipsEmptyFrames)
     {
         DrawList dl = MakeList();
         GlassScene(dl, 10);
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.BeginGlowLayer(Color::White(), 6);
         p.Rect(Rect(10, 10, 20, 20), Style().Fill(Color::White()));
         p.EndGlowLayer();
@@ -601,7 +609,7 @@ ESIA_TEST(Renderer, FxShaderVariantsPerBatchFeatures)
     caps.fxFeatureVariants = true;
     Setup s(caps);
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
     p.Rect(Rect(60, 10, 100, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));
     p.Image(7, Rect(110, 10, 150, 50), 4);   // another texture: a batch of its own
@@ -620,7 +628,7 @@ namespace
     // three glass cards over content: three planned captures
     void ThreeGlassCards(DrawList& dl)
     {
-        Painter p(dl);
+        Painter p(dl, Fx());
         for (int i = 0; i < 3; ++i)
         {
             const float x = 20.0f + 120.0f * (float)i;
@@ -676,7 +684,7 @@ ESIA_TEST(Renderer, PyramidLevelsKeepTheirContentWhenGlassReusesACapture)
     Setup e(caps);
     DrawList fx = MakeList();
     GlassScene(fx, 10);
-    Painter(fx).Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
+    Painter(fx, Fx()).Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
     Renderer re(e.dev);
     re.SetEffectSource(3, "aurora", "float4 WgtEffect(WgtFx fx) { return float4(WgtBackdrop(fx.screenUV, 4.0), 1.0); }");
     re.Render(Data({&fx}), nullptr, e.target);
@@ -706,7 +714,7 @@ ESIA_TEST(Renderer, UnchangedCapturesAreReused)
     // something new under the glass: taken again, then reused again
     DrawList changed = MakeList();
     {
-        Painter p(changed);
+        Painter p(changed, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
         p.Rect(Rect(100, 100, 140, 140), Style().Fill(Color::Hex(0xFFCC00)));
         p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
@@ -721,7 +729,7 @@ ESIA_TEST(Renderer, UnchangedCapturesAreReused)
     // content that animates on the shader's clock under the glass: every frame
     DrawList shimmer = MakeList();
     {
-        Painter p(shimmer);
+        Painter p(shimmer, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203050)).Shimmer(0.5f, 1.0f));
         p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
     }
@@ -742,7 +750,7 @@ ESIA_TEST(Renderer, CapturesWrittenOverComeBackFromTheirCopy)
     Setup s;
     DrawList dl = MakeList();
     {
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));
         p.Rect(Rect(40, 40, 360, 260), Style().Radius(24).Glass(Glass(10)));
         p.Rect(Rect(80, 80, 200, 140), Style().Fill(Color::Hex(0xFFCC00)));   // content on the card ...
@@ -778,7 +786,7 @@ ESIA_TEST(Renderer, CapturesServeSomeFramesOverALiveBackground)
     for (int f = 0; f < 6; ++f)
     {
         DrawList dl = MakeList();
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color((float)f / 6.0f, 0.3f, 0.5f, 1.0f)));   // a new background every frame
         p.Rect(Rect(60, 60, 340, 240), Style().Radius(24).Glass(Glass(10)));
         r.Render(Data({&dl}), nullptr, s.target, live);
@@ -788,7 +796,7 @@ ESIA_TEST(Renderer, CapturesServeSomeFramesOverALiveBackground)
     ESIA_CHECK(taken == 2 && reused == 4);   // taken, reused twice, taken, reused twice
     DrawList moved = MakeList();
     {
-        Painter p(moved);
+        Painter p(moved, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203050)));
         p.Rect(Rect(70, 60, 350, 240), Style().Radius(24).Glass(Glass(10)));
     }
@@ -802,7 +810,7 @@ ESIA_TEST(Renderer, RefusedOrFailedVariantsFallBackToTheFullShader)
     Caps caps;
     caps.fxFeatureVariants = true;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));
     p.Image(7, Rect(110, 10, 150, 50), 4);
     {
@@ -841,7 +849,7 @@ ESIA_TEST(Renderer, GlyphShapesTakeTheirVariantWhereTheFullShaderLacksThem)
     caps.fxFeatureVariants = false;
     caps.asyncPipelines = true;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
     fx::Instance glyph;
     std::memset(&glyph, 0, sizeof(glyph));
@@ -889,7 +897,7 @@ ESIA_TEST(Renderer, QuadsAsInstanceAttributes)
     DrawList dl = MakeList();
     for (int i = 0; i < 3; ++i)
         dl.AddQuad(0, Rect(10.0f + 10.0f * (float)i, 10, 18.0f + 10.0f * (float)i, 18), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(0, 0, 100, 120), Style().Fill(Color::Hex(0x336699)));
     for (int i = 0; i < 2; ++i)
         dl.AddQuad(0, Rect(10.0f + 10.0f * (float)i, 100, 18.0f + 10.0f * (float)i, 108), Vec2(0, 0), Vec2(1, 1), 0xFF00FF00u);
@@ -916,7 +924,7 @@ ESIA_TEST(Renderer, MovingShapesTakeTheirVariantWhereTheFullShaderLacksThem)
     caps.fxFeatureVariants = false;
     caps.asyncPipelines = true;
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
     p.Rect(Rect(100, 10, 150, 50), Style().Fill(Color::White()).MotionBlur(Vec2(12, 0)));
     NullDevice dev(NullOptions{caps});
@@ -934,7 +942,7 @@ ESIA_TEST(Renderer, TheUiLightIsInTheDrawConstants)
 {
     Setup s;
     DrawList dl = MakeList();
-    Painter(dl).Rect(Rect(100, 100, 160, 140), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 4, Vec2(16, 12)));
+    Painter(dl, Fx()).Rect(Rect(100, 100, 160, 140), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 4, Vec2(16, 12)));
     Renderer r(s.dev);
     r.Render(Data({&dl}), nullptr, s.target);
     ESIA_CHECK(Lines(s.dev, "constants draw: 0 0 0 0 | 0 0 0 0") == 1);
@@ -962,7 +970,7 @@ ESIA_TEST(Renderer, VariantsCompilingInTheBackgroundDrawWithAReadyPipeline)
     NullDevice dev(o);
     const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
     DrawList shadowed = MakeList();
-    Painter(shadowed).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));   // features 0x5
+    Painter(shadowed, Fx()).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()).Shadow(Color::Black(0.5f), 8));   // features 0x5
     Renderer r(dev);
     // frames 1 and 2: the variant compiles, the full shader draws (asked for synchronously, once)
     r.Render(Data({&shadowed}), nullptr, target);
@@ -977,7 +985,7 @@ ESIA_TEST(Renderer, VariantsCompilingInTheBackgroundDrawWithAReadyPipeline)
     ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 0 && Lines(dev, "pipeline #" + std::to_string(variant)) == 1);
     // a shape that only fills (0x1): its variant is pending, the ready 0x5 variant covers it - not the full shader
     DrawList filled = MakeList();
-    Painter(filled).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
+    Painter(filled, Fx()).Rect(Rect(10, 10, 50, 50), Style().Fill(Color::White()));
     dev.ClearLog();
     r.Render(Data({&filled}), nullptr, target);
     ESIA_CHECK(NoErrors(dev) && r.Stats().fxPendingVariants == 1);
@@ -1032,7 +1040,7 @@ ESIA_TEST(Renderer, ProfileScopesAreBoundedOrOff)
     caps.timestampQueries = true;
     Setup s(caps);
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     for (int i = 0; i < 40; ++i)   // geometry and FX alternating on the same pixels (no batch joins another): 80 runs
     {
         dl.AddRectFilled(Rect(5, 5, 9, 9), 0xFFFFFFFFu);
@@ -1081,7 +1089,7 @@ ESIA_TEST(Renderer, SmallFixes)
         caps.fxStorage = FxStorage::Texture;
         Setup s(caps, Format::RGBA8_UNORM, true, 1, true);
         DrawList dl = MakeList();
-        Painter p(dl);
+        Painter p(dl, Fx());
         for (int i = 0; i < 5; ++i)
             p.Rect(Rect(10.0f + 30.0f * (float)i, 10, 30.0f + 30.0f * (float)i, 30), Style().Fill(Color::White()));
         Renderer r(s.dev);
@@ -1117,7 +1125,7 @@ ESIA_TEST(Renderer, SteadyFramesAllocateNothing)
     const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true, 1);
     DrawList dl = MakeList(), over = MakeList();
     {
-        Painter p(dl);
+        Painter p(dl, Fx());
         GlassScene(dl, 12.0f);
         for (int i = 0; i < 6; ++i)   // glass controls on the card, content between them: several captures
         {
@@ -1131,7 +1139,7 @@ ESIA_TEST(Renderer, SteadyFramesAllocateNothing)
         p.BeginGlowLayer(Color::Hex(0x00FFFF, 0.5f), 12.0f, 1.5f);
         p.Rect(Rect(100, 250, 200, 280), Style().Fill(Color::White()).Radius(8));
         p.EndGlowLayer();
-        Painter q(over);
+        Painter q(over, Fx());
         q.Rect(Rect(250, 20, 390, 120), Style().Radius(20).Glass(Glass(20)).Shadow(Color::Black(0.3f), 12, Vec2(0, 4)));
     }
     Renderer r(dev);
@@ -1148,4 +1156,45 @@ ESIA_TEST(Renderer, SteadyFramesAllocateNothing)
     if (g_allocations != 0)
         std::fprintf(stderr, "    %ld allocations in 5 frames\n", g_allocations);
     ESIA_CHECK(NoErrors(dev));
+}
+
+// Plain shapes are quads (PainterEnv::quadShapes): shapes and labels overlapping one another are one instanced draw,
+// from the instance data or as instance attributes; the same content as FX instances takes a draw for every change
+// of kind.
+ESIA_TEST(Renderer, PlainShapesDrawWithTheText)
+{
+    const auto items = [](DrawList& dl, const PainterEnv& env) {
+        Painter p(dl, env);
+        for (int i = 0; i < 8; ++i)
+        {
+            const float x = 20.0f + 12.0f * (float)i;   // each overlaps the next
+            p.Rect(Rect(x, 40, x + 30, 100), Style().Stroke(1.5f, Color::Hex(0xFF453A)));
+            p.Circle(Vec2(x + 15, 34), 3, Style().Fill(Color::White()));
+            dl.AddQuad(0, Rect(x, 104, x + 20, 114), Vec2(0, 0), Vec2(1, 1), 0xFFFFFFFFu);
+            p.Line(Vec2(200, 300), Vec2(x + 15, 100), 1.0f, Style().Fill(Color::White(0.5f)));
+        }
+    };
+    for (int attributes = 0; attributes < 2; ++attributes)
+    {
+        Caps caps;
+        if (attributes)
+        {
+            caps.fxStorage = FxStorage::Texture;
+            caps.quadAttributes = true;
+        }
+        DrawList quads = MakeList(), fx = MakeList();
+        items(quads, PainterEnv{});
+        items(fx, Fx());
+        Setup s(caps);
+        Renderer r(s.dev);
+        ESIA_CHECK(r.Render(Data({&quads}), nullptr, s.target) && NoErrors(s.dev));
+        ESIA_CHECK(Lines(s.dev, "draw instanced") == 1 && r.Stats().quads == 32 && r.Stats().fxInstances == 0);
+        // the shape quad program; the text alone (the FX run below) keeps the lighter one
+        ESIA_CHECK(Lines(s.dev, "QuadShapeImage") == 1 && Lines(s.dev, attributes ? "draw instanced 4 x 32 from 0" : "draw instanced 4 x 32") == 1);
+        Setup t(caps);
+        Renderer r2(t.dev);
+        ESIA_CHECK(r2.Render(Data({&fx}), nullptr, t.target) && NoErrors(t.dev));
+        ESIA_CHECK(Lines(t.dev, "draw instanced") > 8 && r2.Stats().fxInstances == 24 && r2.Stats().quads == 8);
+        ESIA_CHECK(Lines(t.dev, "QuadImage") == 1 && Lines(t.dev, "QuadShape") == 0);
+    }
 }

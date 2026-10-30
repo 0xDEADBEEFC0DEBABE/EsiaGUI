@@ -49,7 +49,15 @@ namespace esia::conformance
         // texture (resolving a multisampled target) and compare it with the target's pixels.
         bool checkCopy = false;
         const char* golden = nullptr;          // golden image name when shared with another scene (default: name)
+        // Plain shapes as FX instances and polylines as geometry (PainterEnv::quadShapes off), against the golden of the
+        // scene that draws them as quads: both ways give the same pixels
+        bool fxShapes = false;
         testkit::Tolerance tolerance;
+        // Drawing backends: also against the image of the scene of this name, drawn before it on the same backend,
+        // within sameTolerance - the same pixels drawn two ways, closer than either is to a golden from another
+        // rasterizer
+        const char* sameAs = nullptr;
+        testkit::Tolerance sameTolerance{2, 0.0, 2, 0.05};
     };
 
     const std::vector<Scene>& Scenes();

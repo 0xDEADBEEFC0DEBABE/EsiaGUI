@@ -25,11 +25,17 @@ UiPSIn UiVS(UiVSIn v)
     return o;
 }
 
+// The pixel shaders' colors from the vertex color, the texel and SV_Position: also the textured quads' (esia_quad.hlsl)
+float4 UiColor(float4 col, float4 texel, float4 svpos)
+{
+    float4 c = col * texel;
+    c.a *= WgtEdgeFade(WgtPixelPos(svpos).y);
+    return WgtOutputStraight(c);
+}
+
 float4 UiPS(UiPSIn i) : SV_Target
 {
-    float4 c = i.col * ESIA_SAMPLE(gTex, gLinear, i.uv);
-    c.a *= WgtEdgeFade(WgtPixelPos(i.pos).y);
-    return WgtOutputStraight(c);
+    return UiColor(i.col, ESIA_SAMPLE(gTex, gLinear, i.uv), i.pos);
 }
 
 // ------------------------------------------------------------------ text ----
@@ -74,19 +80,22 @@ float WgtGrayText(float cov, float3 ink)
     return WgtTextAlpha(WgtEnhanceContrast(cov, k), intensity, gText.x);
 }
 
-// Grayscale coverage (Alpha8 glyph atlas).
-float4 TextGrayPS(UiPSIn i) : SV_Target
+// Grayscale coverage (Alpha8 glyph atlas): `cov` its texel's R; sub-pixel pages drawn where per-channel alpha cannot
+// be kept (glow layers, targets that are not opaque, devices without dual-source blending): the grayscale coverage
+// kept in A.
+float4 TextGrayColor(float4 col, float cov, float4 svpos)
 {
-    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).r;
-    return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
+    return WgtOutputStraight(float4(col.rgb, col.a * WgtGrayText(cov, col.rgb) * WgtEdgeFade(WgtPixelPos(svpos).y)));
 }
 
-// Sub-pixel pages drawn where per-channel alpha cannot be kept (glow layers, targets that are not opaque, devices
-// without dual-source blending): the grayscale coverage kept in A.
+float4 TextGrayPS(UiPSIn i) : SV_Target
+{
+    return TextGrayColor(i.col, ESIA_SAMPLE(gTex, gLinear, i.uv).r, i.pos);
+}
+
 float4 TextLcdGrayPS(UiPSIn i) : SV_Target
 {
-    const float cov = ESIA_SAMPLE(gTex, gLinear, i.uv).a;
-    return WgtOutputStraight(float4(i.col.rgb, i.col.a * WgtGrayText(cov, i.col.rgb) * WgtEdgeFade(WgtPixelPos(i.pos).y)));
+    return TextGrayColor(i.col, ESIA_SAMPLE(gTex, gLinear, i.uv).a, i.pos);
 }
 
 // Sub-pixel (ClearType-style) text: one coverage per R / G / B stripe, composed per channel with dual-source blending:
@@ -100,23 +109,32 @@ struct TextLcdOut
     float4 alpha : SV_Target1;
 };
 
-TextLcdOut TextLcdPS(UiPSIn i)
+// `a`: the per-channel alpha (the vertex color's alpha and the edge fade applied)
+TextLcdOut TextLcdOutput(float4 col, float3 a)
 {
-    const float4 t = ESIA_SAMPLE(gTex, gLinear, i.uv);
+    TextLcdOut o;
+    o.color = WgtOutputStraight(float4(col.rgb, 1.0));
+    o.alpha = float4(a, max(a.r, max(a.g, a.b)));
+    return o;
+}
+
+TextLcdOut TextLcdColor(float4 col, float4 t, float4 svpos)
+{
     float3 a;
     if (t.r == t.g && t.g == t.b)
-        a = WgtGrayText(t.r, i.col.rgb).xxx;
+        a = WgtGrayText(t.r, col.rgb).xxx;
     else
     {
         const float3 cov = lerp(t.aaa, t.rgb, gText.w);   // ClearType level: 0 = the grayscale coverage
-        const float k = WgtLightOnDarkContrast(gText.z, i.col.rgb);
-        a.r = WgtTextAlpha(WgtEnhanceContrast(cov.r, k), i.col.r, gText.x);
-        a.g = WgtTextAlpha(WgtEnhanceContrast(cov.g, k), i.col.g, gText.x);
-        a.b = WgtTextAlpha(WgtEnhanceContrast(cov.b, k), i.col.b, gText.x);
+        const float k = WgtLightOnDarkContrast(gText.z, col.rgb);
+        a.r = WgtTextAlpha(WgtEnhanceContrast(cov.r, k), col.r, gText.x);
+        a.g = WgtTextAlpha(WgtEnhanceContrast(cov.g, k), col.g, gText.x);
+        a.b = WgtTextAlpha(WgtEnhanceContrast(cov.b, k), col.b, gText.x);
     }
-    a *= i.col.a * WgtEdgeFade(WgtPixelPos(i.pos).y);
-    TextLcdOut o;
-    o.color = WgtOutputStraight(float4(i.col.rgb, 1.0));
-    o.alpha = float4(a, max(a.r, max(a.g, a.b)));
-    return o;
+    return TextLcdOutput(col, a * (col.a * WgtEdgeFade(WgtPixelPos(svpos).y)));
+}
+
+TextLcdOut TextLcdPS(UiPSIn i)
+{
+    return TextLcdColor(i.col, ESIA_SAMPLE(gTex, gLinear, i.uv), i.pos);
 }

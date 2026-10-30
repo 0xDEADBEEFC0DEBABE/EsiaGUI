@@ -13,7 +13,7 @@ set(_esia_install_targets)
 set(_esia_header_dirs)
 string(REGEX REPLACE "/+$" "" _esia_src "${ESIA_ROOT}")   # ESIA_ROOT may end in a slash
 string(REGEX REPLACE "/+$" "" _esia_bin "${CMAKE_BINARY_DIR}")
-foreach(_t esia_core esia_rhi esia_shaders esia_render esia_text esia_text_ft esia_ui esia_backends
+foreach(_t esia_core esia_rhi esia_shaders esia_render esia_text esia_text_ft esia_svg esia_ui esia_backends
            esia_rhi_d3d_common esia_rhi_d3d9 esia_rhi_d3d10 esia_rhi_d3d11 esia_rhi_d3d12 esia_rhi_opengl
            esia_rhi_vulkan esia_rhi_metal_core esia_rhi_metal
            esia_platform_win32 esia_platform_x11 esia_platform_android

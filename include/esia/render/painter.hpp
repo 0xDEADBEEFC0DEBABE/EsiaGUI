@@ -178,6 +178,14 @@ namespace esia
         // They batch with the text around them: a frame of plain widgets is a few draws of flat geometry.
         bool flat = false;
         Color flatSurface = Color(0.11f, 0.11f, 0.12f, 1.0f);
+        // Plain shapes - a solid fill and / or a solid stroke on a rectangle with one radius on every corner, a circle, a
+        // capsule or a segment, with no other material, outside masks and scales - as quads drawn with the text
+        // (QuadInstance shapes): the same pixels from 32 bytes instead of an FX instance's 384, and many shapes among
+        // many labels in few draws, whatever order they come in. FillRect's and HLine's rectangles too, as quads over the
+        // pixels their geometry covered (no antialiasing), and Polyline's lines, a quad per segment and per end with
+        // their geometry's pixels and antialiasing. false: every shape an FX instance, those rectangles and lines
+        // geometry.
+        bool quadShapes = true;
         // An outline under every text and icon this Painter draws (text::TextOutline; none by default).
         text::TextOutline textOutline;
     };
@@ -206,10 +214,16 @@ namespace esia
         void Arc(Vec2 center, float radius, float thickness, float startRad, float sweepRad, const Style& s);
         void Ring(Vec2 center, float radius, float thickness, const Style& s);
         void Line(Vec2 a, Vec2 b, float thickness, const Style& s);
+        // A solid line: Line(a, b, thickness, Style().Fill(color)) without building a Style - its quad drawn with the text
+        // straight away (PainterEnv::quadShapes, outside masks and scales).
+        void Line(Vec2 a, Vec2 b, float thickness, Color color);
         // Liquid union of two rounded rects (smooth-min blend of the SDFs): metaball / morph effects.
         void Merge(const esia::Rect& a, const esia::Rect& b, float radius, float smoothness, const Style& s);
         // Rounded image (SDF-masked, anti-aliased).
         void Image(TextureId tex, const esia::Rect& r, float radius, Color tint = Color::White(), Vec2 uv0 = Vec2(0, 0), Vec2 uv1 = Vec2(1, 1));
+        // An image already where the scales put it: `r` is final (see Scaled), and no scale moves or resizes it again -
+        // for a texture rasterized at the size it is drawn, as text is under PushScale (svg::Draw). Square corners.
+        void UnscaledImage(TextureId tex, const esia::Rect& r, Color tint = Color::White(), Vec2 uv0 = Vec2(0, 0), Vec2 uv1 = Vec2(1, 1));
 
         // ---------------------------------------------------------- paths: any outline, every material
         // A polygon through `points`: any simple outline (convex or not, either winding), with everything a rounded
@@ -247,6 +261,8 @@ namespace esia
         float SnapToPixel(float v) const;
 
         // ---------------------------------------------------- cheap primitives (indexed geometry)
+        // A rectangle's pixels, without antialiasing (rounded, or under a mask or a scale: an SDF shape); a quad drawn
+        // with the text (PainterEnv::quadShapes), else geometry.
         void FillRect(const esia::Rect& r, Color c, float rounding = 0.0f);
         // A hairline on physical pixel rows (crisp at any DPI / render scale).
         void HLine(float x0, float x1, float y, Color c, float thickness = 1.0f);
@@ -254,8 +270,12 @@ namespace esia
         // the physical pixel. Color: s.fill's color (s.opacity applies). Glows only if `s` has a glow, as one halo.
         // With a material geometry cannot draw - glass, a shadow, an inner glow, a stroke around the line, a gradient,
         // an image, shimmer, noise, a user effect, motion blur - the line is an FX path instead (round joins), with
-        // all of them.
+        // all of them. Quads drawn with the text, the same pixels (PainterEnv::quadShapes), unless a turn is sharper
+        // than 120 degrees or a segment too short for the turns at its ends, under a scale or a mask.
         void Polyline(const Vec2* points, int count, float thickness, const Style& s, std::uint32_t flags = PolylineFlags_None);
+        // A solid polyline: Polyline(points, count, thickness, Style().Fill(color), flags) without building a Style - its
+        // quads from the points themselves where they need no smoothing and repeat none.
+        void Polyline(const Vec2* points, int count, float thickness, Color color, std::uint32_t flags = PolylineFlags_None);
         // Fills between the same path and the horizontal line y = `baseline` (area charts). Solid or linear paint.
         void Area(const Vec2* points, int count, float baseline, const Paint& paint, std::uint32_t flags = PolylineFlags_None);
         // ... with a whole material: the area as an FX path (glass, strokes, shadows ...; Style::Radius rounds its
@@ -276,6 +296,10 @@ namespace esia
         // Uniform scale around `origin` applied to shapes and text emitted until PopScale().
         void PushScale(Vec2 origin, float scale);
         void PopScale();
+        // Where the scales pushed now put what is drawn: the point `p` at Scaled(p), lengths ScaleFactor() times theirs
+        // (p and 1 outside PushScale).
+        Vec2 Scaled(Vec2 p) const;
+        float ScaleFactor() const;
         void SetAlpha(float a) { alpha_ = a; }
         float Alpha() const { return alpha_; }
 
@@ -320,6 +344,14 @@ namespace esia
         // its core: colors with their opacity applied
         bool FlatShape(const esia::Rect& bounds, Color fill, Color stroke, float strokeWidth, float strokeAlign, const float* shapeRadii,
                        float smoothing);
+        // A plain shape as quads drawn with the text (PainterEnv::quadShapes; true: drawn, or nothing to draw). `ends`: a
+        // segment's end points (bounds: its box).
+        bool QuadShapes(fx::ShapeKind kind, const esia::Rect& bounds, const Style& s, const float* ends, const float* radii, float smoothing);
+        // FillRect's and HLine's rectangle without antialiasing: a QuadShape::Solid quad, or geometry without quadShapes
+        void SolidRect(const esia::Rect& r, std::uint32_t rgba);
+        // Polyline's line through `path` as quads drawn with the text (PainterEnv::quadShapes): its geometry's pixels
+        // and coverage (false: the geometry draws it - a miter it clips, a piece too short for its joints)
+        bool LineQuads(const Vec2* path, int n, float hw, float outer, int sides, std::uint32_t rgba);
         void ApplyScale(fx::Instance& inst) const;
         void ExcludeFromScale(std::size_t vtxStart, std::size_t quadStart);
         float Pixel() const { return env_.pixelScale > 0.0f ? env_.pixelScale : 1.0f; }

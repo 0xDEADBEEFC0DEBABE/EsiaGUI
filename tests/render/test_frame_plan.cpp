@@ -35,6 +35,13 @@ namespace
         return n;
     }
 
+    // These tests are about the planner's FX batches: their plain shapes stay FX instances (PainterEnv::quadShapes)
+    PainterEnv Fx(PainterEnv env = {})
+    {
+        env.quadShapes = false;
+        return env;
+    }
+
     int Captures(const FramePlan& p)
     {
         int n = 0;
@@ -68,7 +75,7 @@ ESIA_TEST(FramePlan, DirectPlansDrawTheListsAsTheyAre)
     DrawList a, b;
     a.Reset(Rect(0, 0, 400, 300));
     b.Reset(Rect(0, 0, 400, 300));
-    Painter pa(a), pb(b);
+    Painter pa(a, Fx()), pb(b, Fx());
     a.AddRectFilled(Rect(0, 0, 10, 10), 0xFFFFFFFFu);
     pa.Rect(Rect(100, 100, 150, 150), Style().Fill(Color::White()).Radius(4));
     a.AddRectFilled(Rect(110, 120, 140, 130), 0xFF0000FFu);   // a label on the shape
@@ -115,7 +122,7 @@ ESIA_TEST(FramePlan, FxInstancesBatchUntilTheStateChanges)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::Hex(0xFF0000)).Radius(8));
     p.Circle(Vec2(100, 100), 20, Style().Fill(Color::Hex(0x00FF00)));
     p.Image(7, Rect(200, 10, 260, 70), 6);                       // another texture: a new batch
@@ -141,7 +148,7 @@ ESIA_TEST(FramePlan, ClipsThatCutNothingDoNotSplitBatches)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.PushClip(Rect(0, 0, 300, 200));   // the window's body
     p.Rect(Rect(10, 10, 50, 50), Style().Fill(Color::Hex(0xFF0000)).Radius(8));
     p.PushClip(Rect(60, 0, 140, 80), false);   // a control's own clip around it and its shadow
@@ -170,7 +177,7 @@ ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)
     // two buttons, each a shape with a label on it (a white rectangle stands in for the text)
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
     dl.AddRectFilled(Rect(30, 25, 90, 35), 0xFFFFFFFFu);
     p.Rect(Rect(150, 10, 250, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
@@ -186,7 +193,7 @@ ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)
     // a shape over the first label stays after it
     DrawList d2;
     d2.Reset(Rect(0, 0, 400, 300));
-    Painter q(d2);
+    Painter q(d2, Fx());
     q.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)).Radius(8));
     d2.AddRectFilled(Rect(30, 25, 90, 35), 0xFFFFFFFFu);
     q.Rect(Rect(80, 20, 120, 40), Style().Fill(Color::Hex(0xC03060)));
@@ -198,7 +205,7 @@ ESIA_TEST(FramePlan, ShapesAndTextBatchAcrossEachOtherWhereTheyDoNotOverlap)
     // nothing joins a batch across a callback
     DrawList d3;
     d3.Reset(Rect(0, 0, 400, 300));
-    Painter r(d3);
+    Painter r(d3, Fx());
     r.Rect(Rect(10, 10, 110, 50), Style().Fill(Color::Hex(0x3060C0)));
     d3.AddCallback([](const DrawList&, const DrawCmd&, void*) {}, nullptr);
     r.Rect(Rect(150, 10, 250, 50), Style().Fill(Color::Hex(0x3060C0)));
@@ -214,7 +221,7 @@ ESIA_TEST(FramePlan, ShadowsBatchByWhatTheyShow)
 {
     auto form = [](DrawList& dl, float buttonX) {
         dl.Reset(Rect(0, 0, 400, 300));
-        Painter p(dl);
+        Painter p(dl, Fx());
         for (int row = 0; row < 2; ++row)
         {
             const float y = 20.0f + 60.0f * (float)row;
@@ -252,7 +259,7 @@ ESIA_TEST(FramePlan, GlassKeepsItsPlace)
     {
         DrawList dl;
         dl.Reset(Rect(0, 0, 400, 300));
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.Rect(Rect(0, 0, 60, 60), Style().Fill(Color::Hex(0x336699)));
         dl.AddRectFilled(Rect(100, 10, 140, 20), 0xFFFFFFFFu);
         const Style panel = glass ? Style().Radius(12).Glass(Frosted()) : Style().Radius(12).Fill(Color::Hex(0x808080));
@@ -276,7 +283,7 @@ ESIA_TEST(FramePlan, GlassOnGlassRecapturesButNeighboursShare)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(0, 0, 400, 300), Style().Fill(Paint::Linear(Color::Hex(0x203050), Color::Hex(0x805030))));   // wallpaper
     p.Rect(Rect(40, 40, 360, 260), Style().Radius(28).Glass(Frosted()));                                         // glass card
     p.Capsule(Rect(60, 200, 160, 236), Style().Glass(Frosted(2)));                                                // two buttons on it
@@ -296,7 +303,7 @@ ESIA_TEST(FramePlan, OneCaptureServesGlassThatNothingCovers)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
     p.Rect(Rect(20, 20, 180, 120), Style().Radius(20).Glass(Frosted()));
     p.Rect(Rect(360, 260, 390, 290), Style().Fill(Color::Hex(0xFF0000)));   // drawn far from the second glass
@@ -310,7 +317,7 @@ ESIA_TEST(FramePlan, OneCaptureServesGlassThatNothingCovers)
     // the same, but the red square now lies under the second glass: it must be captured again
     DrawList dl2;
     dl2.Reset(Rect(0, 0, 400, 300));
-    Painter q(dl2);
+    Painter q(dl2, Fx());
     q.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
     q.Rect(Rect(20, 20, 180, 120), Style().Radius(20).Glass(Frosted()));
     q.Rect(Rect(250, 50, 300, 90), Style().Fill(Color::Hex(0xFF0000)));
@@ -324,7 +331,7 @@ ESIA_TEST(FramePlan, PyramidLevelsAndLevelZeroFollowTheGlass)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
     p.Rect(Rect(20, 20, 180, 120), Style().Radius(20).Glass(Frosted(10)));
     FramePlan frosted;
@@ -336,7 +343,7 @@ ESIA_TEST(FramePlan, PyramidLevelsAndLevelZeroFollowTheGlass)
 
     DrawList dl2;
     dl2.Reset(Rect(0, 0, 400, 300));
-    Painter q(dl2);
+    Painter q(dl2, Fx());
     q.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
     q.Rect(Rect(20, 20, 180, 120), Style().Radius(20).Glass(Frosted(0)));   // clear glass reads level 0
     FramePlan clear;
@@ -354,7 +361,7 @@ ESIA_TEST(FramePlan, LegibleTextReadsTheBlurredBackdrop)
     {
         DrawList dl;
         dl.Reset(Rect(0, 0, 400, 300));
-        Painter p(dl);
+        Painter p(dl, Fx());
         p.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x336699)));
         fx::Instance g{};
         g.rect[0] = g.rect[1] = 100.0f;   // the text's box
@@ -387,7 +394,7 @@ ESIA_TEST(FramePlan, MovingShapesCoverWhatTheySweep)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(100, 100, 140, 120), Style().Fill(Color::White()).MotionBlur(Vec2(40, -10)));
     FramePlan plan;
     plan.Build(Data({&dl}), {});
@@ -400,7 +407,7 @@ ESIA_TEST(FramePlan, UserEffectsBuildTheWholePyramid)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 100, 100), Style().Fill(Color::White()).Effect(3, 1.0f));
     FramePlan plan;
     plan.Build(Data({&dl}), {});
@@ -412,7 +419,7 @@ ESIA_TEST(FramePlan, GlowLayersAndTheirBounds)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl, PainterEnv{2.0f, 0.6f, 1.0f, 1.0f, nullptr, nullptr});   // metrics scale 2
+    Painter p(dl, Fx(PainterEnv{2.0f, 0.6f, 1.0f, 1.0f, nullptr, nullptr}));   // metrics scale 2
     p.BeginGlowLayer(Color::Hex(0x00FFFF, 0.5f), 10.0f, 1.5f);
     p.Rect(Rect(100, 100, 140, 120), Style().Fill(Color::White()));
     p.EndGlowLayer();
@@ -436,7 +443,7 @@ ESIA_TEST(FramePlan, EdgeFadesInPixelsAndNeverMixed)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.BeginEdgeFade(Rect(0, 50, 400, 250), 10, 20);
     p.Rect(Rect(10, 60, 50, 100), Style().Fill(Color::White()));
     dl.AddRectFilled(Rect(60, 60, 90, 90), 0xFFFFFFFFu);
@@ -502,7 +509,7 @@ ESIA_TEST(FramePlan, PathsKeepTheirPointsBehindThem)
 {
     DrawList dl;
     dl.Reset(Rect(0, 0, 400, 300));
-    Painter p(dl);
+    Painter p(dl, Fx());
     std::vector<Vec2> ring;
     for (int i = 0; i < 40; ++i)
         ring.push_back(Vec2(200, 150) + Vec2(std::cos(kTau * (float)i / 40.0f), std::sin(kTau * (float)i / 40.0f)) * 50.0f);
@@ -518,7 +525,7 @@ ESIA_TEST(FramePlan, PathsKeepTheirPointsBehindThem)
     // shape after it joins it (the last op)
     DrawList g;
     g.Reset(Rect(0, 0, 400, 300));
-    Painter pg(g);
+    Painter pg(g, Fx());
     pg.Rect(Rect(0, 0, 400, 300), Style().Fill(Color::Hex(0x203040)));
     pg.Polygon(ring.data(), 40, Style().Glass(Frosted()));
     pg.Rect(Rect(300, 250, 340, 290), Style().Fill(Color::White()));
@@ -543,4 +550,46 @@ ESIA_TEST(FramePlan, PathsKeepTheirPointsBehindThem)
     for (const FramePlan::InstanceRun& r : dp.instanceRuns)
         runs += r.count;
     ESIA_CHECK(runs == 5);
+}
+
+// Plain shapes are quads (PainterEnv::quadShapes): items - a frame, a bar, a dot, a label and a line each, every item
+// overlapping the next - are one draw of quads in drawing order, whatever order the kinds come in; the
+// first label's page gives the draw its texture and program. As FX instances the same content alternates batches.
+ESIA_TEST(FramePlan, PlainShapesDrawAsQuadsWithTheTextAround)
+{
+    auto items = [](DrawList& dl, const PainterEnv& env) {
+        Painter p(dl, env);
+        for (int i = 0; i < 6; ++i)
+        {
+            const float x = 20.0f + 15.0f * (float)i;
+            p.Rect(Rect(x, 40, x + 30, 100), Style().Stroke(1.5f, Color::Hex(0xFF453A)));
+            p.Rect(Rect(x - 6, 60, x - 3, 100), Style().Fill(Color::Hex(0x30D158)).Radius(1));
+            p.Circle(Vec2(x + 15, 34), 3, Style().Fill(Color::White()));
+            dl.AddQuad(42, Rect(x, 104, x + 20, 114), Vec2(0, 0), Vec2(0.5f, 0.5f), 0xFFFFFFFFu);
+            p.Line(Vec2(200, 300), Vec2(x + 15, 100), 1.0f, Style().Fill(Color::White(0.5f)));
+        }
+    };
+    const auto pages = [](TextureId id, TextureInfo& ti) {
+        ti = TextureInfo();
+        ti.format = id == 42 ? TextureFormat::Alpha8 : TextureFormat::RGBA8;
+        return true;
+    };
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    items(dl, PainterEnv{});
+    FramePlan plan;
+    plan.Build(Data({&dl}), pages);
+    ESIA_CHECK(plan.ops.size() == 1 && plan.fxCount == 0 && plan.quadCount == 30);
+    if (plan.ops.size() == 1)
+    {
+        const RenderOp& o = plan.ops[0];
+        ESIA_CHECK(o.type == RenderOp::Draw && o.quads && o.quadCount == 30 && o.texture == 42 && o.coverage && !o.anyTexture && o.shapes);
+    }
+    ESIA_CHECK(plan.quadRuns.size() == 1 && plan.quadRuns[0].first == dl.Quads().data());   // as drawn
+    DrawList fx;
+    fx.Reset(Rect(0, 0, 400, 300));
+    items(fx, Fx());
+    FramePlan fxPlan;
+    fxPlan.Build(Data({&fx}), pages);
+    ESIA_CHECK(fxPlan.fxCount == 24 && fxPlan.ops.size() >= 6);
 }

@@ -1,11 +1,11 @@
 begin frame 3
 update buffer #9 640 bytes
 update buffer #10 192 bytes
-update buffer #11 3072 bytes
+update buffer #11 2368 bytes
 pass #1 load ui
 pipeline #12
 scissor [0,0 320x240]
-constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 192
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 144
 texture t0 #8
 texture t1 #2
 texture t2 #3
@@ -15,20 +15,22 @@ texture t5 #6
 texture t6 #7
 fx buffer #11
 constants draw: 0 0 0 0 | 0 0 0 0
-draw instanced 4 x 3
+draw instanced 4 x 1
 pipeline #13
+draw instanced 4 x 2
+pipeline #14
 vertex buffer #9
 index buffer #10
 draw indexed 48 from 0
 end pass
-copy #15 -> #3 at 0,0 [0,0 160x120]
-copy #16 -> #4 at 0,0 [0,0 80x60]
-copy #17 -> #5 at 0,0 [0,0 40x30]
-copy #18 -> #6 at 0,0 [0,0 20x15]
+copy #16 -> #3 at 0,0 [0,0 160x120]
+copy #17 -> #4 at 0,0 [0,0 80x60]
+copy #18 -> #5 at 0,0 [0,0 40x30]
+copy #19 -> #6 at 0,0 [0,0 20x15]
 pass #1 load ui
 pipeline #12
 scissor [0,0 320x240]
-constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 192
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 144
 texture t0 #8
 texture t1 #2
 texture t2 #3
@@ -37,18 +39,18 @@ texture t4 #5
 texture t5 #6
 texture t6 #7
 fx buffer #11
-constants draw: 0 0 0 0 | 3 0 0 0
+constants draw: 0 0 0 0 | 1 0 0 0
 draw instanced 4 x 1
 end pass
-copy #23 -> #2 at 0,0 [0,0 320x160]
-copy #19 -> #3 at 0,0 [0,0 160x120]
-copy #20 -> #4 at 0,0 [0,0 80x60]
-copy #21 -> #5 at 0,0 [0,0 40x30]
-copy #22 -> #6 at 0,0 [0,0 20x15]
+copy #24 -> #2 at 0,0 [0,0 320x160]
+copy #20 -> #3 at 0,0 [0,0 160x120]
+copy #21 -> #4 at 0,0 [0,0 80x60]
+copy #22 -> #5 at 0,0 [0,0 40x30]
+copy #23 -> #6 at 0,0 [0,0 20x15]
 pass #1 load ui
 pipeline #12
 scissor [0,0 320x240]
-constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 192
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 144
 texture t0 #8
 texture t1 #2
 texture t2 #3
@@ -57,13 +59,13 @@ texture t4 #5
 texture t5 #6
 texture t6 #7
 fx buffer #11
+constants draw: 0 0 0 0 | 2 0 0 0
+draw instanced 4 x 1
+constants draw: 0 0 0 0 | 3 0 0 0
+draw instanced 4 x 1
 constants draw: 0 0 0 0 | 4 0 0 0
 draw instanced 4 x 1
 constants draw: 0 0 0 0 | 5 0 0 0
-draw instanced 4 x 1
-constants draw: 0 0 0 0 | 6 0 0 0
-draw instanced 4 x 1
-constants draw: 0 0 0 0 | 7 0 0 0
 draw instanced 4 x 1
 end pass
 end frame

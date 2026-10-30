@@ -1,0 +1,143 @@
+#version 330
+#if defined(GL_EXT_control_flow_attributes)
+#extension GL_EXT_control_flow_attributes : require
+#define SPIRV_CROSS_FLATTEN [[flatten]]
+#define SPIRV_CROSS_BRANCH [[dont_flatten]]
+#define SPIRV_CROSS_UNROLL [[unroll]]
+#define SPIRV_CROSS_LOOP [[dont_unroll]]
+#else
+#define SPIRV_CROSS_FLATTEN
+#define SPIRV_CROSS_BRANCH
+#define SPIRV_CROSS_UNROLL
+#define SPIRV_CROSS_LOOP
+#endif
+
+layout(std140) uniform WgtFrame
+{
+    vec4 gXform;
+    vec4 gTarget;
+    vec4 gDisplay;
+    vec4 gTime;
+    vec4 gLevel[6];
+    vec4 gText;
+    vec4 gConv;
+} _290;
+
+layout(location = 0) in vec4 v_rect;
+layout(location = 1) in vec4 v_packed;
+out vec4 esia_v0;
+out vec2 esia_v1;
+flat out vec4 esia_v2;
+flat out vec4 esia_v3;
+flat out vec2 esia_v4;
+
+void main()
+{
+    bool _654 = (uint(gl_VertexID) & 1u) != 0u;
+    bool _658 = (uint(gl_VertexID) & 2u) != 0u;
+    float _911 = floor(v_packed.z * 1.52587890625e-05);
+    float _918 = floor((v_packed.z - (_911 * 65536.0)) * 0.00390625);
+    vec4 _934 = vec4((v_packed.z - (_911 * 65536.0)) - (_918 * 256.0), _918, _911, v_packed.w) * vec4(0.0039215688593685626983642578125);
+    vec2 _1183;
+    vec2 _1184;
+    vec4 _1185;
+    vec2 _1189;
+    vec4 _1190;
+    SPIRV_CROSS_BRANCH
+    if (v_packed.x < 0.0)
+    {
+        float _672 = (-1.0) - v_packed.x;
+        float _675 = floor(_672 * 0.125);
+        float _679 = floor(v_packed.w * 0.00390625);
+        float _683 = _672 - (_675 * 8.0);
+        vec4 _1138 = _934;
+        _1138.w = (v_packed.w - (_679 * 256.0)) * 0.0039215688593685626983642578125;
+        float _707 = max((2.0 * _290.gTarget.z) / max(abs(_290.gXform.x), 9.9999999747524270787835121154785e-07), (2.0 * _290.gTarget.w) / max(abs(_290.gXform.y), 9.9999999747524270787835121154785e-07));
+        vec2 _1181;
+        vec4 _1186;
+        SPIRV_CROSS_BRANCH
+        if (_683 > 4.5)
+        {
+            float _713 = floor(_675 * 0.03125);
+            float _724 = v_packed.y + (_707 * 0.5);
+            bool _731 = _683 > 5.5;
+            float _739 = _724 * (1.0 + ((_675 - (_713 * 32.0)) * 0.0625));
+            vec2 _1180;
+            do
+            {
+                bool _948 = _654 && (!_731);
+                float _953 = (_948 ? _679 : _713) * 3.0517578125e-05;
+                vec2 _959 = vec2(1.0 - _953, _953);
+                vec2 _964 = vec2(1.0 - _953, 2.0 - _953);
+                bvec2 _965 = bvec2(_953 <= 1.0);
+                vec2 _967 = normalize(vec2(_965.x ? _959.x : _964.x, _965.y ? _959.y : _964.y));
+                vec2 _983 = -_967;
+                bvec2 _985 = bvec2(dot(_967, vec2(v_rect.y - v_rect.w, v_rect.z - v_rect.x)) < 0.0);
+                vec2 _986 = vec2(_985.x ? _983.x : _967.x, _985.y ? _983.y : _967.y);
+                bvec2 _992 = bvec2(_948);
+                vec2 _1001 = vec2(_992.x ? v_rect.zw.x : v_rect.xy.x, _992.y ? v_rect.zw.y : v_rect.xy.y) + (_986 * (_658 ? _739 : (-_739)));
+                if (!(_731 && _654))
+                {
+                    _1180 = _1001;
+                    break;
+                }
+                vec2 _1014 = vec2(_986.y, -_986.x);
+                vec2 _1025 = -_1014;
+                bvec2 _1027 = bvec2(dot(_1014, v_rect.xy - v_rect.zw) < 0.0);
+                _1180 = _1001 + (vec2(_1027.x ? _1025.x : _1014.x, _1027.y ? _1025.y : _1014.y) * _724);
+                break;
+            } while(false);
+            _1186 = vec4(max(v_packed.y - (_707 * 0.5), 0.0), _724, _679, 0.0);
+            _1181 = _1180;
+        }
+        else
+        {
+            float _750 = floor(_675 * 0.0009765625);
+            float _759 = _679 * 0.015625;
+            float _761 = _750 * 0.015625;
+            float _783 = (_683 > 3.5) ? 0.0 : (_707 + ((_683 - (2.0 * floor(_683 * 0.5))) * max(_759 * _761, 0.0)));
+            vec2 _1182;
+            if ((_683 >= 1.5) && (_683 < 3.5))
+            {
+                vec2 _794 = v_rect.zw - v_rect.xy;
+                float _796 = length(_794);
+                vec2 _802 = _794 / vec2(_796);
+                bvec2 _803 = bvec2(_796 > 9.9999997473787516355514526367188e-05);
+                vec2 _804 = vec2(_803.x ? _802.x : vec2(1.0, 0.0).x, _803.y ? _802.y : vec2(1.0, 0.0).y);
+                float _814 = v_packed.y + _783;
+                vec2 _821 = v_rect.zw + (_804 * _814);
+                vec2 _827 = v_rect.xy - (_804 * _814);
+                bvec2 _828 = bvec2(_654);
+                _1182 = vec2(_828.x ? _821.x : _827.x, _828.y ? _821.y : _827.y) + (vec2(-_804.y, _804.x) * (_658 ? _814 : (-_814)));
+            }
+            else
+            {
+                _1182 = vec2(_654 ? (v_rect.z + _783) : (v_rect.x - _783), _658 ? (v_rect.w + _783) : (v_rect.y - _783));
+            }
+            _1186 = vec4(v_packed.y, (_675 - (_750 * 1024.0)) * 0.000977517105638980865478515625, _759, _761);
+            _1181 = _1182;
+        }
+        _1190 = _1138;
+        _1189 = _1181;
+        _1185 = _1186;
+        _1184 = vec2(_683, _707);
+        _1183 = _1181;
+    }
+    else
+    {
+        float _1043 = floor(v_packed.x * 0.000244140625);
+        float _1052 = floor(v_packed.y * 0.000244140625);
+        _1190 = _934;
+        _1189 = vec2((v_packed.x - (_1043 * 4096.0)) + (_654 ? (v_packed.y - (_1052 * 4096.0)) : 0.0), _1043 + (_658 ? _1052 : 0.0)) * vec2(0.000244140625);
+        _1185 = vec4(0.0);
+        _1184 = vec2(-1.0, 0.0);
+        _1183 = vec2(_654 ? v_rect.z : v_rect.x, _658 ? v_rect.w : v_rect.y);
+    }
+    gl_Position = vec4((_1183 * _290.gXform.xy) + _290.gXform.zw, 0.0, 1.0);
+    esia_v0 = _1190;
+    esia_v1 = _1189;
+    esia_v2 = v_rect;
+    esia_v3 = _1185;
+    esia_v4 = _1184;
+}
+
