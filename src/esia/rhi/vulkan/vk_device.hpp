@@ -285,7 +285,7 @@ namespace esia::rhi::vulkan
 
         bool Recording() const { return inFrame_ && !passStarted_; }
         void FlushUploads(VkCommandBuffer cmd);
-        void Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind);
+        void Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind, bool ring = false);
         void RecordTextureData(VkCommandBuffer cmd, Ring& staging, std::uint32_t id, const IRect& r, const void* data, int rowPitch);
         void RecordTextureClear(VkCommandBuffer cmd, std::uint32_t id);
         void RecordBufferData(VkCommandBuffer cmd, Ring& staging, std::uint32_t id, const void* data, std::size_t size);
