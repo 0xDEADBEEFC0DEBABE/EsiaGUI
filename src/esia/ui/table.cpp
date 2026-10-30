@@ -422,6 +422,17 @@ namespace esia::ui
             ++t.column;
             const Rect cell = CellRect(t, t.column);
             const Palette& pc = C();
+            const text::FontRef f = Font(TextStyle::Subheadline);
+            const text::TextMetrics tm = MeasureMetrics(f, text);
+            const Vec2 ts = tm.size;
+            const Align al = t.columns[(std::size_t)t.column].align;
+            const float ax = al == Align::End ? 1.0f : al == Align::Center ? 0.5f : 0.0f;
+            // a cell at rest appends last frame's drawing
+            MemoKey k;
+            k.R(cell).U(icon).C(color).C(iconColor).F(ax).U64(tm.layout);
+            DrawMemo memo(k);
+            if (memo.Replayed())
+                return;
             Painter p = GetPainter();
             const float padX = Sc(10);
             float x0 = cell.min.x + padX;
@@ -430,10 +441,6 @@ namespace esia::ui
                 DrawIcon(p, Vec2(x0 + Sc(8), cell.Center().y), icon, Sc(14), iconColor.a > 0 ? iconColor : pc.secondaryLabel);
                 x0 += Sc(24);
             }
-            const text::FontRef f = Font(TextStyle::Subheadline);
-            const Vec2 ts = MeasureText(f, text);
-            const Align al = t.columns[(std::size_t)t.column].align;
-            const float ax = al == Align::End ? 1.0f : al == Align::Center ? 0.5f : 0.0f;
             const float y = std::floor(cell.Center().y - ts.y * 0.5f + 0.5f);
             if (cell.max.x - padX > x0)
                 p.TextBox(Rect(x0, y, cell.max.x - padX, y + ts.y), Vec2(ax, 0.0f), f, color.a > 0 ? color : LabelOr(pc.label), text, text::TextFlags_Ellipsis);
@@ -537,41 +544,51 @@ namespace esia::ui
             res.toggled = true;
         }
 
-        Painter p = GetPainter();
         const float hover = Anim(id, 0xA1, b.hovered ? 1.0f : 0.0f, SpringFast());
         const bool selected = (o.flags & TreeFlags_Selected) != 0;
         const float selT = Anim(id, 0x5E1, selected ? 1.0f : 0.0f, SpringFast(), selected ? 1.0f : 0.0f);
-        const Rect pill(x0 - Sc(4), row.min.y + Sc(1), row.max.x, row.max.y - Sc(1));
-        if (selT > 0.01f)
-            p.Rect(pill, Style().Radius(Sc(8)).Fill(Accent().Fade(0.24f * selT)));
-        if (hover > 0.01f && selT < 0.99f)
-            p.Rect(pill, Style().Radius(Sc(8)).Fill(pc.highlight.Fade(hover * 0.7f)));
-
         const float shown = leaf ? 0.0f : Anim(id, 0x0E7, st.open ? 1.0f : 0.0f, SpringStd(), st.open ? 1.0f : 0.0f);
-        if (!leaf)
-            Chevron(p, arrow.Center(), Sc(11) * (1.0f + 0.15f * ai.hover), kPi * 0.5f * shown, pc.secondaryLabel.Fade(1.0f + 0.3f * ai.hover));
-        float tx = arrow.max.x + Sc(2);
-        if (o.icon)
-        {
-            DrawIcon(p, Vec2(tx + Sc(9), row.Center().y), o.icon, Sc(15), o.iconColor.a > 0 ? o.iconColor : (selected ? Accent() : pc.secondaryLabel));
-            tx += Sc(26);
-        }
-        const text::FontRef f = Font(TextStyle::Subheadline);
-        float right = row.max.x - Sc(10);
-        if (!o.detail.empty())
-        {
-            const text::FontRef df = Font(TextStyle::Footnote);
-            const Vec2 ds = MeasureText(df, o.detail);
-            const float dx = std::max(tx + Sc(40), right - ds.x);
-            p.TextBox(Rect(dx, std::floor(row.Center().y - ds.y * 0.5f + 0.5f), right, std::floor(row.Center().y - ds.y * 0.5f + 0.5f) + ds.y), Vec2(1, 0), df,
-                      pc.tertiaryLabel, o.detail, text::TextFlags_Ellipsis);
-            right = dx - Sc(8);
-        }
+        const text::FontRef f = Font(TextStyle::Subheadline), df = Font(TextStyle::Footnote);
+        const text::TextMetrics dm = MeasureMetrics(df, o.detail);
         const std::string_view shownLabel = VisibleLabel(label);
-        const Vec2 ls = MeasureText(f, shownLabel);
-        if (right > tx)
-            p.TextBox(Rect(tx, std::floor(row.Center().y - ls.y * 0.5f + 0.5f), right, std::floor(row.Center().y - ls.y * 0.5f + 0.5f) + ls.y), Vec2(0, 0), f,
-                      LabelOr(pc.label), shownLabel, text::TextFlags_Ellipsis);
+        const text::TextMetrics lm = MeasureMetrics(f, shownLabel);
+        {
+            // a row at rest appends last frame's drawing
+            MemoKey k;
+            k.R(row).F(x0).F(hover).F(selT).F(shown).F(ai.hover).U((leaf ? 1u : 0u) | (selected ? 2u : 0u)).U(o.icon).C(o.iconColor);
+            k.U64(dm.layout).U64(lm.layout);
+            DrawMemo memo(k);
+            if (!memo.Replayed())
+            {
+                Painter p = GetPainter();
+                const Rect pill(x0 - Sc(4), row.min.y + Sc(1), row.max.x, row.max.y - Sc(1));
+                if (selT > 0.01f)
+                    p.Rect(pill, Style().Radius(Sc(8)).Fill(Accent().Fade(0.24f * selT)));
+                if (hover > 0.01f && selT < 0.99f)
+                    p.Rect(pill, Style().Radius(Sc(8)).Fill(pc.highlight.Fade(hover * 0.7f)));
+                if (!leaf)
+                    Chevron(p, arrow.Center(), Sc(11) * (1.0f + 0.15f * ai.hover), kPi * 0.5f * shown, pc.secondaryLabel.Fade(1.0f + 0.3f * ai.hover));
+                float tx = arrow.max.x + Sc(2);
+                if (o.icon)
+                {
+                    DrawIcon(p, Vec2(tx + Sc(9), row.Center().y), o.icon, Sc(15), o.iconColor.a > 0 ? o.iconColor : (selected ? Accent() : pc.secondaryLabel));
+                    tx += Sc(26);
+                }
+                float right = row.max.x - Sc(10);
+                if (!o.detail.empty())
+                {
+                    const Vec2 ds = dm.size;
+                    const float dx = std::max(tx + Sc(40), right - ds.x);
+                    p.TextBox(Rect(dx, std::floor(row.Center().y - ds.y * 0.5f + 0.5f), right, std::floor(row.Center().y - ds.y * 0.5f + 0.5f) + ds.y),
+                              Vec2(1, 0), df, pc.tertiaryLabel, o.detail, text::TextFlags_Ellipsis);
+                    right = dx - Sc(8);
+                }
+                const Vec2 ls = lm.size;
+                if (right > tx)
+                    p.TextBox(Rect(tx, std::floor(row.Center().y - ls.y * 0.5f + 0.5f), right, std::floor(row.Center().y - ls.y * 0.5f + 0.5f) + ls.y),
+                              Vec2(0, 0), f, LabelOr(pc.label), shownLabel, text::TextFlags_Ellipsis);
+            }
+        }
 
         // the children: while open or sliding closed, inside a clip as tall as they are shown
         res.open = !leaf && shown > 0.002f;

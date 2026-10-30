@@ -25,6 +25,8 @@ namespace
         std::unique_ptr<ui::Ui> ui;
         bool toggles[6] = {true, false, true, false, true, false};
         float values[6] = {0.10f, 0.25f, 0.40f, 0.55f, 0.70f, 0.85f};
+        bool rowToggle = true;
+        float rowValue = 40.0f;
 
         App(int memo, bool smoothMotion)
         {
@@ -64,11 +66,11 @@ namespace
         if (s.button >= 0)
             a.ctx.QueueInput(InputEvent::Button(MouseButton::Left, s.button == 1));
         a.ui->SetFlat(s.flat);
-        a.ctx.NewFrame({Vec2(800, 600), s.scale, t});
+        a.ctx.NewFrame({Vec2(800, 1400), s.scale, t});
         a.ui->NewFrame();
         ui::WindowOptions wo;
         wo.pos = Vec2(20, 16);
-        wo.size = Vec2(380, 540);
+        wo.size = Vec2(380, 1300);
         if (ui::BeginWindow("Panel", nullptr, wo))
         {
             ui::Spacer(1.0f + s.shift);
@@ -88,6 +90,45 @@ namespace
                 ui::EndStack();
             }
             ui::IconButton("icon", (ui::Icon)'Q');
+            if (ui::BeginSection("Settings", "A footer under the rows."))
+            {
+                ui::RowValue("Version", "1.2.3");
+                if (s.styledRow == 2)
+                    ui::Next().Tint(Color(0.2f, 0.6f, 1.0f));
+                ui::RowToggle("Wi-Fi", &a.rowToggle, ui::RowIcon{(ui::Icon)'W', Color(0.2f, 0.5f, 1.0f)});
+                ui::RowSlider("Volume", &a.rowValue, 0.0f, 100.0f, ui::RowIcon{}, "%.0f");
+                ui::RowNavigation("General", "Details");
+                ui::RowButton("Sign out", true);
+                ui::EndSection();
+            }
+            static const ui::TableColumn kCols[] = {{"Name"}, {"Size", 80, 0, ui::Align::End}, {"Kind", 90}};
+            static const char* names[4] = {"alpha.png", "beta.wav", "gamma.txt", "delta.bin"};
+            static const char* sizes[4] = {"12 KB", "3.4 MB", "1 KB", "88 KB"};
+            static const char* kinds[4] = {"Image", "Sound", "Text", "Data"};
+            if (ui::BeginTable("files", std::span<const ui::TableColumn>(kCols)))
+            {
+                const ui::TableRange range = ui::TableVisible(4);
+                for (int r = range.first; r < range.last; ++r)
+                {
+                    ui::TableRow(r);
+                    ui::TableCellIcon((ui::Icon)'F', names[r]);
+                    ui::TableCell(sizes[r]);
+                    ui::TableCell(kinds[r], Color(0.6f, 0.6f, 0.65f));
+                }
+                ui::EndTable();
+            }
+            ui::TreeNodeOptions to;
+            to.flags = ui::TreeFlags_DefaultOpen | (s.styledRow >= 0 ? ui::TreeFlags_Selected : 0u);
+            to.detail = "2";
+            if (ui::TreeNode("Scene", to).open)
+            {
+                ui::TreeNodeOptions leaf;
+                leaf.flags = ui::TreeFlags_Leaf;
+                leaf.icon = (ui::Icon)'L';
+                ui::TreeNode("Light", leaf);
+                ui::TreeNode("Camera", leaf);
+                ui::TreePop();
+            }
             ui::TextWrapped(ui::TextStyle::Body, Color(0.92f, 0.92f, 0.95f),
                             "Draw memos keep a widget's drawing from the frame before and append it again while nothing it "
                             "is drawn from has changed: the same output, byte for byte.");
@@ -136,14 +177,14 @@ namespace
         if (f >= 30 && f < 110)
         {
             const float k = (float)(f - 30) / 80.0f;
-            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 300.0f * k);
+            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 1180.0f * k);   // down to the section's rows, the table and the tree
             if (f == 50 || f == 80)
                 s.button = 1;
             if (f == 53 || f == 95)
                 s.button = 0;
         }
         else if (f >= 110)
-            s.mouse = Vec2(700, 560);   // out of the window
+            s.mouse = Vec2(700, 1360);   // out of the window
         if (f >= 140 && f < 170)
             s.styledRow = 2;
         if (f >= 180 && f < 260)

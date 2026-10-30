@@ -244,7 +244,10 @@ plain widgets, and most widgets of most frames draw what they drew the frame bef
 * Memos are kept per draw list in the order widgets draw (a lane, `Ui::Impl::MemoLane`): a widget finds its own by its
   place, nothing is looked up, and its inputs tell whether it is its own. A lane not drawn into for 600 frames goes.
 * Button and IconButton, Toggle, Slider, Text (and TextWrapped, the headlines), a window's surface and its title keep
-  memos. A memo inside another's recording draws as part of it.
+  memos; so do a list row's separator, highlight, icon and label (its interaction now comes before its drawing: it draws
+  nothing), a row's right-aligned value, a navigation row's chevron, a slider row's value, a section's card (drawn after
+  its rows and moved under them: the memo lies between the `Mark` and the move), a table's cells and a tree's rows (their
+  springs first). A memo inside another's recording draws as part of it.
 * Kept measures (`MeasureMetrics`): a text measured in a lane's same place with the same font, size, wrap width and
   bytes, the text system's text coming out as it did, takes the metrics it had (`MeasureSlot`) without the layout
   cache's look-up; the layouts found so stay in the cache's use (`TextSystem::KeepLayouts`, once a frame). A button
@@ -258,8 +261,9 @@ plain widgets, and most widgets of most frames draw what they drew the frame bef
 ### Verified
 
 * `DrawMemo.TheSameDrawDataAsDrawingEveryWidget` / `TheSameDrawDataWithTextInMotion` (`esia_ui_memo_tests`, FreeType
-  and the test fonts): 440 frames of a panel of labels, buttons, switches, sliders, an icon button and a paragraph - at
-  rest, the mouse across the rows with a click and a drag, a style on one button, the theme's transition to light and
+  and the test fonts): 440 frames of a panel of labels, buttons, switches, sliders, an icon button, a paragraph, a
+  section of rows (a value, a switch with an icon, a slider with its value, a navigation row, a button), a table and a
+  tree - at rest, the mouse down across all of them with a click and a drag, a style on one button, the theme's transition to light and
   back, a second scale, content moving by fractions of a pixel, the flat look - with memos on and off, every frame's draw
   data byte for byte the same; "verify" finds no difference. With smooth motion the texts that moved are drawn while they
   settle (8 frames), the rest appended.
@@ -283,7 +287,8 @@ The flat look takes 0.78 times Dear ImGui's CPU. With `ESIA_UI_MEMO=off` the sam
 ### Not done
 
 * The regular look's submit: its widgets' shadows are FX instances between the labels' quads (66 draws against 5 flat).
-* Other widgets (lists, tables, fields, pickers, segmented controls ...) draw every frame; each needs its inputs named.
+* Other widgets (fields, pickers, segmented controls, steppers, badges, progress, plots, the dock's tabs ...) draw every
+  frame; each needs its inputs named.
 * What a widget draws from that the memo does not see would be drawn stale: a widget keeping a memo must name every
   input of its drawing (the verify mode and the memo test find what is missed), and draw nothing whose pixels change
   without its inputs (an SVG breaks recordings: `DrawList::BreakRecording`).
