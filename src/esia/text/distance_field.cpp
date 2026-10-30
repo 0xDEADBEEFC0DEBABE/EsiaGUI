@@ -592,20 +592,50 @@ namespace esia::text
             }
         }
 
-        // ---- the pieces near each cell of texels (within the multi-channel range)
+        // ---- the pieces near each cell of texels (within the multi-channel range), cell by cell in piece order
         const float reach = range * 0.5f + 1.5f;
         const int gw = (w + kCell - 1) / kCell, gh = (h + kCell - 1) / kCell;
-        std::vector<std::vector<std::uint32_t>> grid((std::size_t)gw * (std::size_t)gh);
-        for (std::uint32_t i = 0; i < (std::uint32_t)pieces.size(); ++i)
+        const std::size_t cells = (std::size_t)gw * (std::size_t)gh;
+        std::vector<std::uint32_t> cellStart(cells + 1, 0);   // a cell's pieces: cellPieces[cellStart[c] .. cellStart[c + 1])
+        std::vector<int> span(pieces.size() * 4);              // each piece's cells: x0, x1, y0, y1
+        for (std::size_t i = 0; i < pieces.size(); ++i)
         {
             const Piece& s = pieces[i];
-            const int x0 = std::max(0, (int)std::floor((std::min(s.a.x, s.b.x) - reach - (float)left) / kCell));
-            const int x1 = std::min(gw - 1, (int)std::floor((std::max(s.a.x, s.b.x) + reach - (float)left) / kCell));
-            const int y0 = std::max(0, (int)std::floor((std::min(s.a.y, s.b.y) - reach - (float)top) / kCell));
-            const int y1 = std::min(gh - 1, (int)std::floor((std::max(s.a.y, s.b.y) + reach - (float)top) / kCell));
-            for (int gy = y0; gy <= y1; ++gy)
-                for (int gx = x0; gx <= x1; ++gx)
-                    grid[(std::size_t)gy * gw + gx].push_back(i);
+            int* r = &span[i * 4];
+            r[0] = std::max(0, (int)std::floor((std::min(s.a.x, s.b.x) - reach - (float)left) / kCell));
+            r[1] = std::min(gw - 1, (int)std::floor((std::max(s.a.x, s.b.x) + reach - (float)left) / kCell));
+            r[2] = std::max(0, (int)std::floor((std::min(s.a.y, s.b.y) - reach - (float)top) / kCell));
+            r[3] = std::min(gh - 1, (int)std::floor((std::max(s.a.y, s.b.y) + reach - (float)top) / kCell));
+            for (int gy = r[2]; gy <= r[3]; ++gy)
+                for (int gx = r[0]; gx <= r[1]; ++gx)
+                    ++cellStart[(std::size_t)gy * gw + gx + 1];
+        }
+        for (std::size_t c = 0; c < cells; ++c)
+            cellStart[c + 1] += cellStart[c];
+        std::vector<std::uint32_t> cellPieces(cellStart[cells]), cellEnd(cellStart.begin(), cellStart.end() - 1);
+        for (std::size_t i = 0; i < pieces.size(); ++i)
+        {
+            const int* r = &span[i * 4];
+            for (int gy = r[2]; gy <= r[3]; ++gy)
+                for (int gx = r[0]; gx <= r[1]; ++gx)
+                    cellPieces[cellEnd[(std::size_t)gy * gw + gx]++] = (std::uint32_t)i;
+        }
+        // what every texel's search needs of a piece, made once
+        struct Segment
+        {
+            Vec2 a, ab, dir;   // dir: ab's unit vector
+            float len2;
+            std::uint8_t color;
+        };
+        std::vector<Segment> segments(pieces.size());
+        for (std::size_t i = 0; i < pieces.size(); ++i)
+        {
+            Segment& g = segments[i];
+            g.a = pieces[i].a;
+            g.ab = pieces[i].b - pieces[i].a;
+            g.dir = Unit(g.ab);
+            g.len2 = LengthSq(g.ab);
+            g.color = pieces[i].color;
         }
 
         // ---- per texel: each channel's pseudo-distance to its nearest run, the true distance to the boundary
@@ -627,26 +657,33 @@ namespace esia::text
                 } best[3];
                 float trueD2 = kFar;
                 Vec2 trueQ;
-                for (std::uint32_t pi : grid[(std::size_t)(y / kCell) * gw + (x / kCell)])
+                const std::size_t cell = (std::size_t)(y / kCell) * gw + (x / kCell);
+                for (std::uint32_t k = cellStart[cell]; k < cellStart[cell + 1]; ++k)
                 {
-                    const Piece& s = pieces[pi];
-                    const Vec2 ab = s.b - s.a, ap = p - s.a;
-                    const float len2 = LengthSq(ab);
-                    const float t = len2 > 0.0f ? Clamp(Dot(ap, ab) / len2, 0.0f, 1.0f) : 0.0f;
-                    const Vec2 q = s.a + ab * t, pq = p - q;
+                    const std::uint32_t pi = cellPieces[k];
+                    const Segment& s = segments[pi];
+                    const Vec2 ap = p - s.a;
+                    const float t = s.len2 > 0.0f ? Clamp(Dot(ap, s.ab) / s.len2, 0.0f, 1.0f) : 0.0f;
+                    const Vec2 q = s.a + s.ab * t, pq = p - q;
                     const float d2 = LengthSq(pq);
                     if (d2 < trueD2)
                     {
                         trueD2 = d2;
                         trueQ = q;
                     }
-                    // at an end point the more perpendicular piece wins a tie (its side is the right one)
-                    const float ortho = (t > 0.0f && t < 1.0f) || d2 == 0.0f ? 0.0f : std::fabs(Dot(Unit(ab), Unit(pq)));
+                    // at an end point the more perpendicular piece wins a tie (its side is the right one): worked out
+                    // for the pieces that come close enough to need it
+                    float ortho = -1.0f;
                     for (int c = 0; c < 3; ++c)
                         if (s.color & (1 << c))
                         {
                             Best& bc = best[c];
-                            if (!bc.found || d2 < bc.d2 * (1.0f - 1e-5f) || (d2 <= bc.d2 * (1.0f + 1e-5f) && ortho < bc.ortho))
+                            const bool nearer = !bc.found || d2 < bc.d2 * (1.0f - 1e-5f);
+                            if (!nearer && !(d2 <= bc.d2 * (1.0f + 1e-5f)))
+                                continue;
+                            if (ortho < 0.0f)
+                                ortho = (t > 0.0f && t < 1.0f) || d2 == 0.0f ? 0.0f : std::fabs(Dot(s.dir, Unit(pq)));
+                            if (nearer || ortho < bc.ortho)
                                 bc = {d2, ortho, t, pi, true};
                         }
                 }

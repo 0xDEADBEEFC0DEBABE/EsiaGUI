@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <optional>
 
 namespace esia::ui
 {
@@ -215,9 +216,17 @@ namespace esia::ui
             }
             // texel centers at a quarter and three quarters: the corners' colors at the corners. No outline here, on the
             // bars or on the swatch (iOS's picker has none): a 1-unit stroke read as a light rim on dark backgrounds.
-            p.Image(st.spectrum.For(c.Textures(), h.h), spec, sr, Color::White(), Vec2(0.25f, 0.25f), Vec2(0.75f, 0.75f));
+            const TextureId spectrum = st.spectrum.For(c.Textures(), h.h);
             const float sPress = LiquidPulse(Salt(id, 1), si.held, si.pressed);
-            Handle(p, Vec2(spec.min.x + h.s * spec.Width(), spec.min.y + (1.0f - h.v) * spec.Height()), Sc(11), Color::Hsv(h.h, h.s, h.v), sPress);
+            {
+                MemoKey k;
+                k.R(spec).F(sr).U((std::uint32_t)spectrum).U((std::uint32_t)((std::uint64_t)spectrum >> 32)).F(h.h).F(h.s).F(h.v).F(sPress);
+                if (DrawMemo memo(k); !memo.Replayed())
+                {
+                    p.Image(spectrum, spec, sr, Color::White(), Vec2(0.25f, 0.25f), Vec2(0.75f, 0.75f));
+                    Handle(p, Vec2(spec.min.x + h.s * spec.Width(), spec.min.y + (1.0f - h.v) * spec.Height()), Sc(11), Color::Hsv(h.h, h.s, h.v), sPress);
+                }
+            }
             if (si.hovered || si.held)
                 c.SetMouseCursor(MouseCursor::Hand);
             y = spec.max.y + gap;
@@ -232,22 +241,27 @@ namespace esia::ui
                 h.h = std::min(Saturate((in.MousePos().x - hue.min.x - inset) / std::max(hue.Width() - inset * 2.0f, 1.0f)), 0.9999f);
                 commit();
             }
-            p.PushMask(hue, barH * 0.5f);
-            for (int i = 0; i < 6; ++i)
+            const float hPress = LiquidPulse(Salt(id, 2), hi.held, hi.pressed);
+            MemoKey hk;
+            hk.R(hue).F(barH).F(h.h).F(hPress);
+            if (DrawMemo memo(hk); !memo.Replayed())
             {
-                // the segments meet on physical pixels: no overlap, no seam
-                const float x0 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f);
-                const float x1 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f);
-                // the ends keep their pure color under the capsule's round caps
-                if (i == 0)
-                    p.FillRect(Rect(hue.min.x, hue.min.y, x0, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
-                p.Rect(Rect(x0, hue.min.y, x1, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
-                if (i == 5)
-                    p.FillRect(Rect(x1, hue.min.y, hue.max.x, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
+                p.PushMask(hue, barH * 0.5f);
+                for (int i = 0; i < 6; ++i)
+                {
+                    // the segments meet on physical pixels: no overlap, no seam
+                    const float x0 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)i / 6.0f);
+                    const float x1 = p.SnapToPixel(hue.min.x + inset + (hue.Width() - inset * 2.0f) * (float)(i + 1) / 6.0f);
+                    // the ends keep their pure color under the capsule's round caps
+                    if (i == 0)
+                        p.FillRect(Rect(hue.min.x, hue.min.y, x0, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
+                    p.Rect(Rect(x0, hue.min.y, x1, hue.max.y), Style().Fill(Paint::Linear(Color::Hsv((float)i / 6.0f, 1, 1), Color::Hsv((float)(i + 1) / 6.0f, 1, 1), 0.0f)));
+                    if (i == 5)
+                        p.FillRect(Rect(x1, hue.min.y, hue.max.x, hue.max.y), Color::Hsv(0.0f, 1.0f, 1.0f));
+                }
+                p.PopMask();
+                Handle(p, Vec2(hue.min.x + inset + h.h * (hue.Width() - inset * 2.0f), hue.Center().y), Sc(10), Color::Hsv(h.h, 1, 1), hPress);
             }
-            p.PopMask();
-            Handle(p, Vec2(hue.min.x + inset + h.h * (hue.Width() - inset * 2.0f), hue.Center().y), Sc(10), Color::Hsv(h.h, 1, 1),
-                   LiquidPulse(Salt(id, 2), hi.held, hi.pressed));
             y = hue.max.y + gap * 0.75f;
 
             // ---- the opacity bar: the color from clear to opaque over a checkerboard
@@ -260,24 +274,32 @@ namespace esia::ui
                     color->a = Saturate((in.MousePos().x - bar.min.x - inset) / std::max(bar.Width() - inset * 2.0f, 1.0f));
                     commit();
                 }
-                const float px = OnePixel();
-                p.PushMask(bar.Expanded(-px), barH * 0.5f - px);
-                Checker(p, bar, Sc(6));
-                p.PopMask();
-                p.PushMask(bar, barH * 0.5f);
-                const Color opaque = Color::Hsv(h.h, h.s, h.v);
-                const float g0 = p.SnapToPixel(bar.min.x + inset), g1 = p.SnapToPixel(bar.max.x - inset);   // clear left of g0
-                p.Rect(Rect(g0, bar.min.y, g1, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
-                p.FillRect(Rect(g1, bar.min.y, bar.max.x, bar.max.y), opaque);
-                p.PopMask();
-                Handle(p, Vec2(bar.min.x + inset + color->a * (bar.Width() - inset * 2.0f), bar.Center().y), Sc(10), opaque,
-                       LiquidPulse(Salt(id, 3), ai.held, ai.pressed));
+                const float aPress = LiquidPulse(Salt(id, 3), ai.held, ai.pressed);
+                MemoKey ak;
+                ak.R(bar).F(barH).F(h.h).F(h.s).F(h.v).F(color->a).F(aPress);
+                if (DrawMemo memo(ak); !memo.Replayed())
+                {
+                    const float px = OnePixel();
+                    p.PushMask(bar.Expanded(-px), barH * 0.5f - px);
+                    Checker(p, bar, Sc(6));
+                    p.PopMask();
+                    p.PushMask(bar, barH * 0.5f);
+                    const Color opaque = Color::Hsv(h.h, h.s, h.v);
+                    const float g0 = p.SnapToPixel(bar.min.x + inset), g1 = p.SnapToPixel(bar.max.x - inset);   // clear left of g0
+                    p.Rect(Rect(g0, bar.min.y, g1, bar.max.y), Style().Fill(Paint::Linear(opaque.WithAlpha(0.0f), opaque, 0.0f)));
+                    p.FillRect(Rect(g1, bar.min.y, bar.max.x, bar.max.y), opaque);
+                    p.PopMask();
+                    Handle(p, Vec2(bar.min.x + inset + color->a * (bar.Width() - inset * 2.0f), bar.Center().y), Sc(10), opaque, aPress);
+                }
                 y = bar.max.y + gap * 0.75f;
             }
 
             // ---- the result beside the hex value
             const float rowH = Sc(Sizes().row);
             const Rect swatch = Rect::FromSize(Vec2(area.min.x, y), Vec2(Sc(54), rowH));
+            MemoKey rk;
+            rk.R(swatch).C(*color);
+            if (DrawMemo memo(rk); !memo.Replayed())
             {
                 const float px = OnePixel();
                 p.PushMask(swatch.Expanded(-px), Sc(9) - px);
@@ -325,11 +347,16 @@ namespace esia::ui
                     const InteractState it = InteractImpl(Salt(id, 0x100 + (std::uint32_t)i), Rect::FromCenter(cc, Vec2(d, d)), InteractFlags_None);
                     const Color sc = o.swatches[i];
                     const bool current = ToHex(sc, true) == ToHex(*color, true);
-                    p.PushScale(cc, 1.0f + 0.1f * it.hover - 0.08f * it.press);
-                    p.Circle(cc, d * 0.5f, Style().Fill(sc).Stroke(1.0f, pc.separator));
-                    if (current)
-                        p.Ring(cc, d * 0.5f + Sc(3.5f), Sc(2), Style().Fill(pc.label.Fade(0.85f)));
-                    p.PopScale();
+                    MemoKey k;
+                    k.V(cc).F(d).F(it.hover).F(it.press).C(sc).U(current ? 1u : 0u);
+                    if (DrawMemo memo(k); !memo.Replayed())
+                    {
+                        p.PushScale(cc, 1.0f + 0.1f * it.hover - 0.08f * it.press);
+                        p.Circle(cc, d * 0.5f, Style().Fill(sc).Stroke(1.0f, pc.separator));
+                        if (current)
+                            p.Ring(cc, d * 0.5f + Sc(3.5f), Sc(2), Style().Fill(pc.label.Fade(0.85f)));
+                        p.PopScale();
+                    }
                     if (it.pressed)
                     {
                         *color = sc;
@@ -364,26 +391,34 @@ namespace esia::ui
         const InteractState it = InteractImpl(wid, r, InteractFlags_None);
         if (!color)
             return false;
+        MemoKey wk;
+        wk.R(r).F(it.hover).F(it.press).C(*color);
+        std::optional<DrawMemo> wellMemo;
+        wellMemo.emplace(wk);
         Painter p = GetPainter();
         const Vec2 cc = r.Center();
-        p.PushScale(cc, 1.0f + 0.06f * it.hover - 0.08f * it.press);
-        // the spectrum ring of UIColorWell, then the color inside it
-        const int segments = 36;
-        const float ringW = d * 0.13f;
-        for (int i = 0; i < segments; ++i)
-            p.Arc(cc, d * 0.5f - ringW * 0.5f, ringW, kPi * 2.0f * (float)i / (float)segments - kPi * 0.5f, kPi * 2.0f / (float)segments + 0.02f,
-                  Style().Fill(Color::Hsv((float)i / (float)segments, 0.85f, 1.0f)));
-        const float inner = d * 0.5f - ringW - Sc(2);
-        if (color->a < 0.999f)
+        if (!wellMemo->Replayed())
         {
-            const float px = OnePixel();
-            const Rect ir = Rect::FromCenter(cc, Vec2(inner * 2 - px * 2, inner * 2 - px * 2));
-            p.PushMask(ir, inner - px);
-            Checker(p, ir, Sc(4));
-            p.PopMask();
+            p.PushScale(cc, 1.0f + 0.06f * it.hover - 0.08f * it.press);
+            // the spectrum ring of UIColorWell, then the color inside it
+            const int segments = 36;
+            const float ringW = d * 0.13f;
+            for (int i = 0; i < segments; ++i)
+                p.Arc(cc, d * 0.5f - ringW * 0.5f, ringW, kPi * 2.0f * (float)i / (float)segments - kPi * 0.5f, kPi * 2.0f / (float)segments + 0.02f,
+                      Style().Fill(Color::Hsv((float)i / (float)segments, 0.85f, 1.0f)));
+            const float inner = d * 0.5f - ringW - Sc(2);
+            if (color->a < 0.999f)
+            {
+                const float px = OnePixel();
+                const Rect ir = Rect::FromCenter(cc, Vec2(inner * 2 - px * 2, inner * 2 - px * 2));
+                p.PushMask(ir, inner - px);
+                Checker(p, ir, Sc(4));
+                p.PopMask();
+            }
+            p.Circle(cc, inner, Style().Fill(*color).Stroke(1.0f, C().separator));
+            p.PopScale();
         }
-        p.Circle(cc, inner, Style().Fill(*color).Stroke(1.0f, C().separator));
-        p.PopScale();
+        wellMemo.reset();   // (its popup is a window of its own)
 
         const Id popId = Salt(wid, 0xC011);
         if (it.pressed)

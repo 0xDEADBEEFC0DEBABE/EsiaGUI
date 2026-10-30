@@ -358,7 +358,12 @@ namespace esia::ui
                 if (IsLeaf(n))
                 {
                     if (ActiveVisible(reg, n, d.frame) < 0)
-                        p.Rect(n.rect.Expanded(-Sc(2)), Style().Radius(Sc(16)).Fill(pc.fill.Fade(0.18f)).Stroke(1.0f, pc.separator.Fade(0.5f)));
+                    {
+                        MemoKey k;
+                        k.R(n.rect);
+                        if (DrawMemo memo(k); !memo.Replayed())
+                            p.Rect(n.rect.Expanded(-Sc(2)), Style().Radius(Sc(16)).Fill(pc.fill.Fade(0.18f)).Stroke(1.0f, pc.separator.Fade(0.5f)));
+                    }
                     continue;
                 }
                 // the splitter in the gap between the children
@@ -378,7 +383,10 @@ namespace esia::ui
                 {
                     const Vec2 cc = sr.Center();
                     const Rect handle = n.vertical ? Rect::FromCenter(cc, Vec2(Sc(44), Sc(5))) : Rect::FromCenter(cc, Vec2(Sc(5), Sc(44)));
-                    p.Capsule(handle, Style().Fill((it.held ? Accent() : pc.label).Fade(0.25f + 0.45f * show)));
+                    MemoKey k;
+                    k.R(handle).F(show).U(it.held ? 1u : 0u);
+                    if (DrawMemo memo(k); !memo.Replayed())
+                        p.Capsule(handle, Style().Fill((it.held ? Accent() : pc.label).Fade(0.25f + 0.45f * show)));
                 }
             }
             if (!IsLeaf(d.nodes[0]))
@@ -677,30 +685,43 @@ namespace esia::ui
                 reg.tabDrag.active = true;
             }
             const float sel = Anim(tid, 0x5E1, active ? 1.0f : 0.0f, SpringFast(), active ? 1.0f : 0.0f);
-            if (sel > 0.01f)
-                p.Rect(tr, Style().Radius(h * 0.5f).Fill(pc.fill.Fade(0.9f * sel)).Shadow(pc.shadow.Fade(0.4f * sel), Sc(6), Vec2(0, Sc(1))));
-            if (it.hover > 0.01f && !active)
-                p.Rect(tr, Style().Radius(h * 0.5f).Fill(pc.highlight.Fade(it.hover * 0.8f)));
-            float lx = tr.min.x + Sc(12);
-            if (we.icon)
-            {
-                DrawIcon(p, Vec2(lx + Sc(7), tr.Center().y), we.icon, Sc(13), active ? Accent() : pc.secondaryLabel);
-                lx += Sc(20);
-            }
             const bool closeShown = we.closable && (it.hovered || active);
-            const float right = tr.max.x - (closeShown ? Sc(26) : Sc(10));
             const std::string_view label = VisibleLabel(w);
-            const Vec2 ls = MeasureText(active ? fa : f, label);
-            if (right > lx)
-                p.TextBox(Rect(lx, std::floor(tr.Center().y - ls.y * 0.5f + 0.5f), right, std::floor(tr.Center().y - ls.y * 0.5f + 0.5f) + ls.y), Vec2(0, 0),
-                          active ? fa : f, active ? pc.label : pc.secondaryLabel, label, text::TextFlags_Ellipsis);
+            const text::TextMetrics lm = MeasureMetrics(active ? fa : f, label);
+            {
+                MemoKey k;
+                k.R(tr).F(sel).F(it.hover).U((active ? 1u : 0u) | (closeShown ? 2u : 0u)).U(we.icon).U64(lm.layout);
+                if (DrawMemo memo(k); !memo.Replayed())
+                {
+                    if (sel > 0.01f)
+                        p.Rect(tr, Style().Radius(h * 0.5f).Fill(pc.fill.Fade(0.9f * sel)).Shadow(pc.shadow.Fade(0.4f * sel), Sc(6), Vec2(0, Sc(1))));
+                    if (it.hover > 0.01f && !active)
+                        p.Rect(tr, Style().Radius(h * 0.5f).Fill(pc.highlight.Fade(it.hover * 0.8f)));
+                    float lx = tr.min.x + Sc(12);
+                    if (we.icon)
+                    {
+                        DrawIcon(p, Vec2(lx + Sc(7), tr.Center().y), we.icon, Sc(13), active ? Accent() : pc.secondaryLabel);
+                        lx += Sc(20);
+                    }
+                    const float right = tr.max.x - (closeShown ? Sc(26) : Sc(10));
+                    const Vec2 ls = lm.size;
+                    if (right > lx)
+                        p.TextBox(Rect(lx, std::floor(tr.Center().y - ls.y * 0.5f + 0.5f), right, std::floor(tr.Center().y - ls.y * 0.5f + 0.5f) + ls.y),
+                                  Vec2(0, 0), active ? fa : f, active ? pc.label : pc.secondaryLabel, label, text::TextFlags_Ellipsis);
+                }
+            }
             if (closeShown)
             {
                 const Vec2 cc(tr.max.x - Sc(14), tr.Center().y);
                 const InteractState ci = InteractImpl(Salt(tid, 0xC1), Rect::FromCenter(cc, Vec2(Sc(18), Sc(18))), InteractFlags_None);
-                if (ci.hover > 0.01f)
-                    p.Circle(cc, Sc(9), Style().Fill(pc.highlight.Fade(ci.hover)));
-                DrawIcon(p, cc, icons::Close, Sc(8), pc.secondaryLabel);
+                MemoKey k;
+                k.V(cc).F(ci.hover);
+                if (DrawMemo memo(k); !memo.Replayed())
+                {
+                    if (ci.hover > 0.01f)
+                        p.Circle(cc, Sc(9), Style().Fill(pc.highlight.Fade(ci.hover)));
+                    DrawIcon(p, cc, icons::Close, Sc(8), pc.secondaryLabel);
+                }
                 if (ci.pressed)
                     reg.windows[w].closeRequested = true;
             }

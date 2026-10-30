@@ -2,6 +2,7 @@
 #pragma once
 #include "esia/ui/ui.hpp"
 #include <algorithm>
+#include <bit>
 #include <cstdarg>
 #include <cstddef>
 #include <mutex>
@@ -114,6 +115,7 @@ namespace esia::ui
         {
             ItemStyle resolved;
             float alpha = 1.0f;
+            std::uint64_t hash = 0;   // of resolved and alpha (a draw memo's: the style in scope)
         };
         std::vector<StyleEntry> styles;
         const ItemStyle noStyle{};   // ResolvedStyle outside every scope
@@ -226,6 +228,59 @@ namespace esia::ui
         Id tooltipItem = 0;
         Rect tooltipRect;
         double tooltipSince = 0.0;
+
+        // ---- draw memos (DrawMemo): per draw list, its widgets' drawings in the order they were drawn - a widget
+        // finds its own by its place in that order (nothing is looked up), and its inputs tell whether it is its own
+        static constexpr int kMemoWords = 48;
+        struct MemoSlot
+        {
+            std::uint32_t key[kMemoWords];
+            int words = -1;   // the key's (-1: nothing kept)
+            std::vector<std::uint8_t> data;   // MemoKey::Data's bytes
+            DrawRecord record;
+            std::vector<text::DrawNote> notes;
+        };
+        // A text measured in a lane (MeasureMetrics): its metrics while its font, size, wrap width and bytes are the
+        // same and the text system's text comes out as it did (DrawGeneration)
+        struct MeasureSlot
+        {
+            std::uint64_t generation = 0;   // 0: nothing kept
+            std::uint32_t font = 0, size = 0, wrap = 0;   // (the floats' bits)
+            std::string text;
+            text::TextMetrics metrics;
+        };
+        struct MemoLane
+        {
+            const DrawList* list = nullptr;
+            std::uint32_t frame = 0;   // of `next` and `nextMeasure`
+            std::size_t next = 0, nextMeasure = 0;
+            std::vector<MemoSlot> slots;
+            std::vector<MeasureSlot> measures;
+        };
+        std::vector<std::uint64_t> keptLayouts;   // this frame's measures found in their slots (TextSystem::KeepLayouts)
+        std::vector<std::unique_ptr<MemoLane>> memoLanes;
+        MemoLane* memoLane = nullptr;   // the one asked for last
+        MemoLane& LaneOf(const DrawList& list);
+        int memoMode = 1;               // 0 off, 1 on, 2 verify (UiDesc::drawMemo, ESIA_UI_MEMO)
+        // what every drawing is drawn from (theme, density, sizes, look, flat, fonts, scales, the text system): its
+        // serial changes with any of it (NewFrame compares them)
+        std::uint64_t memoEnv = 1;
+        struct MemoEnv
+        {
+            Theme theme;
+            detail::ControlSizes sizes;
+            GlassLook look;
+            bool flat;
+            text::FontId fonts[(int)FontWeight::Count];
+            text::FontId iconFont;
+            text::TextSystem* text;
+            float scale, framebufferScale;
+        };
+        MemoEnv memoLast;
+        std::uint32_t glowCalls = 0;    // GlowContainment's (a glow reads its neighbours: drawn every frame)
+        DrawRecord memoScratch;         // "verify": the drawing, compared with the slot's
+        std::vector<text::DrawNote> memoScratchNotes;
+        DrawMemoStats memoStats;
     };
 
     namespace detail
@@ -277,6 +332,58 @@ namespace esia::ui
                     return label.substr(0, i);
             return label;
         }
+
+        // ---- draw memos (Ui::Impl::MemoSlot)
+        // A widget's own inputs to its drawing, word by word (floats by their bits: the same bits, the same drawing).
+        struct MemoKey
+        {
+            std::uint32_t w[Ui::Impl::kMemoWords - 8];   // (8: the words every memo adds)
+            int n = 0;
+            MemoKey& U(std::uint32_t v)
+            {
+                ESIA_ASSERT(n < (int)(sizeof(w) / sizeof(w[0])) && "MemoKey: too many words");
+                w[n++] = v;
+                return *this;
+            }
+            MemoKey& F(float v) { return U(std::bit_cast<std::uint32_t>(v)); }
+            MemoKey& U64(std::uint64_t v) { return U((std::uint32_t)v).U((std::uint32_t)(v >> 32)); }
+            MemoKey& V(Vec2 v) { return F(v.x).F(v.y); }
+            MemoKey& R(const Rect& r) { return F(r.min.x).F(r.min.y).F(r.max.x).F(r.max.y); }
+            MemoKey& C(Color c) { return F(c.r).F(c.g).F(c.b).F(c.a); }
+            // one input of any size (a chart's values): compared byte for byte, kept as bytes; it must outlive the memo
+            const void* data = nullptr;
+            std::size_t dataSize = 0;
+            MemoKey& Data(const void* p, std::size_t size)
+            {
+                data = p;
+                dataSize = size;
+                return *this;
+            }
+        };
+        // A widget's drawing kept from the frame before: declared before the widget draws (after everything that
+        // must happen every frame - interaction, springs), with every input of its drawing besides the theme, the
+        // density, the look, the style in scope and the text system's pages (which it adds itself). When they are all
+        // as they were and its draw list is in the state its drawing began in last frame, that drawing is appended
+        // again (DrawList::Replay, TextSystem::ReplayDraws) and Replayed() says the widget draws nothing; else what it
+        // draws is recorded for the next frame (and kept when it can be: at rest, no glow fitted to its neighbours).
+        // `inputs` must outlive it.
+        class DrawMemo
+        {
+        public:
+            explicit DrawMemo(const MemoKey& inputs);
+            ~DrawMemo();
+            DrawMemo(const DrawMemo&) = delete;
+            DrawMemo& operator=(const DrawMemo&) = delete;
+            bool Replayed() const { return replayed_; }
+
+        private:
+            const MemoKey& inputs_;
+            Ui::Impl::MemoSlot* slot_ = nullptr;   // recording into it
+            DrawList* list_ = nullptr;
+            std::uint32_t env_[8] = {};
+            std::uint32_t glowCalls_ = 0;
+            bool replayed_ = false, verifying_ = false;
+        };
 
         // ---- styles
         // every scope merged (inline: the widgets ask for it a dozen times each)
@@ -394,6 +501,8 @@ namespace esia::ui
 
         // ---- text and icons (Font, VisibleLabel: above)
         Vec2 MeasureText(text::FontRef f, std::string_view text, float wrapWidth = 0.0f);
+        // ... with the rest of its metrics (TextMetrics::layout: what a draw memo keeps the text by)
+        text::TextMetrics MeasureMetrics(text::FontRef f, std::string_view text, float wrapWidth = 0.0f);
         void DrawIcon(Painter& p, Vec2 center, Icon icon, float size, Color color);
         void TextImpl(text::FontRef f, Color color, std::string_view text, bool wrap);
         // vsnprintf into `buf` (truncated to size - 1, terminated), the length written. The formats labels use most -

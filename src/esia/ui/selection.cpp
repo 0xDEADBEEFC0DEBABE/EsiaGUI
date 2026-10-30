@@ -6,6 +6,7 @@
 // transition (press, drag, release, retarget mid-flight) is continuous.
 #include "ui_internal.hpp"
 #include <algorithm>
+#include <optional>
 
 namespace esia::ui
 {
@@ -123,12 +124,24 @@ namespace esia::ui
             return false;
         const Palette& c = C();
         const Theme& t = T();
+        // tap a segment or drag the selection: it travels as a clear lens and lands as a solid pill (it draws nothing)
+        const LiquidSelection sel = LiquidSelect(id, r, count, selected);
+        // at rest it appends last frame's drawing (its labels known by their layouts; a dozen of them at most)
+        std::optional<DrawMemo> memo;
+        MemoKey k;
+        if (count <= 12)
+        {
+            k.R(r).F(sel.pos).F(sel.velocity).F(sel.lens).U((std::uint32_t)(sel.hovered + 1) | (sel.held ? 1u << 16 : 0u));
+            for (const std::string_view item : items)
+                k.U64(MeasureMetrics(Font(FontWeight::Regular, 13.5f), VisibleLabel(item)).layout);
+            memo.emplace(k);
+            if (memo->Replayed())
+                return sel.changed;
+        }
         Painter p = GetPainter();
         const float trackR = std::min(ItemRadius(r.Height() * 0.5f), r.Height() * 0.5f);
         DrawPill(p, r, Surface(FillOr(c.tertiaryFill)));
         const float segW = r.Width() / (float)count;
-        // tap a segment or drag the selection: it travels as a clear lens and lands as a solid pill
-        const LiquidSelection sel = LiquidSelect(id, r, count, selected);
         const Rect pill = LiquidSelectionRect(sel, r, count, Dt(2.5f));
         const float solid = 1.0f - Saturate(sel.lens);
         // the selected segment's background: the style's, else the tint, else - on a custom track - a light,

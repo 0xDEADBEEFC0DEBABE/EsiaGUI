@@ -16,6 +16,7 @@
 #include "esia/base/utf8.hpp"
 #include "esia/core/fx.hpp"
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -57,6 +58,22 @@ namespace esia::text
         Vec2 size;               // box of the laid-out text (UI units)
         float baseline = 0.0f;   // first baseline, from the top of the box
         int lines = 0;
+        // The layout's identity in its text system: another text, font, size, wrap width or flags - or the same laid
+        // out again - another one (0: none). What a caller keeps drawn from a text may stand for it.
+        std::uint64_t layout = 0;
+    };
+
+    // What a text draw leaves in its text system besides its quads: smooth motion's record of where the text was drawn
+    // (TextRendering::smoothMotion), which tells the next draw whether it moved. Kept while a list of them is set
+    // (TextSystem::SetDrawNotes), so that a draw appended again from a record (DrawList::Replay) leaves it too
+    // (TextSystem::ReplayDraws).
+    struct DrawNote
+    {
+        std::uint64_t layout = 0;    // TextMetrics::layout
+        Vec2 pos;
+        float scale = 1.0f;
+        float rest = 1.0f;           // how much it was drawn as at rest (below 1: moving, or settling after it moved)
+        std::uint32_t outline = 0;   // 1: DrawOutline's
     };
 
     // A place a caret can stand in a line of text: a grapheme cluster boundary.
@@ -266,8 +283,9 @@ namespace esia::text
             const Color fill(material.fill0[0], material.fill0[1], material.fill0[2], material.fill0[3] * material.misc[0]);
             return Draw(dl, font, pos, fill, text, wrapWidth, flags, scale);
         }
-        // Coverage tiles other than glyphs, in the texture text is drawn with (the corners of Painter's flat shapes, so
-        // they batch with the text) and kept apart from the glyphs: the tile cached under `key`, else null; AddTile packs
+        // Coverage tiles other than glyphs, in the texture text is drawn with (the corners of Painter's flat shapes, the
+        // masks of SVG icons that last - drawn as images of it, DrawList::AddCoverageQuad - so they batch with the text)
+        // and kept apart from the glyphs, under the caller's keys: the tile cached under `key`, else null; AddTile packs
         // one the caller rasterized (8-bit coverage). Gone when the glyph pages start over. Null from both: no tiles.
         virtual const GlyphSlot* FindTile(std::uint64_t key)
         {
@@ -281,8 +299,23 @@ namespace esia::text
             return nullptr;
         }
         // Changes when the tiles found so far are gone (the pages started over), and differs between text systems (one
-        // made where another was): a caller may keep their slots while it stays.
+        // made where another was): a caller may keep their slots while it stays. 0: a text system without tiles.
         virtual std::uint64_t TileGeneration() { return 0; }
+
+        // ---- draws done again (the widget layer's draw memo)
+        // While `notes` is set (null: none), every draw that leaves a record behind appends its DrawNote there.
+        virtual void SetDrawNotes(std::vector<DrawNote>* notes) { (void)notes; }
+        // Leaves the records of `notes` as their draws would leave them now, when every one of them would be drawn as it
+        // was - its layout still there, at rest, where it was: true. False (nothing changed): one of them would not.
+        virtual bool ReplayDraws(std::span<const DrawNote> notes) { return notes.empty(); }
+        // Whether ReplayDraws would (nothing changed)
+        virtual bool CanReplayDraws(std::span<const DrawNote> notes) { return notes.empty(); }
+        // The layouts (TextMetrics::layout) a caller measured the frame before and keeps using without measuring them
+        // again: in use this frame, as if measured (a cache of unused layouts does not drop them).
+        virtual void KeepLayouts(std::span<const std::uint64_t> layouts) { (void)layouts; }
+        // Changes whenever a text drawn again the same way could come out otherwise: the glyph pages started over,
+        // another rendering, another density, other fonts. 0: draws are not noted (they cannot be done again).
+        virtual std::uint64_t DrawGeneration() { return 0; }
 
         // ---- editing
         // The caret stops of `text` laid out as one line (line breaks are not honored: single-line fields), in logical

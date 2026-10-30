@@ -1155,6 +1155,7 @@ int main(int argc, char** argv)
     glass::App app;
     app.name = "showcase";
     app.loadFonts = false;   // the Ui loads the platform's UI font, its weights, the CJK chain and the icon font
+    app.opaqueBackground = true;   // the wallpaper, or its gradient, covers the target (a translucent --wallpaper: see init)
     app.option = [&](const std::string& o, const char* value, bool& usedValue) {
         if (o == "--light")
             return !(d.darkMode = false);
@@ -1284,6 +1285,12 @@ int main(int argc, char** argv)
             d.wallpaper = ctx.Textures().Create({esia::TextureFormat::RGBA8, wall.width, wall.height}, wall.rgba.data());
             d.wallpaperWidth = wall.width;
             d.wallpaperHeight = wall.height;
+            for (std::size_t i = 3; i < wall.rgba.size(); i += 4)
+                if (wall.rgba[i] != 255)
+                {
+                    app.opaqueBackground = false;   // what lies under the wallpaper shows through it
+                    break;
+                }
         }
         d.running = true;
         d.worker = std::thread([&] { d.WorkerMain(); });

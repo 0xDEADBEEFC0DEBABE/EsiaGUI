@@ -1,16 +1,18 @@
 // SVG rasterizing: exact area coverage - a pixel's coverage is the area of the filled region in it, under either rule and
 // where contours overlap or cross (checked against dense point sampling); strokes as the union of their pieces (a round
 // stroke is every point within half its width of the path); paints, layers, clips, masks and the texels around the
-// drawing; the atlas's cache.
+// drawing; images of parts of a drawing; the atlas's cache, its icons in the text's pages, what the clip rect shows.
 #include "esia/core/draw_list.hpp"
 #include "esia/core/texture.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/svg/svg.hpp"
+#include "esia/text/glyph_atlas.hpp"
 #include "esia_test.hpp"
 #include "svg_internal.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -636,4 +638,432 @@ ESIA_TEST(SvgAtlas, LargerThanAPage)
     ESIA_CHECK(textures.Info(texture, info));
     atlas.BeginFrame();
     ESIA_CHECK(!textures.Info(texture, info));
+}
+
+namespace
+{
+    // curves, an even-odd hole, a dashed round stroke over them, a crisp square
+    const char* const kPartSvg0 =
+        "<svg viewBox='0 0 40 30'><path d='M3 4 C 20 -6 44 10 30 26 S 4 30 3 4 Z M12 10 h10 v8 h-10 Z' fill='#e04' fill-rule='evenodd'/>"
+        "<path d='M2 15 Q 20 2 38 15 T 2 15' fill='none' stroke='#08f' stroke-width='2.5' stroke-dasharray='3 2' stroke-linecap='round'/>"
+        "<rect x='31.3' y='3.7' width='5' height='5' fill='currentColor' shape-rendering='crispEdges'/></svg>";
+    // gradients (a radial one with its focus off its center), a group's opacity and clip path, a nested clip
+    const char* const kPartSvg1 =
+        "<svg viewBox='0 0 40 30'><defs><linearGradient id='l' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#f80'/>"
+        "<stop offset='1' stop-color='#08f' stop-opacity='0.5'/></linearGradient><radialGradient id='r' fx='0.3' fy='0.35'>"
+        "<stop offset='0' stop-color='#fff'/><stop offset='0.6' stop-color='#4c4'/><stop offset='1' stop-color='#000' stop-opacity='0'/>"
+        "</radialGradient><clipPath id='c'><circle cx='20' cy='15' r='13'/></clipPath><clipPath id='d' clip-path='url(#c)'>"
+        "<rect x='9' y='0' width='30' height='24'/></clipPath></defs><rect width='40' height='30' fill='url(#l)'/>"
+        "<g opacity='0.7' clip-path='url(#c)'><rect x='4' y='2' width='32' height='26' fill='url(#r)'/><circle cx='26' cy='12' r='7' "
+        "fill='#c0f'/></g><path d='M0 30 L40 0' stroke='#ff0' stroke-width='3' clip-path='url(#d)'/></svg>";
+}
+
+// The image of a part of a drawing - the viewport moved by the part's corner - has the pixels the image of all of it has
+// there, bit for bit: each pixel's coverage comes from the same row of the same sweep (the rows above the part are
+// skipped, the columns beside it not painted), a gradient's color from the same place. With a border, the texels around
+// the part are the drawing's there, so even the transparent texels' colors along its edges are the whole image's.
+ESIA_TEST(SvgCoverage, PartsHaveTheWholeImagesPixels)
+{
+    const int W = 77, H = 58;
+    const int parts[][4] = {{0, 0, 20, 15}, {13, 7, 50, 40}, {30, 21, 77, 58}, {-5, 40, 30, 70}, {60, -3, 90, 9}, {5, 5, 6, 6}, {-9, -9, -2, 70}};
+    int checked = 0, differ = 0;
+    for (const char* svg : {kPartSvg0, kPartSvg1})
+    {
+        const Document doc = Document::Parse(svg);
+        for (const bool mask : {false, true})
+            for (const Rect vp : {Rect(), Rect(0.375f, 0.25f, 76.625f, 57.75f), Rect(-12.5f, 3.0f, 70.25f, 58.0f)})
+            {
+                RasterOptions o;
+                o.mask = mask;
+                o.currentColor = Color(0.2f, 0.7f, 0.4f, 0.9f);
+                o.border = 1;
+                o.viewport = vp;
+                // the whole image in its frame - for a viewport that is its frame (none, or the fractions of a pixel
+                // svg::Draw leaves) Rasterize's pixels
+                Image whole, plain;
+                ESIA_CHECK(detail::RasterizePart(doc, W, H, o, whole));
+                if (vp.min.x >= 0.0f && vp.min.y >= 0.0f)
+                    ESIA_CHECK(Rasterize(doc, W, H, o, plain) && plain.pixels == whole.pixels);
+                const Rect all = vp.Empty() ? Rect(0.0f, 0.0f, (float)W, (float)H) : vp;
+                for (const auto& p : parts)
+                {
+                    const int pw = p[2] - p[0], ph = p[3] - p[1];
+                    RasterOptions po = o;
+                    po.viewport = Rect(all.min.x - (float)p[0], all.min.y - (float)p[1], all.max.x - (float)p[0], all.max.y - (float)p[1]);
+                    Image part;
+                    ESIA_CHECK(detail::RasterizePart(doc, pw, ph, po, part) && part.width == pw + 2 && part.height == ph + 2);
+                    // every texel against the whole image's at the same place: alpha everywhere, the color of the texels
+                    // with ink and of all inside both borders. Beyond the whole image (and its border) the part shows
+                    // what the viewport puts there: nothing outside the whole pixels around it.
+                    const float fx0 = std::floor(all.min.x), fy0 = std::floor(all.min.y), fx1 = std::ceil(all.max.x), fy1 = std::ceil(all.max.y);
+                    for (int y = 0; y < part.height; ++y)
+                        for (int x = 0; x < part.width; ++x)
+                        {
+                            const int wx = x + p[0], wy = y + p[1];   // in the whole image, its border included
+                            const std::uint8_t* a = Px(part, x, y);
+                            const bool in = wx >= 0 && wy >= 0 && wx < whole.width && wy < whole.height;
+                            ++checked;
+                            if (!in)
+                            {
+                                const float dx = (float)(wx - 1), dy = (float)(wy - 1);   // in the drawing's pixels
+                                if (dx < fx0 || dy < fy0 || dx >= fx1 || dy >= fy1)
+                                    differ += a[3] != 0 ? 1 : 0;
+                                continue;
+                            }
+                            const std::uint8_t* b = Px(whole, wx, wy);
+                            const bool inside = x >= 1 && y >= 1 && x <= pw && y <= ph && wx >= 1 && wy >= 1 && wx <= W && wy <= H;
+                            differ += a[3] != b[3] || ((inside || a[3] != 0) && std::memcmp(a, b, 3) != 0) ? 1 : 0;
+                        }
+                }
+            }
+    }
+    ESIA_CHECK(checked > 70000 && differ == 0);
+    if (differ)
+        std::printf("    %d of %d texels differ\n", differ, checked);
+}
+
+// In its frame, a viewport moved by whole pixels gives the same pixels moved by as many, wherever it lies in the image.
+ESIA_TEST(SvgCoverage, ViewportMovedByWholePixels)
+{
+    const Document doc = Document::Parse(kPartSvg1);
+    RasterOptions o;
+    o.viewport = Rect(3.25f, 5.5f, 33.25f, 31.5f);
+    Image a, b;
+    ESIA_CHECK(detail::RasterizePart(doc, 40, 36, o, a));
+    o.viewport = Rect(3.25f + 17.0f, 5.5f + 20.0f, 33.25f + 17.0f, 31.5f + 20.0f);
+    ESIA_CHECK(detail::RasterizePart(doc, 70, 66, o, b));
+    bool same = true;
+    int ink = 0;
+    for (int y = 0; y < 66; ++y)
+        for (int x = 0; x < 70; ++x)
+        {
+            const int ax = x - 17, ay = y - 20;
+            const bool inA = ax >= 0 && ay >= 0 && ax < 40 && ay < 36;
+            ink += Px(b, x, y)[3] != 0 ? 1 : 0;
+            same = same && (inA ? std::memcmp(Px(a, ax, ay), Px(b, x, y), 4) == 0 : Px(b, x, y)[3] == 0);
+        }
+    ESIA_CHECK(same && ink > 500);
+}
+
+namespace
+{
+    // A text system's pages as the FreeType system keeps them: glyphs (here one, every character's) and coverage tiles
+    // in one Alpha8 text::GlyphAtlas, tiles under keys with the top bit set, gone when it starts over.
+    struct PageText final : text::TextSystem
+    {
+        text::GlyphAtlas atlas;
+        const text::GlyphSlot* glyph = nullptr;
+        int added = 0;                       // tiles added
+        std::vector<std::uint8_t> lastTile;  // the last one's coverage
+        const text::GlyphSlot* lastSlot = nullptr;
+        explicit PageText(TextureRegistry& textures) : atlas(textures, text::GlyphAtlasDesc{512, 2, 1}) { AddGlyph(); }
+        void AddGlyph()
+        {
+            text::GlyphBitmap g;
+            g.width = 6;
+            g.height = 10;
+            g.pixels.assign(60, 200);
+            glyph = atlas.Add(1, g, Rect(0.0f, 0.0f, 6.0f, 10.0f));
+        }
+        text::FontId AddFontFile(const char*, int) override { return 1; }
+        text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
+        void AddFallback(text::FontId) override {}
+        void NewFrame(const text::RasterParams&) override
+        {
+            atlas.BeginFrame();
+            if (!atlas.Find(1))
+                AddGlyph();
+        }
+        text::TextMetrics Measure(text::FontRef, std::string_view s, float, std::uint32_t) override { return {Vec2(6.0f * (float)s.size(), 10.0f), 8.0f, 1}; }
+        Vec2 Draw(DrawList& dl, text::FontRef f, Vec2 pos, Color c, std::string_view s, float, std::uint32_t, float) override
+        {
+            for (std::size_t i = 0; i < s.size(); ++i)
+                dl.AddQuad(glyph->page, Rect::FromSize(pos + Vec2(6.0f * (float)i, 0.0f), Vec2(6.0f, 10.0f)), glyph->uv0, glyph->uv1, c.ToRgba8());
+            return Measure(f, s, 0.0f, 0).size;
+        }
+        void DrawGlyph(DrawList&, text::FontRef, char32_t, Vec2, Color) override {}
+        const text::GlyphSlot* FindTile(std::uint64_t key) override { return atlas.Find(key | (1ull << 63)); }
+        const text::GlyphSlot* AddTile(std::uint64_t key, const text::GlyphBitmap& b) override
+        {
+            ++added;
+            lastTile = b.pixels;
+            return lastSlot = atlas.Add(key | (1ull << 63), b, Rect());
+        }
+        std::uint64_t TileGeneration() override { return (std::uint64_t)atlas.Resets() + 1u; }
+    };
+
+    const char* const kIconSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' "
+                                 "stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='5'/><path d='M8 12.5l2.5 2.5L16 9'/></svg>";
+
+    int CoverageQuads(const DrawList& dl)
+    {
+        int n = 0;
+        for (const QuadInstance& q : dl.Quads())
+            n += q.IsCoverage() ? 1 : 0;
+        return n;
+    }
+}
+
+// A monochrome icon that lasts - drawn in the frame before too - is a tile of the text's pages: a plain-coverage quad in
+// the command of the labels around it, its coverage the mask's alpha (from the pixels it was made with, not rasterized
+// again). When the text's pages start over the tile goes with them: an image for a frame, then a tile again.
+ESIA_TEST(SvgAtlas, LastingIconsAreTilesOfTheText)
+{
+    TextureRegistry textures;
+    PageText text(textures);
+    Atlas atlas(textures);
+    const Document icon = Document::Parse(kIconSvg);
+    ESIA_CHECK(icon.Monochrome());
+    PainterEnv env;
+    env.text = &text;
+    env.pixelScale = 1.5f;
+    const Color tint(0.9f, 0.3f, 0.2f, 0.8f);
+    DrawList dl;
+    const auto frame = [&] {
+        atlas.BeginFrame();
+        text.NewFrame({1.5f});
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl, env);
+        p.Text(Vec2(40, 20), text::FontRef{1, 10.0f}, Color::White(), "label");
+        Draw(p, atlas, icon, Rect(10.0f, 20.0f, 26.0f, 36.0f), tint);   // 24 x 24 pixels from (15, 30)
+        p.Text(Vec2(40, 40), text::FontRef{1, 10.0f}, Color::White(), "more");
+    };
+    // new: an image of the recent pages, between the labels' commands
+    frame();
+    ESIA_CHECK(text.added == 0 && atlas.Rasterized() == 1 && dl.Vertices().size() == 4 && dl.Commands().size() == 3);
+    // drawn again: a tile - one command with the labels
+    frame();
+    ESIA_CHECK(text.added == 1 && atlas.Rasterized() == 1 && dl.Vertices().empty());
+    ESIA_CHECK(dl.Commands().size() == 1 && dl.Commands()[0].shapes && dl.Quads().size() == 10 && CoverageQuads(dl) == 1);
+    if (dl.Quads().size() == 10 && text.lastSlot)
+    {
+        // where the image was, the tile's texels, in the color
+        QuadInstance want;
+        want.SetCoverage(Rect(10.0f, 20.0f, 26.0f, 36.0f), text.lastSlot->uv0, text.lastSlot->uv1, tint.ToRgba8());
+        ESIA_CHECK(std::memcmp(&dl.Quads()[5], &want, sizeof(want)) == 0 && text.lastSlot->page == text.glyph->page);
+    }
+    // the tile's coverage: the mask's alpha, texel for texel
+    RasterOptions m;
+    m.mask = true;
+    m.currentColor = Color::White();
+    Image ref;
+    ESIA_CHECK(Rasterize(icon, 24, 24, m, ref) && text.lastTile.size() == 24 * 24);
+    bool same = text.lastTile.size() == 24 * 24;
+    for (std::size_t i = 0; same && i < text.lastTile.size(); ++i)
+        same = text.lastTile[i] == ref.pixels[i * 4 + 3];
+    ESIA_CHECK(same);
+    // found from then on
+    frame();
+    frame();
+    ESIA_CHECK(text.added == 1 && atlas.Rasterized() == 1 && CoverageQuads(dl) == 1 && dl.Commands().size() == 1);
+    // the text's pages start over: an image (from the recent pages) for a frame, then a tile again - rasterized again,
+    // its pixels are not kept
+    text.atlas.StartOver();
+    frame();
+    ESIA_CHECK(text.added == 1 && CoverageQuads(dl) == 0 && dl.Vertices().size() == 4 && atlas.Rasterized() == 1);
+    frame();
+    ESIA_CHECK(text.added == 2 && CoverageQuads(dl) == 1 && dl.Vertices().empty() && atlas.Rasterized() == 2);
+    same = text.lastTile.size() == 24 * 24;
+    for (std::size_t i = 0; same && i < text.lastTile.size(); ++i)
+        same = text.lastTile[i] == ref.pixels[i * 4 + 3];
+    ESIA_CHECK(same);
+}
+
+// What changes every frame stays out of the text's pages: an icon whose size animates, one under an animated scale, a
+// drawing two frames alternate between. The text's atlas never starts over for them.
+ESIA_TEST(SvgAtlas, AnimationsStayOutOfTheTextsPages)
+{
+    TextureRegistry textures;
+    PageText text(textures);
+    Atlas atlas(textures);
+    const Document sized = Document::Parse(kIconSvg), scaled = Document::Parse(kIconSvg), turns = Document::Parse(kIconSvg);
+    PainterEnv env;
+    env.text = &text;
+    for (int f = 0; f < 120; ++f)
+    {
+        atlas.BeginFrame();
+        text.NewFrame({1.0f});
+        DrawList dl;
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl, env);
+        const float s = 16.0f + (float)(f % 40);   // a new size every frame, the same again 40 frames later
+        Draw(p, atlas, sized, Rect(10.0f, 10.0f, 10.0f + s, 10.0f + s), Color::White());
+        p.PushScale(Vec2(200, 100), 1.0f + 0.01f * (float)f);
+        Draw(p, atlas, scaled, Rect(190.0f, 90.0f, 214.0f, 114.0f), Color::White());
+        p.PopScale();
+        const float alt = f % 2 ? 30.0f : 32.0f;   // two sizes in turn
+        Draw(p, atlas, turns, Rect(300.0f, 10.0f, 300.0f + alt, 10.0f + alt), Color::White());
+    }
+    ESIA_CHECK(text.added == 0 && text.atlas.Resets() == 0);
+}
+
+// Tiles only where they draw what the image draws: not for a colored drawing, a mask larger than kMaxTile, one under a
+// Painter mask, or with a text system without tiles - those stay images (rasterized once). Under a scale at rest an icon
+// is a tile, which PopScale leaves where the scale put it.
+ESIA_TEST(SvgAtlas, TilesWhereTheyDrawAsTheImage)
+{
+    TextureRegistry textures;
+    const Document icon = Document::Parse(kIconSvg);
+    const Document colored = Document::Parse("<svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='9' fill='#08f'/></svg>");
+    // a text system without tiles
+    struct NoTiles final : text::TextSystem
+    {
+        text::FontId AddFontFile(const char*, int) override { return 1; }
+        text::FontId AddFontMemory(const void*, std::size_t, int) override { return 1; }
+        void AddFallback(text::FontId) override {}
+        void NewFrame(const text::RasterParams&) override {}
+        text::TextMetrics Measure(text::FontRef, std::string_view, float, std::uint32_t) override { return {}; }
+        Vec2 Draw(DrawList&, text::FontRef, Vec2, Color, std::string_view, float, std::uint32_t, float) override { return Vec2(0, 0); }
+        void DrawGlyph(DrawList&, text::FontRef, char32_t, Vec2, Color) override {}
+    } noTiles;
+    enum Kind { Pages, NoTileSystem, NoText };
+    // three frames of `draw` with an atlas and text pages of their own: the last frame's coverage quads, and how many times
+    // the atlas rasterized
+    const auto frames = [&](Kind kind, auto draw) {
+        PageText text(textures);
+        Atlas atlas(textures);
+        PainterEnv env;
+        env.text = kind == Pages ? &text : kind == NoTileSystem ? static_cast<text::TextSystem*>(&noTiles) : nullptr;
+        DrawList dl;
+        for (int f = 0; f < 3; ++f)
+        {
+            atlas.BeginFrame();
+            text.NewFrame({1.0f});
+            dl.Reset(Rect(0, 0, 400, 300));
+            Painter p(dl, env);
+            draw(p, atlas);
+        }
+        return std::make_pair(CoverageQuads(dl), atlas.Rasterized());
+    };
+    auto r = frames(Pages, [&](Painter& p, Atlas& a) { Draw(p, a, colored, Rect(10, 10, 34, 34), Color::White()); });
+    ESIA_CHECK(r.first == 0 && r.second == 1);
+    r = frames(Pages, [&](Painter& p, Atlas& a) { Draw(p, a, icon, Rect(10, 10, 139, 139), Color::White()); });   // 129 pixels
+    ESIA_CHECK(r.first == 0 && r.second == 1);
+    r = frames(Pages, [&](Painter& p, Atlas& a) { Draw(p, a, icon, Rect(10, 10, 138, 138), Color::White()); });   // 128
+    ESIA_CHECK(r.first == 1 && r.second == 1);
+    r = frames(Pages, [&](Painter& p, Atlas& a) { Draw(p, a, colored, Rect(10, 10, 34, 34), Color::White(), true); });   // as a mask
+    ESIA_CHECK(r.first == 1 && r.second == 1);
+    // under a mask: an image (an FX shape, which takes the mask); the same icon outside it a tile - from the pixels the
+    // first frame made, not rasterized again
+    r = frames(Pages, [&](Painter& p, Atlas& a) {
+        p.PushMask(Rect(0, 0, 200, 200), 24.0f);
+        Draw(p, a, icon, Rect(60, 60, 84, 84), Color::White());
+        p.PopMask();
+        ESIA_CHECK(p.GetDrawList().FxInstances().size() == 1);
+        Draw(p, a, icon, Rect(260, 60, 284, 84), Color::White());
+    });
+    ESIA_CHECK(r.first == 1 && r.second == 1);
+    // under a scale at rest: the quad where the scale puts the drawing (to 1/64 pixel, rasterized there), PopScale leaves it
+    Rect at;
+    r = frames(Pages, [&](Painter& p, Atlas& a) {
+        p.PushScale(Vec2(0, 0), 1.25f);
+        Draw(p, a, icon, Rect(10, 10, 34, 34), Color::White());
+        p.PopScale();
+        const QuadVector& q = p.GetDrawList().Quads();
+        if (!q.empty())
+            at = Rect(q.back().rect[0], q.back().rect[1], q.back().rect[2], q.back().rect[3]);
+    });
+    ESIA_CHECK(r.first == 1 && r.second == 1 && at == Rect(12.0f, 12.0f, 43.0f, 43.0f));
+    // without tiles, or without text: images, rasterized once
+    r = frames(NoTileSystem, [&](Painter& p, Atlas& a) { Draw(p, a, icon, Rect(10, 10, 34, 34), Color::White()); });
+    ESIA_CHECK(r.first == 0 && r.second == 1);
+    r = frames(NoText, [&](Painter& p, Atlas& a) { Draw(p, a, icon, Rect(10, 10, 34, 34), Color::White()); });
+    ESIA_CHECK(r.first == 0 && r.second == 1);
+}
+
+// Only what the clip rect shows is rasterized: a drawing outside it not at all; a large one reaching beyond it only in
+// the steps of 256 pixels that hold the part inside - found again while it moves less than a step - when that is at most
+// half of it; a drawing mostly inside, whole.
+ESIA_TEST(SvgAtlas, OnlyWhatTheClipShows)
+{
+    TextureRegistry textures;
+    Atlas atlas(textures);
+    const Document doc = Document::Parse(kPartSvg1);   // 40 x 30: drawn 1200 x 900 below
+    RasterOptions o;
+    o.currentColor = Color::White();
+    o.border = 1;
+    Image whole;
+    ESIA_CHECK(Rasterize(doc, 1200, 900, o, whole));
+    DrawList dl;
+    std::vector<TextureChange> changes;
+    const auto bounds = [&] {
+        Rect b(1e9f, 1e9f, -1e9f, -1e9f);
+        for (const Vertex& v : dl.Vertices())
+            b = Rect(std::min(b.min.x, v.pos.x), std::min(b.min.y, v.pos.y), std::max(b.max.x, v.pos.x), std::max(b.max.y, v.pos.y));
+        return b;
+    };
+    // the pixels the frame uploaded for a part of w x h from (x0, y0) of the drawing (into a page: inside its border, the
+    // padding beside it), against the whole image's there
+    const auto uploaded = [&](int x0, int y0, int w, int h) {
+        changes.clear();
+        textures.TakeChanges(changes);
+        for (const TextureChange& c : changes)
+            if (c.kind == TextureChange::Kind::Update && c.width == w + 3 && c.height == h + 3 && !c.pixels.empty())
+            {
+                for (int y = 0; y < h; ++y)
+                    if (std::memcmp(c.pixels.data() + ((std::size_t)(y + 1) * (std::size_t)c.width + 1) * 4, Px(whole, x0 + 1, y0 + y + 1), (std::size_t)w * 4) != 0)
+                        return false;
+                return true;
+            }
+        return false;
+    };
+    const auto frame = [&](const Rect& r) {
+        atlas.BeginFrame();
+        dl.Reset(Rect(0, 0, 400, 300));
+        Painter p(dl, PainterEnv());
+        Draw(p, atlas, doc, r, Color::White());
+    };
+    // outside: nothing
+    frame(Rect(500, 50, 1700, 950));
+    ESIA_CHECK(atlas.Rasterized() == 0 && dl.Commands().empty());
+    // from (100, 50), 300 x 250 of it shown: its columns 0 - 512 and rows 0 - 256, an image from (100, 50) - the whole
+    // image's pixels
+    frame(Rect(100, 50, 1300, 950));
+    ESIA_CHECK(atlas.Rasterized() == 1 && bounds() == Rect(100, 50, 612, 306) && uploaded(0, 0, 512, 256));
+    // moved by less than a step: the same part
+    frame(Rect(60, 50, 1260, 950));
+    ESIA_CHECK(atlas.Rasterized() == 1 && bounds() == Rect(60, 50, 572, 306));
+    // the next step down comes into view: another part
+    frame(Rect(60, 30, 1260, 930));
+    ESIA_CHECK(atlas.Rasterized() == 2 && bounds() == Rect(60, 30, 572, 542) && uploaded(0, 0, 512, 512));
+    // its middle shown: columns and rows 256 - 768
+    frame(Rect(-300, -400, 900, 500));
+    ESIA_CHECK(atlas.Rasterized() == 3 && bounds() == Rect(-44, -144, 468, 368) && uploaded(256, 256, 512, 512));
+    // under a clip of its own: the part inside that one
+    atlas.BeginFrame();
+    dl.Reset(Rect(0, 0, 400, 300));
+    {
+        Painter p(dl, PainterEnv());
+        p.PushClip(Rect(0, 0, 40, 40));
+        Draw(p, atlas, doc, Rect(0, 0, 1200, 900), Color::White());
+        p.PopClip();
+    }
+    ESIA_CHECK(atlas.Rasterized() == 4 && bounds() == Rect(0, 0, 256, 256) && uploaded(0, 0, 256, 256));
+    // most of a drawing shown: all of it
+    frame(Rect(-20, 10, 380, 310));
+    ESIA_CHECK(atlas.Rasterized() == 5 && bounds() == Rect(-20, 10, 380, 310));
+    // scrolled down through the view, 60 pixels a frame: a new part each time the view reaches the next step - made
+    // from the part before and the band it does not hold - the whole image's pixels every time
+    Atlas scrolled(textures);
+    int parts = 0, lastY0 = -1, lastY1 = -1;
+    bool same = true;
+    for (int s = 0; s <= 600; s += 60)
+    {
+        scrolled.BeginFrame();
+        dl.Reset(Rect(0, 0, 400, 300));
+        {
+            Painter p(dl, PainterEnv());
+            Draw(p, scrolled, doc, Rect(-100.0f, (float)-s, 1100.0f, (float)(900 - s)), Color::White());
+        }
+        const int y0 = s / 256 * 256, y1 = std::min(900, (s + 300 + 255) / 256 * 256);
+        if (y0 != lastY0 || y1 != lastY1)
+        {
+            ++parts;
+            same = same && uploaded(0, y0, 512, y1 - y0);
+            lastY0 = y0;
+            lastY1 = y1;
+        }
+        same = same && bounds() == Rect(-100.0f, (float)(y0 - s), 412.0f, (float)(y1 - s));
+    }
+    ESIA_CHECK(same && parts == 5 && scrolled.Rasterized() == parts);
 }

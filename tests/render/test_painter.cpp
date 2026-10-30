@@ -272,6 +272,39 @@ ESIA_TEST(Painter, UnscaledImagesStayWhereTheScalePutThem)
     ESIA_CHECK((i.flags[0] & fx::kMask) && (i.flags[0] & fx::kImage) && i.rect[0] == 10 && i.rect[1] == 10 && i.rect[2] == 20 && i.rect[3] == 20);
 }
 
+// A coverage tile drawn as an image (svg::Draw's icons in the text's pages): a plain-coverage quad on the tile's page at
+// `r` with the painter's opacity, left where it is by PopScale; none under a mask (the image is an FX shape there).
+ESIA_TEST(Painter, UnscaledCoverageIsAQuadWithTheText)
+{
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.alpha = 0.5f;
+    Painter p(dl, Fx(env));
+    text::GlyphSlot tile;
+    tile.page = 42;
+    tile.uv0 = Vec2(0.25f, 0.5f);
+    tile.uv1 = Vec2(0.375f, 0.625f);
+    dl.AddQuad(42, Rect(0, 0, 6, 10), Vec2(0, 0), Vec2(0.01f, 0.01f), 0xFFFFFFFFu);   // a glyph before it
+    p.PushScale(Vec2(0, 0), 2.0f);
+    ESIA_CHECK(p.UnscaledCoverage(tile, Rect(10, 20, 34, 44), Color(1.0f, 0.0f, 0.0f, 0.8f)));
+    p.PopScale();
+    ESIA_CHECK(dl.Commands().size() == 1 && dl.Commands()[0].shapes && dl.Quads().size() == 2);
+    const QuadInstance& q = dl.Quads()[1];
+    QuadInstance want;
+    want.SetCoverage(Rect(10, 20, 34, 44), tile.uv0, tile.uv1, Color(1.0f, 0.0f, 0.0f, 0.4f).ToRgba8());
+    ESIA_CHECK(std::memcmp(&q, &want, sizeof(q)) == 0);
+    // under a mask: refused, nothing drawn
+    ESIA_CHECK(!p.Masked());
+    p.PushMask(Rect(0, 0, 200, 200), 16.0f);
+    ESIA_CHECK(p.Masked() && !p.UnscaledCoverage(tile, Rect(40, 40, 64, 64), Color::White()) && dl.Quads().size() == 2);
+    p.PopMask();
+    ESIA_CHECK(!p.Masked() && p.UnscaledCoverage(tile, Rect(40, 40, 64, 64), Color::White()) && dl.Quads().size() == 3);
+    // nothing for a transparent color or an empty tile
+    ESIA_CHECK(p.UnscaledCoverage(tile, Rect(40, 40, 64, 64), Color::White(0.0f)) && dl.Quads().size() == 3);
+    tile.page = 0;
+    ESIA_CHECK(p.UnscaledCoverage(tile, Rect(40, 40, 64, 64), Color::White()) && dl.Quads().size() == 3);
+}
+
 ESIA_TEST(Painter, TextOutlinesGoUnderTheirTextAndIcons)
 {
     DrawList dl = MakeList();

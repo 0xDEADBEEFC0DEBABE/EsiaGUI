@@ -1939,16 +1939,29 @@ namespace esia::svg
     bool Document::UsesCurrentColor() const { return tree_ && tree_->usesCurrent; }
     std::uint64_t Document::Id() const { return tree_ ? tree_->id : 0; }
 
+    namespace
+    {
+        bool RasterizeIn(const Document& doc, int width, int height, const RasterOptions& options, Image& out, bool frame)
+        {
+            out.width = out.height = 0;
+            out.pixels.clear();   // its memory is used again
+            const detail::Tree* t = doc.Data();
+            if (!t || width <= 0 || height <= 0 || width > 16384 || height > 16384 || options.border < 0 || options.border > 256)
+                return false;
+            const Rect& vp = options.viewport;
+            if (!std::isfinite(vp.min.x) || !std::isfinite(vp.min.y) || !std::isfinite(vp.max.x) || !std::isfinite(vp.max.y))
+                return false;
+            return detail::Render(*t, width, height, options, out, frame);
+        }
+    }
+
     bool Rasterize(const Document& doc, int width, int height, const RasterOptions& options, Image& out)
     {
-        out.width = out.height = 0;
-        out.pixels.clear();   // its memory is used again
-        const detail::Tree* t = doc.Data();
-        if (!t || width <= 0 || height <= 0 || width > 16384 || height > 16384 || options.border < 0 || options.border > 256)
-            return false;
-        const Rect& vp = options.viewport;
-        if (!std::isfinite(vp.min.x) || !std::isfinite(vp.min.y) || !std::isfinite(vp.max.x) || !std::isfinite(vp.max.y))
-            return false;
-        return detail::Render(*t, width, height, options, out);
+        return RasterizeIn(doc, width, height, options, out, false);
+    }
+
+    bool detail::RasterizePart(const Document& doc, int width, int height, const RasterOptions& options, Image& out)
+    {
+        return RasterizeIn(doc, width, height, options, out, true);
     }
 }

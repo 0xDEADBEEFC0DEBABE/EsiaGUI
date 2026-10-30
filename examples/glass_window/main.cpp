@@ -10,6 +10,7 @@ int main(int argc, char** argv)
     std::unique_ptr<glass::Scene> scene;
     glass::App app;
     app.name = "glass_window";
+    app.opaqueBackground = true;   // the wallpaper's gradient covers the target
     app.init = [&](esia::Context&, esia::text::TextSystem* text, esia::text::FontId font, const std::vector<std::string>&) {
         scene = std::make_unique<glass::Scene>(text, font);
     };
