@@ -42,6 +42,21 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**SVG to textures** (2026-10-30, in Esia): SVG files parsed once and rasterized at the size drawn into texture pages, with
+exact area coverage (overlaps, both fill rules and a stroke's pieces resolved in the sweep); monochrome icons as one mask
+in any color; a 16-pixel icon in 7 us.
+
+**Polylines on the processor's vectors** (2026-10-30, in Esia): a polyline's loops on AVX-512, AVX2, SSE2 or NEON, chosen
+at run time, every level with the same bits; long dense series in 0.039 ms of CPU on AVX-512 (plain C++ 0.150, Dear
+ImGui 1.92.9b 0.084).
+
+**Render-class cost, round 2: much content on screen** (2026-10-30, in Esia): plain shapes - a solid fill or stroke
+on a rounded rectangle, a circle, a capsule, a segment - and polylines are 32-byte quads drawn in the draws of the text
+around them, with the pixels they had; shapes and labels overlapping one another are one draw (a thousand overlapping
+items: 948 draws -> 1); a text can be drawn from the nearest whole pixel; solid lines and polylines from a Color,
+without a Style. Measured against Dear ImGui 1.92.9b and 1.93.0. Polyline's round ends, drawn inside the line, are
+beyond it.
+
 **Glass on every shape** (2026-10-28, in Esia): polygons of any outline - slanted tabs, triangles, stars, arrows -
 as one FX path each, with every material a rounded rectangle takes, glass included; lines, areas and ring sectors with
 a material as paths too; glass on rings and lines one rounded rod.
@@ -130,6 +145,9 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [SVG to textures](#svg-to-textures)
+* [Polylines on the processor's vectors](#polylines-on-the-processors-vectors)
+* [Render-class cost, round 2: much content on screen](#render-class-cost-round-2-much-content-on-screen)
 * [Glass on every shape](#glass-on-every-shape)
 * [Render-class cost, round 1](#render-class-cost-round-1)
 * [One UI light, motion blur](#one-ui-light-motion-blur)
@@ -167,6 +185,301 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## SVG to textures
+
+SVG files - icons, illustrations - parsed once and rasterized at the size they are drawn, into texture pages that
+Painter::Image draws (2026-10-30): `include/esia/svg/svg.hpp`, the library `esia::svg`.
+
+### What it does
+
+* `svg::Document::Parse` / `Load`: the XML (comments, DOCTYPE, CDATA, entities); CSS - style attributes and `<style>`
+  sheets with type, class, id, universal, descendant and child selectors, specificity, `!important`, inheritance; path
+  data (every command, numbers and flags without separators); the basic shapes; transforms, viewBox and
+  preserveAspectRatio, nested `svg`, `use` and `symbol`; colors (hex, rgb / rgba, hsl / hsla, the named colors) and
+  `currentColor`; linear and radial gradients (units, transforms, spread methods, focal points, `href` inheritance); fills
+  with both rules; strokes (width, caps, joins, miter limit, dashes, paint-order); opacity; clip paths (both units,
+  nested); `display`, `visibility`, `shape-rendering: crispEdges`. Not drawn: text, images, filters, masks, markers,
+  patterns.
+* `svg::Rasterize`: RGBA8, straight alpha in sRGB (the texture format of images); transparent texels next to the drawing
+  take its colors, so bilinear filtering does not darken its edges. `RasterOptions::mask`: the alpha alone, in white,
+  tinted when drawn. `RasterOptions::viewport`: the drawing fitted into any rectangle of the image, to fractions of a
+  pixel, cut exactly at its sides.
+* `svg::Atlas`: rasterized documents packed into RGBA8 pages (text::GlyphAtlas's packing and frame rules), keyed by
+  document, size, viewport, mode and - where it paints something - currentColor. A new drawing goes into the recent
+  pages and moves into the lasting ones when the next frame draws it too (from the pixels it was made with): the sizes
+  an animation passes through stay among the recent pages, found again when it comes back to them, and filling those
+  never makes what stays on screen be rasterized again. A drawing larger than a page gets a texture of its own while it
+  is drawn.
+* `svg::Draw` rasterizes at the size the drawing has on the target and draws it with its texels on pixels one to one:
+  outside a scale on the rectangle rounded to whole physical pixels; under `Painter::PushScale` exactly where the scale
+  puts it (to 1/64 pixel), rasterized there - as text is under a scale - so every frame of a scale animation has the
+  pixels of its own geometry. A monochrome document (every paint currentColor) is rasterized once, as a mask, and drawn
+  in any color.
+
+### Quality
+
+* Exact area coverage: a pixel gets the area of the filled region in it. The sweep puts each row's monotone chains in
+  order; where they keep apart, the winding count tells which chains bound the area, and only those leave their area in
+  the cells; where they come close (turning points, overlaps, crossings), the row is cut into strips at every vertex and
+  crossing. Overlapping contours, both fill rules and a stroke's overlapping pieces are resolved exactly - the usual
+  |sum| clamped to 1 over-covers such pixels, by up to a quarter of a pixel.
+* Strokes are made in the path's user units (a stroke scaled unevenly keeps its shape there) as pieces wound the same
+  way whose union is the stroke: bands along runs of segments, wedges and caps. A closed convex outline whose inner side
+  folds (a stroke wider than a small circle) is its outer loop less its inner offset, a half-plane intersection.
+* Curves and arcs are flattened within 1/32 pixel, their points moved out by 2/3 of their chords' sagitta: the polygon
+  keeps the curve's area, so curved edges do not come out thinner.
+* Compositing as browsers composite SVG: premultiplied, in sRGB. Group opacity and clipped groups take a layer only where
+  they need one (a group around one shape with one paint passes its opacity to it).
+
+### Verified
+
+* `esia_svg_tests` (29): the parser and CSS; coverage against dense point sampling (64 x 64 points a pixel) for
+  overlapping squares, a pentagram and a bow tie under both rules and unions of groups with their own rules (within
+  0.002); round strokes against "every point within half the width of the path" (within 0.008); strokes wider than their
+  outline's curves (a disc, a ring, folded corners); dashes as SVG 2 places them; gradients, layers, clips, masks, the
+  texels around the drawing, the atlas's cache, Draw on the pixel grid; a viewport at quarter and half pixels against
+  the area of its box in every pixel, also for a square and a stroke reaching far beyond it (within half a level); Draw
+  under scales of 1.5 and 1.25; a drawing that stays beside one at a new size every frame (rasterized once); drawings
+  larger than a page. `esia_render_tests`: Painter::Scaled, ScaleFactor and UnscaledImage (a hundred images under one
+  scale, with geometry between them and under a mask).
+* Under a scale on a GPU: an icon drawn at scales 1.37, 1.5 and 2.25 on D3D9, D3D10, D3D11, D3D12, OpenGL and Vulkan
+  (RTX 4080) has the pixels of svg::Rasterize of the same geometry on the CPU, within half a level (the rounding of
+  the blend), and nothing around it. Drawn the first version's way - rasterized at its size in the layout and stretched
+  by the scale - not one of its pixels reached full ink at those scales.
+* Against Chrome, its rendering of the same files at the same size compared pixel by pixel in the page: 158 renderings
+  of 80 files - the 63 SVG icons that come with Visual Studio, 16 feature files, two logos - at 16 to 128 pixels. Mean
+  alpha difference 2.8 levels, along edges: Chrome's antialiasing there has 8 levels of coverage (multiples of 32) where
+  Esia's is the area, its edges on whole pixels can sit 0.08 pixel off, and its dashes drift (half a pixel at the top of
+  a dashed circle; Esia's fall where the dash pattern puts them). Two icons Chrome does not draw (attributes without
+  white space between them) Esia does.
+* clang-cl, MSVC `/W4 /WX`, the GNU flags on the new files.
+
+### Measured
+
+Release clang-cl, Ryzen 9 7950X, one thread, that corpus:
+
+| | mean | max |
+| --- | --- | --- |
+| parse a file | 6.7 us | |
+| rasterize at 16 x 16 | 7.3 us | 14 us |
+| at 48 x 48 | 18 us | 30 us |
+| at 128 x 128 | 88 us | 136 us |
+
+At 512 x 512: an empty drawing 0.13 ms, a full opaque rectangle 0.42 ms, a full linear gradient 0.98 ms, a stroke wider
+than its small circle 0.26 ms (8.7 ms as overlapping pieces). Only the drawing's rows and columns are visited; rows turn
+into RGBA8 with SSE2 or NEON (a plain loop elsewhere); a group's layer only where it needs one.
+
+The atlas over 600 frames: 80 icons that stay (40 documents at 24 and 48 pixels) and icons whose size changes every
+frame in one-second cycles, the first version's atlas (one set of pages) against the recent and lasting pages, runs
+taken in turn, the cost of the frame's lookups and rasterizations:
+
+| | first version: mean / p99 / max | now: mean / p99 / max | icons that stay, rasterized again |
+| --- | --- | --- | --- |
+| 4 animated, 24 to 96 px | 7.4 / 155 / 165 us | 6.6 / 132 / 153 us | 0 / 0 |
+| 20 animated, 24 to 120 px | 746 / 3290 / 3400 us | 576 / 930 / 1310 us | 1520 times in 19 frames / 0 |
+
+With 20 animations the first version's pages filled 19 times, and each time the next frame rasterized the 80 icons that
+stay as well. A lookup that finds its drawing costs what it did (6.3 to 6.8 ns in both).
+
+### Fixed after the first version
+
+* Under `Painter::PushScale` a drawing was rasterized at its size in the layout and the image stretched by the scale:
+  soft at every scale but 1. It is now rasterized where the scale puts it. Painter has what that needs: `Scaled` and
+  `ScaleFactor` (where the scales pushed put a point, how much they scale lengths) and `UnscaledImage` (an image already
+  at its final place, which PopScale leaves alone); and PopScale's list of what it leaves alone joins ranges that follow
+  one another, so labels and icons drawn one after another under a scale take one entry (it holds 64; past them, what
+  came after was scaled twice).
+* Drawings at new sizes every frame filled the one set of pages, and each time it started over, everything on screen was
+  rasterized again: recent and lasting pages now.
+* A drawing larger than an atlas page was not drawn at all (at the default 1024, anything over 1021 pixels - 510 UI
+  units at a pixel scale of 2): a texture of its own now.
+
+### Not done
+
+* Text, `<image>`, filters, masks, markers, patterns, `vector-effect`.
+* A stroke wider than a tight curve of an open path stays a set of overlapping pieces: exact, slower at large sizes.
+* A row crossed thousands of times: past 256 cuts it goes in strips of 1/32 pixel (coverage within about 1/64 there).
+* A large drawing is rasterized whole on the thread that draws it, also the parts outside the target (0.4 to 1 ms at
+  512 x 512).
+
+## Polylines on the processor's vectors
+
+The loops that make a polyline's quads run on the widest vector instructions the processor has (2026-10-30): AVX-512,
+AVX2 or SSE2 on x86-64, NEON on AArch64, plain C++ elsewhere - chosen at run time, not at build time, so one binary uses
+what each machine runs.
+
+### What changed
+
+* `esia::cpu` (`include/esia/core/cpu.hpp`): the level a processor runs - cpuid and the register state the operating
+  system saves (`xgetbv`) on x86, NEON on AArch64 - detected once; `ESIA_SIMD` (`scalar`, `sse2`, `avx2`, `avx512`, `neon`)
+  or `cpu::Force` run a lower one (tests, benchmarks).
+* `render/line_kernels.cpp`: Painter::LineQuads' loops - the segments' normals and the bounds, the joints' directions and
+  the sharpest turn, the check that each piece clears its joints' lines, the pieces' quads - for every level. AVX2 and
+  AVX-512 code is compiled with the compilers' target attributes in the same file (MSVC needs none), so the library is
+  built for the baseline and still runs the wide code where it exists. A level hands what is left over to the next
+  narrower one (AVX-512 to AVX2 to SSE2 to plain C++).
+* Every level writes the same bits: the same IEEE operations in the same order, exact square roots and divisions (no
+  reciprocal estimates, which differ between Intel and AMD and between SSE and AVX-512), no fused multiply-adds
+  (contraction off for the file). `Painter.PolylineKernelsAgree` draws lines of every length (the vector loops' tails),
+  turn and width at whole and fractional scales, and long dense series, on every level the processor runs, and compares
+  quads, geometry and bounds with plain C++'s byte for byte.
+* The pieces go straight into the draw list (`DrawList::AppendShapeQuads`). The check that a piece clears its joints'
+  lines - which a long dense series (a point every pixel or two) ran piece by piece in plain C++ - is on the vectors too.
+* Also: the quad shapes' antialiasing no longer takes derivatives - fxc had moved them into a branch, and WARP and Mesa
+  gave one pixel of a thin line other values -, and the dense scene's pair allows 3 levels where its translucent lines
+  meet and a pixel is blended a dozen times over (llvmpipe; 2 everywhere else).
+
+### Verified
+
+* Every test on Windows (clang-cl Debug, `-DESIA_WERROR=ON`): 41 / 41; MSVC `/W4 /WX` and the GNU flags on the new files;
+  the kernels' test on SSE2, AVX2 and AVX-512 here (a Ryzen 9 7950X), NEON by the macOS CI. The polylines scenes on
+  Direct3D 11 at every level: within 1 level of their geometry, as before. WARP (Direct3D 10 / 11 / 12): every scene.
+
+### Measured
+
+rcbench (round 1's benchmark), Direct3D 11, CPU ms (build + submit), medians of 5 alternated runs; `ESIA_SIMD` picks the
+level in one binary:
+
+| scene | plain C++ | SSE2 | AVX2 | AVX-512 | Dear ImGui 1.92.9b | 1.93.0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 200 polylines of 64 points, 2 px | 0.082 | 0.046 | 0.043 | 0.043 | 0.085 | 0.100 |
+| 8 series of 1 601 points (a point every pixel or two), 2 px | 0.150 | 0.054 | 0.040 | 0.039 | 0.084 | 0.099 |
+
+GPU time 0.028 and 0.021 ms (Dear ImGui 0.043 and 0.041). The round before (one loop a point, its reciprocal square roots
+estimated) took 0.087 ms for the first scene. On a Zen 4 AVX-512 runs as two halves: it equals AVX2 here.
+
+### Not done
+
+* Text: labels at new sub-pixel offsets every frame still build in 1.7 times Dear ImGui's time unless drawn on whole
+  pixels (round 2); their per-glyph work is lookups more than arithmetic.
+
+## Render-class cost, round 2: much content on screen
+
+Screens that show thousands of shapes, lines and labels at once - charts and maps, diagrams, dashboards, long lists
+(2026-10-30). Round 1 left two costs there: every plain line, frame or dot was a 384-byte FX instance (most of what
+such a frame uploads), and shapes and labels that overlap one another alternated between the FX program and the
+text's, a draw each time (948 draws for a thousand overlapping items of a frame, a bar, a dot, two labels and a line
+each, where Dear ImGui takes 2).
+
+### What changed
+
+* Plain shapes are quads (`PainterEnv::quadShapes`, on by default): a solid fill and / or a solid stroke on a rectangle
+  with one radius on every corner (continuous corners included), a circle, a capsule or a segment - with no other
+  material, outside masks and scales - is a `QuadInstance` of 32 bytes (`QuadShape::Fill`, `Stroke`, `SegmentFill`,
+  `SegmentStroke`) instead of an FX instance of 384, drawn in the draws of the text around it. Its fields go where a
+  glyph's uv and alpha are: its kind, smoothing (in 1/1023) and stroke align (in 1/64) as one negative whole number, its
+  radius as it is, its stroke width (in 1/64 units) beside the alpha - exact in a float on every shader model, so glyphs
+  keep their bytes and their shaders.
+* The shape quad programs (`QuadShapeImage`, `QuadShapeGray`, `QuadShapeLcd`, `QuadShapeLcdGray`: `QuadShapeVS` and pixel
+  shaders over the colors of esia_ui.hlsl's) measure a shape with the FX shader's own distance (`SdRoundRect`,
+  `SdSegment`, moved to esia_common.hlsli) and antialiasing, and `QuadShapeVS` pads it by a pixel (a segment's quad turns
+  with it), so it covers the same pixels. Batches that hold shapes (`DrawCmd::shapes`, `RenderOp::shapes`) draw with
+  them, batches of text alone with the four quad programs as they were; a shape among sub-pixel text has the same alpha
+  in every channel. A fill and a stroke fading together (opacity below 1) stay one FX instance: the FX shader puts the
+  stroke over the fill and fades the two as one, two quads would blend each on its own.
+* Polylines are quads too (`QuadShape::LinePiece`, `QuadShape::LineCap`): a piece per segment and one per round end, 32
+  bytes each where a segment's geometry took 152 (four vertices, 18 indices), with the geometry's pixels. A piece's quad
+  ends on the lines its geometry's triangles end on (the miters; their directions as diamond angles in 16 bits, no
+  trigonometry to encode or decode them; the quad reaching along them as far as the sharpest miter does), and the two
+  quads of a joint - or an end and its piece - compute those corners from the same numbers with the same arithmetic:
+  they share the edge exactly, the rasterizer gives every pixel on it to one of them, as it does the triangles, on
+  every API (Direct3D 9 too: no interpolated value decides it), and a translucent line is blended once. The pixel
+  shaders give each pixel the alpha the triangles interpolate - flat inside, linear over the pixel at the edge, an end's
+  polygonal fan the same way. A turn sharper than 120 degrees (the geometry clips its miter), a segment too short for
+  the turns at its ends, a scale or a mask keep the line geometry.
+* `FillRect` and `HLine` are `QuadShape::Solid` quads over the pixels their two triangles covered (no antialiasing, as
+  before) instead of indexed geometry: no third program among the text.
+* Solid lines without a Style: `Line(a, b, thickness, color)` and `Polyline(points, count, thickness, color, flags)` draw
+  what `Style().Fill(color)` draws, quad for quad, without building a Style (a few hundred bytes of defaults) or going
+  through the material checks - as `FillRound` does for rounded rectangles; a polyline's quads come from the points
+  themselves when they need no smoothing and repeat none. A polyline's joints cost less: the segments' normals in a loop
+  of their own (no chain from one segment to the next), reciprocal square roots from the processor's estimate and a
+  Newton step on x86, a joint's code from the bisector before its length is known - the diamond angle around the whole
+  turn modulo 2, one division and no branch (the joints of a line across a chart turn either way at random) -, and a
+  piece longer than twice its quad's reach along x or y is clear of its joints' lines without being measured (a joint's
+  line meets the segment at 30 degrees or more).
+* A plain shape reads no texture: it joins the quads before it whatever their texture, and a run of shapes takes the
+  texture of the first glyph after it (`DrawCmd::anyTexture`, `RenderOp::anyTexture`) - in the list and in the planner -
+  so shapes and labels overlapping one another are one draw, in drawing order, whatever order the kinds come in.
+* `TextFlags_PixelSnap`: a text from the nearest whole pixel. A label drawn at a new place every frame - one that moves
+  with what it names - keeps its placed glyphs instead of placing them again at each new sub-pixel offset; it moves in
+  whole pixels (smooth motion does not apply to it).
+* Conformance: scenes that draw the same pixels two ways are also compared with each other on every backend
+  (`Scene::sameAs`, no channel more than 2 apart): `shapes_fx` with `shapes`, `dense_fx` with `dense` (much content at
+  scale 1.25, new), and the new `polylines_mesh` with `polylines`, `polylines_scaled_mesh` with `polylines_scaled`
+  (scale 1.5): opaque and translucent lines on a checker turning by up to 115 degrees, steps on whole and half units
+  (the joints' lines through pixel centers), ends on pixel centers, a hairline, a thick line, smooth curves, a line
+  crossing itself, a short segment between turns, and lines left to geometry. The new scenes' goldens are Direct3D 11
+  renders (NVIDIA), within the default tolerance of llvmpipe's.
+* Fixed first, in a commit of its own: Polyline's round ends were turned inward - half discs inside the line, which
+  ended flat and, translucent, showed them twice; they are beyond the ends now, as the code's comment always said.
+
+### Verified
+
+* Every test on Windows (clang-cl Debug, `-DESIA_WERROR=ON`): 41 / 41 - the conformance suite `--strict` on D3D9 / 10 /
+  11 / 12, OpenGL and Vulkan (RTX 4080 SUPER), one frame and three, the pairs above included; the null device's command
+  logs regenerated and read. MSVC `/W4 /WX` and the Linux CI's GNU flags (`-Wpedantic -Wshadow -Wnon-virtual-dtor`) on
+  the changed sources: no warning.
+* Pixels. The quads against their other way on each of D3D9, 10, 11, 12, OpenGL and Vulkan: polylines at most 1 level
+  apart, plain shapes 1, the dense scene 2. Every scene against the build before, Direct3D 11: at most 2 levels, no
+  pixel more (the round ends' own pixels left out); text, shadows, glows and glass identical.
+* The shader library from the Shaders workflow.
+
+### Measured
+
+Against Dear ImGui (round 1's benchmark: both libraries on one device and an offscreen 1600 x 1000 target, RTX 4080
+SUPER, medians of 3 alternated runs of 300 frames, CPU = build + submit). Dear ImGui 1.92.9b and 1.93.0, released on
+2026-10-14 with a new ImDrawList: thin lines as one textured quad each (about half the CPU and GPU time of 1.92.9b's),
+fractional rectangles antialiased (fills nearly 4 times its CPU), strokes inside closed shapes. Direct3D 11, ms, Esia
+before -> after (Dear ImGui 1.92.9b / 1.93.0):
+
+| scene | CPU | GPU | draws | upload KB |
+| --- | --- | --- | --- | --- |
+| 10 000 lines, 1.5 px | 0.568 -> 0.281 (0.338 / 0.176) | 0.231 -> 0.033 (0.136 / 0.061) | 1 (2 / 1) | 3 750 -> 312 (1 914 / 898) |
+| 10 000 rect outlines, 1 px | 0.547 -> 0.304 (0.423 / 0.461) | 0.231 -> 0.032 (0.122 / 0.144) | 1 (2 / 2) | 3 750 -> 312 (2 031 / 2 421) |
+| 10 000 filled rects | 0.170 -> 0.112 (0.115 / 0.441) | 0.066 -> 0.024 (0.058 / 0.124) | 1 (1 / 2) | 1 015 -> 312 (898 / 2 148) |
+| 10 000 rounded rects with a stroke | 0.558 -> 0.369 (2.137 / 2.486) | 0.236 -> 0.053 (0.714 / 0.739) | 1 (8 / 8) | 3 750 -> 625 (12 773 / 13 164) |
+| 5 000 circles with a stroke | 0.284 -> 0.185 (1.042 / 1.223) | 0.142 -> 0.048 (0.404 / 0.423) | 1 (5 / 5) | 1 875 -> 312 (7 204 / 7 508) |
+| 1 000 overlapping items (a frame, a bar, a dot, two labels, a line) | 0.659 -> 0.428 (0.395 / 0.485) | 0.219 -> 0.095 (0.164 / 0.187) | 948 -> 1 (2 / 2) | 1 696 -> 524 (2 220 / 2 564) |
+| ... labels on whole pixels (`TextFlags_PixelSnap`) | 0.305 | | | |
+| 100 such items | 0.068 -> 0.040 (0.041 / 0.050) | 0.029 -> 0.015 (0.019 / 0.022) | 102 -> 1 (1 / 1) | 170 -> 52 (222 / 256) |
+| 1 000 lines across the screen to one point | 0.059 -> 0.031 (0.033 / 0.021) | 0.113 -> 0.037 (0.032 / 0.035) | 1 (1 / 1) | 375 -> 31 (89 / 89) |
+| 200 polylines of 64 points, 2 px | 0.824 -> 0.194 (0.082 / 0.099) | 0.123 -> 0.028 (0.044 / 0.043) | 1 (1 / 1) | 1 998 -> 406 (647 / 647) |
+| 3 000 labels | 0.418 -> 0.422 (0.248 / 0.248) | 0.050 (0.133 / 0.133) | 1 (2 / 2) | 747 (2 150 / 2 150) |
+| ... on whole pixels | 0.203 | | | |
+
+Direct3D 12, Vulkan and OpenGL alike. In the tree's `esia_bench` (alternated, 5 runs), Direct3D 11: 10 000 plain shapes
+build 0.363 -> 0.396 ms, submit 0.356 -> 0.026, GPU 0.236 -> 0.046, upload 3 750 -> 625 KB; plain widgets submit 0.025
+-> 0.006, GPU 0.034 -> 0.025, 2 draws -> 1; text the same; glass GPU 0.409 -> 0.395. Cipher's demo (an application on
+the widgets, 1920 x 1080, 5 alternated runs): with a thousand items of shapes and labels on screen the frame 0.891 ->
+0.679 ms on Direct3D 11 and 1.042 -> 0.791 on Direct3D 12, GPU 0.233 -> 0.069 and 0.228 -> 0.102, 538 draws -> 1; its
+ordinary screens within 1 %.
+
+The solid lines and the cheaper joints came after these numbers; measured again on the same benchmark (4 builds
+alternated, 3 runs each), Direct3D 11, ms, before -> after (Dear ImGui 1.92.9b / 1.93.0):
+
+| scene | CPU | build | GPU |
+| --- | --- | --- | --- |
+| 10 000 lines, 1.5 px | 0.294 -> 0.137 (0.338 / 0.176) | 0.280 -> 0.122 | 0.033 (1.93.0: 0.063) |
+| 1 000 lines across the screen to one point | 0.031 -> 0.015 (0.033 / 0.021) | 0.027 -> 0.011 | 0.037 (0.043) |
+| 200 polylines of 64 points, 2 px | 0.189 -> 0.087 (0.079 / 0.100) | 0.173 -> 0.071 | 0.028 (0.046) |
+
+Direct3D 12 and Vulkan alike (the polylines 0.88 and 0.94 times Dear ImGui 1.93.0's CPU); every other scene the same as
+before.
+
+### Not done
+
+* Polylines against Dear ImGui 1.92.9b's CPU: 1.04 to 1.11 times (the joints' arithmetic one joint at a time; SIMD
+  would take four). On OpenGL Esia's submission is most of the small scenes: 1 000 lines across the screen 0.046 ms
+  against Dear ImGui 1.93.0's 0.037, the polylines 0.125 against 0.114 (their build the same as on the other APIs).
+* Labels at new sub-pixel offsets every frame still build in 1.7 times Dear ImGui's time unless drawn on whole pixels
+  (`TextFlags_PixelSnap`: 0.82 times).
+* A plain shape between FX shapes that overlap it changes program twice (a draw each): scenes of glass and shadows with
+  a plain rectangle among them take a draw more; scenes of text and plain shapes take fewer.
+* Arcs and rings, per-corner radii, fading strokes and every other material stay FX instances; so do polylines with a
+  material (FX paths) and, as geometry, the ones above.
+* Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (round 1's).
 
 ## Glass on every shape
 
@@ -282,9 +595,11 @@ findings (`64c1753`), each checked against the code.
 
 * One pipeline for plain shapes and text: solid rounded rects, circles, segments and fills as compact instances
   drawn with the glyph quads (the shapes' 384-byte FX instance is most of what 10 000 lines upload, and the markers'
-  948 draws are kinds alternating, which on OpenGL cost 1.5 ms of GPU time).
+  948 draws are kinds alternating, which on OpenGL cost 1.5 ms of GPU time). Done in
+  [round 2](#render-class-cost-round-2-much-content-on-screen).
 * Labels at new sub-pixel offsets every frame still build in twice Dear ImGui's time (0.39 against 0.18 ms for 3 000):
-  every glyph is put on the pixel grid at a quarter-pixel phase, which Dear ImGui does not do.
+  every glyph is put on the pixel grid at a quarter-pixel phase, which Dear ImGui does not do. Round 2: such labels
+  drawn on whole pixels (`TextFlags_PixelSnap`) build in 0.82 times its time.
 * Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (frames in flight
   serialize); to be measured with frames in flight, which the benchmarks do not run.
 

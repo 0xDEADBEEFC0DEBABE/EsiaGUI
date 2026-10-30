@@ -9,7 +9,7 @@ layout(std140) uniform WgtFrame
     vec4 gLevel[6];
     vec4 gText;
     vec4 gConv;
-} _115;
+} _152;
 
 layout(location = 0) in vec4 v_rect;
 layout(location = 1) in vec4 v_packed;
@@ -18,14 +18,14 @@ out vec2 esia_v1;
 
 void main()
 {
-    float _228 = floor(v_packed.x * 0.000244140625);
-    float _237 = floor(v_packed.y * 0.000244140625);
-    float _246 = floor(v_packed.z * 1.52587890625e-05);
-    float _253 = floor((v_packed.z - (_246 * 65536.0)) * 0.00390625);
-    bool _265 = (uint(gl_VertexID) & 1u) != 0u;
-    bool _269 = (uint(gl_VertexID) & 2u) != 0u;
-    gl_Position = vec4((vec2(_265 ? v_rect.z : v_rect.x, _269 ? v_rect.w : v_rect.y) * _115.gXform.xy) + _115.gXform.zw, 0.0, 1.0);
-    esia_v0 = vec4((v_packed.z - (_246 * 65536.0)) - (_253 * 256.0), _253, _246, v_packed.w) * vec4(0.0039215688593685626983642578125);
-    esia_v1 = vec2((v_packed.x - (_228 * 4096.0)) + (_265 ? (v_packed.y - (_237 * 4096.0)) : 0.0), _228 + (_269 ? _237 : 0.0)) * vec2(0.000244140625);
+    bool _249 = (uint(gl_VertexID) & 1u) != 0u;
+    bool _253 = (uint(gl_VertexID) & 2u) != 0u;
+    float _297 = floor(v_packed.z * 1.52587890625e-05);
+    float _304 = floor((v_packed.z - (_297 * 65536.0)) * 0.00390625);
+    float _330 = floor(v_packed.x * 0.000244140625);
+    float _339 = floor(v_packed.y * 0.000244140625);
+    gl_Position = vec4((vec2(_249 ? v_rect.z : v_rect.x, _253 ? v_rect.w : v_rect.y) * _152.gXform.xy) + _152.gXform.zw, 0.0, 1.0);
+    esia_v0 = vec4((v_packed.z - (_297 * 65536.0)) - (_304 * 256.0), _304, _297, v_packed.w) * vec4(0.0039215688593685626983642578125);
+    esia_v1 = vec2((v_packed.x - (_330 * 4096.0)) + (_249 ? (v_packed.y - (_339 * 4096.0)) : 0.0), _330 + (_253 ? _339 : 0.0)) * vec2(0.000244140625);
 }
 

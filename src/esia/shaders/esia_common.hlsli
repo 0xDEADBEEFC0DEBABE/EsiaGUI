@@ -177,6 +177,51 @@ float WgtErf(float x)
     return s - s / (t * t);
 }
 
+// ------------------------------------------------------------------ SDFs ----
+// The FX shader's shapes (esia_fx.hlsl) and the plain shapes drawn as quads (esia_quad.hlsl) measure with these, so a
+// plain shape covers the same pixels either way.
+
+// Rounded box with per-corner radii and optional "continuous" (squircle-like) corners.
+float SdRoundRect(float2 p, float2 halfSize, float4 radii, float smoothing)
+{
+    float r = (p.x > 0.0) ? ((p.y > 0.0) ? radii.z : radii.y) : ((p.y > 0.0) ? radii.w : radii.x);
+    float maxR = min(halfSize.x, halfSize.y);
+    r = min(r, maxR);
+    float s = smoothing;
+    float R = r * (1.0 + 0.6 * s);
+    if (R > maxR)
+    {
+        s *= saturate((maxR - r) / max(0.6 * r, 1e-4));
+        R = r * (1.0 + 0.6 * s);
+    }
+    float2 q = abs(p) - halfSize + R;
+    float2 m = max(q, 0.0);
+    float corner = 0.0;
+    [branch] if (m.x > 0.0 && m.y > 0.0)   // only the corner quadrants need the superellipse
+    {
+        // (a sharp corner - R under the 1e-4 floor below - has no curve to normalize by: its distance is the
+        // Euclidean one; normalizing by the floor instead collapsed it to 0 and put a half-covered pixel outside it)
+        if (s > 0.001 && R > 1e-4)
+        {
+            float n = 2.0 + 2.0 * s;
+            float2 mn = m / max(R, 1e-4);
+            corner = pow(pow(mn.x, n) + pow(mn.y, n), 1.0 / n) * R;
+        }
+        else
+            corner = length(m);
+    }
+    else
+        corner = max(m.x, m.y);
+    return min(max(q.x, q.y), 0.0) + corner - R;
+}
+
+float SdSegment(float2 p, float2 a, float2 b, float r)
+{
+    float2 pa = p - a, ba = b - a;
+    float h = saturate(dot(pa, ba) / max(dot(ba, ba), 1e-6));
+    return length(pa - ba * h) - r;
+}
+
 // Cubic B-spline reconstruction with 4 bilinear taps: smooth magnification of low-res blur levels. The taps depend
 // on the level's size only, so they are computed once (WgtBSplineTaps) and each level's branch just reads its texture
 // (WgtBSplineRead): SM3 counts every branch's code against the pixel shader's instruction slots.

@@ -3,6 +3,7 @@
 
 esia_add_test(esia_core_tests
     core/test_hash.cpp
+    core/test_cpu.cpp
     core/test_draw_list.cpp
     core/test_texture.cpp
     core/test_input.cpp
@@ -30,6 +31,11 @@ esia_add_test(esia_render_tests
     render/test_painter.cpp
     render/test_renderer.cpp)
 target_link_libraries(esia_render_tests PRIVATE esia::render)
+
+# SVG: the parser, exact coverage (against dense point sampling), strokes, paints and the atlas
+esia_add_test(esia_svg_tests svg/test_svg_parse.cpp svg/test_svg_raster.cpp)
+target_link_libraries(esia_svg_tests PRIVATE esia::svg)
+target_include_directories(esia_svg_tests PRIVATE ${ESIA_ROOT}/src/esia/svg)   # the internals: path data, the sweep
 
 # the widget layer's tests, where the tree has the layer (tests/ui/CMakeLists.txt)
 if(TARGET esia_ui AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/ui/CMakeLists.txt)
