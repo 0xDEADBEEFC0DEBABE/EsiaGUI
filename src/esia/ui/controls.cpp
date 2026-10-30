@@ -199,6 +199,11 @@ namespace esia::ui
         c.ItemSize(Vec2(w, Sc(9)));
         if (!c.ItemAdd(0, Rect::FromSize(pos, Vec2(w, Sc(9)))))
             return;
+        MemoKey k;
+        k.V(pos).F(w);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return;
         Painter p = GetPainter();
         p.HLine(pos.x, pos.x + w, pos.y + Sc(4), C().separator, std::max(1.0f, Sc(T().metrics.hairline)));
     }
@@ -568,6 +573,11 @@ namespace esia::ui
         const float bounce = ui::Anim(bounceId, 0.0f, kBounce);
         const float light = Anim(it.id, 0x75, it.held ? 1.0f : 0.0f, Spring{0.18f, 1.0f});
         const float k = Saturate(on);
+        MemoKey mk;
+        mk.R(it.rect).F(it.press).F(on).F(pop).F(bounce).F(light).V(press.at).C(o.tint).U(icon).U((*value ? 1u : 0u) | (o.glow ? 2u : 0u));
+        DrawMemo memo(mk);
+        if (memo.Replayed())
+            return it.pressed;
 
         Painter p = GetPainter();
         p.PushScale(center, 1.0f - 0.07f * it.press + 0.06f * pop);
@@ -702,10 +712,6 @@ namespace esia::ui
     bool detail::StepperAt(Id id, const Rect& r, int* value, int mn, int mx, int step)
     {
         const Palette& pc = C();
-        Painter p = GetPainter();
-        const float radius = ItemRadius(Dt(9));
-        Style well = Style().Radius(radius);
-        p.Rect(r, SurfaceFill(well, FillOr(pc.tertiaryFill)));
         const Rect left(r.min.x, r.min.y, r.Center().x, r.max.y), right(r.Center().x, r.min.y, r.max.x, r.max.y);
         bool changed = false;
         const InteractState a = InteractImpl(Salt(id, 1), left, InteractFlags_Repeat);
@@ -721,6 +727,15 @@ namespace esia::ui
             *value = std::min(mx, *value + step);
             changed = true;
         }
+        MemoKey k;
+        k.R(r).F(a.press).F(b.press).U((canDec ? 1u : 0u) | (canInc ? 2u : 0u));
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return changed;
+        Painter p = GetPainter();
+        const float radius = ItemRadius(Dt(9));
+        Style well = Style().Radius(radius);
+        p.Rect(r, SurfaceFill(well, FillOr(pc.tertiaryFill)));
         if (a.press > 0.01f)
             p.Rect(left, Style().Radius(radius, 0, 0, radius).Fill(pc.highlight.Fade(a.press * 1.5f)));
         if (b.press > 0.01f)
@@ -872,8 +887,14 @@ namespace esia::ui
         c.ItemSize(sz);
         if (!c.ItemAdd(0, Rect::FromSize(pos, sz)))
             return;
+        const float rad = radius < 0.0f ? Sc(T().metrics.controlRadius) : Sc(radius);
+        MemoKey k;
+        k.V(pos).V(sz).U((std::uint32_t)texture).U((std::uint32_t)((std::uint64_t)texture >> 32)).F(rad).V(uv0).V(uv1);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return;
         Painter p = GetPainter();
-        p.Image(texture, Rect::FromSize(pos, sz), radius < 0.0f ? Sc(T().metrics.controlRadius) : Sc(radius), Color::White(), uv0, uv1);
+        p.Image(texture, Rect::FromSize(pos, sz), rad, Color::White(), uv0, uv1);
     }
 
     bool ColorSwatches(std::string_view id, int* selected, const Color* colors, int count, float diameter)
@@ -899,6 +920,11 @@ namespace esia::ui
             }
             const float on = Anim(it.id, 0x80, *selected == i ? 1.0f : 0.0f, SpringBouncy());
             const float r = d * 0.5f * (1.0f - 0.08f * it.press);
+            MemoKey k;
+            k.V(center).F(r).F(on).C(colors[i]);
+            DrawMemo memo(k);
+            if (memo.Replayed())
+                continue;
             p.Circle(center, r - Sc(3) * on, Style().Fill(Paint::Radial(colors[i].Lighter(0.18f), colors[i], Vec2(0.35f, 0.3f), 0.8f)));
             if (on > 0.01f)
                 p.Circle(center, r + Sc(1.5f), Style().Stroke(Sc(2), colors[i].Fade(on), 0.0f));

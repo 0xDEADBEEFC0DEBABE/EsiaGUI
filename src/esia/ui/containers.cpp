@@ -243,10 +243,17 @@ namespace esia::ui
                 if (alpha > 0.01f)
                 {
                     const float w = Sc(t.metrics.scrollIndicator) + Sc(3) * wide;
-                    Painter p = GetPainter();
-                    if (always > 0.0f)
-                        p.Capsule(Rect(x - w * 0.5f, view.min.y + trackPad, x + w * 0.5f, view.min.y + trackPad + trackH), Style().Fill(C().label.Fade(0.07f * always)));
-                    p.Capsule(Rect(x - w * 0.5f, thumbY, x + w * 0.5f, thumbY + thumbH), Style().Fill(C().label.Fade((0.28f + 0.2f * wide) * alpha)));
+                    MemoKey k;
+                    k.F(x).F(w).F(always).F(alpha).F(wide).F(view.min.y + trackPad).F(trackH).F(thumbY).F(thumbH);
+                    DrawMemo memo(k);
+                    if (!memo.Replayed())
+                    {
+                        Painter p = GetPainter();
+                        if (always > 0.0f)
+                            p.Capsule(Rect(x - w * 0.5f, view.min.y + trackPad, x + w * 0.5f, view.min.y + trackPad + trackH),
+                                      Style().Fill(C().label.Fade(0.07f * always)));
+                        p.Capsule(Rect(x - w * 0.5f, thumbY, x + w * 0.5f, thumbY + thumbH), Style().Fill(C().label.Fade((0.28f + 0.2f * wide) * alpha)));
+                    }
                 }
             }
             c.PopClipRect();
@@ -294,6 +301,9 @@ namespace esia::ui
 
         DrawList& dl = c.WindowDrawList();
         const std::size_t from = dl.Mark();
+        MemoKey k;
+        k.R(card).F(o.radius).C(o.fill).U((o.glass ? 1u : 0u) | (o.shadow ? 2u : 0u));
+        if (DrawMemo memo(k); !memo.Replayed())
         {
             Painter p = GetPainter();
             Style s;
@@ -619,9 +629,15 @@ namespace esia::ui
             const float show = Anim(e.id, 0x2E5, nearCorner ? 1.0f : 0.0f, SpringFast());
             if (show > 0.01f)
             {
-                const float r = Sc(T().metrics.windowRadius);
-                Painter p = GetPainter();
-                p.Arc(wr.max - Vec2(r, r), r - Sc(5), Sc(4), kPi * 0.12f, kPi * 0.26f, Style().Fill(C().label.Fade(0.35f * show)));
+                MemoKey k;
+                k.V(wr.max).F(show);
+                DrawMemo memo(k);
+                if (!memo.Replayed())
+                {
+                    const float r = Sc(T().metrics.windowRadius);
+                    Painter p = GetPainter();
+                    p.Arc(wr.max - Vec2(r, r), r - Sc(5), Sc(4), kPi * 0.12f, kPi * 0.26f, Style().Fill(C().label.Fade(0.35f * show)));
+                }
             }
         }
         PopStyle();   // the window's opacity

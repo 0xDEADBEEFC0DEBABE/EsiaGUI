@@ -27,6 +27,8 @@ namespace
         float values[6] = {0.10f, 0.25f, 0.40f, 0.55f, 0.70f, 0.85f};
         bool rowToggle = true;
         bool check = false;
+        bool airplane = false;
+        int count = 3, swatch = 1;
         int mode = 1;
         float rowValue = 40.0f;
 
@@ -68,11 +70,11 @@ namespace
         if (s.button >= 0)
             a.ctx.QueueInput(InputEvent::Button(MouseButton::Left, s.button == 1));
         a.ui->SetFlat(s.flat);
-        a.ctx.NewFrame({Vec2(800, 1400), s.scale, t});
+        a.ctx.NewFrame({Vec2(800, 1800), s.scale, t});
         a.ui->NewFrame();
         ui::WindowOptions wo;
         wo.pos = Vec2(20, 16);
-        wo.size = Vec2(380, 1300);
+        wo.size = Vec2(380, 1700);
         if (ui::BeginWindow("Panel", nullptr, wo))
         {
             ui::Spacer(1.0f + s.shift);
@@ -139,6 +141,18 @@ namespace
                 ui::TreeNode("Camera", leaf);
                 ui::TreePop();
             }
+            ui::Divider();
+            if (ui::BeginCard("card"))
+            {
+                static const Color kSwatches[4] = {Color(1.0f, 0.3f, 0.3f), Color(0.3f, 0.8f, 0.4f), Color(0.3f, 0.5f, 1.0f), Color(0.9f, 0.8f, 0.2f)};
+                ui::BeginHStack("tools");
+                ui::ToggleButton("airplane", &a.airplane, (ui::Icon)'A');
+                ui::Stepper("count", &a.count, 0, 10);
+                ui::ColorSwatches("swatches", &a.swatch, kSwatches, 4);
+                ui::EndStack();
+                ui::Image(0, Vec2(48, 32), 6.0f);
+                ui::EndCard();
+            }
             ui::TextWrapped(ui::TextStyle::Body, Color(0.92f, 0.92f, 0.95f),
                             "Draw memos keep a widget's drawing from the frame before and append it again while nothing it "
                             "is drawn from has changed: the same output, byte for byte.");
@@ -187,14 +201,14 @@ namespace
         if (f >= 30 && f < 110)
         {
             const float k = (float)(f - 30) / 80.0f;
-            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 1180.0f * k);   // down to the section's rows, the table and the tree
+            s.mouse = Vec2(40.0f + 300.0f * k, 40.0f + 1580.0f * k);   // down to the section's rows, the table, the tree, the card
             if (f == 50 || f == 80)
                 s.button = 1;
             if (f == 53 || f == 95)
                 s.button = 0;
         }
         else if (f >= 110)
-            s.mouse = Vec2(700, 1360);   // out of the window
+            s.mouse = Vec2(700, 1760);   // out of the window
         if (f >= 140 && f < 170)
             s.styledRow = 2;
         if (f >= 180 && f < 260)
