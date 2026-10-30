@@ -752,8 +752,9 @@ capture ends and restarts a render pass, should gain more; not measured.
 
 ### Not done
 
-* The example and EsiaGUI do not set `targetStatic` yet (their hosts clear or not per backend); an app that draws its
-  whole background with Esia can.
+* The examples promise `targetStatic` since 2026-10-30 (`App::opaqueBackground`: their wallpapers cover the target), but
+  their backgrounds move, so no capture is reused there (glass_window, the showcase and the workbench: 0 of 1 200,
+  6 652 and 1 206 in 600 frames; GPU time the same with `--no-reuse`). An app over a still background gains.
 * Captures that write over each other are restored every frame (copies); separate storage per capture would keep
   them, at more memory.
 

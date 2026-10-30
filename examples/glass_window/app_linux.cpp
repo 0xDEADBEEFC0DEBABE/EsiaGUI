@@ -208,6 +208,7 @@ namespace glass
                 cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
                 rp.frame = host->Frame();
+                rp.targetStatic = app.opaqueBackground;
                 if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                     std::fprintf(stderr, "%s: the device refused frame %d\n", app.name, frame);
                 window.ApplyRequests(ctx.Requests());

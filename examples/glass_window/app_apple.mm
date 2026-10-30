@@ -309,6 +309,7 @@ namespace glass::apple
         const esia::rhi::Texture target = esia::rhi::metal::WrapTexture(*device_, texture);
         esia::render::RenderParams rp;
         rp.frame.nativeContext = (__bridge void*)cb;
+        rp.targetStatic = app_.opaqueBackground;
         if (!target || !renderer_->Render(ctx_->GetDrawData(), &ctx_->Textures(), target, rp))
             std::fprintf(stderr, "%s: the device refused frame %d\n", app_.name, frame_);
         encodeMs_ = std::chrono::duration<float, std::milli>(Clock::now() - encodeStart).count();
