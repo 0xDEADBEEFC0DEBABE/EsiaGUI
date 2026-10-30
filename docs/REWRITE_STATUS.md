@@ -247,7 +247,8 @@ plain widgets, and most widgets of most frames draw what they drew the frame bef
   memos; so do a list row's separator, highlight, icon and label (its interaction now comes before its drawing: it draws
   nothing), a row's right-aligned value, a navigation row's chevron, a slider row's value, a section's card (drawn after
   its rows and moved under them: the memo lies between the `Mark` and the move), a table's cells, a tree's rows (their
-  springs first), Checkbox, Badge, ProgressBar and ProgressRing. A memo inside another's recording draws as part of it.
+  springs first), Checkbox, Badge, ProgressBar, ProgressRing and segmented controls (after their liquid selection's
+  springs; a dozen segments at most). A memo inside another's recording draws as part of it.
 * Kept measures (`MeasureMetrics`): a text measured in a lane's same place with the same font, size, wrap width and
   bytes, the text system's text coming out as it did, takes the metrics it had (`MeasureSlot`) without the layout
   cache's look-up; the layouts found so stay in the cache's use (`TextSystem::KeepLayouts`, once a frame). A button
@@ -287,8 +288,7 @@ The flat look takes 0.78 times Dear ImGui's CPU. With `ESIA_UI_MEMO=off` the sam
 ### Not done
 
 * The regular look's submit: its widgets' shadows are FX instances between the labels' quads (66 draws against 5 flat).
-* Other widgets (fields, pickers, segmented controls, steppers, plots, the dock's tabs ...) draw every frame; each needs
-  its inputs named.
+* Other widgets (fields, pickers, steppers, plots, the dock's tabs ...) draw every frame; each needs its inputs named.
 * What a widget draws from that the memo does not see would be drawn stale: a widget keeping a memo must name every
   input of its drawing (the verify mode and the memo test find what is missed), and draw nothing whose pixels change
   without its inputs (an SVG breaks recordings: `DrawList::BreakRecording`).

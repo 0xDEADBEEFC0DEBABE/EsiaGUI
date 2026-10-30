@@ -27,6 +27,7 @@ namespace
         float values[6] = {0.10f, 0.25f, 0.40f, 0.55f, 0.70f, 0.85f};
         bool rowToggle = true;
         bool check = false;
+        int mode = 1;
         float rowValue = 40.0f;
 
         App(int memo, bool smoothMotion)
@@ -104,6 +105,8 @@ namespace
                     ui::Next().Tint(Color(0.2f, 0.6f, 1.0f));
                 ui::RowToggle("Wi-Fi", &a.rowToggle, ui::RowIcon{(ui::Icon)'W', Color(0.2f, 0.5f, 1.0f)});
                 ui::RowSlider("Volume", &a.rowValue, 0.0f, 100.0f, ui::RowIcon{}, "%.0f");
+                static const std::string_view kModes[3] = {"Off", "Auto", "On"};
+                ui::RowSegmented("Mode", &a.mode, kModes);
                 ui::RowNavigation("General", "Details");
                 ui::RowButton("Sign out", true);
                 ui::EndSection();
