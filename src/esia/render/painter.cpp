@@ -578,6 +578,22 @@ namespace esia
             ExcludeFromScale(start, quadStart);
     }
 
+    bool Painter::UnscaledCoverage(const text::GlyphSlot& tile, const esia::Rect& r, Color color)
+    {
+        if (maskDepth_ > 0)
+            return false;   // UnscaledImage draws an FX image there, which takes the mask
+        // what UnscaledImage does with an image on whole pixels outside masks: a quad where `r` is, in the color with the
+        // painter's alpha, that PopScale skips
+        color.a *= alpha_;
+        if (!(color.a > 0.0f) || r.Empty() || tile.page == 0)
+            return true;
+        const std::size_t start = dl_->Vertices().size(), quadStart = dl_->Quads().size();
+        dl_->AddCoverageQuad(tile.page, r, tile.uv0, tile.uv1, color.ToRgba8());
+        if (scaleDepth_ > 0)
+            ExcludeFromScale(start, quadStart);
+        return true;
+    }
+
     // ------------------------------------------------------------ paths
     void Painter::Polygon(const Vec2* points, int count, const Style& s) { EmitPolygon(points, count, nullptr, s.radii[0], s); }
 

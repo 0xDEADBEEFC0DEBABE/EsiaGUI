@@ -145,8 +145,32 @@ namespace esia::platform::win32
         // sized for the primary monitor first, corrected below when Windows places it on another one
         const UINT systemDpi = ::GetDpiForSystem();
         SIZE size = outerSize(systemDpi);
-        HWND w = ::CreateWindowExW(0, kWindowClass, Widen(desc.title).c_str(), style, CW_USEDEFAULT, CW_USEDEFAULT, size.cx, size.cy,
-                                   nullptr, nullptr, instance, &platform);
+        // WindowDesc::monitor: its work area's top-left (in pixels: the process is DPI aware by now)
+        struct Find
+        {
+            int want, others;
+            RECT work;
+            bool found;
+        } find{desc.monitor, 0, {}, false};
+        if (desc.monitor >= 0)
+            ::EnumDisplayMonitors(
+                nullptr, nullptr,
+                [](HMONITOR m, HDC, LPRECT, LPARAM p) -> BOOL {
+                    Find& f = *reinterpret_cast<Find*>(p);
+                    MONITORINFO mi = {};
+                    mi.cbSize = sizeof(mi);
+                    if (!::GetMonitorInfoW(m, &mi))
+                        return TRUE;
+                    const int index = (mi.dwFlags & MONITORINFOF_PRIMARY) ? 0 : ++f.others;
+                    if (index != f.want)
+                        return TRUE;
+                    f.work = mi.rcWork;
+                    f.found = true;
+                    return FALSE;
+                },
+                (LPARAM)&find);
+        HWND w = ::CreateWindowExW(0, kWindowClass, Widen(desc.title).c_str(), style, find.found ? find.work.left : CW_USEDEFAULT,
+                                   find.found ? find.work.top : CW_USEDEFAULT, size.cx, size.cy, nullptr, nullptr, instance, &platform);
         if (!w)
             return fail("CreateWindowExW");
         const UINT dpi = ::GetDpiForWindow(w);
@@ -162,7 +186,7 @@ namespace esia::platform::win32
         }
         platform.impl_->owned = true;
         platform.Attach(w);
-        ::ShowWindow(w, SW_SHOWDEFAULT);
+        ::ShowWindow(w, desc.activate ? SW_SHOWDEFAULT : SW_SHOWNOACTIVATE);
         return w;
     }
 

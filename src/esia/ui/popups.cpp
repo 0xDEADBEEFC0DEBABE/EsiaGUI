@@ -62,6 +62,9 @@ namespace esia::ui
         PushStyle(ItemStyle().Opacity(Saturate(a)));
         Painter p = GetPainter();
         const Rect wr = w.GetRect();
+        MemoKey bk;
+        bk.R(wr).F(a);
+        if (DrawMemo memo(bk); !memo.Replayed())
         {
             ScopedUnclip unclip(wr, ShadowExtent(Sc(28), Vec2(0, Sc(10))));
             p.Rect(Scaled(wr, 0.96f + 0.04f * a),
@@ -123,7 +126,8 @@ namespace esia::ui
         Context& c = Ctx();
         const text::FontRef f = Font(TextStyle::Body);
         const std::string_view shown = VisibleLabel(label);
-        const Vec2 ts = MeasureText(f, shown);
+        const text::TextMetrics lm = MeasureMetrics(f, shown);
+        const Vec2 ts = lm.size;
         // The popup sizes itself to its widest row (what each measures: ItemSize); every row then spans the popup
         // (or the scroll area its rows are in) as wide as it is now.
         const float natural = ts.x + Sc(64), h = Sc(Sizes().row);
@@ -133,6 +137,11 @@ namespace esia::ui
         const InteractState it = InteractImpl(c.GetId(label), Rect::FromSize(pos, Vec2(width, h)), InteractFlags_None);
         if (!it.visible)
             return false;
+        MemoKey k;
+        k.R(it.rect).F(it.hover).U((selected ? 1u : 0u)).U(icon).U64(lm.layout);
+        DrawMemo memo(k);
+        if (memo.Replayed())
+            return it.pressed;
         const Palette& pc = C();
         Painter p = GetPainter();
         if (it.hover > 0.01f)
@@ -188,9 +197,12 @@ namespace esia::ui
         const InteractState it = InteractImpl(id, r, InteractFlags_None);
         Painter p = GetPainter();
         const text::FontRef f = Font(TextStyle::Body);
-        const Vec2 ts = MeasureText(f, current);
+        const text::TextMetrics cm = MeasureMetrics(f, current);
+        const Vec2 ts = cm.size;
         const float chevron = Dt(10);
-        if (it.visible)
+        MemoKey k;
+        k.R(r).F(it.hover).F(it.press).U((plain ? 1u : 0u) | (it.visible ? 2u : 0u)).U64(cm.layout);
+        if (DrawMemo memo(k); it.visible && !memo.Replayed())
         {
             if (!plain)
             {
@@ -283,6 +295,9 @@ namespace esia::ui
         }
         c.BeginTooltip();
         const Rect tr = c.CurrentWindow()->GetRect();
+        MemoKey tk;
+        tk.R(tr);
+        if (DrawMemo memo(tk); !memo.Replayed())
         {
             Painter p = GetPainter();
             ScopedUnclip unclip(tr, ShadowExtent(Sc(16), Vec2(0, Sc(6))));

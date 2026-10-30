@@ -60,6 +60,10 @@ namespace glass
         // true: the frame loads the fonts (--font, else Segoe UI + Microsoft YaHei) and calls TextSystem::NewFrame;
         // false: the example does both (esia::ui::Ui does)
         bool loadFonts = true;
+        // true: every frame first covers its whole target with opaque content (a wallpaper), so what the target held
+        // before does not matter - the host promises RenderParams::targetStatic, and a glass capture whose content
+        // did not change is reused instead of taken again (Windows: --no-reuse, not)
+        bool opaqueBackground = false;
         // Options the frame does not know ("--demo name"): true when consumed (then `value`, if not null, was too).
         std::function<bool(const std::string& option, const char* value, bool& usedValue)> option;
         // On the render thread, once the Context and the text system exist (text is null when built without it or

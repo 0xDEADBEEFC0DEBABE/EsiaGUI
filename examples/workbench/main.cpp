@@ -579,6 +579,7 @@ int main(int argc, char** argv)
     glass::App app;
     app.name = "workbench";
     app.loadFonts = false;   // the Ui loads the platform's fonts
+    app.opaqueBackground = true;   // Background's gradient covers the target
     app.option = [&](const std::string& o, const char* value, bool& usedValue) {
         if (o == "--light")
             return !(d.dark = false);

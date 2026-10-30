@@ -480,7 +480,7 @@ namespace esia::svg::detail
         }
     }
 
-    void Sweep::Row(int y, Cells& cells)
+    void Sweep::Pass(int y)
     {
         const float y0 = (float)y, y1 = y0 + 1.0f;
         while (next_ < chains_.size() && pts_[chains_[next_].first].y < y1)
@@ -525,8 +525,6 @@ namespace esia::svg::detail
             active_[live++] = a;
         }
         active_.resize(live);
-        if (active_.empty())
-            return;
         for (std::size_t i = 1; i < active_.size(); ++i)
         {
             const Active a = active_[i];
@@ -538,6 +536,14 @@ namespace esia::svg::detail
             }
             active_[j] = a;
         }
+    }
+
+    void Sweep::Row(int y, Cells& cells)
+    {
+        Pass(y);
+        if (active_.empty())
+            return;
+        const float y0 = (float)y;
         // chains apart from each other across the row: one walk for the whole row
         float reach = -std::numeric_limits<float>::max();
         bool apart = true;

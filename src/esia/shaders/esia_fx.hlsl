@@ -163,10 +163,14 @@ float2 UiLightDir(float2 p)
 }
 // How far a drop shadow's offset reaches from the shape: every way once the light turns it.
 float ShadowReach(float2 offset) { return UiLightOn() ? length(offset) : max(abs(offset.x), abs(offset.y)); }
-// A shadow's offset: as given, or turned away from the light (its length kept)
+// A shadow's offset: as given, or turned away from the light (its length kept). A branch, not a selection: a ?: on
+// the light computes both sides in every pixel (fxc selects with movc)
 float2 ShadowOffset(FxInst I)
 {
-    return UiLightOn() ? -UiLightDir((I.rect.xy + I.rect.zw) * 0.5) * length(I.shadowParams.zw) : I.shadowParams.zw;
+    float2 offset = I.shadowParams.zw;
+    [branch] if (UiLightOn())
+        offset = -UiLightDir((I.rect.xy + I.rect.zw) * 0.5) * length(I.shadowParams.zw);
+    return offset;
 }
 
 struct FxVSIn
@@ -499,9 +503,26 @@ float2 ShapeNormal(float2 p, FxInst I)
         return g;
     }
     const float e = 0.5;
-    float dx = ShapeSD(p + float2(e, 0), I) - ShapeSD(p - float2(e, 0), I);
-    float dy = ShapeSD(p + float2(0, e), I) - ShapeSD(p - float2(0, e), I);
-    float2 g = float2(dx, dy);
+    float2 g;
+#ifndef ESIA_SM3   // (SM3: the four calls below alone - the full ps_3_0 shader has no slots for a second copy)
+    // A rounded rect with one radius on every corner (most glass): the four points share their corner, and their
+    // distances skip the shape's dispatch - ShapeSD's numbers, from a quarter of its corner work. Glass shades its
+    // whole bevel through here.
+    [branch] if (I.flags.z == SHAPE_RRECT && !FX_HAS(I.flags.x, F_GLYPH) && !FX_HAS(I.flags.x, F_MERGE) && all(I.radii.xyz == I.radii.yzw))
+    {
+        const float2 center = (I.rect.xy + I.rect.zw) * 0.5;
+        const float2 halfSize = max((I.rect.zw - I.rect.xy) * 0.5, 1e-3);
+        const float2 corner = RoundRectCorner(p - center, halfSize, I.radii, I.shape.y);
+        g.x = SdRoundRectCorner(p + float2(e, 0) - center, halfSize, corner) - SdRoundRectCorner(p - float2(e, 0) - center, halfSize, corner);
+        g.y = SdRoundRectCorner(p + float2(0, e) - center, halfSize, corner) - SdRoundRectCorner(p - float2(0, e) - center, halfSize, corner);
+    }
+    else
+#endif
+    {
+        float dx = ShapeSD(p + float2(e, 0), I) - ShapeSD(p - float2(e, 0), I);
+        float dy = ShapeSD(p + float2(0, e), I) - ShapeSD(p - float2(0, e), I);
+        g = float2(dx, dy);
+    }
     float l = length(g);
     return l > 1e-5 ? g / l : float2(0, -1);
 }
@@ -719,23 +740,31 @@ GlassSample EvalGlass(float2 svpos, float2 p, float d, float px, FxInst I)
     const float fres = pow(1.0 - N.z, 5.0);
     col = lerp(col, env * 1.1 + 0.08, fres * 0.35);
 
-    // light catches the rim facing it, and bounces weaker on the opposite side
-    const float2 L = UiLightOn() ? UiLightDir(p) : float2(cos(I.glassParams.w), sin(I.glassParams.w));   // the UI light, or the glass's own
-    const float facing = dot(n, L);
-    const float lit = pow(saturate(facing), 1.5) + 0.4 * pow(saturate(-facing), 1.5);
+    // light catches the rim facing it, and bounces weaker on the opposite side: the UI light, or the glass's own (a
+    // branch: selected with ?:, both were computed in every pixel)
+    float2 L;
+    [branch] if (UiLightOn())
+        L = UiLightDir(p);
+    else
+        L = float2(cos(I.glassParams.w), sin(I.glassParams.w));
     // The Fresnel term peaks within a fraction of a pixel of the outline, and ends there at once: sampled at the
     // pixel center the rim line flickered along a curve (a round button looked dented), and a few taps across the
     // outline left steps and light above the top of a circle (a notch). It is averaged over the pixel exactly: the
     // pixel's square seen across the outline is a trapezoid (a box |n.x| px wide convolved with one |n.y| px wide),
     // and the average of f over it is a second difference of RimG. Outside the shape f = 0, so the rim carries its
-    // own coverage (applied once, in FxPS). The same as 16 x 16 samples a pixel to 2 / 255.
+    // own coverage (applied once, in FxPS). The same as 16 x 16 samples a pixel to 2 / 255. Where f = 0, so is the
+    // rim: its light (two powers) only along the outline.
     const float inside = -d;
     const float hx = px * (0.5 * abs(n.x) + 0.02), hy = px * (0.5 * abs(n.y) + 0.02);   // half widths
-    float rimFresnel = 0.0;
+    gs.rim = 0.0;
     [branch] if (inside + hx + hy > 0.0 && inside - hx - hy < 0.5 * bezel)   // else f = 0 over the pixel (G is linear)
-        rimFresnel = (RimG(inside + hx + hy, bezel) - RimG(inside + hx - hy, bezel) - RimG(inside - hx + hy, bezel) +
-                      RimG(inside - hx - hy, bezel)) / (4.0 * hx * hy);
-    gs.rim = rimFresnel * lit * I.glassParams.z * 1.6;
+    {
+        const float rimFresnel = (RimG(inside + hx + hy, bezel) - RimG(inside + hx - hy, bezel) - RimG(inside - hx + hy, bezel) +
+                                  RimG(inside - hx - hy, bezel)) / (4.0 * hx * hy);
+        const float facing = dot(n, L);
+        const float lit = pow(saturate(facing), 1.5) + 0.4 * pow(saturate(-facing), 1.5);
+        gs.rim = rimFresnel * lit * I.glassParams.z * 1.6;
+    }
     // light: the side of the slab facing it and the whole bevel glow a little (clear glass too)
     const float2 center = (I.rect.xy + I.rect.zw) * 0.5;
     const float toward = saturate(0.5 + 0.5 * dot((p - center) / halfSize, L));

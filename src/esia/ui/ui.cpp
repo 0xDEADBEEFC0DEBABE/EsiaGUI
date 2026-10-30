@@ -2,6 +2,8 @@
 #include "ui_internal.hpp"
 #include "esia/text/system_fonts.hpp"
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 
 namespace esia::ui
 {
@@ -82,6 +84,10 @@ namespace esia::ui
         m.look = desc.glassLook;
         m.flat = desc.flat;
         m.islandEnabled = desc.island;
+        m.memoMode = desc.drawMemo ? 1 : 0;
+        if (const char* e = std::getenv("ESIA_UI_MEMO"))
+            m.memoMode = std::strcmp(e, "off") == 0 ? 0 : std::strcmp(e, "verify") == 0 ? 2 : m.memoMode;
+        std::memset(static_cast<void*>(&m.memoLast), 0, sizeof(m.memoLast));
         if (!m.text)
             return;
         for (int w = 0; w < (int)FontWeight::Count; ++w)
@@ -150,7 +156,31 @@ namespace esia::ui
         m.decorationSerial = 0;
         const std::uint32_t frame = (std::uint32_t)m.ctx->FrameCount();
         if (frame % 64 == 0)
+        {
             m.anims.Collect(frame, 600);   // as Context::State keeps its entries (ContextDesc::retainFrames)
+            // the memos of draw lists not drawn into for as long
+            std::erase_if(m.memoLanes, [&](const std::unique_ptr<Impl::MemoLane>& l) { return frame - l->frame > 600; });
+            m.memoLane = nullptr;
+        }
+        {
+            // what every drawing is drawn from: a new serial when any of it changed (byte for byte: copied as bytes)
+            Impl::MemoEnv e;
+            std::memset(static_cast<void*>(&e), 0, sizeof(e));
+            std::memcpy(static_cast<void*>(&e.theme), static_cast<const void*>(&m.effective), sizeof(Theme));
+            e.sizes = m.sizes;
+            e.look = m.look;
+            e.flat = m.flat;
+            std::memcpy(e.fonts, m.fonts, sizeof(m.fonts));
+            e.iconFont = m.iconFont;
+            e.text = m.text;
+            e.scale = m.ctx->Scale();
+            e.framebufferScale = m.ctx->FramebufferScale().x;
+            if (std::memcmp(static_cast<const void*>(&e), static_cast<const void*>(&m.memoLast), sizeof(e)) != 0)
+            {
+                std::memcpy(static_cast<void*>(&m.memoLast), static_cast<const void*>(&e), sizeof(e));
+                ++m.memoEnv;
+            }
+        }
         if (m.text)   // with the frame's clock: moving text settles into its hinting in 0.12 s (TextRendering::smoothMotion)
             m.text->NewFrame({m.ctx->FramebufferScale().x, m.ctx->Input().Time()});
         m.inFrame = true;
@@ -161,6 +191,9 @@ namespace esia::ui
     void Ui::EndFrame()
     {
         Impl& m = *impl_;
+        if (m.text && !m.keptLayouts.empty())
+            m.text->KeepLayouts(m.keptLayouts);
+        m.keptLayouts.clear();
         if (m.islandEnabled && g_current == this)
             detail::IslandFrame();
         // floating bars to the end of their window's draw list, in the order they were submitted
@@ -239,6 +272,132 @@ namespace esia::ui
     void Ui::SetGlassLook(GlassLook look) { impl_->look = look; }
     GlassLook Ui::GetGlassLook() const { return impl_->look; }
     bool Ui::Animating() const { return impl_->animating; }
+
+    DrawMemoStats Ui::MemoStats() const { return impl_->memoStats; }
+
+    Ui::Impl::MemoLane& Ui::Impl::LaneOf(const DrawList& list)
+    {
+        if (!memoLane || memoLane->list != &list)
+        {
+            memoLane = nullptr;
+            for (const std::unique_ptr<MemoLane>& l : memoLanes)
+                if (l->list == &list)
+                {
+                    memoLane = l.get();
+                    break;
+                }
+            if (!memoLane)
+            {
+                memoLanes.push_back(std::make_unique<MemoLane>());
+                memoLane = memoLanes.back().get();
+                memoLane->list = &list;
+            }
+        }
+        const std::uint32_t frame = (std::uint32_t)ctx->FrameCount();
+        if (memoLane->frame != frame)
+        {
+            memoLane->frame = frame;
+            memoLane->next = memoLane->nextMeasure = 0;
+        }
+        return *memoLane;
+    }
+
+    namespace detail
+    {
+        DrawMemo::DrawMemo(const MemoKey& inputs) : inputs_(inputs)
+        {
+            Ui::Impl& m = M();
+            if (m.memoMode == 0 || !m.text)
+                return;
+            DrawList& dl = m.ctx->WindowDrawList();
+            if (dl.Recording())
+                return;   // inside another widget's drawing: recorded with it
+            const std::uint64_t generation = m.text->DrawGeneration();
+            if (generation == 0)
+                return;   // a text system that does not note its draws
+            Ui::Impl::MemoLane& lane = m.LaneOf(dl);
+            if (lane.next == lane.slots.size())
+                lane.slots.emplace_back();
+            Ui::Impl::MemoSlot& slot = lane.slots[lane.next++];
+            // what every drawing is drawn from, then the widget's own
+            const std::uint64_t style = m.styles.empty() ? 0 : m.styles.back().hash;
+            const std::uint64_t env[3] = {m.memoEnv, style, generation};
+            std::memcpy(env_, env, sizeof(env));
+            const int words = 6 + inputs.n;
+            const bool same = slot.words == words && std::memcmp(slot.key, env_, 6 * sizeof(std::uint32_t)) == 0 &&
+                              std::memcmp(slot.key + 6, inputs.w, (std::size_t)inputs.n * sizeof(std::uint32_t)) == 0 &&
+                              slot.data.size() == inputs.dataSize && (inputs.dataSize == 0 || std::memcmp(slot.data.data(), inputs.data, inputs.dataSize) == 0);
+            if (same && dl.CanReplay(slot.record))
+            {
+                if (m.memoMode == 2)
+                    verifying_ = m.text->CanReplayDraws(slot.notes);   // it would be appended: compared with the drawing below
+                else if (m.text->ReplayDraws(slot.notes))
+                {
+                    dl.Replay(slot.record);
+                    replayed_ = true;
+                    ++m.memoStats.replayed;
+                    return;
+                }
+            }
+            // drawn, and recorded for the next frame
+            slot_ = &slot;
+            list_ = &dl;
+            glowCalls_ = m.glowCalls;
+            if (!verifying_)
+                slot.words = -1;
+            std::vector<text::DrawNote>& notes = verifying_ ? m.memoScratchNotes : slot.notes;
+            notes.clear();
+            m.text->SetDrawNotes(&notes);
+            dl.BeginRecord();
+        }
+
+        DrawMemo::~DrawMemo()
+        {
+            if (!slot_)
+                return;
+            Ui::Impl& m = M();
+            m.text->SetDrawNotes(nullptr);
+            Ui::Impl::MemoSlot& slot = *slot_;
+            DrawRecord& record = verifying_ ? m.memoScratch : slot.record;
+            std::vector<text::DrawNote>& notes = verifying_ ? m.memoScratchNotes : slot.notes;
+            bool keep = list_->EndRecord(record) && m.glowCalls == glowCalls_;
+            for (const text::DrawNote& n : notes)
+                keep = keep && n.rest >= 1.0f;   // in motion, or settling: drawn every frame
+            ++m.memoStats.drawn;
+            if (verifying_)
+            {
+                // what the memo would have appended (it would have: the same inputs, the list as it began, its texts
+                // at rest where they were) against the drawing
+                const auto sameNotes = [](const std::vector<text::DrawNote>& a, const std::vector<text::DrawNote>& b) {
+                    if (a.size() != b.size())
+                        return false;
+                    for (std::size_t i = 0; i < a.size(); ++i)
+                        if (a[i].layout != b[i].layout || !(a[i].pos == b[i].pos) || a[i].scale != b[i].scale || a[i].rest != b[i].rest ||
+                            a[i].outline != b[i].outline)
+                            return false;
+                    return true;
+                };
+                if (!keep || !(record == slot.record) || !sameNotes(notes, slot.notes))
+                {
+                    if (++m.memoStats.mismatches <= 8)
+                        std::fprintf(stderr, "esia ui: a draw memo differs from the drawing (%d words of inputs, %zu quads vs %zu, %zu notes vs %zu)\n",
+                                     inputs_.n, record.quads.size(), slot.record.quads.size(), notes.size(), slot.notes.size());
+                }
+                std::swap(record, slot.record);
+                std::swap(notes, slot.notes);
+            }
+            if (!keep)
+            {
+                slot.words = -1;
+                return;
+            }
+            std::memcpy(slot.key, env_, 6 * sizeof(std::uint32_t));
+            std::memcpy(slot.key + 6, inputs_.w, (std::size_t)inputs_.n * sizeof(std::uint32_t));
+            const std::uint8_t* data = static_cast<const std::uint8_t*>(inputs_.data);
+            slot.data.assign(data, data + inputs_.dataSize);
+            slot.words = 6 + inputs_.n;
+        }
+    }
 
     text::FontRef Ui::Font(FontWeight weight, float size) const
     {
@@ -636,10 +795,46 @@ namespace esia::ui
         }
 
         // ---- text
-        Vec2 MeasureText(text::FontRef f, std::string_view text, float wrapWidth)
+        Vec2 MeasureText(text::FontRef f, std::string_view text, float wrapWidth) { return MeasureMetrics(f, text, wrapWidth).size; }
+
+        text::TextMetrics MeasureMetrics(text::FontRef f, std::string_view text, float wrapWidth)
         {
-            text::TextSystem* ts = M().text;
-            return ts && !text.empty() ? ts->Measure(f, text, wrapWidth).size : Vec2(0, 0);
+            Ui::Impl& m = M();
+            text::TextSystem* ts = m.text;
+            if (!ts || text.empty())
+                return text::TextMetrics{};
+            // the measure of this place in the draw list's order, kept from the frame before: compared byte for byte
+            const std::uint64_t generation = m.memoMode != 0 && m.ctx->CurrentWindow() ? ts->DrawGeneration() : 0;
+            if (generation == 0)
+                return ts->Measure(f, text, wrapWidth);
+            Ui::Impl::MemoLane& lane = m.LaneOf(m.ctx->WindowDrawList());
+            if (lane.nextMeasure == lane.measures.size())
+                lane.measures.emplace_back();
+            Ui::Impl::MeasureSlot& s = lane.measures[lane.nextMeasure++];
+            const std::uint32_t size = std::bit_cast<std::uint32_t>(f.size), wrap = std::bit_cast<std::uint32_t>(wrapWidth);
+            if (s.generation == generation && s.font == f.id && s.size == size && s.wrap == wrap && s.text.size() == text.size() &&
+                std::memcmp(s.text.data(), text.data(), text.size()) == 0)
+            {
+                if (m.memoMode == 2)
+                {
+                    // "verify": the text system's own measure
+                    const text::TextMetrics fresh = ts->Measure(f, text, wrapWidth);
+                    if (!(fresh.size == s.metrics.size) || fresh.baseline != s.metrics.baseline || fresh.lines != s.metrics.lines)
+                    {
+                        if (++m.memoStats.mismatches <= 8)
+                            std::fprintf(stderr, "esia ui: a kept measure differs from the text system's\n");
+                    }
+                }
+                m.keptLayouts.push_back(s.metrics.layout);
+                return s.metrics;
+            }
+            s.metrics = ts->Measure(f, text, wrapWidth);
+            s.generation = generation;
+            s.font = f.id;
+            s.size = size;
+            s.wrap = wrap;
+            s.text.assign(text);
+            return s.metrics;
         }
 
         void DrawIcon(Painter& p, Vec2 center, Icon icon, float size, Color color)
@@ -711,6 +906,32 @@ namespace esia::ui
 
         void MergeStyle(ItemStyle& into, const ItemStyle& s) { Merge(into, s); }
 
+        // The style in scope as a draw memo's input: its fields (not its bytes: there are gaps between them) and opacity
+        std::uint64_t StyleHash(const ItemStyle& s, float alpha)
+        {
+            std::uint64_t h = 0x9E3779B97F4A7C15ull;
+            const auto add = [&h](std::uint32_t v) { h = (h ^ v) * 0xBF58476D1CE4E5B9ull; h ^= h >> 29; };
+            const auto addBytes = [&add](const void* p, std::size_t size) {
+                for (std::size_t i = 0; i < size; i += 4)
+                {
+                    std::uint32_t v;
+                    std::memcpy(&v, (const char*)p + i, 4);
+                    add(v);
+                }
+            };
+            static_assert(sizeof(GlassMaterial) % 4 == 0 && sizeof(Color) == 16 && sizeof(text::TextOutline) == 20, "fields without gaps");
+            add(s.set);
+            add((std::uint32_t)s.look);
+            addBytes(&s.glass, sizeof(s.glass));
+            for (const Color* c : {&s.tint, &s.fill, &s.label, &s.selectedFill, &s.movingFill, &s.selectedLabel})
+                addBytes(c, sizeof(Color));
+            add(std::bit_cast<std::uint32_t>(s.radius));
+            add(std::bit_cast<std::uint32_t>(s.opacity));
+            addBytes(&s.textOutline, sizeof(s.textOutline));
+            add(std::bit_cast<std::uint32_t>(alpha));
+            return h | 1u;   // (0: no style)
+        }
+
         void PushStyle(const ItemStyle& s)
         {
             Ui::Impl& m = M();
@@ -720,6 +941,7 @@ namespace esia::ui
             Merge(e.resolved, s);
             if (s.Has(ItemStyle::kOpacity))
                 e.alpha *= Saturate(s.opacity);
+            e.hash = StyleHash(e.resolved, e.alpha);
             m.styles.push_back(e);
         }
 

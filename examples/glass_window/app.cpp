@@ -10,6 +10,7 @@
 #if defined(GLASS_TEXT)
 #include "esia/text/freetype.hpp"
 #endif
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -39,6 +40,10 @@ namespace glass
             std::string textRendering;   // --text-rendering
             bool light = false;          // --light: one UI light at the cursor (RenderParams::light)
             bool hdr = false;            // --hdr: an scRGB target, the UI at the monitor's SDR white (RenderParams::hdr)
+            bool reuse = true;           // --no-reuse: App::opaqueBackground not promised (captures taken every frame)
+            bool stats = false;          // --stats: with --frames, the CPU / GPU medians at the end
+            int monitor = -1;            // --monitor n: the window opens on monitor n (0 the primary, 1 the first other one)
+            bool activate = true;        // --no-activate: the window does not take the focus
         };
 
         int Usage(const App& app, const char* problem)
@@ -46,7 +51,8 @@ namespace glass
             std::fprintf(stderr,
                          "%s: %s\n"
                          "usage: %s [--api %s] [--size WxH] [--scale s] [--vsync on|off] [--debug] [--no-shader-cache] [--fixed-dt seconds]\n"
-                         "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--light] [--hdr]\n",
+                         "       [--frames N] [--screenshot out.png] [--font file]... [--text-rendering spec] [--light] [--hdr] [--no-reuse]\n"
+                         "       [--stats] [--monitor n] [--no-activate]\n",
                          app.name, problem, app.name, BuiltApis().c_str());
             return 2;
         }
@@ -135,6 +141,8 @@ namespace glass
             const Clock::time_point start = Clock::now();
             Clock::time_point fpsStart = start;
             int fpsFrames = 0, frame = 0, result = 0;
+            std::vector<float> statCpu, statGpu;   // --stats
+            int reused = 0, captures = 0;
             float fps = 0.0f, cpuMs = 0.0f;
             int width = fi.width, height = fi.height;
             while (!platform.CloseRequested())
@@ -182,6 +190,7 @@ namespace glass
                 cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
                 rp.frame = host->Frame();
+                rp.targetStatic = app.opaqueBackground && opt.reuse;
                 if (host->ScRgb())   // the UI at the brightness the monitor shows SDR content at
                 {
                     rp.hdr.encoding = esia::render::HdrEncoding::ScRgb;
@@ -197,6 +206,15 @@ namespace glass
                 }
                 if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                     std::fprintf(stderr, "%s: the device refused frame %d\n", app.name, frame);
+                if (opt.stats)
+                {
+                    const esia::render::RenderStats& s = renderer.Stats();
+                    statCpu.push_back(cpuMs);
+                    if (s.gpu.valid)
+                        statGpu.push_back(s.gpu.totalMs);
+                    reused += s.reusedCaptures;
+                    captures += s.backdropCaptures;
+                }
                 platform.ApplyRequests(ctx.Requests());
 
                 ++frame;
@@ -237,6 +255,15 @@ namespace glass
             if (app.shutdown)
                 app.shutdown();
 
+            if (opt.stats)
+            {
+                const auto median = [](std::vector<float>& v) {
+                    std::sort(v.begin(), v.end());
+                    return v.empty() ? 0.0f : v[v.size() / 2];
+                };
+                std::printf("%s: UI CPU median %.3f ms, GPU median %.3f ms, %d of %d glass captures reused\n", app.name, median(statCpu), median(statGpu),
+                            reused, reused + captures);
+            }
             const std::uint32_t messages = host->ValidationMessages();
             std::printf("%s: %d frames, %u validation / debug-layer messages%s\n", app.name, frame, messages, opt.debug ? "" : " (--debug to enable the layer)");
             return (opt.debug && messages > 0 && result == 0) ? 3 : result;
@@ -262,6 +289,14 @@ namespace glass
                     o.light = true;
                 else if (a == "--hdr")
                     o.hdr = true;
+                else if (a == "--no-reuse")
+                    o.reuse = false;
+                else if (a == "--stats")
+                    o.stats = true;
+                else if (a == "--monitor" && needs())
+                    o.monitor = std::atoi(value);
+                else if (a == "--no-activate")
+                    o.activate = false;
                 else if (a == "--no-shader-cache")
                     o.shaderCache = false;
                 else if (a == "--api" && needs())
@@ -326,7 +361,13 @@ namespace glass
         pw::Platform platform;
         std::string error;
         const std::string apiName = opt.api == "directx" ? std::string("DirectX") : std::string(CreateHost(opt.api)->Name());
-        if (!pw::CreateAppWindow(platform, {"Esia " + std::string(app.name) + " - " + apiName, (int)std::lround(opt.width), (int)std::lround(opt.height)}, &error))
+        pw::WindowDesc wd;
+        wd.title = "Esia " + std::string(app.name) + " - " + apiName;
+        wd.width = (int)std::lround(opt.width);
+        wd.height = (int)std::lround(opt.height);
+        wd.monitor = opt.monitor;
+        wd.activate = opt.activate;
+        if (!pw::CreateAppWindow(platform, wd, &error))
         {
             std::fprintf(stderr, "%s: %s\n", app.name, error.c_str());
             return 1;

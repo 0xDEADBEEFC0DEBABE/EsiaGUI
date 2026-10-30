@@ -118,7 +118,7 @@ is the executable reference: run the conformance suite with `--backend null --ou
 | `DestroyTexture(tex)` | Any time outside passes; defer the real release until the GPU is done with it. |
 | `GetTextureDesc(tex)` | Size, format, usage, samples. The renderer reads it for the target every frame. |
 | `CreateBuffer(desc)` / `UpdateBuffer(buf, data, size)` / `DestroyBuffer` | `Vertex` (20-byte `esia::Vertex`), `Index` (uint32), `FxInstances` (float4 rows, `FxStorage::Buffer` only). Updates replace the first `size` bytes, before the first pass; version them per frame in flight. |
-| `MapBuffer(buf, size)` / `UnmapBuffer(buf)` | `UpdateBuffer` written in place: the renderer writes the frame's vertices, indices and FX instances straight from the draw lists, one buffer at a time. The default stages them for `UpdateBuffer`; a backend whose buffers map hands out their memory (Direct3D 9 - 11: lock / map with discard; Direct3D 12: the buffer's copy for the ring). |
+| `MapBuffer(buf, size)` / `UnmapBuffer(buf)` | `UpdateBuffer` written in place: the renderer writes the frame's vertices, indices and FX instances straight from the draw lists, one buffer at a time. The default stages them for `UpdateBuffer`; a backend whose buffers map hands out their memory (Direct3D 9 - 11: lock / map with discard; Direct3D 12: the buffer's copy for the ring; Vulkan: the frame slot's ring in device memory the host maps, else its staging ring copied into the slot's device ring). |
 | `CreatePipeline(desc)` | Program (vertex + pixel shader of `ShaderProgram`), vertex layout, topology, blend, target format, samples, and for `Fx`: `effect` / `effectSource` (user effects, only with `runtimeEffects`), `fxFeatures` (with `fxFeatureVariants`, and for batches of `fx::kVariantOnlyFeatures` where `fullFxGlyphs` is false) and `background` (only with `asyncPipelines`, below). May be called inside a pass. Return `{}` if the combination is impossible (a sample count the format cannot have, an effect that failed): the renderer falls back or skips - a refused FX variant is drawn with the full shader (`fxFeatures = 0`, counted in `RenderStats::fxFallbacks`). A user effect may return `{}` while it compiles in the background; the renderer asks again on a later frame. |
 | `GetPipelineStatus(p)` | Only with `asyncPipelines`: `Pending` while a `background` pipeline compiles, `Failed` when it could not be built, else `Ready` (the default implementation). The renderer never binds a pipeline that is not `Ready`. |
 
@@ -418,7 +418,13 @@ generated SPIR-V, GLSL, ESSL and MSL have them as location 0 index 0 / 1 (`color
   targets in `SHADER_READ_ONLY_OPTIMAL` at the end of their pass (final layout) and transition at `BeginPass`
   (to `COLOR_ATTACHMENT_OPTIMAL`), at `CopyTexture` (`TRANSFER_SRC` / `TRANSFER_DST`, then back to
   `SHADER_READ_ONLY`), after uploads, and at `EndFrame` (the host target back to its exit layout).
-* Uploads go into a staging ring recorded before the first render pass (all updates happen before it).
+* Uploads go into a staging ring recorded before the first render pass (all updates happen before it). Each waits
+  for what it overwrites only (an image's transition from its layout, a barrier on that buffer), not for all earlier
+  work: with frames in flight that would make each frame wait for the one before. A frame's mapped data and its
+  constants go into rings per frame in flight that no running frame reads, in device memory the host maps
+  (`DEVICE_LOCAL | HOST_VISIBLE`: the BAR, unified memory) where there is some - written in place, read at full speed
+  (constants read from host memory cost a glass frame on an RTX 4080 a fifth of its GPU time) -, else the data copied
+  into device memory and the constants in host memory.
 * Constants: dynamic uniform-buffer offsets into a per-frame ring (32 bytes of Draw constants could be push
   constants, but the SPIR-V declares `WgtDraw` as a uniform buffer: keep the three as UBOs). Descriptor sets from a
   per-frame pool, or `VK_KHR_push_descriptor`.

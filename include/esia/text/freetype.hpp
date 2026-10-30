@@ -46,6 +46,13 @@ namespace esia::text
         // ESIA_TEXT_RENDERING environment variable, when set, overrides it (ParseTextRendering: "crisp", "light",
         // "hinting=full,interpreter=35" ...), so any program can be compared under another rendering.
         TextRendering rendering;
+        // Distance fields (DrawShapes, large text): the fields of a text's new glyphs are made at once by this many
+        // worker threads and the UI thread together (FieldMakerDesc::workers): -1 one per processor but one, at most
+        // 15; 0 the UI thread alone. The same fields either way.
+        int fieldThreads = -1;
+        // A directory where the distance fields are kept between runs (FieldMakerDesc::cacheDirectory, UTF-8): a
+        // later run reads them instead of making them again. Empty: none.
+        std::string fieldCacheDirectory;
     };
 
     // The text system keeps its glyph pages in `textures`, which must outlive it. Null if FreeType cannot start.
