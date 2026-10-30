@@ -2,6 +2,7 @@
 // passes) must give identical pixels, with no validation message over a whole device lifetime (the messenger prints
 // them; CTest fails on that output too). Several frames on one device exercise the frame slots: rings reused,
 // fences waited for, deferred releases, timestamps read back.
+#include "esia/render/painter.hpp"
 #include "esia/render/renderer.hpp"
 #include "esia/rhi/vulkan.hpp"
 #include "esia_test.hpp"
@@ -65,6 +66,26 @@ namespace
         image.rgba = pixels;
         testkit::WritePng(std::string(ESIA_VULKAN_TEST_OUT) + "/" + scene.name + suffix + ".png", image);
     }
+
+    // Frame k's content: a background quad, k + 1 FX shapes, a zigzag line drawn as geometry (turns sharper than 120
+    // degrees) and a glass panel, placed and colored by k - so the frame's vertices, indices and instances, their
+    // amounts and their offsets in the frame's data all change from frame to frame.
+    void FrameContent(DrawList& dl, int k, float w, float h)
+    {
+        dl.Reset(Rect(0, 0, w, h));
+        Painter p(dl);
+        p.FillRect(Rect(0, 0, w, h), Color::Hsv((float)k / 7.0f, 0.5f, 0.6f));
+        for (int i = 0; i <= k; ++i)
+            p.Rect(Rect::FromSize(Vec2(8.0f + 26.0f * (float)i, 12.0f + 4.0f * (float)k), Vec2(20.0f, 20.0f)),
+                   Style().Radius(6.0f).Fill(Color::Hsv((float)(i + 2 * k) / 11.0f, 0.8f, 0.9f)).Stroke(1.5f, Color::Black(0.5f)));
+        Vec2 zigzag[8];
+        for (int i = 0; i < 8; ++i)
+            zigzag[i] = Vec2(12.0f + 20.0f * (float)i, (i % 2 == 0 ? 110.0f : 60.0f) + 3.0f * (float)k);
+        p.Polyline(zigzag, 4 + k % 4, 3.0f, Style().Fill(Color::Hsv((float)k / 5.0f, 0.9f, 1.0f)));
+        GlassMaterial frost;
+        frost.blur = 6.0f;
+        p.Rect(Rect::FromSize(Vec2(30.0f + 14.0f * (float)k, 40.0f), Vec2(90.0f, 50.0f)), Style().Radius(14.0f).Glass(frost));
+    }
 }
 
 ESIA_TEST(VulkanScenes, BothRenderPathsAgree)
@@ -111,6 +132,70 @@ ESIA_TEST(VulkanScenes, FramesInFlight)
                     c[3], c[4]);
         ESIA_CHECK(sum > 0.0f && sum <= five.profile.totalMs * 1.01f);
     }
+}
+
+// The frame's vertices, indices and instances live in a range of its slot's ring: with frames in flight, every frame
+// draws from its own data, also when its slot comes back. Five frames with different content, each into a target of
+// its own, the GPU never waited for in between: each target has the pixels of its frame rendered alone (a renderer of
+// its own, read back at once) - with the data written in mapped device memory and through staging, the same pixels.
+ESIA_TEST(VulkanScenes, FrameDataPerFrame)
+{
+    const int W = 200, H = 140, kFrames = 5;
+    std::vector<std::vector<std::uint8_t>> paths[2];   // the frames' pixels: mapped device memory, through staging
+    for (int path = 0; path < 2; ++path)
+    {
+        HeadlessDesc hd;
+        hd.width = W;
+        hd.height = H;
+        std::string error;
+        vulkan::HeadlessOptions o;
+        o.mappedDeviceMemory = path == 0;
+        HeadlessDevice h = vulkan::CreateHeadless(hd, o, error);
+        if (!h.device)
+        {
+            std::printf("  (no Vulkan device: %s)\n", error.c_str());
+            return;
+        }
+        Device& dev = *h.device;
+        TextureDesc td;
+        td.width = W;
+        td.height = H;
+        td.usage = TextureUsage_RenderTarget | TextureUsage_Sampled | TextureUsage_CopySrc;
+        std::vector<Texture> targets;
+        for (int k = 0; k < kFrames; ++k)
+            targets.push_back(dev.CreateTexture(td, nullptr, 0));
+        auto draw = [&](render::Renderer& renderer, int k) {
+            DrawList dl;
+            FrameContent(dl, k, (float)W, (float)H);
+            DrawData dd;
+            dd.lists.push_back(&dl);
+            dd.displaySize = Vec2((float)W, (float)H);
+            ESIA_CHECK(renderer.Render(dd, nullptr, targets[(std::size_t)k], render::RenderParams{}));
+        };
+        std::vector<std::vector<std::uint8_t>> inFlight((std::size_t)kFrames);
+        {
+            render::Renderer renderer(dev);
+            for (int k = 0; k < kFrames; ++k)
+                draw(renderer, k);
+            for (int k = 0; k < kFrames; ++k)
+                ESIA_CHECK(dev.ReadPixels(targets[(std::size_t)k], IRect{0, 0, W, H}, inFlight[(std::size_t)k]));
+        }
+        for (int k = 0; k < kFrames; ++k)
+        {
+            render::Renderer renderer(dev);
+            draw(renderer, k);
+            std::vector<std::uint8_t> alone;
+            ESIA_CHECK(dev.ReadPixels(targets[(std::size_t)k], IRect{0, 0, W, H}, alone));
+            ESIA_CHECK(!alone.empty() && alone == inFlight[(std::size_t)k]);
+            if (k > 0)
+                ESIA_CHECK(inFlight[(std::size_t)k] != inFlight[(std::size_t)k - 1]);   // the frames differ: a mix-up would show
+        }
+        for (Texture t : targets)
+            dev.DestroyTexture(t);
+        ESIA_CHECK(vulkan::ValidationMessages(dev) == 0);
+        paths[path] = inFlight;
+    }
+    ESIA_CHECK(paths[0] == paths[1]);
 }
 
 // Devices older than 1.3: dynamic rendering through VK_KHR_dynamic_rendering (1.2), plus its dependencies on 1.1.

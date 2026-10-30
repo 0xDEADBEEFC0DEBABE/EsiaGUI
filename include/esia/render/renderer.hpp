@@ -28,7 +28,8 @@
 
 namespace esia::render
 {
-    // How glyph coverage becomes alpha (the DirectWrite model; see TextGrayPS / TextLcdPS in esia_ui.hlsl).
+    // How glyph coverage becomes alpha (the DirectWrite model; see TextGrayPS / TextLcdPS in esia_ui.hlsl). Plain coverage
+    // in the same pages (QuadInstance::SetCoverage: SVG icons drawn with the text) takes none of it.
     struct TextComposition
     {
         float gamma = 1.8f;               // display gamma of the alpha correction (1.0 .. 2.2)

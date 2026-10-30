@@ -212,6 +212,8 @@ with dynamic rendering, with `--frames 3`, and with render passes and `--frames 
    images and glyph pages), but a host with many images would hit `maxMemoryAllocationCount` (4096 on some
    drivers) and waste allocation granularity; a sub-allocator (or VMA) is the fix.
 2. **Uploads always go through staging**, even on unified-memory GPUs where device-local memory is host-visible.
+   Since 2026-10-30 (docs/REWRITE_STATUS.md, "Vulkan frames in flight") the frame's mapped data and its constants
+   are written in place where device memory is host-visible; textures and `UpdateBuffer` still go through staging.
 3. **Wrapping contract.** A wrapped image is prepared for sampling at `BeginFrame` only when `WrapImage` was called
    for that frame (before `Renderer::Render`); a persistent host target wrapped once and never re-wrapped would be
    sampled in its entry layout if the frame's first operation is a capture of it. Documented in `vulkan.hpp`.

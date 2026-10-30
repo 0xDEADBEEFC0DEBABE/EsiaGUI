@@ -2,6 +2,9 @@
 #include "esia/core/draw_list.hpp"
 #include <algorithm>
 #include <cstring>
+#if defined(__SSE2__) || defined(_M_X64)
+#include <emmintrin.h>
+#endif
 
 namespace esia
 {
@@ -17,6 +20,7 @@ namespace esia
         clipStack_.assign(1, clip);
         textureStack_.clear();
         mergeBarrier_ = 0;
+        rec_ = RecordState();
     }
 
     void DrawList::PushClipRect(const Rect& r, bool intersect)
@@ -33,6 +37,8 @@ namespace esia
     void DrawList::PopClipRect()
     {
         ESIA_ASSERT(clipStack_.size() > 1 && "PopClipRect without PushClipRect");
+        if (rec_.active && clipStack_.size() <= rec_.clipDepth)
+            rec_.broken = true;   // a clip from before the recording
         if (clipStack_.size() > 1)
             clipStack_.pop_back();
     }
@@ -42,6 +48,8 @@ namespace esia
     void DrawList::PopTexture()
     {
         ESIA_ASSERT(!textureStack_.empty() && "PopTexture without PushTexture");
+        if (rec_.active && textureStack_.size() <= rec_.textureDepth)
+            rec_.broken = true;
         if (!textureStack_.empty())
             textureStack_.pop_back();
     }
@@ -193,6 +201,17 @@ namespace esia
         EndQuads(w);
     }
 
+    void DrawList::AddCoverageQuad(TextureId texture, const Rect& r, Vec2 uv0, Vec2 uv1, std::uint32_t color)
+    {
+        if (r.Empty() || (color >> 24) == 0)
+            return;
+        DrawCmd& c = QuadCommand(texture);
+        quads_.emplace_back().SetCoverage(r, uv0, uv1, color);
+        ++c.count;
+        c.shapes = true;   // the programs that tell it from the glyphs
+        c.vtxBounds = c.vtxBounds.Union(r);
+    }
+
     void DrawList::AddShapeQuad(const QuadInstance& shape, const Rect& bounds)
     {
         if (shape.Alpha() == 0)
@@ -275,6 +294,13 @@ namespace esia
             else
                 continue;
             c.vtxBounds = b;
+            if (rec_.active && (std::size_t)(&c - cmds_.data()) < rec_.cmds)
+            {
+                // a command from before the recording: its bounds are all of it now (after MoveCommands any of them
+                // may be the one before it: none is given back then)
+                rec_.broken = true;
+                rec_.refreshed = rec_.refreshed || (std::size_t)(&c - cmds_.data()) + 1 == rec_.cmds || rec_.restored;
+            }
         }
     }
 
@@ -331,24 +357,35 @@ namespace esia
 
     void DrawList::BeginLayer(const fx::LayerParams& params)
     {
+        rec_.broken = rec_.broken || rec_.active;
         DrawCmd& c = Push(DrawCmdKind::LayerBegin);
         c.payload = (std::uint32_t)layers_.size();
         layers_.push_back(params);
     }
 
-    void DrawList::EndLayer() { Push(DrawCmdKind::LayerEnd); }
+    void DrawList::EndLayer()
+    {
+        rec_.broken = rec_.broken || rec_.active;
+        Push(DrawCmdKind::LayerEnd);
+    }
 
     void DrawList::BeginFade(const fx::FadeParams& params)
     {
+        rec_.broken = rec_.broken || rec_.active;
         DrawCmd& c = Push(DrawCmdKind::FadeBegin);
         c.payload = (std::uint32_t)fades_.size();
         fades_.push_back(params);
     }
 
-    void DrawList::EndFade() { Push(DrawCmdKind::FadeEnd); }
+    void DrawList::EndFade()
+    {
+        rec_.broken = rec_.broken || rec_.active;
+        Push(DrawCmdKind::FadeEnd);
+    }
 
     void DrawList::AddCallback(DrawCallback callback, void* userData)
     {
+        rec_.broken = rec_.broken || rec_.active;
         DrawCmd& c = Push(DrawCmdKind::Callback);
         c.callback = callback;
         c.userData = userData;
@@ -356,6 +393,7 @@ namespace esia
 
     std::size_t DrawList::Mark()
     {
+        rec_.broken = rec_.broken || rec_.active;
         mergeBarrier_ = cmds_.size();
         return cmds_.size();
     }
@@ -365,9 +403,274 @@ namespace esia
         ESIA_ASSERT(to <= from && from <= cmds_.size() && "MoveCommands: bad range");
         if (to >= from || from > cmds_.size())
             return;
+        if (rec_.active)
+        {
+            rec_.broken = true;
+            if (rec_.hadLast && !rec_.restored && !rec_.refreshed)
+            {
+                // the command before the recording may move: its bounds back first (with what it gathered)
+                DrawCmd& last = cmds_[rec_.cmds - 1];
+                last.vtxBounds = rec_.before.vtxBounds.Union(last.vtxBounds);
+                rec_.restored = true;
+            }
+        }
         std::rotate(cmds_.begin() + (std::ptrdiff_t)to, cmds_.begin() + (std::ptrdiff_t)from, cmds_.end());
         // the last command is now an earlier one: new primitives start a command of their own
         mergeBarrier_ = cmds_.size();
+    }
+
+    // ------------------------------------------------------------------ recording
+    void DrawRecord::Clear()
+    {
+        before = DrawCmd();
+        hadLast = mergeOk = contiguous = took = anyTextureAfter = shapesAfter = false;
+        clip = Rect();
+        texture = textureAfter = 0;
+        addCount = 0;
+        addBounds = DrawCmd().vtxBounds;
+        vtxEnd = -1;
+        vtx.clear();   // (the storage stays for the next recording)
+        idx.clear();
+        quads.clear();
+        fx.clear();
+        cmds.clear();
+    }
+
+    namespace
+    {
+        // what decides how a primitive joins a command, and what it leaves in it: all but its ranges and bounds
+        bool SameState(const DrawCmd& a, const DrawCmd& b)
+        {
+            return a.kind == b.kind && a.clip == b.clip && a.texture == b.texture && a.anyTexture == b.anyTexture && a.shapes == b.shapes &&
+                   a.effect == b.effect && a.payload == b.payload && a.callback == b.callback && a.userData == b.userData;
+        }
+
+        bool SameCmd(const DrawCmd& a, const DrawCmd& b)
+        {
+            return SameState(a, b) && a.first == b.first && a.count == b.count && a.vtxFirst == b.vtxFirst && a.vtxEnd == b.vtxEnd &&
+                   a.vtxBounds == b.vtxBounds;
+        }
+
+        template <class V>
+        bool SameBytes(const V& a, const V& b)
+        {
+            return a.size() == b.size() && (a.empty() || std::memcmp(a.data(), b.data(), a.size() * sizeof(a[0])) == 0);
+        }
+    }
+
+    bool DrawRecord::operator==(const DrawRecord& o) const
+    {
+        if (hadLast != o.hadLast || mergeOk != o.mergeOk || contiguous != o.contiguous || !(clip == o.clip) || texture != o.texture ||
+            (hadLast && !SameState(before, o.before)) || took != o.took || cmds.size() != o.cmds.size())
+            return false;
+        if (took && (addCount != o.addCount || !(addBounds == o.addBounds) || textureAfter != o.textureAfter || anyTextureAfter != o.anyTextureAfter ||
+                     shapesAfter != o.shapesAfter || vtxEnd != o.vtxEnd))
+            return false;
+        for (std::size_t i = 0; i < cmds.size(); ++i)
+            if (!SameCmd(cmds[i], o.cmds[i]))
+                return false;
+        return SameBytes(vtx, o.vtx) && SameBytes(idx, o.idx) && SameBytes(quads, o.quads) && SameBytes(fx, o.fx);
+    }
+
+    namespace
+    {
+        // A widget's few quads copied here (a call to the C runtime's memcpy cost as much as the copy), a long text's
+        // with memcpy
+        void CopyQuads(QuadInstance* to, const QuadInstance* from, std::size_t n)
+        {
+            if (n > 24)
+            {
+                std::memcpy(to, from, n * sizeof(QuadInstance));
+                return;
+            }
+#if defined(__SSE2__) || defined(_M_X64)
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                const __m128 a = _mm_loadu_ps(from[i].rect), b = _mm_loadu_ps(from[i].packed);
+                _mm_storeu_ps(to[i].rect, a);
+                _mm_storeu_ps(to[i].packed, b);
+            }
+#else
+            for (std::size_t i = 0; i < n; ++i)
+                to[i] = from[i];
+#endif
+        }
+    }
+
+    bool DrawList::Contiguous(const DrawCmd& c) const
+    {
+        switch (c.kind)
+        {
+        case DrawCmdKind::Geometry: return c.first + c.count == (std::uint32_t)idx_.size();
+        case DrawCmdKind::Quads: return c.first + c.count == (std::uint32_t)quads_.size();
+        case DrawCmdKind::Fx: return c.first + c.count == (std::uint32_t)fx_.size();
+        default: return false;
+        }
+    }
+
+    void DrawList::BeginRecord()
+    {
+        ESIA_ASSERT(!rec_.active && "BeginRecord: a recording is going on");
+        RecordState& r = rec_;
+        r = RecordState();
+        r.active = true;
+        r.vtx = vtx_.size();
+        r.idx = idx_.size();
+        r.quads = quads_.size();
+        r.fx = fx_.size();
+        r.cmds = cmds_.size();
+        r.layers = layers_.size();
+        r.fades = fades_.size();
+        r.clipDepth = clipStack_.size();
+        r.textureDepth = textureStack_.size();
+        r.mergeBarrier = mergeBarrier_;
+        r.hadLast = !cmds_.empty();
+        r.mergeOk = cmds_.size() > mergeBarrier_;
+        if (r.hadLast)
+        {
+            DrawCmd& last = cmds_.back();
+            r.before = last;
+            r.contiguous = Contiguous(last);
+            last.vtxBounds = DrawCmd().vtxBounds;   // gathers what the stretch adds to it
+        }
+    }
+
+    bool DrawList::EndRecord(DrawRecord& out)
+    {
+        ESIA_ASSERT(rec_.active && "EndRecord without BeginRecord");
+        RecordState& r = rec_;
+        r.active = false;
+        out.Clear();
+        bool ok = !r.broken && clipStack_.size() == r.clipDepth && textureStack_.size() == r.textureDepth && mergeBarrier_ == r.mergeBarrier &&
+                  layers_.size() == r.layers && fades_.size() == r.fades && cmds_.size() >= r.cmds;
+        if (r.hadLast && r.cmds <= cmds_.size())
+        {
+            DrawCmd& last = cmds_[r.cmds - 1];
+            const DrawCmd& b = r.before;
+            const Rect added = last.vtxBounds;
+            if (!r.refreshed && !r.restored)
+                last.vtxBounds = b.vtxBounds.Union(added);   // (refreshed: all of it already, as unrecorded)
+            const bool emptyAdded = added == DrawCmd().vtxBounds;
+            if (last.count != b.count || !emptyAdded || last.texture != b.texture || last.anyTexture != b.anyTexture || last.shapes != b.shapes ||
+                last.vtxEnd != b.vtxEnd)
+            {
+                // it took primitives: only by joining it (a command left empty is taken over, clip and all: not kept)
+                out.took = true;
+                out.addCount = last.count - b.count;
+                out.addBounds = added;
+                out.textureAfter = last.texture;
+                out.anyTextureAfter = last.anyTexture;
+                out.shapesAfter = last.shapes;
+                out.vtxEnd = last.vtxEnd != b.vtxEnd ? (std::int64_t)last.vtxEnd - (std::int64_t)r.vtx : -1;
+                if (b.count == 0 || last.count < b.count || last.kind != b.kind || !(last.clip == b.clip) || last.first != b.first ||
+                    last.vtxFirst != b.vtxFirst || last.effect != b.effect || out.vtxEnd < -1)
+                    ok = false;
+            }
+        }
+        if (!ok)
+        {
+            out.Clear();
+            return false;
+        }
+        out.before = r.before;
+        out.hadLast = r.hadLast;
+        out.mergeOk = r.mergeOk;
+        out.contiguous = r.contiguous;
+        out.clip = clipStack_.back();
+        out.texture = CurrentTexture();
+        out.vtx.assign(vtx_.begin() + (std::ptrdiff_t)r.vtx, vtx_.end());
+        out.idx.resize(idx_.size() - r.idx);
+        for (std::size_t i = 0; i < out.idx.size(); ++i)
+        {
+            if (idx_[r.idx + i] < (std::uint32_t)r.vtx)
+            {
+                out.Clear();   // a vertex from before the stretch
+                return false;
+            }
+            out.idx[i] = idx_[r.idx + i] - (std::uint32_t)r.vtx;
+        }
+        out.quads.assign(quads_.begin() + (std::ptrdiff_t)r.quads, quads_.end());
+        out.fx.assign(fx_.begin() + (std::ptrdiff_t)r.fx, fx_.end());
+        out.cmds.assign(cmds_.begin() + (std::ptrdiff_t)r.cmds, cmds_.end());
+        for (DrawCmd& c : out.cmds)
+        {
+            if (c.kind == DrawCmdKind::Geometry)
+            {
+                c.first -= (std::uint32_t)r.idx;
+                c.vtxFirst -= (std::uint32_t)r.vtx;
+                c.vtxEnd -= (std::uint32_t)r.vtx;
+            }
+            else if (c.kind == DrawCmdKind::Quads)
+                c.first -= (std::uint32_t)r.quads;
+            else
+                c.first -= (std::uint32_t)r.fx;
+        }
+        return true;
+    }
+
+    bool DrawList::CanReplay(const DrawRecord& rec) const
+    {
+        if (cmds_.empty() == rec.hadLast || (cmds_.size() > mergeBarrier_) != rec.mergeOk || !(clipStack_.back() == rec.clip) ||
+            CurrentTexture() != rec.texture)
+            return false;
+        if (!rec.hadLast)
+            return true;
+        const DrawCmd& last = cmds_.back();
+        return SameState(last, rec.before) && Contiguous(last) == rec.contiguous && (last.count == 0) == (rec.before.count == 0);
+    }
+
+    void DrawList::Replay(const DrawRecord& rec)
+    {
+        ESIA_ASSERT(CanReplay(rec) && "Replay: the list is not in the state the stretch began in");
+        const std::uint32_t v0 = (std::uint32_t)vtx_.size(), i0 = (std::uint32_t)idx_.size(), q0 = (std::uint32_t)quads_.size(),
+                            f0 = (std::uint32_t)fx_.size();
+        if (rec.took)
+        {
+            DrawCmd& last = cmds_.back();
+            last.count += rec.addCount;
+            last.vtxBounds = last.vtxBounds.Union(rec.addBounds);
+            last.texture = rec.textureAfter;
+            last.anyTexture = rec.anyTextureAfter;
+            last.shapes = rec.shapesAfter;
+            if (rec.vtxEnd >= 0)
+                last.vtxEnd = v0 + (std::uint32_t)rec.vtxEnd;
+        }
+        if (!rec.vtx.empty())
+        {
+            Reserve((std::uint32_t)rec.idx.size(), (std::uint32_t)rec.vtx.size());
+            vtx_.resize(v0 + rec.vtx.size());
+            std::memcpy(vtx_.data() + v0, rec.vtx.data(), rec.vtx.size() * sizeof(Vertex));
+        }
+        if (!rec.idx.empty())
+        {
+            idx_.resize(i0 + rec.idx.size());
+            std::uint32_t* to = idx_.data() + i0;
+            for (std::size_t i = 0; i < rec.idx.size(); ++i)
+                to[i] = rec.idx[i] + v0;
+        }
+        if (!rec.quads.empty())
+        {
+            if (quads_.capacity() < q0 + rec.quads.size())
+                quads_.reserve(std::max<std::size_t>(q0 + rec.quads.size(), quads_.capacity() * 2));
+            quads_.resize(q0 + rec.quads.size());
+            CopyQuads(quads_.data() + q0, rec.quads.data(), rec.quads.size());
+        }
+        if (!rec.fx.empty())
+            fx_.insert(fx_.end(), rec.fx.begin(), rec.fx.end());
+        for (DrawCmd c : rec.cmds)
+        {
+            if (c.kind == DrawCmdKind::Geometry)
+            {
+                c.first += i0;
+                c.vtxFirst += v0;
+                c.vtxEnd += v0;
+            }
+            else if (c.kind == DrawCmdKind::Quads)
+                c.first += q0;
+            else
+                c.first += f0;
+            cmds_.push_back(c);
+        }
     }
 
     std::size_t DrawData::TotalVertices() const

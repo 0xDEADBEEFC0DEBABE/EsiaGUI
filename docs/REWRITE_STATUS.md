@@ -42,13 +42,37 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Draw lists recorded and appended again** (2026-10-30, in Esia): a stretch of a draw list - what a widget drew -
+kept as a `DrawRecord` and appended again where the list is in the state it began in, byte for byte what drawing it
+again makes, with the text system's records of where texts were drawn (`DrawNote`) left as the draws would leave them:
+the widget layer's draw memos stand on it.
+
+**Glass shading cost** (2026-10-30, in Esia): what glass costs the GPU - the UI light nothing measurable (the shader paid
+for it with or without it), a panel's backdrop capture 9 to 11 us, mostly its passes' fixed cost - and glass shaded 5 to
+8 % faster on Direct3D 11 / 12, Vulkan and OpenGL with the same pixels: the light's direction and the rim's light computed
+only where they are used, the bevel's normal from one corner.
+
+**Vulkan frames in flight** (2026-10-30, in Esia): a frame's vertices, indices, instances and constants in rings per
+frame in flight, in device memory the host maps where there is some (written in place; else copied from staging,
+constants in host memory); upload barriers on what was written instead of one that waited for all earlier work;
+`esia_bench --in-flight` measures frames the GPU is not waited for. RTX 4080 SUPER: GPU -22 % for glass (its
+constants no longer read across PCIe), -46 % for 10 000 shapes, -50 % for a page of text; submit up to -12 %.
+
 **SVG to textures** (2026-10-30, in Esia): SVG files parsed once and rasterized at the size drawn into texture pages, with
 exact area coverage (overlaps, both fill rules and a stroke's pieces resolved in the sweep); monochrome icons as one mask
-in any color; a 16-pixel icon in 7 us.
+in any color; a 16-pixel icon in 7 us. Later that day: icons that last drawn from the text's pages in the labels' draw,
+with the same pixels (200 rows of an icon and a label on row backgrounds: 394 draws -> 1), and of a large drawing only
+what the clip rect shows rasterized, with the whole image's pixels.
 
 **Polylines on the processor's vectors** (2026-10-30, in Esia): a polyline's loops on AVX-512, AVX2, SSE2 or NEON, chosen
 at run time, every level with the same bits; long dense series in 0.039 ms of CPU on AVX-512 (plain C++ 0.150, Dear
 ImGui 1.92.9b 0.084).
+
+**Labels at many sub-pixel offsets** (2026-10-30, in Esia): a text drawn at many offsets is placed once per rounding class
+of its glyphs and copied in after that; 3 000 labels 0.421 -> 0.280 ms of CPU on Direct3D 11, the same pixels.
+
+**OpenGL: the host's texture units saved when first bound** (2026-10-30, in Esia): the host's state without a round trip
+to a threaded driver for every unit; a small frame's submit 0.061 -> 0.039 ms.
 
 **Render-class cost, round 2: much content on screen** (2026-10-30, in Esia): plain shapes - a solid fill or stroke
 on a rounded rectangle, a circle, a capsule, a segment - and polylines are 32-byte quads drawn in the draws of the text
@@ -84,7 +108,9 @@ into its hinting when it stops; a halo of the other tone where the backdrop come
 
 **Distance-field text** (2026-10-28, in Esia): Esia's own MTSDF generator (overlapping contours resolved, sharp
 corners), glyphs as FX shapes with every Painter material (`Painter::Text` with a `Style`: outlines, glows,
-shadows, gradients, glass, weight) on every backend, large text from fields by itself.
+shadows, gradients, glass, weight) on every backend, large text from fields by itself. Since 2026-10-30 the fields of a
+text's new glyphs are made at once on worker threads (a paragraph of 200 new glyphs: 77 -> 8 ms on 16 cores, the same
+bits) and can be kept on disk between runs.
 
 **Sub-pixel text** (2026-10-28, in Esia): LCD antialiasing again, from either rasterizer with FreeType's filters,
 dual-source blending on every backend but Direct3D 9, the grayscale fallback in glow layers; the ClearType setup of
@@ -145,8 +171,13 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Draw lists recorded and appended again](#draw-lists-recorded-and-appended-again)
+* [Glass shading cost](#glass-shading-cost)
+* [Vulkan frames in flight](#vulkan-frames-in-flight)
 * [SVG to textures](#svg-to-textures)
 * [Polylines on the processor's vectors](#polylines-on-the-processors-vectors)
+* [Labels at many sub-pixel offsets](#labels-at-many-sub-pixel-offsets)
+* [OpenGL: the host's texture units saved when first bound](#opengl-the-hosts-texture-units-saved-when-first-bound)
 * [Render-class cost, round 2: much content on screen](#render-class-cost-round-2-much-content-on-screen)
 * [Glass on every shape](#glass-on-every-shape)
 * [Render-class cost, round 1](#render-class-cost-round-1)
@@ -186,6 +217,241 @@ on a row index.
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
 
+## Draw lists recorded and appended again
+
+A widget whose inputs are those of the frame before draws what it drew then. With much content on screen, drawing it
+again - its shapes' tiles looked up, its text's quads copied in, every merge of every primitive - is most of what a frame
+of widgets costs (2026-10-30). The widget layer keeps such drawings (EsiaGUI: `UiDesc::drawMemo`); this is what it
+keeps them with.
+
+### What changed
+
+* `DrawList::BeginRecord` / `EndRecord(DrawRecord&)`: what a stretch of the list added - its vertices, indices (from its
+  first vertex), quads, FX instances and commands (ranges from its starts) - and what it did to the command before it:
+  its primitives may join that command, so the count it added, the bounds of what it added (gathered apart while it
+  records), its texture and kinds after them. A recording that reached into what lay before it is not kept (a `Mark`,
+  moved commands, bounds refreshed there, a clip or texture popped from below its start, a layer, a fade or a callback,
+  `BreakRecording`), nor one that left the clip or texture stacks changed; either way the list is what it would be
+  unrecorded.
+* `CanReplay` / `Replay`: appended where the list's last command is the same but for its ranges (and takes primitives the
+  same way: the same kind, clip, texture, effect, contiguous or not, empty or not), after a `Mark` or not alike, with the
+  same clip and texture in use. The arrays are appended and moved to where they go (indices, command ranges); the command
+  before takes the count and bounds the stretch added to it.
+* `BreakRecording`: what is drawn now depends on more than the drawing's inputs. `svg::Draw` calls it (a drawing is an
+  image the first frame and a tile in the text's pages after).
+* Text: `TextMetrics::layout`, a layout's identity (a serial given whenever a text is laid out; never reused). While
+  `SetDrawNotes` has a list, `Draw` and `DrawOutline` with smooth motion append where they drew (`DrawNote`: the layout,
+  the place, the scale, how much at rest). `ReplayDraws` leaves those records as the draws would - each one the next of
+  its layout this frame, seen where it is, at rest - or changes nothing when one of them would be drawn otherwise (it
+  moved, it is settling, its layout left the cache). `DrawGeneration` changes whenever a text drawn the same way could
+  come out otherwise (pages started over, another rendering, density or fallback fonts). `KeepLayouts`: layouts a caller
+  keeps using without measuring them again stay in the cache's use.
+
+### Verified
+
+* `DrawList.ReplayAppendsWhatDrawingWould`: a recorded stretch replayed after other content (glyphs on its label's page
+  before it: it joins their command; more geometry: its indices move) against drawing it there, every array byte for
+  byte and every command field for field; a recording leaves the list as it is unrecorded.
+  `DrawList.ReplayNeedsTheStateItBeganIn`, `DrawList.RecordingsThatReachBackAreNotKept`.
+* EsiaGUI's draw memos: 440 frames of a panel of labels, buttons, switches, sliders and a paragraph through hovers, clicks,
+  a drag, a style, a theme's transition, a second scale and content moving by fractions of a pixel (smooth motion on and
+  off): the draw data byte for byte what drawing every widget makes, every frame.
+
+## Glass shading cost
+
+What liquid glass costs the GPU - its shading with and without the UI light (RenderParams::light), and its backdrop
+captures - and its shading made cheaper without a pixel changing (2026-10-30). RTX 4080 SUPER, Release clang-cl.
+
+### Measured first
+
+`esia_bench` prints two more medians: the GPU time of the backdrop captures (`capture`: the copy and the pyramid) and of
+the FX batches with glass (`glass`), every category switch timed (`maxProfileScopes` 1024). `--light` puts a point
+light over the middle of the target; the scene `glass-shadow` is the glass scene (20 frosted panels with titles) with a
+drop shadow under each panel, as the widgets draw windows and bars; `shapes-fx` draws the 10 000 plain shapes as FX
+instances. At 2808 x 2100 the glass scene takes one capture and its shading is most of the frame; at 1600 x 1000 every
+panel captures again (20 captures).
+
+* The UI light costs nothing measurable: glass 0.223 ms with it and without, on Direct3D 11 and 12. Not because it is
+  free: FxPS computed the UI light's direction and the glass's own one in every pixel (a `?:` on the light, which fxc
+  compiles as both sides and a `movc`), the drop shadow's offset likewise, so a frame without the light paid for it all
+  the same. All of the light's terms together - the direction, the rim's two powers, the side of the slab facing it -
+  were 5 % of the glass's time (taken out in a test build).
+* The glass's shading in parts, each taken out in turn (Direct3D 11, 2808 x 2100): the backdrop as two B-spline levels
+  instead of one bilinear read 25 %, the bevel's normal (four distances a pixel, over a quarter of a panel) 8.5 %,
+  the light's terms 5 %, vibrancy and veil 3 %, the rim's reflection 2.5 %, the rim's Fresnel average 2 %; FxPS outside
+  the glass body (the distance, coverage, the rim's hairline, grain, the output) about 35 %; the quads with an empty
+  pixel shader 9 %.
+* The captures: at 1600 x 1000 the 20 captures take 0.22 ms (Direct3D 11) and 0.18 ms (Direct3D 12), more than the
+  panels' shading (0.14 / 0.13 ms) - 9 to 11 us each, most of it the fixed cost of its four downsample passes, each
+  waiting for the one before (one capture of the whole 2808 x 2100 target: 0.04 ms). Not changed here (Not done).
+
+### What changed (esia_fx.hlsl, esia_common.hlsli)
+
+* The light's direction is a branch on the light: the UI light's (per pixel for a point light) or the glass's own
+  angle's, not both and a select; the drop shadow's offset likewise (`ShadowOffset`).
+* The rim's light - two powers - only where the rim has light: in the band along the outline where the pixel's Fresnel
+  average is computed. Elsewhere the rim was 0 times them.
+* The bevel's normal: a rounded rect with one radius on every corner (most glass) takes its four distances from one
+  corner, without ShapeSD's dispatch over the shape kinds. `SdRoundRect` is two functions now - `RoundRectCorner`, the
+  corner of the quadrant a point lies in (its reach and smoothing), and `SdRoundRectCorner`, the distance from it -
+  and with one radius the four points' corners are one: the same operations on the same numbers. Not on SM3: the full
+  ps_3_0 shader keeps one copy of the distances (3921 of NVIDIA's 4096 instruction slots; 4121 with a second).
+
+Every change computes the same values in the same order where it computes them. Glass GPU ms, the build before and after
+alternated, 10 rounds of 600 frames (1600 x 1000: 8; Vulkan, OpenGL: 6), medians of the rounds' medians - no two rounds
+of a cell more than 0.002 ms apart:
+
+| 2808 x 2100 | Direct3D 11 | Direct3D 12 | Vulkan | OpenGL |
+| --- | --- | --- | --- | --- |
+| glass | 0.223 -> 0.208 (-6.7 %) | 0.223 -> 0.208 (-6.7 %) | 0.238 -> 0.220 (-7.6 %) | 0.245 -> 0.228 (-6.7 %) |
+| glass, UI light | 0.223 -> 0.209 (-6.3 %) | 0.223 -> 0.210 (-5.6 %) | 0.238 -> 0.222 (-6.7 %) | 0.245 -> 0.230 (-6.1 %) |
+| glass-shadow | 0.263 -> 0.246 (-6.5 %) | 0.263 -> 0.247 (-6.3 %) | 0.281 -> 0.260 (-7.5 %) | 0.293 -> 0.275 (-6.1 %) |
+| glass-shadow, UI light | 0.263 -> 0.249 (-5.3 %) | 0.263 -> 0.249 (-5.3 %) | | |
+
+The frame -4 to -5 % on Direct3D 11 / 12. At 1600 x 1000 glass 0.139 -> 0.128 ms (Direct3D 11) and 0.134 -> 0.126
+(Direct3D 12), glass-shadow 0.148 -> 0.137 and 0.152 -> 0.141, the captures as they were. WARP (Direct3D 11, a CPU
+rasterizer: arithmetic weighs more there), 1600 x 1000, 5 rounds: 24.96 -> 23.34 ms (-6.5 %). `shapes-fx` (FX shapes
+without glass, 14 rounds): 0.325 -> 0.324 ms (Direct3D 11), 0.333 -> 0.330 (Direct3D 12), the same. With the light the
+glass now costs 0.001 - 0.003 ms more than without it: its direction per pixel, which glass without the light no longer
+computes.
+
+### Verified
+
+* Every conformance scene rendered by the build before and after on Direct3D 9, 10, 11 and 12 (RTX 4080 SUPER and WARP),
+  OpenGL, GLES and Vulkan (the last three with the shader library regenerated by the same local tools for both builds):
+  identical, pixel for pixel; the goldens unchanged.
+* ctest 42 / 42 (clang-cl Debug, `-DESIA_WERROR=ON`) with the library as it is and regenerated; Direct3D 10 / 11 / 12
+  with the debug layers, 3 frames: no message; MSVC `/W4 /WX`; the GNU flags on esia_bench.
+* fxc /O3: ps_5_0 FxPS 23 temporaries before and after, 3406 -> 3569 instruction slots (the second copy of the four
+  distances: a glass pixel runs fewer instructions, the shader holds more), ps_4_0 3465 -> 3632; ps_3_0 31 registers,
+  3910 -> 3921 slots; FxVS unchanged.
+
+### Not done
+
+* The glass body's four instance rows (glass, tint, its parameters, the loupe) as flat varyings: on Direct3D 11 those
+  four structured-buffer reads a pixel are 6 % of the glass's time (Direct3D 12's root SRV: 1 %), but four more
+  varyings cost every other FX shape 2.5 % (Direct3D 11) and 4.5 % (Direct3D 12) in `shapes-fx`; two of them in the
+  solid area's varyings (a glass has none) cost it 4 - 5 %.
+* FX feature variants on Direct3D 10 - 12 (`Caps::fxFeatureVariants`): the glass scene drawn with a variant of fill,
+  stroke, shadow, glass, mask and grain (21 temporaries instead of 23, 2540 instruction slots instead of 3406) was 9 %
+  faster; a variant is another compile, not bound to round as the full shader does, and is built at run time.
+* The pyramid's last level: `LevelsForBlur` builds the level after a blur's own even where the shader reads that one
+  alone (a radius at a power of two: the rim reflection's 16 units at scales 1 and 2). Not building a level no glass
+  reads took 17 % off the captures (20 of them, 1600 x 1000, a test build); it changes the null device's command
+  goldens.
+* An integrated GPU: the Ryzen's is off in the BIOS. Its arithmetic is scarcer: what was cut here should weigh more
+  there.
+
+## Vulkan frames in flight
+
+Rounds 1 and 2 left two things in Vulkan's uploads that make frames in flight wait for each other (2026-10-30): one
+barrier before a frame's uploads waited for all earlier work at every stage - the frame before's too -, and every
+buffer had one device copy, which each frame wrote while the frame before could still be reading it. No benchmark ran
+frames in flight to see what that cost. Measuring it found a larger cost next to it: the GPU read every draw's
+constants from host memory.
+
+### What changed
+
+* The frame's data in a ring per frame in flight: `MapBuffer` in a frame (the renderer's vertices, indices, FX instances
+  and quads) hands out a range of the frame slot's new ring (vertex, index and storage usage; 1 MiB chunks that grow and
+  merge like the staging ring's). Where the device has device memory the host maps (`DEVICE_LOCAL | HOST_VISIBLE |
+  HOST_COHERENT`: the BAR of a discrete GPU - 256 MB without resizable BAR -, unified memory) the ring is there and the
+  bytes are written in place: no copy, no barrier, read by the GPU at full speed. Without it (or without room in it) the
+  ring is device memory, and the bytes go into the slot's staging ring - written once, not into a vector first - and are
+  copied into the range at `UnmapBuffer`. The frame's draws read the range: vertex and index buffer offsets, the FX
+  storage buffer's descriptor range. A slot's rings are reset only when the slot comes back - its last frame completed
+  (its fence, or the host's promise) -, so nothing waits for the frame before and every frame in flight reads data of
+  its own. Host frames that share a slot (`FrameDesc::hostFrame`) take ranges one after another.
+* Constants: the uniform ring (one per slot already) in mapped device memory too where there is some, else in host
+  memory as before. Read across PCIe, every draw's constants cost a glass frame a fifth of its GPU time on the RTX 4080
+  SUPER.
+* `vulkan::Desc::mappedDeviceMemory` (default on; `HeadlessOptions::mappedDeviceMemory`; the registered creator reads
+  `ESIA_VULKAN_MAPPED_DEVICE_MEMORY=0`): off leaves that memory to the host - constants in host memory, the frame's data
+  copied from staging. A few MB per frame in flight; an allocation that fails falls back chunk by chunk.
+* A buffer's own copy keeps `UpdateBuffer`'s bytes (and `MapBuffer`'s outside a frame, recorded by the next one, as
+  before) and is made at its first use: the buffers the renderer maps every frame take no device memory beside the
+  ring.
+* Barriers on what was written. No barrier opens a block of uploads (it was `ALL_COMMANDS` -> `TRANSFER`). An image
+  upload waits through its transition from the layout it is in, as before, and an image written twice in a block waits
+  on that image, not on every transfer; an `UpdateBuffer` into a copy that commands used waits on that buffer, for the
+  stages that read its kind and for transfers. The block ends with the written buffer ranges made visible to the access
+  and stages that read each kind (vertex attributes or indices at vertex input, shader reads of the FX buffer) and the
+  uploaded images' transitions: no global memory barrier, no uniform or transfer reads of buffers nothing reads so.
+* `esia_bench --in-flight`: the GPU is not waited for between frames, so the device keeps its frames in flight (Vulkan's
+  headless device: 2, a fence per slot), as a window's loop with vsync off. Frame time is the period from a frame's
+  start to the next one's - the GPU's time per frame where the GPU is the bottleneck, the CPU's where it is; submit
+  includes the waits for a slot then, and a frame's GPU time runs from the end of the frame before. CTest runs the mode
+  on the null device (`esia_bench_smoke_in_flight`).
+* Tests (`esia_rhi_vulkan_tests`), each with mapped device memory and through staging:
+  `Vulkan.BufferWritesWithFramesInFlight` writes vertex, index and FX buffers with `UpdateBuffer` and with `MapBuffer`,
+  mixed from frame to frame and once outside a frame, while the frames that draw from them are in flight;
+  synchronization validation checks every hazard (through staging, without the own copy's barrier, without its reader
+  stages, or with one ring for every slot it reports one). `VulkanScenes.FrameDataPerFrame` renders five frames of
+  different content, a target each, the GPU never waited for: every target has its frame's pixels rendered alone, and
+  the two ways give the same pixels.
+
+### Verified
+
+* Every test on Windows (clang-cl Debug, `-DESIA_WERROR=ON`): 43 / 43, `esia_rhi_vulkan_tests` 17 / 17 and the four
+  Vulkan conformance tests (`--strict`, dynamic rendering and render passes, one frame and three) with the validation
+  layer and synchronization validation: no message. MSVC `/W4 /WX` and the GNU flags on the changed sources.
+* Pixels: `esia_conformance --backend vulkan --out` of the build before and after (Release, RTX 4080 SUPER), dynamic
+  rendering and render passes, one frame and three, with mapped device memory and through staging: 35 / 35 images
+  identical bit for bit each time; the goldens are unchanged.
+* `esia_bench --in-flight` with the validation layer and synchronization validation on (`ESIA_VULKAN_VALIDATION=1`),
+  both ways: every scene, no message. `glass_window --api vulkan --debug` (a swap chain, the host's command buffers, two
+  frames in flight): 600 frames, no message.
+
+### Measured
+
+`esia_bench`, Release clang-cl, Vulkan on the RTX 4080 SUPER, 1600 x 1000, 600 frames after 60 of warm-up; the build
+before (9df4411 with this `esia_bench`) and after, alternated, 12 runs each in flight and 10 with the GPU waited for (a
+run during which another benchmark ran on the machine done again); ms, medians of the runs' medians, before -> after
+(after, through staging: `ESIA_VULKAN_MAPPED_DEVICE_MEMORY=0`):
+
+| scene | frame, in flight | GPU, in flight | GPU, waited for | submit, waited for |
+| --- | --- | --- | --- | --- |
+| text | 0.036 -> 0.033 (0.035) | 0.014 -> 0.007 (0.014) | 0.016 -> 0.009 (0.016) | 0.036 -> 0.035 (0.034) |
+| widgets | 0.051 -> 0.050 (0.050) | 0.025 -> 0.019 (0.025) | 0.026 -> 0.020 (0.026) | 0.036 -> 0.034 (0.033) |
+| widgets-flat | 0.100 -> 0.099 (0.098) | 0.025 -> 0.018 (0.025) | 0.026 -> 0.019 (0.026) | 0.039 -> 0.035 (0.035) |
+| shapes (10 000, 625 KB a frame) | 0.450 -> 0.444 (0.437) | 0.056 -> 0.030 (0.056) | 0.057 -> 0.031 (0.057) | 0.069 -> 0.061 (0.055) |
+| glass | 0.530 -> 0.412 (0.527) | 0.512 -> 0.398 (0.513) | 0.514 -> 0.403 (0.515) | 0.207 -> 0.207 (0.204) |
+| glass-static | 0.435 -> 0.407 (0.428) | 0.417 -> 0.394 (0.416) | 0.429 -> 0.402 (0.426) | 0.202 -> 0.202 (0.201) |
+| glass-live | 0.536 -> 0.413 (0.530) | 0.512 -> 0.399 (0.514) | 0.538 -> 0.420 (0.540) | 0.251 -> 0.253 (0.246) |
+| glass-live-2 | 0.597 -> 0.540 (0.589) | 0.427 -> 0.396 (0.434) | 0.458 -> 0.405 (0.434) | 0.201 -> 0.200 (0.198) |
+
+* The GPU: a glass frame loses a fifth of its time (0.512 -> 0.398 ms in flight; the runs 0.507 - 0.730 -> 0.397 -
+  0.400): its 121 draws read their constants from device memory instead of across PCIe. Frames that upload much lose
+  the copy: the shapes 0.056 -> 0.030 ms, a page of text 0.014 -> 0.007. The glass scenes are bound by the GPU in
+  flight, so their frame follows: 0.530 -> 0.412 ms.
+* The CPU: submit with the GPU waited for 0.069 -> 0.061 ms for the shapes (runs 0.065 - 0.096 -> 0.059 - 0.063),
+  4 - 10 % less for text and widgets, the glass scenes the same (constants written into device memory cost the CPU
+  nothing measurable). In flight the text and widget scenes are bound by the CPU: text 0.036 -> 0.033 ms a frame.
+  Through staging the shapes submit less still (0.055 ms), their 625 KB written into host memory rather than across
+  PCIe, but the GPU copies them.
+* Found on the way: the first version of this change wrote the frame's data through staging only, and the frames' GPU
+  time stayed where it was - for the glass scenes in flight 3 to 4 us more (0.508 -> 0.512 ms, 12 runs, ranges
+  0.502 - 0.516 -> 0.509 - 0.518). With the old barrier before the uploads put back (an experiment) it was 0.509: on
+  this GPU the next frame's copy overlapping the frame before cost more than the overlap saved. The upload barrier was
+  not what ordered the frames on the GPU; their target is (Not done). Written in place, nothing is copied.
+
+### Not done
+
+* Frames still meet at the images they share. A frame's first pass on its target waits for every earlier use of the
+  stages the target's resting layout stands for, the frame before's included: vertex and fragment shaders for
+  `SHADER_READ_ONLY`, where a sampleable target rests after each pass (a sampleable swap-chain image too, moved there at
+  `BeginFrame`), color output for the others - only an image entered as `UNDEFINED` and not sampleable waits for
+  nothing. And captures write the backdrop copy and the pyramid that the frame before's glass reads. A Vulkan barrier
+  cannot wait for one image's last use: an image whose last use lies in a completed frame (or a swap-chain image entered
+  as `UNDEFINED` and not read yet) could transition without waiting, and the frames would overlap there. The benchmark
+  renders into one target, where they meet in any case.
+* Textures (glyph pages, images) and `UpdateBuffer` still go through staging and a copy, also where device memory is
+  mapped (`src/esia/rhi/vulkan/STATUS.md`, known issue 2); an `UpdateBuffer` into a buffer that frames in flight draw
+  from waits for its kind's reading stages (the renderer maps its per-frame data; `UpdateBuffer` is for data that
+  stays).
+* The mapped device memory is not budgeted (`VK_EXT_memory_budget`): next to a host that fills the BAR the backend falls
+  back when an allocation fails, not before.
+
 ## SVG to textures
 
 SVG files - icons, illustrations - parsed once and rasterized at the size they are drawn, into texture pages that
@@ -210,12 +476,12 @@ Painter::Image draws (2026-10-30): `include/esia/svg/svg.hpp`, the library `esia
   pages and moves into the lasting ones when the next frame draws it too (from the pixels it was made with): the sizes
   an animation passes through stay among the recent pages, found again when it comes back to them, and filling those
   never makes what stays on screen be rasterized again. A drawing larger than a page gets a texture of its own while it
-  is drawn.
+  is drawn. A monochrome icon that lasts goes into the text's pages instead (`Atlas::Tile`, below).
 * `svg::Draw` rasterizes at the size the drawing has on the target and draws it with its texels on pixels one to one:
   outside a scale on the rectangle rounded to whole physical pixels; under `Painter::PushScale` exactly where the scale
   puts it (to 1/64 pixel), rasterized there - as text is under a scale - so every frame of a scale animation has the
   pixels of its own geometry. A monochrome document (every paint currentColor) is rasterized once, as a mask, and drawn
-  in any color.
+  in any color. Only what the clip rect shows is rasterized (below).
 
 ### Quality
 
@@ -295,13 +561,158 @@ stay as well. A lookup that finds its drawing costs what it did (6.3 to 6.8 ns i
 * A drawing larger than an atlas page was not drawn at all (at the default 1024, anything over 1021 pixels - 510 UI
   units at a pixel scale of 2): a texture of its own now.
 
+### Icons with the labels, only what the clip shows (later the same day)
+
+An icon was an image of the atlas's RGBA8 pages, between labels drawn as glyph quads of the text's pages: another
+texture and another program, a draw of its own wherever the planner could not move it - with a background under each
+row, two draws a row. And a large drawing was rasterized whole, also where the clip rect hides it.
+
+#### What changed
+
+* `svg::Atlas::Tile`: a mask (a monochrome document, or `mask`) of up to 128 x 128 pixels that lasts - drawn in the frame
+  before too, the lasting pages' rule - goes into the text system's pages as a coverage tile (`TextSystem::FindTile` /
+  `AddTile`, keys of its own): its alpha taken from the pixels it was made with, or rasterized again where the recent
+  pages served it. What is new in a frame stays in the recent pages, so the sizes and places of an animation never reach
+  the text's pages, which start over only when they did before; then an icon is an image for a frame and a tile again.
+* `svg::Draw` draws a tile with `Painter::UnscaledCoverage`: a quad of plain coverage (`QuadInstance::SetCoverage`: the
+  alpha + 256; `DrawList::AddCoverageQuad`) in the command of the text on its page, at the image's place, in the
+  painter's opacity, left alone by PopScale. Under a Painter mask an icon stays an image (its FX image takes the mask;
+  `Painter::Masked`).
+* The programs that tell quads apart (`QuadShapeVS`; `QuadGrayPS`, `QuadLcdGrayPS`, `QuadLcdPS` - a command with plain
+  coverage draws with them, `DrawCmd::shapes`) give it UiColor's pixels: the color with the texel as its alpha, as an
+  image of white texels with that alpha, none of the text's composition (gamma, enhanced contrast:
+  `render::TextComposition`) - on Alpha8 and sub-pixel pages, with dual-source blending and without. The four programs'
+  GLSL, ESSL, MSL and SPIR-V come from CI's Shaders workflow, as every program's.
+* An image of part of a drawing (`detail::RasterizePart`) is made in the drawing's frame - the whole pixels around its
+  viewport, the viewport moved by the part's corner - and holds what it covers: its pixels are the whole image's there,
+  bit for bit. The rows above it are passed over as the whole image draws them (`Sweep::Pass`: each row's chains in their
+  order across it, without its coverage - where chains tie across a row, their order is the one the rows before left),
+  the columns beside it are not painted (a gradient is placed from its span's start, as before), and the border holds
+  the drawing's pixels where it goes on. `Rasterize` and `RasterOptions::viewport` are as they were: the drawing in the
+  image's pixels.
+* `svg::Draw` does not rasterize a drawing outside the clip rect, and of a large one reaching beyond it only the part
+  inside, when that is at most half of it - in steps of 256 pixels from its corner, so that the part is found again
+  while the drawing moves less than that (`Atlas::GetPart`). The part of a drawing made last is kept while the drawing is
+  drawn: a new part copies the pixels they share and rasterizes the bands around them.
+
+#### Measured
+
+200 rows of an icon (16 x 16 pixels, 12 documents) and a label: `list` four columns of 50 rows, `panels` the same on a
+plain rounded background a row, `grid` icons over labels in 8 columns drawn row by row. 1600 x 1000, Release clang-cl,
+the median of 9 alternated runs' medians (each 600 frames; the lowest and highest run in the report), ms; the old build
+draws the icons as images:
+
+| Direct3D 11 | build | submit | GPU | draws |
+| --- | --- | --- | --- | --- |
+| list | 0.0307 -> 0.0250 | 0.0161 -> 0.0060 | 0.0092 -> 0.0082 | 2 -> 1 |
+| panels | 0.0405 -> 0.0363 | 0.0379 -> 0.0067 | 0.0367 -> 0.0184 | 394 -> 1 |
+| grid | 0.0366 -> 0.0279 | 0.0162 -> 0.0056 | 0.0102 -> 0.0091 | 2 -> 1 |
+
+Vulkan: submit -24% / -81% / -18%, GPU +5% / -55% / 0% (the text's quads in a frame of two draws now run the program that
+tells quads apart); Direct3D 12: submit -22% / -56% / -20%, GPU 0% / -62% / -10%; build -8% to -15% on both. A second
+Direct3D 11 run gave the list's build -1% (the machine was shared).
+
+A large drawing, the CPU of its draws (a 1600 x 1000 view, 3 alternated runs):
+
+| | before | now |
+| --- | --- | --- |
+| 3200 x 2400, its middle shown: the first frame | 77 - 81 ms, 7.7 M texels | 29 - 31 ms, 2.3 M texels |
+| 800 x 600 zoomed to 4 times in 90 frames: a frame | 34 ms (worst 77) | 26 ms (worst 51 - 53) |
+| 1600 x 4000 scrolled through it, 6 pixels a frame: a frame | 0.22 ms (the first 65) | 0.30 - 0.32 ms (the first 15 - 18) |
+
+Scrolled, the drawing is made 15 times instead of once - every 256 pixels a part, from the part before and the band below
+it - and uploads 27.5 M texels instead of 6.4 M.
+
+#### Verified
+
+* `esia_svg_tests` (35): images of parts against the image of all of it, texel for texel (two drawings with curves,
+  dashes, crisp edges, gradients with a focus, layers and nested clips, masks and colors, three viewports, seven parts
+  inside, at and beyond its edges); a part's viewport moved by whole pixels; a lasting icon as a tile in the labels'
+  command, its coverage the mask's alpha, gone with the text's pages and back; animations - sizes, a scale, sizes in
+  turn - never in the text's pages; no tiles for colored drawings, masks over 128 pixels, under a Painter mask or
+  without tiles; tiles under a scale; only what the clip shows rasterized, the uploaded parts against the whole image
+  while it scrolls.
+  `esia_core_tests` `DrawList.CoverageQuadsJoinTheGlyphsOfTheirPage`, `esia_render_tests`
+  `Painter.UnscaledCoverageIsAQuadWithTheText`.
+* Over 2 922 SVG files (the custom feature files, Visual Studio's icons, two logos, Lucide's 1 924 icons, Steam's
+  controller images, QDarkStyle's): 525 960 parts of 52 596 images, 3 billion texels - none differs from the whole
+  image's. `Rasterize` against the version before, over the same files: 70 128 images (four sizes; no viewport, one at
+  fractions of a pixel, one inside the image; color and mask) - every one byte for byte the same.
+* Conformance `coverage` / `coverage_image` (plain coverage against images of it: light and dark ink, translucent, both
+  kinds of page, an edge fade, a glow layer): the same pixels on Direct3D 9, 10, 11, 12, OpenGL and Vulkan (RTX 4080
+  SUPER), and a temporary scene of `svg::Draw` - icons as tiles against images, under scales 1.25 / 1.5 / 2, the
+  painter's opacity, an edge fade, sub-pixel pages; a part against the whole image under the same clip: no pixel
+  differs. ctest 42 / 42 (clang-cl, every backend), MSVC `/W4 /WX`, the GNU flags on the changed files.
+
 ### Not done
 
 * Text, `<image>`, filters, masks, markers, patterns, `vector-effect`.
 * A stroke wider than a tight curve of an open path stays a set of overlapping pieces: exact, slower at large sizes.
 * A row crossed thousands of times: past 256 cuts it goes in strips of 1/32 pixel (coverage within about 1/64 there).
-* A large drawing is rasterized whole on the thread that draws it, also the parts outside the target (0.4 to 1 ms at
-  512 x 512).
+* A large drawing is rasterized on the thread that draws it: what the clip shows (0.4 to 1 ms for 512 x 512 pixels of
+  it); a zoom makes a part every frame, a scroll one every 256 pixels (a band of it rasterized). No async rasterizing.
+* Icons under a Painter mask stay images: a draw of their own.
+* The four quad programs' generated shaders (GLSL, ESSL, MSL, SPIR-V) are the Vulkan SDK's tools' output: CI's Shaders
+  workflow must make them before a push.
+
+## Labels at many sub-pixel offsets
+
+Screens with much content on them draw the same short texts at many places a frame - names, values, units - at
+offsets that are fractions of a pixel. Each such draw placed every glyph again (2026-10-30).
+
+### What changed (`src/esia/text/ft/ft_text_system.cpp`)
+
+* A glyph's quad depends only on the quarter pixel its pen rounds to across and the whole pixel its line rounds to
+  down (a quarter pixel too for an outline in motion). Between the offsets where one of them changes - for a pen, where
+  offset + pen = n + 1/8, 3/8, 5/8, 7/8; for a line, n + 1/2 - the whole placement is the same. `QuadSet` keeps those
+  offsets (`xBreaks`, `yBreaks`) and a placement per class (`classes`, at most 256 a set, texts of up to 64 glyphs): a
+  draw at another offset finds its class with two binary searches and copies the class's quads in, as a text drawn at
+  the same offsets as last time is.
+* `classScore` keeps classes only while a text's offsets come back (+4 a class found, -1 one placed): a text that moves
+  on, or a new text every few frames, is placed as before (one pass straight into the list), and every 16th draw looks
+  again.
+* A moving text (smooth motion) keeps its glyphs' atlas slots per pen and line phase (`movingSlots`), as a still one
+  did per pen phase: no atlas look-up per glyph in motion.
+* A layout's key: its parameters' part kept while they repeat (most texts of a frame share a font, size and wrap
+  width), the text's at a multiply per 8 bytes. A color glyph's color comes from the text's (one conversion, not two).
+* A layout rebuilt for another text now forgets its moving sets too (their placements were the old text's).
+
+### Verified
+
+* The same pixels: rcbench's labels, text and widgets scenes and its scenes of many labels over boxes, drawn by the
+  old and the new build on Direct3D 11, compared texel for texel (no difference); the text and render tests.
+
+### Measured (rcbench, Direct3D 11, RTX 4080 SUPER, medians of 3 alternated runs, CPU = build + submit)
+
+| ms | before | now | Dear ImGui 1.92.9b / 1.93.0 |
+| --- | --- | --- | --- |
+| 3 000 labels at their own offsets, 64 names | 0.421 | 0.280 | 0.252 / 0.256 |
+| 1 000 items with a name and a distance each | 0.419 | 0.391 | 0.407 / 0.489 |
+
+### Not done
+
+* Labels at their own offsets still take 1.1 times Dear ImGui's CPU (0.92 on whole pixels).
+
+## OpenGL: the host's texture units saved when first bound
+
+### What changed (`src/esia/rhi/opengl/gl_device.cpp`)
+
+Saving the host's state at BeginFrame asked every texture unit for its texture and sampler: an ActiveTexture before
+each query, and on a threaded driver (NVIDIA's) a query after any call waits for the driver's thread. That was 80 % of a
+small frame's submit time (`SaveHostState` under `BeginFrame` in the profile). The other queries now come with no call
+between them (one wait), a unit's bindings are saved the first time the device binds a texture or a sampler to it
+(`SaveUnit`), and only those units are put back (`HostState::savedUnits`).
+
+### Verified
+
+* `GlDevice.HostStateIsRestored` puts a texture of the host's on 16 units and samplers on some, and checks every one
+  after a frame and after the calls outside frames; the OpenGL and GLES tests and conformance.
+
+### Measured
+
+* 100 items with a name and a distance (an rcbench scene), OpenGL on the RTX 4080 SUPER: submit p50 0.061 -> 0.039 ms
+  (the profile's share of `SaveHostState` 80 -> 59 %: what is left is the first query's wait, which Dear ImGui's backend
+  has too).
 
 ## Polylines on the processor's vectors
 
@@ -479,7 +890,8 @@ before.
   a plain rectangle among them take a draw more; scenes of text and plain shapes take fewer.
 * Arcs and rings, per-corner radii, fading strokes and every other material stay FX instances; so do polylines with a
   material (FX paths) and, as geometry, the ones above.
-* Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (round 1's).
+* Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (round 1's). Done in
+  [Vulkan frames in flight](#vulkan-frames-in-flight).
 
 ## Glass on every shape
 
@@ -601,7 +1013,8 @@ findings (`64c1753`), each checked against the code.
   every glyph is put on the pixel grid at a quarter-pixel phase, which Dear ImGui does not do. Round 2: such labels
   drawn on whole pixels (`TextFlags_PixelSnap`) build in 0.82 times its time.
 * Vulkan: the uploads' barrier waits for all earlier work and every buffer has one device copy (frames in flight
-  serialize); to be measured with frames in flight, which the benchmarks do not run.
+  serialize); to be measured with frames in flight, which the benchmarks do not run. Done in
+  [Vulkan frames in flight](#vulkan-frames-in-flight), measured with `esia_bench --in-flight`.
 
 ## HDR output
 
@@ -881,6 +1294,25 @@ now be drawn from multi-channel signed distance fields made by Esia, as FX shape
   Direct3D 9 the full ps_3_0 shader has no registers left for it), so glyph batches build their variant at once.
 * Painter: `Material()` out of `EmitShape` (shapes unchanged), `Text` / `TextBox` with a `Style`, `Style::Weight`.
   glass_window's text wrappers pass `DrawShapes` and `DrawOutline` on (outlines did not reach the inner system).
+* Without the hitch (2026-10-30). A text that appears with glyphs the field atlas does not have had their fields made
+  one by one on the UI thread, in its draw: 0.37 ms a Latin glyph, 0.58 a Chinese one (Release), so a paragraph of 200
+  new glyphs held its frame for 75 to 120 ms. `FieldMaker` (`distance_field.hpp`) makes the fields of a batch together:
+  worker threads (one per processor but one, at most 15: `FreeTypeDesc::fieldThreads`, 0 = the UI thread alone) start
+  on a shape as soon as it is handed over, and the thread that waits makes the rest with them - `GenerateMtsdf` itself,
+  the same bits on every thread. `DrawShapes` looks up every glyph's field once before its passes, reads the new
+  glyphs' outlines on the UI thread (FreeType's faces stay there), makes them as one batch and packs them in the order
+  the passes meet them: the fields, their places in the atlas and every instance are what the one-by-one way gave.
+* A cache on disk, off by default (`FreeTypeDesc::fieldCacheDirectory`): each field a file named by what makes its
+  bits - every point of the outline as the generator gets it, the ranges, `kDistanceFieldVersion` (raised when the
+  generator's output changes), the kind of processor and compiler -, so another font file, face, variable instance or
+  range never finds a field that is not its own (the outline is what a font file's content decides of a field). The file
+  holds a check of that key and one of its texels: a damaged, cut or swapped file is made again and written anew. The
+  workers read it; one of them writes the new fields afterwards, behind any batch, beside their place and renamed over.
+* The generator's search, bit for bit the same: the pieces of each cell in one array, each piece's direction made once,
+  the tie-breaking angle worked out only for the pieces close enough to need it - 11 % less time a field.
+* `esia_field_bench` (`tests/bench/field_bench.cpp`): the draw that meets a paragraph of new glyphs against the same
+  paragraph again - with a style, from a cache, as frames on a backend; `--digest` hashes every glyph's field of a font,
+  to compare two builds' generators bit for bit.
 
 ### Verified
 
@@ -893,13 +1325,59 @@ now be drawn from multi-channel signed distance fields made by Esia, as FX shape
   Vulkan within 2 levels of the D3D11 golden (D3D9 through its variant); ctest 36 / 36.
 * glass_window with a title in white with a blue outline, a pink glow and a shadow (Latin and Chinese), a gradient
   across a word and glass text, on Direct3D 11.
+* The hitch's work (2026-10-30): `FieldMaker.SameBitsAsMadeOneByOne` (corners, holes, overlaps, curves, a star, an
+  empty shape and one too large; 0, 3 and 8 workers, batch after batch), `FieldMaker.CacheOnDiskKeepsTheSameFields` (a
+  second maker reads every field, the same bits; another range, a point moved by one float step, a texel changed, a
+  file cut short or grown, another field's file under its name: made again, and the file put right),
+  `FreeTypeRendering.FieldsFromWorkersAndDiskAreTheSame` (three texts sharing and repeating glyphs, Latin and Chinese:
+  instances, the draws' pages and the field page byte for byte from 0, 3 and 15 workers and from the cache). The
+  generator's change: the fields of every glyph of 18 fonts - the test fonts, Segoe UI, Microsoft YaHei, SimSun,
+  Malgun Gothic, the variable Noto Sans SC, Bahnschrift, Cascadia Code and Sitka, Segoe Fluent Icons, Segoe UI Symbol
+  and Emoji, Georgia, Times New Roman, Consolas, Arial: 240 000 fields - hash as 9df4411's. Every test (clang-cl Debug,
+  every backend, the conformance goldens with `text_fields` among them): 43 / 43; MSVC `/W4 /WX`; the GNU flags on the
+  changed files.
+
+### Measured
+
+`esia_field_bench`, Release clang-cl, Ryzen 9 7950X (16 cores), against 9df4411 alternated run by run: 5 runs of 5 to 9
+rounds, each a new text system. Medians of the runs' medians, in brackets the fastest and the slowest round; the draw
+that meets the paragraph, once its text system has drawn fields before (the first fields also create the field page:
+16 MB zeroed, 2 to 2.5 ms of that first draw, now as before):
+
+| a paragraph of new glyphs, 48 px | before | now |
+| --- | --- | --- |
+| 200 Latin (DroidSans) | 76.5 ms (74.8 .. 84.9) | 7.7 ms (6.5 .. 9.9) |
+| 200 Chinese (Microsoft YaHei) | 119.6 ms (117.3 .. 124.6) | 11.2 ms (10.3 .. 13.7) |
+| 30 Latin with a style (fill, stroke outside, shadow) | 10.3 ms (9.3 .. 11.4) | 1.7 ms (1.5 .. 2.1) |
+| 10 Latin with a style | 2.7 ms (2.5 .. 3.2) | 0.9 ms (0.7 .. 1.2) |
+| 200 Latin, the UI thread alone (`fieldThreads` 0) | 77.2 ms (75.1 .. 83.1) | 67.7 ms (66.6 .. 72.3) |
+| 200 Latin, read from the cache | | 3.9 ms (3.5 .. 5.0) |
+| 200 Chinese, read from the cache | | 5.0 ms (4.6 .. 6.1) |
+
+* The frame on Direct3D 11 (200 Latin with a style): draw 74.9 -> 7.2 ms, then 1.5 ms of submit, before and now (the
+  new texels go up as a cell each).
+* Drawn again, every field made: the same or less (one look-up a glyph for both passes): 0.077 -> 0.053 ms for 200
+  glyphs with a fill.
+* Where the time goes now, 200 Latin glyphs: their outlines on the UI thread 0.7 to 1 ms (overlapping the workers'
+  start), the fields 5 to 6 ms on 16 threads (10 to 12 times one thread's), packing into the atlas 0.8 to 1 ms. 31
+  workers instead of 15: 6.4 ms. A few glyphs wait for the slowest of them, 0.3 to 0.9 ms.
+* The cache on Windows: a file read for the first time after it was written is scanned by the virus scanner
+  (Defender), which makes the run after the one that wrote them no faster than making the fields; from the run after
+  that on, the times above. A run that writes is about 1 ms slower per 200 new fields (looking for files that are not
+  there).
 
 ### Not done
 
-* Fields are made when first drawn, on the UI thread (3 ms per glyph in a debug build): no background generation or
-  cache on disk yet.
 * Glows and shadows reach a quarter em from the field; farther they follow the glyph's box (use a glow layer).
 * Per-glyph shadows of neighbouring glyphs add up where they overlap (no union of the whole text's shadow).
+* Fields are not made ahead (a font's common glyphs in the background before they are drawn): a few new glyphs still
+  wait for the slowest one's field (up to 0.9 ms), a paragraph of 200 for 5 to 8 ms.
+* The generator on vectors (the texels of a cell share their pieces): it would have to give the same bits on every
+  level, as the polylines' loops do.
+* The field page is created as 16 MB of zeros on the CPU and uploaded whole (2 to 2.5 ms of the first field draw, more
+  to upload); a new field's texels go up as a cell each (1.5 ms of submit for 200 on Direct3D 11).
+* The cache keeps every field it is given (as the D3D shader cache, nothing is ever removed), one file each; on Windows
+  each costs an open (66 us on one thread).
 
 ## Sub-pixel text
 

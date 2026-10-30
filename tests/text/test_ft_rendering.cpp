@@ -520,6 +520,86 @@ ESIA_TEST(FreeTypeRendering, LargeTextDrawsFromFields)
 
 namespace
 {
+    // What DrawShapes made of texts that bring new glyphs, three calls in a row (the glyphs shared, repeated, Latin and
+    // Chinese, a space): every instance and draw's page, and every distance-field page's texels.
+    struct FieldDraws
+    {
+        std::vector<fx::Instance> instances;
+        std::vector<TextureId> textures;
+        std::vector<std::vector<std::uint8_t>> pages;
+    };
+
+    FieldDraws DrawFieldTexts(int threads, const std::string& cache)
+    {
+        TextureRegistry textures;
+        PageStore store;
+        text::FreeTypeDesc desc;
+        desc.fieldThreads = threads;
+        desc.fieldCacheDirectory = cache;
+        const std::unique_ptr<text::TextSystem> ts = text::CreateFreeTypeTextSystem(textures, desc);
+        FieldDraws out;
+        ESIA_CHECK(ts != nullptr);
+        if (!ts)
+            return out;
+        ts->SetRendering({});
+        const text::FontId droid = ts->AddFontFile((kFonts + "/DroidSans.ttf").c_str());
+        ts->AddFallback(ts->AddFontFile((kFonts + "/NotoSansSC-Subset.otf").c_str()));
+        ts->NewFrame({1.0f});
+        fx::Instance m;
+        std::memset(&m, 0, sizeof(m));
+        m.fill0[0] = m.fill0[1] = m.fill0[2] = m.fill0[3] = 1.0f;
+        m.misc[0] = 1.0f;
+        m.stroke[3] = 1.0f;
+        m.strokeParams[0] = 2.0f;
+        m.strokeParams[1] = 1.0f;
+        m.flags[0] = fx::kFill | fx::kStroke;
+        DrawList dl = NewList();
+        ts->DrawShapes(dl, {droid, 40.0f}, Vec2(10, 20), m, 0, 0.0f, "The quick brown fox jumps over the lazy dog 0123456789");
+        ts->DrawShapes(dl, {droid, 64.0f}, Vec2(10, 90), m, 0, 0.5f, "AVWaffle \xC3\x80\xC3\x89\xC3\x8E\xC3\xB5\xC3\xBC fox");
+        ts->DrawShapes(dl, {droid, 32.0f}, Vec2(10, 180), m, 0, 0.0f, "中文与英文混排的版面，测试字体与字号。Mixed 中文");
+        store.Collect(textures);
+        out.instances = dl.FxInstances();
+        for (const DrawCmd& c : dl.Commands())
+            if (c.kind == DrawCmdKind::Fx)
+                out.textures.push_back(c.texture);
+        for (TextureId id = 1; id < 64; ++id)
+            if (const auto it = store.pages.find(id); it != store.pages.end() && (it->second.info.flags & TextureFlags_DistanceField))
+                out.pages.push_back(it->second.pixels);
+        return out;
+    }
+
+    bool SameDraws(const FieldDraws& a, const FieldDraws& b)
+    {
+        return a.instances.size() == b.instances.size() && !a.instances.empty() &&
+               std::memcmp(a.instances.data(), b.instances.data(), a.instances.size() * sizeof(fx::Instance)) == 0 && a.textures == b.textures &&
+               a.pages == b.pages && !a.pages.empty();
+    }
+}
+
+// The fields of a text's new glyphs are made together - by the workers and the UI thread, or read from the cache on
+// disk -, and the result is what making them one by one on the UI thread gave: the same instances, the same atlas.
+ESIA_TEST(FreeTypeRendering, FieldsFromWorkersAndDiskAreTheSame)
+{
+    const FieldDraws alone = DrawFieldTexts(0, {});
+    ESIA_CHECK(alone.instances.size() > 100 && alone.pages.size() == 1);
+    ESIA_CHECK(SameDraws(DrawFieldTexts(3, {}), alone));
+    ESIA_CHECK(SameDraws(DrawFieldTexts(-1, {}), alone));
+    const std::filesystem::path dir = std::filesystem::path(ESIA_TEXT_OUT_DIR) / "field_cache_ft";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    const std::string cache = reinterpret_cast<const char*>(dir.u8string().c_str());
+    ESIA_CHECK(SameDraws(DrawFieldTexts(-1, cache), alone));   // made, and written
+    std::size_t files = 0;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec))
+        files += e.path().extension() == ".mtsdf";
+    ESIA_CHECK(files > 50);
+    ESIA_CHECK(SameDraws(DrawFieldTexts(-1, cache), alone));   // read
+    ESIA_CHECK(SameDraws(DrawFieldTexts(0, cache), alone));
+    std::filesystem::remove_all(dir, ec);
+}
+
+namespace
+{
     int AlphaOf(const Quad& q) { return (int)std::lround(Color::FromRgba8(q.color).a * 255.0f); }
 
     // the ink's vertical center of a text drawn in black (Composite over white)

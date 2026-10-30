@@ -69,6 +69,11 @@ namespace esia::rhi::vulkan
         bool dualSrcBlend = false;       // VkPhysicalDeviceFeatures::dualSrcBlend: sub-pixel text
         bool dynamicRendering = false;   // Vulkan 1.3 dynamicRendering or VK_KHR_dynamic_rendering; else render passes
         bool debugUtils = false;         // VK_EXT_debug_utils on the instance: resources get their debug names
+        // The frame's constants, vertices, indices and instances in device memory the host maps, where the device has
+        // such memory (DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT: the BAR of a discrete GPU - 256 MB without resizable
+        // BAR -, unified memory): written in place, read by the GPU at full speed. A few MB per frame in flight. false
+        // (to leave that memory to the host): constants in host memory, the rest copied from a staging ring.
+        bool mappedDeviceMemory = true;
     };
 
     // Null (and `error` set) when the device lacks what the backend needs.
@@ -98,10 +103,11 @@ namespace esia::rhi::vulkan
         // The highest Vulkan version to use (>= 1.1): lower it to run the paths of older devices (dynamic rendering
         // through VK_KHR_dynamic_rendering below 1.3, and its 1.1 dependencies).
         std::uint32_t maxApiVersion = VK_API_VERSION_1_3;
+        bool mappedDeviceMemory = true;  // Desc::mappedDeviceMemory (false: the path of devices without such memory)
     };
     // Empty device (and `error` set) when this machine cannot run the backend: the conformance suite then skips it.
-    // The backend's registered creator reads ESIA_VULKAN_VALIDATION=0 and ESIA_VULKAN_RENDER_PASS=1 from the
-    // environment to change the defaults.
+    // The backend's registered creator reads ESIA_VULKAN_VALIDATION=0, ESIA_VULKAN_RENDER_PASS=1 and
+    // ESIA_VULKAN_MAPPED_DEVICE_MEMORY=0 from the environment to change the defaults.
     HeadlessDevice CreateHeadless(const HeadlessDesc& desc, const HeadlessOptions& options, std::string& error);
     // Validation messages (warnings and errors) reported so far for a headless device; 0 for other devices.
     std::uint32_t ValidationMessages(const Device& dev);

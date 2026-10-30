@@ -181,8 +181,12 @@ float WgtErf(float x)
 // The FX shader's shapes (esia_fx.hlsl) and the plain shapes drawn as quads (esia_quad.hlsl) measure with these, so a
 // plain shape covers the same pixels either way.
 
-// Rounded box with per-corner radii and optional "continuous" (squircle-like) corners.
-float SdRoundRect(float2 p, float2 halfSize, float4 radii, float smoothing)
+// Rounded box with per-corner radii and optional "continuous" (squircle-like) corners: SdRoundRect. In two parts, so
+// points that share a corner can share its first part (esia_fx.hlsl, ShapeNormal):
+//   RoundRectCorner - the corner of the quadrant `p` lies in: x its reach R (a continuous corner reaches 1 + 0.6 s
+//                     times its radius), y its smoothing s;
+//   SdRoundRectCorner - the distance from that corner.
+float2 RoundRectCorner(float2 p, float2 halfSize, float4 radii, float smoothing)
 {
     float r = (p.x > 0.0) ? ((p.y > 0.0) ? radii.z : radii.y) : ((p.y > 0.0) ? radii.w : radii.x);
     float maxR = min(halfSize.x, halfSize.y);
@@ -194,6 +198,12 @@ float SdRoundRect(float2 p, float2 halfSize, float4 radii, float smoothing)
         s *= saturate((maxR - r) / max(0.6 * r, 1e-4));
         R = r * (1.0 + 0.6 * s);
     }
+    return float2(R, s);
+}
+
+float SdRoundRectCorner(float2 p, float2 halfSize, float2 roundCorner)
+{
+    const float R = roundCorner.x, s = roundCorner.y;
     float2 q = abs(p) - halfSize + R;
     float2 m = max(q, 0.0);
     float corner = 0.0;
@@ -213,6 +223,11 @@ float SdRoundRect(float2 p, float2 halfSize, float4 radii, float smoothing)
     else
         corner = max(m.x, m.y);
     return min(max(q.x, q.y), 0.0) + corner - R;
+}
+
+float SdRoundRect(float2 p, float2 halfSize, float4 radii, float smoothing)
+{
+    return SdRoundRectCorner(p, halfSize, RoundRectCorner(p, halfSize, radii, smoothing));
 }
 
 float SdSegment(float2 p, float2 a, float2 b, float r)

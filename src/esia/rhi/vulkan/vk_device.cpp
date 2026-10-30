@@ -12,10 +12,13 @@ namespace esia::rhi::vulkan
     {
         constexpr VkDeviceSize kConstantRange = 256;         // the largest constant block (Frame, 192 bytes) rounded up
         constexpr VkDeviceSize kStagingChunk = 1u << 20;
+        constexpr VkDeviceSize kFrameDataChunk = 1u << 20;
         constexpr VkDeviceSize kUniformChunk = 64u << 10;
         constexpr std::uint32_t kSetsPerPool = 256;
         constexpr std::uint32_t kMaxQueries = 2 + 2 * 256;   // frame start / end + 256 profile scopes
         constexpr VkPipelineStageFlags kShaderStages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        constexpr VkMemoryPropertyFlags kHostMemory = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        constexpr VkMemoryPropertyFlags kMappedDeviceMemory = kHostMemory | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
         VkDeviceSize AlignUp(VkDeviceSize v, VkDeviceSize a) { return (v + a - 1) / a * a; }
 
@@ -55,6 +58,35 @@ namespace esia::rhi::vulkan
                 stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
                 access = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
                 break;
+            }
+        }
+
+        // What a buffer of a kind is bound as (transfers: its uploads).
+        VkBufferUsageFlags BufferUsage(BufferKind kind)
+        {
+            switch (kind)
+            {
+            case BufferKind::Vertex:
+            case BufferKind::QuadInstances:   // unused here (no Caps::quadAttributes)
+                return VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            case BufferKind::Index: return VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            case BufferKind::FxInstances: return VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            }
+            return VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+
+        // The stages and access that read a buffer of a kind: the scope its uploads' barriers make the bytes visible to,
+        // and the one an upload into its own copy waits for.
+        void ReadScope(BufferKind kind, VkPipelineStageFlags& stage, VkAccessFlags& access)
+        {
+            stage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+            access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+            if (kind == BufferKind::Index)
+                access = VK_ACCESS_INDEX_READ_BIT;
+            else if (kind == BufferKind::FxInstances)
+            {
+                stage = kShaderStages;
+                access = VK_ACCESS_SHADER_READ_BIT;
             }
         }
 
@@ -118,6 +150,7 @@ namespace esia::rhi::vulkan
         vk_.vkGetPhysicalDeviceMemoryProperties(desc_.physicalDevice, &memory_);
         uboAlign_ = std::max<VkDeviceSize>(props_.limits.minUniformBufferOffsetAlignment, 16);
         cbStride_ = AlignUp(kConstantRange, uboAlign_);
+        frameDataAlign_ = std::max<VkDeviceSize>(props_.limits.minStorageBufferOffsetAlignment, 16);
 
         std::uint32_t familyCount = 0;
         vk_.vkGetPhysicalDeviceQueueFamilyProperties(desc_.physicalDevice, &familyCount, nullptr);
@@ -216,9 +249,13 @@ namespace esia::rhi::vulkan
         {
             s.staging.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
             s.staging.minChunk = kStagingChunk;
+            s.frameData.usage = BufferUsage(BufferKind::Vertex) | BufferUsage(BufferKind::Index) | BufferUsage(BufferKind::FxInstances);
+            s.frameData.minChunk = kFrameDataChunk;
+            s.frameData.memory = RingMemory::Device;
             s.uniforms.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
             s.uniforms.reserved = cbStride_;
             s.uniforms.minChunk = kUniformChunk;
+            s.uniforms.memory = RingMemory::DeviceMapped;
             if (caps_.timestampQueries)
             {
                 VkQueryPoolCreateInfo qi{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
@@ -312,6 +349,7 @@ namespace esia::rhi::vulkan
         for (Slot& s : slots_)
         {
             DestroyRing(s.staging);
+            DestroyRing(s.frameData);
             DestroyRing(s.uniforms);
             for (VkDescriptorPool p : s.descriptorPools)
                 vk_.vkDestroyDescriptorPool(d, p, nullptr);
@@ -355,7 +393,8 @@ namespace esia::rhi::vulkan
         return UINT32_MAX;
     }
 
-    bool VulkanDevice::CreateBufferObject(VkDeviceSize size, VkBufferUsageFlags usage, bool hostVisible, VkBuffer& buffer, VkDeviceMemory& memory, void** mapped)
+    bool VulkanDevice::CreateBufferObject(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags required, VkMemoryPropertyFlags preferred,
+                                          VkBuffer& buffer, VkDeviceMemory& memory, void** mapped)
     {
         buffer = VK_NULL_HANDLE;
         memory = VK_NULL_HANDLE;
@@ -369,8 +408,7 @@ namespace esia::rhi::vulkan
         vk_.vkGetBufferMemoryRequirements(desc_.device, buffer, &req);
         VkMemoryAllocateInfo ai{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
         ai.allocationSize = req.size;
-        ai.memoryTypeIndex = hostVisible ? FindMemoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0)
-                                         : FindMemoryType(req.memoryTypeBits, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        ai.memoryTypeIndex = FindMemoryType(req.memoryTypeBits, required, preferred);
         if (ai.memoryTypeIndex == UINT32_MAX || vk_.vkAllocateMemory(desc_.device, &ai, nullptr, &memory) != VK_SUCCESS ||
             vk_.vkBindBufferMemory(desc_.device, buffer, memory, 0) != VK_SUCCESS ||
             (mapped && vk_.vkMapMemory(desc_.device, memory, 0, VK_WHOLE_SIZE, 0, mapped) != VK_SUCCESS))
@@ -420,10 +458,21 @@ namespace esia::rhi::vulkan
         Chunk c;
         c.size = std::max(bytes, ring.minChunk);
         void* mapped = nullptr;
-        if (!CreateBufferObject(c.size, ring.usage, true, c.buffer, c.memory, &mapped))
+        // device memory the host maps first (where wanted and there is room), else the ring's next choice
+        bool ok = ring.memory != RingMemory::Host && desc_.mappedDeviceMemory &&
+                  CreateBufferObject(c.size, ring.usage, kMappedDeviceMemory, 0, c.buffer, c.memory, &mapped);
+        if (!ok)
+        {
+            mapped = nullptr;
+            ok = ring.memory == RingMemory::Device
+                     ? CreateBufferObject(c.size, ring.usage, 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, c.buffer, c.memory, nullptr)
+                     : CreateBufferObject(c.size, ring.usage, kHostMemory, 0, c.buffer, c.memory, &mapped);
+        }
+        if (!ok)
             return false;
         c.mapped = static_cast<std::uint8_t*>(mapped);
-        std::memset(c.mapped, 0, (std::size_t)ring.reserved);
+        if (c.mapped)
+            std::memset(c.mapped, 0, (std::size_t)ring.reserved);
         c.used = ring.reserved;
         ring.chunks.push_back(c);
         return true;
@@ -496,10 +545,9 @@ namespace esia::rhi::vulkan
 
     void VulkanDevice::Submit(Barriers& b, VkCommandBuffer cmd)
     {
-        if (b.count == 0 && !b.hasMemory)
+        if (b.count == 0)
             return;
-        vk_.vkCmdPipelineBarrier(cmd, b.src, b.dst, 0, b.hasMemory ? 1u : 0u, b.hasMemory ? &b.memory : nullptr, 0, nullptr,
-                                 b.count, b.Images());
+        vk_.vkCmdPipelineBarrier(cmd, b.src, b.dst, 0, 0, nullptr, 0, nullptr, b.count, b.Images());
         b = Barriers();
     }
 
@@ -537,42 +585,37 @@ namespace esia::rhi::vulkan
     }
 
     // ------------------------------------------------------------------ uploads
-    void VulkanDevice::BeginUploads(VkCommandBuffer cmd)
+    // No barrier opens a block of uploads: each write waits for what it overwrites only. An image's transition to
+    // TRANSFER_DST takes its source scope from the layout it leaves (the reads, attachment or transfer writes before);
+    // a buffer's own copy waits for the stages that read it and for an earlier upload into it (RecordBufferData); and
+    // per-frame data goes into a range of the frame slot's ring that no frame still running reads - the slot's last
+    // frame completed before the slot came back (its fence, or the host's promise) - so it waits for nothing: written
+    // in place where the ring is mapped device memory (no command at all), else copied from the staging ring. The next
+    // frame's uploads do not wait for the frame before to finish.
+
+    // A buffer range written by the block: made visible to the stages that read its kind when the block ends.
+    void VulkanDevice::Uploaded(VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, BufferKind kind)
     {
-        if (uploadsOpen_)
-            return;
-        // after everything the GPU did before (earlier frames still read these resources): WAR and WAW hazards
-        Barriers b;
-        b.src = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        b.dst = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        b.memory.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-        b.memory.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        b.hasMemory = true;
-        Submit(b, cmd);
+        VkBufferMemoryBarrier b{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        VkPipelineStageFlags stages;
+        ReadScope(kind, stages, b.dstAccessMask);
+        b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.buffer = buffer;
+        b.offset = offset;
+        b.size = size;
+        uploadedBuffers_.push_back(b);
+        uploadedStages_ |= stages;
         uploadsOpen_ = true;
     }
 
-    // Two uploads to one resource in one block: the second copy waits for the first (write after write).
-    void VulkanDevice::TransferAfterTransfer(VkCommandBuffer cmd)
-    {
-        Barriers b;
-        b.src = b.dst = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        b.memory.srcAccessMask = b.memory.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        b.hasMemory = true;
-        Submit(b, cmd);
-    }
-
+    // The block's end, before what reads it: the written buffer ranges to the stages that read them, the uploaded
+    // sampleable images to SHADER_READ_ONLY (the others stay in TRANSFER_DST, which their next transition leaves).
     void VulkanDevice::FlushUploads(VkCommandBuffer cmd)
     {
         if (!uploadsOpen_)
             return;
         Barriers b;
-        b.src = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        b.dst = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | kShaderStages | VK_PIPELINE_STAGE_TRANSFER_BIT;
-        b.memory.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        b.memory.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                                 VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-        b.hasMemory = true;
         for (std::uint32_t id : uploadedImages_)
         {
             auto it = textures_.find(id);
@@ -580,9 +623,17 @@ namespace esia::rhi::vulkan
                 it->second.layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
                 AddTransition(b, it->second, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
-        Submit(b, cmd);
+        if (!uploadedBuffers_.empty())
+        {
+            b.src |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+            b.dst |= uploadedStages_;
+        }
+        if (b.count > 0 || !uploadedBuffers_.empty())
+            vk_.vkCmdPipelineBarrier(cmd, b.src, b.dst, 0, 0, nullptr, (std::uint32_t)uploadedBuffers_.size(), uploadedBuffers_.data(), b.count,
+                                     b.Images());
         uploadedImages_.clear();
         uploadedBuffers_.clear();
+        uploadedStages_ = 0;
         uploadsOpen_ = false;
     }
 
@@ -600,12 +651,11 @@ namespace esia::rhi::vulkan
             return;
         for (int y = 0; y < r.Height(); ++y)
             std::memcpy(c->mapped + offset + row * (std::size_t)y, static_cast<const std::uint8_t*>(data) + pitch * (std::size_t)y, row);
-        BeginUploads(cmd);
+        uploadsOpen_ = true;
+        // from the layout it is in; already TRANSFER_DST (written in this block - created with data, then updated - or
+        // left there by an earlier upload): a barrier on the image from that write (write after write)
         const bool whole = r.x0 == 0 && r.y0 == 0 && r.x1 == t.desc.width && r.y1 == t.desc.height;
-        if (t.layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-            Transition(cmd, t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, whole);
-        else
-            TransferAfterTransfer(cmd);   // written already in this block (created with data, then updated)
+        Transition(cmd, t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, whole);
         VkBufferImageCopy region{};
         region.bufferOffset = offset;
         region.imageSubresource = ColorLayers();
@@ -621,7 +671,7 @@ namespace esia::rhi::vulkan
         if (it == textures_.end())
             return;
         Tex& t = it->second;
-        BeginUploads(cmd);
+        uploadsOpen_ = true;
         Transition(cmd, t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, true);
         const VkClearColorValue zero{};
         const VkImageSubresourceRange range = ColorRange();
@@ -629,23 +679,36 @@ namespace esia::rhi::vulkan
         uploadedImages_.push_back(id);
     }
 
+    // UpdateBuffer's bytes into the buffer's own copy.
     void VulkanDevice::RecordBufferData(VkCommandBuffer cmd, Ring& staging, std::uint32_t id, const void* data, std::size_t size)
     {
         Buf* b = FindBuf(Buffer{id});
-        if (!b || size == 0)
+        if (!b || size == 0 || !OwnCopy(*b))
             return;
         VkDeviceSize offset = 0;
         Chunk* c = Alloc(staging, size, 16, offset);
         if (!c)
             return;
         std::memcpy(c->mapped + offset, data, size);
-        BeginUploads(cmd);
-        if (std::find(uploadedBuffers_.begin(), uploadedBuffers_.end(), id) != uploadedBuffers_.end())
-            TransferAfterTransfer(cmd);
-        else
-            uploadedBuffers_.push_back(id);
+        if (b->used)
+        {
+            // earlier frames may still read the copy and an earlier upload may have written it: this copy waits for
+            // those stages, the barrier on this buffer only (UpdateBuffer is rare: the frame's data is mapped)
+            VkBufferMemoryBarrier w{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+            VkPipelineStageFlags readers;
+            VkAccessFlags reads;
+            ReadScope(b->desc.kind, readers, reads);
+            w.srcAccessMask = w.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            w.srcQueueFamilyIndex = w.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            w.buffer = b->buffer;
+            w.size = VK_WHOLE_SIZE;
+            vk_.vkCmdPipelineBarrier(cmd, readers | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &w, 0, nullptr);
+        }
+        b->used = true;
+        b->ringFrame = 0;   // the own copy holds the newest bytes now
         const VkBufferCopy region{offset, 0, size};
         vk_.vkCmdCopyBuffer(cmd, c->buffer, b->buffer, 1, &region);
+        Uploaded(b->buffer, 0, size, b->desc.kind);
     }
 
     void VulkanDevice::RecordPending(VkCommandBuffer cmd, Ring& staging)
@@ -884,27 +947,45 @@ namespace esia::rhi::vulkan
         return t ? t->desc : TextureDesc{};
     }
 
+    // No memory yet: what a buffer holds lives in its own copy (UpdateBuffer, made then) or in the frame slots' rings
+    // (MapBuffer in frames) - a buffer the renderer maps every frame never gets a copy of its own.
     Buffer VulkanDevice::CreateBuffer(const BufferDesc& desc)
     {
         if (desc.size == 0)
             return {};
-        VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        switch (desc.kind)
-        {
-        case BufferKind::Vertex:
-        case BufferKind::QuadInstances: usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;   // the latter unused here (no Caps::quadAttributes)
-        case BufferKind::Index: usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
-        case BufferKind::FxInstances: usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; break;
-        }
         Buf b;
         b.desc = desc;
         b.desc.debugName = nullptr;
-        if (!CreateBufferObject(desc.size, usage, false, b.buffer, b.memory, nullptr))
-            return {};
-        SetName(VK_OBJECT_TYPE_BUFFER, (std::uint64_t)b.buffer, desc.debugName);
+        if (vk_.vkSetDebugUtilsObjectNameEXT && desc.debugName)
+            b.name = desc.debugName;
         const Buffer handle{nextId_++};
-        buffers_[handle.id] = b;
+        buffers_[handle.id] = std::move(b);
         return handle;
+    }
+
+    bool VulkanDevice::OwnCopy(Buf& b)
+    {
+        if (b.buffer)
+            return true;
+        if (!CreateBufferObject(b.desc.size, BufferUsage(b.desc.kind), 0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, b.buffer, b.memory, nullptr))
+            return false;
+        SetName(VK_OBJECT_TYPE_BUFFER, (std::uint64_t)b.buffer, b.name.empty() ? nullptr : b.name.c_str());
+        return true;
+    }
+
+    // What a draw reads: MapBuffer's bytes of this frame (its range of the slot's ring), else the buffer's own copy.
+    bool VulkanDevice::Source(Buf& b, VkDescriptorBufferInfo& out)
+    {
+        if (b.ringFrame == frame_ && b.ringBuffer)
+        {
+            out = VkDescriptorBufferInfo{b.ringBuffer, b.ringOffset, b.ringSize};
+            return true;
+        }
+        if (!OwnCopy(b))   // never written: a copy of undefined bytes (rhi.hpp: mapped bytes last for their frame)
+            return false;
+        b.used = true;
+        out = VkDescriptorBufferInfo{b.buffer, 0, VK_WHOLE_SIZE};
+        return true;
     }
 
     void VulkanDevice::UpdateBuffer(Buffer buf, const void* data, std::size_t size)
@@ -919,6 +1000,62 @@ namespace esia::rhi::vulkan
                                              std::vector<std::uint8_t>(static_cast<const std::uint8_t*>(data), static_cast<const std::uint8_t*>(data) + size)});
     }
 
+    // In a frame, before its first pass: a range of the frame slot's per-frame ring, where this frame's draws read the
+    // bytes (Source) - the frames in flight each read a range of their own. Written in place where the ring is device
+    // memory the host maps; else into the slot's staging ring, copied into the range at UnmapBuffer. Elsewhere (no frame
+    // to record the copy into, or no room): the default, for UpdateBuffer.
+    void* VulkanDevice::MapBuffer(Buffer buf, std::size_t size)
+    {
+        Buf* b = FindBuf(buf);
+        if (!b || size == 0 || size > b->desc.size)
+            return nullptr;
+        mapping_ = Mapping();
+        if (Recording())
+        {
+            const VkDeviceSize bytes = AlignUp(size, 16);   // whole float4 rows for the FX storage buffer's range
+            VkDeviceSize ringOffset = 0, stagingOffset = 0;
+            Chunk* ring = Alloc(slot_->frameData, bytes, frameDataAlign_, ringOffset);
+            if (ring && ring->mapped)
+            {
+                mapping_ = Mapping{buf.id, VK_NULL_HANDLE, ring->buffer, 0, ringOffset, bytes};
+                return ring->mapped + ringOffset;
+            }
+            Chunk* staging = ring ? Alloc(slot_->staging, bytes, 16, stagingOffset) : nullptr;
+            if (staging)
+            {
+                mapping_ = Mapping{buf.id, staging->buffer, ring->buffer, stagingOffset, ringOffset, bytes};
+                return staging->mapped + stagingOffset;
+            }
+        }
+        return Device::MapBuffer(buf, size);
+    }
+
+    void VulkanDevice::UnmapBuffer(Buffer buf)
+    {
+        if (mapping_.id == 0 || mapping_.id != buf.id)
+        {
+            Device::UnmapBuffer(buf);
+            return;
+        }
+        const Mapping m = mapping_;
+        mapping_ = Mapping();
+        Buf* b = FindBuf(buf);
+        if (!b || !Recording())
+            return;
+        // written in place: the submit makes the host's writes visible to the device. Through staging: the range is
+        // new memory of this frame's slot, the copy waits for nothing (see "uploads").
+        if (m.staging)
+        {
+            const VkBufferCopy region{m.stagingOffset, m.ringOffset, m.size};
+            vk_.vkCmdCopyBuffer(cmd_, m.staging, m.ring, 1, &region);
+            Uploaded(m.ring, m.ringOffset, m.size, b->desc.kind);
+        }
+        b->ringFrame = frame_;
+        b->ringBuffer = m.ring;
+        b->ringOffset = m.ringOffset;
+        b->ringSize = m.size;
+    }
+
     void VulkanDevice::DestroyBuffer(Buffer buf)
     {
         auto it = buffers_.find(buf.id);
@@ -929,7 +1066,8 @@ namespace esia::rhi::vulkan
         g.memory = it->second.memory;
         Retire(g);
         std::erase_if(pending_, [&](const PendingUpload& p) { return p.kind == PendingUpload::Kind::BufferData && p.id == buf.id; });
-        std::erase(uploadedBuffers_, buf.id);
+        if (mapping_.id == buf.id)
+            mapping_ = Mapping();
         buffers_.erase(it);
     }
 
@@ -1181,6 +1319,7 @@ namespace esia::rhi::vulkan
         if (!sharedSlot)
         {
             ResetRing(s.staging);
+            ResetRing(s.frameData);
             ResetRing(s.uniforms);
             if (s.uniforms.chunks.empty() && !AllocChunk(s.uniforms, kUniformChunk))
                 return false;
@@ -1278,8 +1417,9 @@ namespace esia::rhi::vulkan
         const Tex* dummy = FindTex(dummyTexture_);
         for (VkImageView& v : views_)
             v = dummy ? dummy->sampleView : VK_NULL_HANDLE;
-        const auto b = buffers_.find(dummyBuffer_.id);
-        fxBuffer_ = b != buffers_.end() ? b->second.buffer : VK_NULL_HANDLE;
+        Buf* placeholder = FindBuf(dummyBuffer_);
+        if (!placeholder || !Source(*placeholder, fx_))
+            fx_ = VkDescriptorBufferInfo{};
         // unset constants read the zero block at the start of the uniform ring
         const VkBuffer zeros = slot_ && !slot_->uniforms.chunks.empty() ? slot_->uniforms.chunks[0].buffer : VK_NULL_HANDLE;
         for (int i = 0; i < 3; ++i)
@@ -1408,32 +1548,41 @@ namespace esia::rhi::vulkan
 
     void VulkanDevice::SetFxBuffer(Buffer buf)
     {
-        const Buf* b = FindBuf(buf);
-        const VkBuffer v = b && b->desc.kind == BufferKind::FxInstances ? b->buffer : FindBuf(dummyBuffer_)->buffer;
-        if (fxBuffer_ != v)
+        Buf* b = FindBuf(buf);
+        VkDescriptorBufferInfo v{};
+        if (!b || b->desc.kind != BufferKind::FxInstances || !Source(*b, v))
         {
-            fxBuffer_ = v;
+            Buf* placeholder = FindBuf(dummyBuffer_);
+            if (!placeholder || !Source(*placeholder, v))
+                return;
+        }
+        if (fx_.buffer != v.buffer || fx_.offset != v.offset || fx_.range != v.range)
+        {
+            fx_ = v;
             setDirty_ = true;
         }
     }
 
     void VulkanDevice::SetVertexBuffer(Buffer buf)
     {
-        const Buf* b = FindBuf(buf);
-        if (!inFrame_ || !b || b->buffer == boundVertices_)
+        Buf* b = FindBuf(buf);
+        VkDescriptorBufferInfo v{};
+        if (!inFrame_ || !b || !Source(*b, v) || (v.buffer == boundVertices_ && v.offset == vertexOffset_))
             return;
-        const VkDeviceSize offset = 0;
-        vk_.vkCmdBindVertexBuffers(cmd_, 0, 1, &b->buffer, &offset);
-        boundVertices_ = b->buffer;
+        vk_.vkCmdBindVertexBuffers(cmd_, 0, 1, &v.buffer, &v.offset);
+        boundVertices_ = v.buffer;
+        vertexOffset_ = v.offset;
     }
 
     void VulkanDevice::SetIndexBuffer(Buffer buf)
     {
-        const Buf* b = FindBuf(buf);
-        if (!inFrame_ || !b || b->buffer == boundIndices_)
+        Buf* b = FindBuf(buf);
+        VkDescriptorBufferInfo v{};
+        if (!inFrame_ || !b || !Source(*b, v) || (v.buffer == boundIndices_ && v.offset == indexOffset_))
             return;
-        vk_.vkCmdBindIndexBuffer(cmd_, b->buffer, 0, VK_INDEX_TYPE_UINT32);
-        boundIndices_ = b->buffer;
+        vk_.vkCmdBindIndexBuffer(cmd_, v.buffer, v.offset, VK_INDEX_TYPE_UINT32);
+        boundIndices_ = v.buffer;
+        indexOffset_ = v.offset;
     }
 
     VkDescriptorSet VulkanDevice::AllocateSet()
@@ -1488,7 +1637,7 @@ namespace esia::rhi::vulkan
             const VkDescriptorSet set = AllocateSet();
             if (!set)
                 return false;
-            VkDescriptorBufferInfo cbs[3], fx{fxBuffer_, 0, VK_WHOLE_SIZE};
+            VkDescriptorBufferInfo cbs[3];
             VkDescriptorImageInfo images[kSlotBackdrop0 + kBackdropLevels];
             VkWriteDescriptorSet writes[3 + kSlotBackdrop0 + kBackdropLevels + 1];
             std::uint32_t n = 0;
@@ -1517,7 +1666,7 @@ namespace esia::rhi::vulkan
             writes[n].dstBinding = 10;
             writes[n].descriptorCount = 1;
             writes[n].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            writes[n++].pBufferInfo = &fx;
+            writes[n++].pBufferInfo = &fx_;
             vk_.vkUpdateDescriptorSets(desc_.device, n, writes, 0, nullptr);
             set_ = set;
             setDirty_ = false;
@@ -1744,7 +1893,7 @@ namespace esia::rhi::vulkan
         VkBuffer buffer;
         VkDeviceMemory memory;
         void* mapped = nullptr;
-        if (!CreateBufferObject(count * bpp, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, buffer, memory, &mapped))
+        if (!CreateBufferObject(count * bpp, VK_BUFFER_USAGE_TRANSFER_DST_BIT, kHostMemory, 0, buffer, memory, &mapped))
         {
             vk_.vkEndCommandBuffer(cmd);
             return false;

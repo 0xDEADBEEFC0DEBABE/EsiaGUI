@@ -315,6 +315,7 @@ namespace esia::rhi::vulkan
         desc.dualSrcBlend = supported.features.dualSrcBlend == VK_TRUE;
         desc.dynamicRendering = dynamicRendering;
         desc.framesInFlight = options.framesInFlight;
+        desc.mappedDeviceMemory = options.mappedDeviceMemory;
 
         // the device owns everything from here on: a failed Create released it all already
         std::unique_ptr<VulkanDevice> dev = VulkanDevice::Create(desc, vk, std::move(own), error);
@@ -347,6 +348,7 @@ namespace esia::rhi::vulkan
             HeadlessOptions o;
             o.validation = !EnvIs("ESIA_VULKAN_VALIDATION", "0");
             o.dynamicRendering = !EnvIs("ESIA_VULKAN_RENDER_PASS", "1");
+            o.mappedDeviceMemory = !EnvIs("ESIA_VULKAN_MAPPED_DEVICE_MEMORY", "0");
             return CreateHeadless(desc, o, error);
         }
     }

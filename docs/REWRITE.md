@@ -419,7 +419,11 @@ Implementations:
   `TextRendering::distanceFieldFrom` draws text of that many pixels per em and more from the fields by itself. The
   shader takes the median of R, G, B near the edge and the true distance farther out; past the field's reach (a
   quarter em) a lower bound from the glyph's ink box keeps glows fading (larger halos: glow layers). A blurred text
-  is a shadow without a fill; a blurred backdrop is glass without refraction.
+  is a shadow without a fill; a blurred backdrop is glass without refraction. The fields a text's new glyphs need are
+  made together before its passes (`text::FieldMaker`): their outlines read on the UI thread, the fields made by worker
+  threads and the UI thread at once, packed in the order the passes meet the glyphs (`FreeTypeDesc::fieldThreads`);
+  `FreeTypeDesc::fieldCacheDirectory` keeps them on disk between runs, each found by its outline, ranges and the
+  generator's version.
   Smooth motion (`TextRendering::smoothMotion`, on in `Light`, `Crisp`, `ClearType` and `native`): the text system
   follows a text from frame to frame by its layout and the order of its draws; while its position or scale changes it
   is drawn from the design's outline at quarter pixels across and down (glyphs of their own in the atlas), and when it

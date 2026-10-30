@@ -1,11 +1,12 @@
 // The multi-channel signed distance fields (MTSDF) of glyph outlines: true distances in A, the multi-channel median
 // that keeps corners sharp under bilinear filtering, the filled area of overlapping contours, holes, either winding,
-// curves.
+// curves; FieldMaker's workers and cache on disk, which give the generator's bits.
 #include "esia/text/distance_field.hpp"
 #include "esia_test.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
 using namespace esia;
@@ -296,4 +297,171 @@ ESIA_TEST(DistanceField, EmptyAndOversizedShapes)
     GlyphShape huge;
     AddRect(huge, 0, 0, 5000, 10);
     ESIA_CHECK(!GenerateMtsdf(huge, {}, b));
+}
+
+namespace
+{
+    // Shapes of every kind the generator meets: corners, holes, overlaps, curves, a polygon of many sides, nothing at
+    // all, and one too large for a field
+    std::vector<GlyphShape> TestShapes()
+    {
+        std::vector<GlyphShape> shapes(9);
+        AddRect(shapes[0], 4, 6, 24, 26);
+        AddRect(shapes[1], 0, 0, 30, 30);
+        AddRect(shapes[1], 10, 10, 20, 20, true);
+        AddRect(shapes[2], 4, 4, 20, 20);
+        AddRect(shapes[2], 12, 12, 28, 28);
+        AddCircle(shapes[3], Vec2(20, 20), 12);
+        shapes[4].MoveTo(Vec2(4, 26));
+        shapes[4].LineTo(Vec2(16, 3));
+        shapes[4].LineTo(Vec2(28, 26));
+        shapes[5].MoveTo(Vec2(16, 3));
+        shapes[5].CubicTo(Vec2(22, 12), Vec2(28, 28), Vec2(16, 28));
+        shapes[5].QuadTo(Vec2(4, 28), Vec2(16, 3));
+        for (int i = 0; i < 24; ++i)   // a star
+        {
+            const float a = (float)i * kTau / 24.0f, r = i % 2 ? 7.0f : 15.0f;
+            const Vec2 p = Vec2(18, 18) + Vec2(std::cos(a), std::sin(a)) * r;
+            if (i == 0)
+                shapes[6].MoveTo(p);
+            else
+                shapes[6].LineTo(p);
+        }
+        // shapes[7]: empty
+        AddRect(shapes[8], 0, 0, 5000, 10);
+        return shapes;
+    }
+
+    bool SameField(const GlyphBitmap& a, const GlyphBitmap& b)
+    {
+        return a.left == b.left && a.top == b.top && a.width == b.width && a.height == b.height && a.channels == b.channels && a.sdf == b.sdf &&
+               a.lcd == b.lcd && a.pixels == b.pixels;
+    }
+
+    // `maker`'s fields of `shapes` against GenerateMtsdf's on this thread, bit for bit (null where it refuses one)
+    int Different(FieldMaker& maker, const std::vector<GlyphShape>& shapes, const DistanceFieldDesc& desc, int* fromDisk = nullptr)
+    {
+        for (GlyphShape s : shapes)
+            maker.Add(std::move(s), desc);
+        maker.Make();
+        int different = 0;
+        if (fromDisk)
+            *fromDisk = 0;
+        for (std::size_t i = 0; i < shapes.size(); ++i)
+        {
+            GlyphBitmap alone;
+            const bool ok = GenerateMtsdf(shapes[i], desc, alone);
+            const GlyphBitmap* made = maker.Field(i);
+            different += ok != (made != nullptr) || (ok && !SameField(*made, alone));
+            if (fromDisk)
+                *fromDisk += maker.FromDisk(i);
+        }
+        return different;
+    }
+
+    std::filesystem::path FreshDirectory(const char* name)
+    {
+        const std::filesystem::path dir = std::filesystem::path(ESIA_TEXT_OUT_DIR) / name;
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+        return dir;
+    }
+
+    std::vector<std::filesystem::path> FilesIn(const std::filesystem::path& dir)
+    {
+        std::vector<std::filesystem::path> files;
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec))
+            files.push_back(e.path());
+        std::sort(files.begin(), files.end());
+        return files;
+    }
+}
+
+// A batch of fields made by the workers and the waiting thread: GenerateMtsdf's bits, in the order added, whatever
+// thread made each; batch after batch; with no workers at all.
+ESIA_TEST(FieldMaker, SameBitsAsMadeOneByOne)
+{
+    const std::vector<GlyphShape> shapes = TestShapes();
+    for (const int workers : {0, 3, 8})
+    {
+        FieldMakerDesc d;
+        d.workers = workers;
+        FieldMaker maker(d);
+        ESIA_CHECK(maker.Workers() == workers);
+        for (int round = 0; round < 3; ++round)
+            ESIA_CHECK(Different(maker, shapes, DistanceFieldDesc{8.0f, 24.0f}) == 0);
+        ESIA_CHECK(Different(maker, shapes, DistanceFieldDesc{6.0f, 12.0f}) == 0);
+        ESIA_CHECK(maker.Field(7) && maker.Field(7)->width == 0 && !maker.Field(8));   // empty: a field of nothing; too large: none
+    }
+    ESIA_CHECK(FieldMaker().Workers() >= 0);
+}
+
+// The cache on disk: a second maker finds the fields the first one made, the same bits, from the same shapes and
+// ranges only - another range, a point moved by the least step a float has, a damaged or cut file, another field's
+// file under its name are made again (and the file put right).
+ESIA_TEST(FieldMaker, CacheOnDiskKeepsTheSameFields)
+{
+    const std::filesystem::path dir = FreshDirectory("field_cache_test");
+    FieldMakerDesc d;
+    d.workers = 2;
+    d.cacheDirectory = reinterpret_cast<const char*>(dir.u8string().c_str());
+    const std::vector<GlyphShape> shapes = TestShapes();
+    const DistanceFieldDesc desc{8.0f, 24.0f};
+    int fromDisk = -1;
+    {
+        FieldMaker first(d);
+        ESIA_CHECK(Different(first, shapes, desc, &fromDisk) == 0 && fromDisk == 0);
+    }   // its fields written as it goes
+    const std::vector<std::filesystem::path> files = FilesIn(dir);
+    ESIA_CHECK(files.size() == 7);   // not the empty shape, not the one too large
+    for (const int workers : {2, 0})
+    {
+        d.workers = workers;
+        FieldMaker second(d);
+        ESIA_CHECK(Different(second, shapes, desc, &fromDisk) == 0 && fromDisk == 7);
+    }
+
+    // what makes another field misses: another range, a point moved by one float step
+    {
+        FieldMaker other(d);
+        ESIA_CHECK(Different(other, shapes, DistanceFieldDesc{6.0f, 24.0f}, &fromDisk) == 0 && fromDisk == 0);
+        std::vector<GlyphShape> moved(1);
+        AddRect(moved[0], 4, 6, 24, std::nextafter(26.0f, 100.0f));
+        ESIA_CHECK(Different(other, moved, desc, &fromDisk) == 0 && fromDisk == 0);
+    }
+
+    // files damaged on disk are not taken: one texel changed, one cut short, one longer, one another field's
+    const auto rewrite = [](const std::filesystem::path& file, auto change) {
+        std::FILE* f = std::fopen(file.string().c_str(), "rb");
+        std::vector<unsigned char> bytes;
+        for (int c; f && (c = std::fgetc(f)) != EOF;)
+            bytes.push_back((unsigned char)c);
+        if (f)
+            std::fclose(f);
+        change(bytes);
+        f = std::fopen(file.string().c_str(), "wb");
+        if (f)
+        {
+            std::fwrite(bytes.data(), 1, bytes.size(), f);
+            std::fclose(f);
+        }
+    };
+    ESIA_CHECK(files.size() == 7);
+    if (files.size() == 7)
+    {
+        rewrite(files[0], [](std::vector<unsigned char>& b) { b[b.size() / 2] ^= 1; });
+        rewrite(files[1], [](std::vector<unsigned char>& b) { b.resize(b.size() - 4); });
+        rewrite(files[2], [](std::vector<unsigned char>& b) { b.push_back(0); });
+        std::error_code ec;
+        std::filesystem::copy_file(files[4], files[3], std::filesystem::copy_options::overwrite_existing, ec);
+        {
+            FieldMaker damaged(d);
+            ESIA_CHECK(Different(damaged, shapes, desc, &fromDisk) == 0 && fromDisk == 3);
+        }
+        FieldMaker mended(d);
+        ESIA_CHECK(Different(mended, shapes, desc, &fromDisk) == 0 && fromDisk == 7);
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
 }
