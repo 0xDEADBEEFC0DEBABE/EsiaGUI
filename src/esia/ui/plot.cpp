@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,41 @@ namespace esia::ui
                                          // a dense line keeps a few points per pixel column
             bool hidden = false;
         };
+
+        // a draw memo's bytes for a plot (MemoKey::Data): the formats, the categories, every series' kind, look and points
+        thread_local std::vector<std::uint8_t> g_bytes;
+        template <class T>
+        void PutBytes(const T& v)
+        {
+            const std::uint8_t* b = reinterpret_cast<const std::uint8_t*>(&v);
+            g_bytes.insert(g_bytes.end(), b, b + sizeof(T));
+        }
+        void PutText(std::string_view t)
+        {
+            PutBytes(t.size());
+            g_bytes.insert(g_bytes.end(), t.begin(), t.end());
+        }
+        void PlotBytes(const PlotOptions& o, std::span<const Series> series)
+        {
+            g_bytes.clear();
+            PutText(o.xFormat ? o.xFormat : "");
+            PutText(o.yFormat ? o.yFormat : "");
+            PutBytes(o.categories.size());
+            for (const std::string_view l : o.categories)
+                PutText(l);
+            for (const Series& s : series)
+            {
+                PutBytes(s.kind);
+                PutBytes(s.color);
+                PutBytes(s.style.thickness);
+                PutBytes(s.style.size);
+                PutBytes((std::uint8_t)((s.style.fill ? 1 : 0) | (s.style.smooth ? 2 : 0) | (s.sorted ? 4 : 0) | (s.hidden ? 8 : 0)));
+                PutBytes(s.width);
+                PutBytes(s.pts.size());
+                const std::uint8_t* b = reinterpret_cast<const std::uint8_t*>(s.pts.data());
+                g_bytes.insert(g_bytes.end(), b, b + s.pts.size() * sizeof(Vec2));
+            }
+        }
 
         struct PlotState
         {
@@ -463,161 +499,175 @@ namespace esia::ui
 
         Painter p = GetPainter();
         const float px = 1.0f / std::max(c.Scale(), 1e-3f);   // one physical pixel
-        p.Rect(area, Style().Radius(Sc(8)).Fill(pc.quaternaryFill));
-
-        // ---- the grid and the tick labels
-        PlotTicks(view[2], view[3], maxYTicks, g_ticks);
-        for (const float v : g_ticks)
-        {
-            const float y = std::round(Y(v) / px) * px;
-            if (!(o.flags & PlotFlags_NoGrid))
-                p.HLine(area.min.x, area.max.x, y, pc.label.Fade(v == 0.0f ? 0.20f : 0.07f));
-            const char* s = Format(o.yFormat, v);
-            const Vec2 ts = MeasureText(tf, s);
-            p.Text(Vec2(area.min.x - Sc(6) - ts.x, std::floor(y - ts.y * 0.5f)), tf, pc.secondaryLabel, s);
-        }
-        const bool categories = !o.categories.empty();
-        if (categories)
-        {
-            // a label under each category in view; every n-th one when they would overlap
-            float widest = 0.0f;
-            for (const std::string_view l : o.categories)
-                widest = std::max(widest, MeasureText(tf, l).x);
-            const int every = std::max(1, (int)std::ceil((widest + Sc(8)) / std::max(sx, 1e-3f)));
-            const int first = std::max(0, (int)std::ceil(view[0])), last = std::min((int)o.categories.size() - 1, (int)std::floor(view[1]));
-            for (int i = first; i <= last; ++i)
-            {
-                if (i % every != 0)
-                    continue;
-                const std::string_view l = o.categories[(std::size_t)i];
-                const Vec2 ts = MeasureText(tf, l);
-                p.Text(Vec2(std::floor(X((float)i) - ts.x * 0.5f), area.max.y + Sc(5)), tf, pc.secondaryLabel, l);
-            }
-        }
-        else
-        {
-            PlotTicks(view[0], view[1], std::max(2, (int)(area.Width() / Sc(80))), g_ticks);
-            for (const float v : g_ticks)
-            {
-                const float x = std::round(X(v) / px) * px;
-                if (!(o.flags & PlotFlags_NoGrid))
-                    p.FillRect(Rect(x - px * 0.5f, area.min.y, x + px * 0.5f, area.max.y), pc.label.Fade(v == 0.0f ? 0.20f : 0.07f));
-                const char* s = Format(o.xFormat, v);
-                const Vec2 ts = MeasureText(tf, s);
-                p.Text(Vec2(std::floor(x - ts.x * 0.5f), area.max.y + Sc(5)), tf, pc.secondaryLabel, s);
-            }
-        }
 
         // ---- what is under the mouse
         const bool hoverOn = b.hovered && !(o.flags & PlotFlags_NoHover) && !st.dragging && in.MouseValid() && area.Contains(in.MousePos());
         const float mouseX = hoverOn ? view[0] + (in.MousePos().x - area.min.x) / sx : 0.0f;
         const int hoverCategory = hoverOn ? (int)std::lround(mouseX) : -1;
 
-        // ---- the series, clipped to the area
-        p.PushClip(area);
-        const float baseline = std::clamp(Y(0.0f), area.min.y, area.max.y);
-        int barSlot = 0;
-        for (Series& s : series)
+        const bool categories = !o.categories.empty();
+
+        // what the plot draws up to its legend - the background, the grid and its labels, the series - comes from these:
+        // a memo of them, the formats, the categories and every series' points as bytes
+        PlotBytes(o, series);
+        MemoKey mk;
+        mk.R(area).F(view[0]).F(view[1]).F(view[2]).F(view[3]).F(px).U((std::uint32_t)maxYTicks).U(o.flags).U((std::uint32_t)barSeries);
+        mk.U(hoverOn ? 1u : 0u).F(mouseX).U((std::uint32_t)(hoverCategory + 1)).Data(g_bytes.data(), g_bytes.size());
+        std::optional<DrawMemo> memo;
+        memo.emplace(mk);
+        if (!memo->Replayed())
         {
-            if (s.hidden || s.pts.empty())
-                continue;
-            const Color col = s.color;
-            if (s.kind == SeriesKind::Line)
+            p.Rect(area, Style().Radius(Sc(8)).Fill(pc.quaternaryFill));
+
+            // ---- the grid and the tick labels
+            PlotTicks(view[2], view[3], maxYTicks, g_ticks);
+            for (const float v : g_ticks)
             {
-                // to the screen; past four points a pixel column, a sorted line keeps each column's first, lowest,
-                // highest and last (its shape at any zoom, a million points cost what the width does)
-                g_screen.clear();
-                const bool decimate = s.sorted && (float)s.pts.size() > area.Width() / px * 4.0f;
-                int column = std::numeric_limits<int>::min();
-                Vec2 first, lo, hi, last;
-                std::size_t inColumn = 0;
-                const auto flush = [&] {
-                    if (inColumn == 0)
-                        return;
-                    // in their order along x (a point twice in a row is dropped by the path)
-                    g_screen.push_back(first);
-                    g_screen.push_back(lo.x <= hi.x ? lo : hi);
-                    g_screen.push_back(lo.x <= hi.x ? hi : lo);
-                    g_screen.push_back(last);
-                };
-                for (const Vec2& d : s.pts)
-                {
-                    const Vec2 q(X(d.x), Y(d.y));
-                    if (!decimate)
-                    {
-                        g_screen.push_back(q);
-                        continue;
-                    }
-                    const int col0 = (int)std::floor(q.x / px);
-                    if (col0 != column)
-                    {
-                        flush();
-                        column = col0;
-                        first = lo = hi = q;
-                        inColumn = 0;
-                    }
-                    if (q.y > lo.y)
-                        lo = q;
-                    if (q.y < hi.y)
-                        hi = q;
-                    last = q;
-                    ++inColumn;
-                }
-                flush();
-                const int n = (int)g_screen.size();
-                const std::uint32_t flags = s.style.smooth ? PolylineFlags_Smooth : PolylineFlags_None;
-                if (s.style.fill && n >= 2)
-                    p.Area(g_screen.data(), n, baseline, Paint::Linear(col.Fade(0.30f), col.Fade(0.0f), 90), flags);
-                if (n >= 2)
-                    p.Polyline(g_screen.data(), n, Sc(s.style.thickness), Style().Fill(col), flags);
-                else if (n == 1)
-                    p.Circle(g_screen[0], Sc(s.style.thickness) * 1.5f, Style().Fill(col));
+                const float y = std::round(Y(v) / px) * px;
+                if (!(o.flags & PlotFlags_NoGrid))
+                    p.HLine(area.min.x, area.max.x, y, pc.label.Fade(v == 0.0f ? 0.20f : 0.07f));
+                const char* s = Format(o.yFormat, v);
+                const Vec2 ts = MeasureText(tf, s);
+                p.Text(Vec2(area.min.x - Sc(6) - ts.x, std::floor(y - ts.y * 0.5f)), tf, pc.secondaryLabel, s);
             }
-            else if (s.kind == SeriesKind::Scatter)
+            if (categories)
             {
-                const float r = Sc(s.style.size);
-                for (const Vec2& d : s.pts)
+                // a label under each category in view; every n-th one when they would overlap
+                float widest = 0.0f;
+                for (const std::string_view l : o.categories)
+                    widest = std::max(widest, MeasureText(tf, l).x);
+                const int every = std::max(1, (int)std::ceil((widest + Sc(8)) / std::max(sx, 1e-3f)));
+                const int first = std::max(0, (int)std::ceil(view[0])), last = std::min((int)o.categories.size() - 1, (int)std::floor(view[1]));
+                for (int i = first; i <= last; ++i)
                 {
-                    const Vec2 q(X(d.x), Y(d.y));
-                    if (q.x < area.min.x - r || q.x > area.max.x + r || q.y < area.min.y - r || q.y > area.max.y + r)
+                    if (i % every != 0)
                         continue;
-                    p.Circle(q, r, Style().Fill(col.Fade(0.85f)));
+                    const std::string_view l = o.categories[(std::size_t)i];
+                    const Vec2 ts = MeasureText(tf, l);
+                    p.Text(Vec2(std::floor(X((float)i) - ts.x * 0.5f), area.max.y + Sc(5)), tf, pc.secondaryLabel, l);
                 }
             }
             else
             {
-                // bars: the series side by side in each category; a histogram's bins as they are
-                float w, offset;
-                if (s.kind == SeriesKind::Bars)
+                PlotTicks(view[0], view[1], std::max(2, (int)(area.Width() / Sc(80))), g_ticks);
+                for (const float v : g_ticks)
                 {
-                    w = 0.8f / (float)std::max(barSeries, 1);
-                    offset = -0.4f + w * ((float)barSlot + 0.5f);
-                    ++barSlot;
+                    const float x = std::round(X(v) / px) * px;
+                    if (!(o.flags & PlotFlags_NoGrid))
+                        p.FillRect(Rect(x - px * 0.5f, area.min.y, x + px * 0.5f, area.max.y), pc.label.Fade(v == 0.0f ? 0.20f : 0.07f));
+                    const char* s = Format(o.xFormat, v);
+                    const Vec2 ts = MeasureText(tf, s);
+                    p.Text(Vec2(std::floor(x - ts.x * 0.5f), area.max.y + Sc(5)), tf, pc.secondaryLabel, s);
+                }
+            }
+
+            // ---- the series, clipped to the area
+            p.PushClip(area);
+            const float baseline = std::clamp(Y(0.0f), area.min.y, area.max.y);
+            int barSlot = 0;
+            for (Series& s : series)
+            {
+                if (s.hidden || s.pts.empty())
+                    continue;
+                const Color col = s.color;
+                if (s.kind == SeriesKind::Line)
+                {
+                    // to the screen; past four points a pixel column, a sorted line keeps each column's first, lowest,
+                    // highest and last (its shape at any zoom, a million points cost what the width does)
+                    g_screen.clear();
+                    const bool decimate = s.sorted && (float)s.pts.size() > area.Width() / px * 4.0f;
+                    int column = std::numeric_limits<int>::min();
+                    Vec2 first, lo, hi, last;
+                    std::size_t inColumn = 0;
+                    const auto flush = [&] {
+                        if (inColumn == 0)
+                            return;
+                        // in their order along x (a point twice in a row is dropped by the path)
+                        g_screen.push_back(first);
+                        g_screen.push_back(lo.x <= hi.x ? lo : hi);
+                        g_screen.push_back(lo.x <= hi.x ? hi : lo);
+                        g_screen.push_back(last);
+                    };
+                    for (const Vec2& d : s.pts)
+                    {
+                        const Vec2 q(X(d.x), Y(d.y));
+                        if (!decimate)
+                        {
+                            g_screen.push_back(q);
+                            continue;
+                        }
+                        const int col0 = (int)std::floor(q.x / px);
+                        if (col0 != column)
+                        {
+                            flush();
+                            column = col0;
+                            first = lo = hi = q;
+                            inColumn = 0;
+                        }
+                        if (q.y > lo.y)
+                            lo = q;
+                        if (q.y < hi.y)
+                            hi = q;
+                        last = q;
+                        ++inColumn;
+                    }
+                    flush();
+                    const int n = (int)g_screen.size();
+                    const std::uint32_t flags = s.style.smooth ? PolylineFlags_Smooth : PolylineFlags_None;
+                    if (s.style.fill && n >= 2)
+                        p.Area(g_screen.data(), n, baseline, Paint::Linear(col.Fade(0.30f), col.Fade(0.0f), 90), flags);
+                    if (n >= 2)
+                        p.Polyline(g_screen.data(), n, Sc(s.style.thickness), Style().Fill(col), flags);
+                    else if (n == 1)
+                        p.Circle(g_screen[0], Sc(s.style.thickness) * 1.5f, Style().Fill(col));
+                }
+                else if (s.kind == SeriesKind::Scatter)
+                {
+                    const float r = Sc(s.style.size);
+                    for (const Vec2& d : s.pts)
+                    {
+                        const Vec2 q(X(d.x), Y(d.y));
+                        if (q.x < area.min.x - r || q.x > area.max.x + r || q.y < area.min.y - r || q.y > area.max.y + r)
+                            continue;
+                        p.Circle(q, r, Style().Fill(col.Fade(0.85f)));
+                    }
                 }
                 else
                 {
-                    w = s.width;
-                    offset = 0.0f;
-                }
-                const float inset = std::min(w * sx * 0.08f, Sc(2));
-                for (const Vec2& d : s.pts)
-                {
-                    const float xc = X(d.x + offset), half = w * sx * 0.5f - inset;
-                    if (xc + half < area.min.x || xc - half > area.max.x || half <= 0.0f)
-                        continue;
-                    const float top = Y(d.y);
-                    Rect r(xc - half, std::min(top, baseline), xc + half, std::max(top, baseline));
-                    if (r.Height() < px)
-                        r.max.y = r.min.y + px;
-                    const float rad = std::min(Sc(4), half);
-                    const bool hot = s.kind == SeriesKind::Bars ? (int)std::lround(d.x) == hoverCategory
-                                                                : hoverOn && std::fabs(mouseX - d.x) <= s.width * 0.5f;
-                    Style bs = d.y >= 0.0f ? Style().Radius(rad, rad, 0, 0) : Style().Radius(0, 0, rad, rad);
-                    p.Rect(r, bs.Fill(hot ? col.Lighter(0.18f) : col));
+                    // bars: the series side by side in each category; a histogram's bins as they are
+                    float w, offset;
+                    if (s.kind == SeriesKind::Bars)
+                    {
+                        w = 0.8f / (float)std::max(barSeries, 1);
+                        offset = -0.4f + w * ((float)barSlot + 0.5f);
+                        ++barSlot;
+                    }
+                    else
+                    {
+                        w = s.width;
+                        offset = 0.0f;
+                    }
+                    const float inset = std::min(w * sx * 0.08f, Sc(2));
+                    for (const Vec2& d : s.pts)
+                    {
+                        const float xc = X(d.x + offset), half = w * sx * 0.5f - inset;
+                        if (xc + half < area.min.x || xc - half > area.max.x || half <= 0.0f)
+                            continue;
+                        const float top = Y(d.y);
+                        Rect r(xc - half, std::min(top, baseline), xc + half, std::max(top, baseline));
+                        if (r.Height() < px)
+                            r.max.y = r.min.y + px;
+                        const float rad = std::min(Sc(4), half);
+                        const bool hot = s.kind == SeriesKind::Bars ? (int)std::lround(d.x) == hoverCategory
+                                                                    : hoverOn && std::fabs(mouseX - d.x) <= s.width * 0.5f;
+                        Style bs = d.y >= 0.0f ? Style().Radius(rad, rad, 0, 0) : Style().Radius(0, 0, rad, rad);
+                        p.Rect(r, bs.Fill(hot ? col.Lighter(0.18f) : col));
+                    }
                 }
             }
+            p.PopClip();
         }
-        p.PopClip();
+        memo.reset();
 
         // ---- the legend: a dot and the label per series, a click hides or shows it
         if (legend)
@@ -643,14 +693,20 @@ namespace esia::ui
                         st.hidden.push_back(s.key);
                 }
                 const Vec2 dc(x + dot * 0.5f, entry.Center().y);
-                if (s.hidden)
-                    p.Circle(dc, dot * 0.5f - Sc(0.75f), Style().Fill(Color::Clear()).Stroke(Sc(1.5f), s.color.Fade(0.6f)));
-                else
-                    p.Circle(dc, dot * 0.5f, Style().Fill(s.color));
                 const std::string_view label = VisibleLabel(s.label);
-                const Vec2 ts = MeasureText(tf, label);
-                const Color lc = Lerp(pc.secondaryLabel, pc.label, it.hover);
-                p.Text(Vec2(x + dot + dotGap, std::floor(entry.Center().y - ts.y * 0.5f)), tf, s.hidden ? lc.Fade(0.5f) : lc, label);
+                const text::TextMetrics lm = MeasureMetrics(tf, label);
+                MemoKey k;
+                k.V(dc).F(dot).F(x + dot + dotGap).F(entry.Center().y).F(it.hover).C(s.color).U(s.hidden ? 1u : 0u).U64(lm.layout);
+                if (DrawMemo entryMemo(k); !entryMemo.Replayed())
+                {
+                    if (s.hidden)
+                        p.Circle(dc, dot * 0.5f - Sc(0.75f), Style().Fill(Color::Clear()).Stroke(Sc(1.5f), s.color.Fade(0.6f)));
+                    else
+                        p.Circle(dc, dot * 0.5f, Style().Fill(s.color));
+                    const Vec2 ts = lm.size;
+                    const Color lc = Lerp(pc.secondaryLabel, pc.label, it.hover);
+                    p.Text(Vec2(x + dot + dotGap, std::floor(entry.Center().y - ts.y * 0.5f)), tf, s.hidden ? lc.Fade(0.5f) : lc, label);
+                }
                 x += w + entryGap;
             }
         }
@@ -857,27 +913,59 @@ namespace esia::ui
         }
 
         Painter p = GetPainter();
-        if (total <= 0.0)
-            p.Sector(center, outerR - ring, outerR, 0.0f, kTau, pc.quaternaryFill);
         int positive = 0;
         for (const float v : values)
             positive += v > 0.0f && std::isfinite(v) ? 1 : 0;
         const float inset = positive > 1 ? Sc(1.5f) : 0.0f;   // a gap of the same width between the segments
-        float acc = 0.0f;
+        // every segment's spring (as the ring draws them), then the values and springs as the memo's bytes
+        thread_local std::vector<float> grows;
+        grows.assign(values.begin(), values.end());
         for (std::size_t i = 0; i < values.size() && total > 0.0; ++i)
+            if (values[i] > 0.0f && std::isfinite(values[i]) && (float)(values[i] / total) > 0.0f)
+                grows.push_back(Anim(pid, 0x200u + (std::uint32_t)i, (int)i == hovered ? 1.0f : 0.0f, SpringFast()));
         {
-            const float share = values[i] > 0.0f && std::isfinite(values[i]) ? (float)(values[i] / total) : 0.0f;
-            const float a0 = start + acc * kTau * shown, sweep = share * kTau * shown;
-            acc += share;
-            if (share <= 0.0f)
-                continue;
-            const float grow = Anim(pid, 0x200u + (std::uint32_t)i, (int)i == hovered ? 1.0f : 0.0f, SpringFast());
-            p.Sector(center, outerR - ring, outerR + Sc(4) * grow, a0, sweep, PlotColor((int)i), inset);
+            MemoKey k;
+            k.V(center).F(outerR).F(ring).F(shown).F(start).F(inset).U64(std::bit_cast<std::uint64_t>(total)).U((std::uint32_t)values.size());
+            k.Data(grows.data(), grows.size() * sizeof(float));
+            if (DrawMemo memo(k); !memo.Replayed())
+            {
+                if (total <= 0.0)
+                    p.Sector(center, outerR - ring, outerR, 0.0f, kTau, pc.quaternaryFill);
+                float acc = 0.0f;
+                std::size_t g = values.size();
+                for (std::size_t i = 0; i < values.size() && total > 0.0; ++i)
+                {
+                    const float share = values[i] > 0.0f && std::isfinite(values[i]) ? (float)(values[i] / total) : 0.0f;
+                    const float a0 = start + acc * kTau * shown, sweep = share * kTau * shown;
+                    acc += share;
+                    if (share <= 0.0f)
+                        continue;
+                    const float grow = grows[g++];
+                    p.Sector(center, outerR - ring, outerR + Sc(4) * grow, a0, sweep, PlotColor((int)i), inset);
+                }
+            }
         }
 
         // the hole: the hovered segment's label, value and share, else the given text
         const float hole = outerR - ring;
+        MemoKey hk;
+        hk.V(center).F(hole).U((std::uint32_t)(hovered + 1));
         if (hovered >= 0)
+        {
+            char value[48], pct[16];
+            std::snprintf(value, sizeof(value), o.format && *o.format ? o.format : "%.0f", (double)values[(std::size_t)hovered]);
+            std::snprintf(pct, sizeof(pct), "%.0f%%", 100.0 * values[(std::size_t)hovered] / total);
+            const std::string_view label = hovered < (int)labels.size() ? labels[(std::size_t)hovered] : std::string_view();
+            const text::FontRef big = Font(FontWeight::Semibold, T().type.size[(int)TextStyle::Title3]);
+            hk.U64(MeasureMetrics(big, value).layout).U64(MeasureMetrics(lf, label).layout).U64(MeasureMetrics(lf, pct).layout);
+        }
+        else
+            hk.U64(MeasureMetrics(Font(FontWeight::Semibold, T().type.size[(int)TextStyle::Title3]), o.center).layout);
+        std::optional<DrawMemo> holeMemo;
+        holeMemo.emplace(hk);
+        if (holeMemo->Replayed())
+            ;
+        else if (hovered >= 0)
         {
             const std::string_view label = hovered < (int)labels.size() ? labels[(std::size_t)hovered] : std::string_view();
             char value[48], pct[16];
@@ -898,6 +986,7 @@ namespace esia::ui
             const text::FontRef big = Font(FontWeight::Semibold, T().type.size[(int)TextStyle::Title3]);
             p.TextBox(Rect(center.x - hole, center.y - hole, center.x + hole, center.y + hole), Vec2(0.5f, 0.5f), big, pc.label, o.center, text::TextFlags_Ellipsis);
         }
+        holeMemo.reset();
 
         // the legend: a dot, the label, the share
         if (legend)
@@ -907,14 +996,21 @@ namespace esia::ui
             for (int i = 0; i < rows; ++i, y += rowH)
             {
                 const float a = hovered < 0 || hovered == i ? 1.0f : 0.45f;
-                p.Circle(Vec2(x0 + dot * 0.5f, y + rowH * 0.5f), dot * 0.5f, Style().Fill(PlotColor(i).Fade(a)));
                 const std::string_view l = labels[(std::size_t)i];
-                const Vec2 ls = MeasureText(lf, l);
-                p.Text(Vec2(x0 + dot + Sc(8), std::floor(y + (rowH - ls.y) * 0.5f)), lf, pc.label.Fade(a), l);
+                const text::TextMetrics lm = MeasureMetrics(lf, l);
                 const float share = total > 0.0 && values[(std::size_t)i] > 0.0f ? (float)(100.0 * values[(std::size_t)i] / total) : 0.0f;
                 char pct[16];
                 std::snprintf(pct, sizeof(pct), "%.0f%%", (double)share);
-                const Vec2 ps = MeasureText(lb, pct);
+                const text::TextMetrics pm = MeasureMetrics(lb, pct);
+                MemoKey k;
+                k.F(x0).F(y).F(rowH).F(dot).F(r.max.x).F(a).U((std::uint32_t)i).U64(lm.layout).U64(pm.layout);
+                DrawMemo memo(k);
+                if (memo.Replayed())
+                    continue;
+                p.Circle(Vec2(x0 + dot * 0.5f, y + rowH * 0.5f), dot * 0.5f, Style().Fill(PlotColor(i).Fade(a)));
+                const Vec2 ls = lm.size;
+                p.Text(Vec2(x0 + dot + Sc(8), std::floor(y + (rowH - ls.y) * 0.5f)), lf, pc.label.Fade(a), l);
+                const Vec2 ps = pm.size;
                 p.Text(Vec2(r.max.x - ps.x, std::floor(y + (rowH - ps.y) * 0.5f)), lb, pc.secondaryLabel.Fade(a), pct);
             }
         }

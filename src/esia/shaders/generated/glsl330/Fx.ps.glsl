@@ -16,36 +16,38 @@
 #define SPIRV_CROSS_CONSTANT_ID_0 4294967295u
 #endif
 const uint kEsiaFxFeatures = SPIRV_CROSS_CONSTANT_ID_0;
-const uint _1742 = (32768u & kEsiaFxFeatures);
-const uint _1757 = (262144u & kEsiaFxFeatures);
-const uint _1828 = (512u & kEsiaFxFeatures);
-const uint _1880 = (262144u & kEsiaFxFeatures);
-const vec3 _2344[6] = vec3[](vec3(1.0, 0.4199999868869781494140625, 0.2199999988079071044921875), vec3(1.0, 0.699999988079071044921875, 0.300000011920928955078125), vec3(0.800000011920928955078125, 0.920000016689300537109375, 0.4000000059604644775390625), vec3(0.3499999940395355224609375, 0.89999997615814208984375, 0.699999988079071044921875), vec3(0.4000000059604644775390625, 0.62000000476837158203125, 1.0), vec3(0.660000026226043701171875, 0.5, 1.0));
-const uint _2985 = (512u & kEsiaFxFeatures);
-const uint _3006 = (32768u & kEsiaFxFeatures);
-const uint _3039 = (131072u & kEsiaFxFeatures);
-const uint _3175 = (2u & kEsiaFxFeatures);
-const uint _3185 = (1024u & kEsiaFxFeatures);
-const uint _3252 = (32u & kEsiaFxFeatures);
-const uint _3260 = (4u & kEsiaFxFeatures);
-const uint _3265 = (256u & kEsiaFxFeatures);
-const uint _3330 = (8u & kEsiaFxFeatures);
-const uint _3359 = (8192u & kEsiaFxFeatures);
-const uint _3576 = (65536u & kEsiaFxFeatures);
-const uint _3652 = (32u & kEsiaFxFeatures);
-const uint _3716 = (1u & kEsiaFxFeatures);
-const uint _3745 = (64u & kEsiaFxFeatures);
-const uint _3798 = (16384u & kEsiaFxFeatures);
-const vec4 _3960[4] = vec4[](vec4(-1.0, 1.0, 3.400000095367431640625, 2.599999904632568359375), vec4(-0.550000011920928955078125, 0.800000011920928955078125, 2.0, 0.800000011920928955078125), vec4(0.300000011920928955078125, 1.0, 1.2000000476837158203125, 1.2999999523162841796875), vec4(0.62000000476837158203125, 0.800000011920928955078125, 1.60000002384185791015625, 0.449999988079071044921875));
-const vec2 _3977[4] = vec2[](vec2(0.0), vec2(0.100000001490116119384765625, 1.2999999523162841796875), vec2(0.550000011920928955078125, 3.900000095367431640625), vec2(0.20000000298023223876953125, 5.19999980926513671875));
-const uint _4229 = (4u & kEsiaFxFeatures);
-const uint _4233 = (256u & kEsiaFxFeatures);
-const uint _4293 = (16u & kEsiaFxFeatures);
-const uint _4362 = (2u & kEsiaFxFeatures);
-const uint _4496 = (128u & kEsiaFxFeatures);
-const uint _4578 = (2048u & kEsiaFxFeatures);
-const uint _4618 = (8u & kEsiaFxFeatures);
-const uint _4622 = (4u & kEsiaFxFeatures);
+const uint _1785 = (32768u & kEsiaFxFeatures);
+const uint _1800 = (262144u & kEsiaFxFeatures);
+const uint _1871 = (512u & kEsiaFxFeatures);
+const uint _1923 = (262144u & kEsiaFxFeatures);
+const uint _1943 = (32768u & kEsiaFxFeatures);
+const uint _1950 = (512u & kEsiaFxFeatures);
+const vec3 _2493[6] = vec3[](vec3(1.0, 0.4199999868869781494140625, 0.2199999988079071044921875), vec3(1.0, 0.699999988079071044921875, 0.300000011920928955078125), vec3(0.800000011920928955078125, 0.920000016689300537109375, 0.4000000059604644775390625), vec3(0.3499999940395355224609375, 0.89999997615814208984375, 0.699999988079071044921875), vec3(0.4000000059604644775390625, 0.62000000476837158203125, 1.0), vec3(0.660000026226043701171875, 0.5, 1.0));
+const uint _3136 = (512u & kEsiaFxFeatures);
+const uint _3157 = (32768u & kEsiaFxFeatures);
+const uint _3190 = (131072u & kEsiaFxFeatures);
+const uint _3326 = (2u & kEsiaFxFeatures);
+const uint _3336 = (1024u & kEsiaFxFeatures);
+const uint _3403 = (32u & kEsiaFxFeatures);
+const uint _3411 = (4u & kEsiaFxFeatures);
+const uint _3416 = (256u & kEsiaFxFeatures);
+const uint _3481 = (8u & kEsiaFxFeatures);
+const uint _3510 = (8192u & kEsiaFxFeatures);
+const uint _3727 = (65536u & kEsiaFxFeatures);
+const uint _3803 = (32u & kEsiaFxFeatures);
+const uint _3867 = (1u & kEsiaFxFeatures);
+const uint _3896 = (64u & kEsiaFxFeatures);
+const uint _3949 = (16384u & kEsiaFxFeatures);
+const vec4 _4111[4] = vec4[](vec4(-1.0, 1.0, 3.400000095367431640625, 2.599999904632568359375), vec4(-0.550000011920928955078125, 0.800000011920928955078125, 2.0, 0.800000011920928955078125), vec4(0.300000011920928955078125, 1.0, 1.2000000476837158203125, 1.2999999523162841796875), vec4(0.62000000476837158203125, 0.800000011920928955078125, 1.60000002384185791015625, 0.449999988079071044921875));
+const vec2 _4128[4] = vec2[](vec2(0.0), vec2(0.100000001490116119384765625, 1.2999999523162841796875), vec2(0.550000011920928955078125, 3.900000095367431640625), vec2(0.20000000298023223876953125, 5.19999980926513671875));
+const uint _4380 = (4u & kEsiaFxFeatures);
+const uint _4384 = (256u & kEsiaFxFeatures);
+const uint _4444 = (16u & kEsiaFxFeatures);
+const uint _4513 = (2u & kEsiaFxFeatures);
+const uint _4647 = (128u & kEsiaFxFeatures);
+const uint _4729 = (2048u & kEsiaFxFeatures);
+const uint _4769 = (8u & kEsiaFxFeatures);
+const uint _4773 = (4u & kEsiaFxFeatures);
 
 layout(std140) uniform WgtFrame
 {
@@ -56,13 +58,13 @@ layout(std140) uniform WgtFrame
     vec4 gLevel[6];
     vec4 gText;
     vec4 gConv;
-} _226;
+} _239;
 
 layout(std140) uniform WgtDraw
 {
     vec4 gFade;
     vec4 gDrawInfo;
-} _268;
+} _281;
 
 uniform sampler2D SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler;
 uniform sampler2D SPIRV_Cross_CombinedgTexgLinear;
@@ -85,4920 +87,5060 @@ layout(location = 0) out vec4 _entryPointOutput;
 
 void main()
 {
-    vec2 _6387 = gl_FragCoord.xy + _226.gConv.yy;
-    vec2 _28164;
-    if (_226.gConv.x > 0.5)
+    vec2 _6538 = gl_FragCoord.xy + _239.gConv.yy;
+    vec2 _29435;
+    if (_239.gConv.x > 0.5)
     {
-        vec2 _26506 = _6387;
-        _26506.y = _226.gTarget.y - _6387.y;
-        _28164 = _26506;
+        vec2 _27682 = _6538;
+        _27682.y = _239.gTarget.y - _6538.y;
+        _29435 = _27682;
     }
     else
     {
-        _28164 = _6387;
+        _29435 = _6538;
     }
-    float _4988 = dFdx(esia_v0.x);
-    float _4992 = dFdy(esia_v0.x);
-    float _4995 = max(abs(_4988) + abs(_4992), 9.9999997473787516355514526367188e-05);
-    vec4 _28169;
-    vec4 _28172;
+    float _5139 = dFdx(esia_v0.x);
+    float _5143 = dFdy(esia_v0.x);
+    float _5146 = max(abs(_5139) + abs(_5143), 9.9999997473787516355514526367188e-05);
+    vec4 _29440;
+    vec4 _29443;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.z == 2u) || ((esia_v7.x & _2985) != 0u))
+    if ((esia_v7.z == 2u) || ((esia_v7.x & _3136) != 0u))
     {
-        uint _6406 = max(uint(_226.gConv.z), 1u);
-        uint _6447 = max(uint(_226.gConv.z), 1u);
-        _28172 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6406) * 24u) + 15u), int(esia_v1 / _6406), 0).xy, 0);
-        _28169 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6447) * 24u) + 16u), int(esia_v1 / _6447), 0).xy, 0);
+        uint _6557 = max(uint(_239.gConv.z), 1u);
+        uint _6598 = max(uint(_239.gConv.z), 1u);
+        _29443 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6557) * 24u) + 15u), int(esia_v1 / _6557), 0).xy, 0);
+        _29440 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6598) * 24u) + 16u), int(esia_v1 / _6598), 0).xy, 0);
     }
     else
     {
-        _28172 = vec4(0.0);
-        _28169 = vec4(0.0);
+        _29443 = vec4(0.0);
+        _29440 = vec4(0.0);
     }
-    vec4 _28165;
-    vec4 _28171;
+    vec4 _29436;
+    vec4 _29442;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3006) != 0u)
+    if ((esia_v7.x & _3157) != 0u)
     {
-        uint _6488 = max(uint(_226.gConv.z), 1u);
-        uint _6529 = max(uint(_226.gConv.z), 1u);
-        _28171 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6488) * 24u) + 15u), int(esia_v1 / _6488), 0).xy, 0);
-        _28165 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6529) * 24u) + 18u), int(esia_v1 / _6529), 0).xy, 0);
+        uint _6639 = max(uint(_239.gConv.z), 1u);
+        uint _6680 = max(uint(_239.gConv.z), 1u);
+        _29442 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6639) * 24u) + 15u), int(esia_v1 / _6639), 0).xy, 0);
+        _29436 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _6680) * 24u) + 18u), int(esia_v1 / _6680), 0).xy, 0);
     }
     else
     {
-        _28171 = _28172;
-        _28165 = vec4(0.0);
+        _29442 = _29443;
+        _29436 = vec4(0.0);
     }
-    vec2 _6608 = (esia_v2.xy + esia_v2.zw) * 0.5;
-    vec2 _6617 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-    float _28219;
+    vec2 _6759 = (esia_v2.xy + esia_v2.zw) * 0.5;
+    vec2 _6768 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+    float _29486;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _1742) != 0u)
+    if ((esia_v7.x & _1785) != 0u)
     {
-        float _6734 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-        vec4 _6768 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(esia_v0, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-        float _6792 = (_6768.w - 0.5) * esia_v3.y;
-        vec2 _6833 = abs(esia_v0 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _6734), vec2(0.0));
-        _28219 = max((-mix((max(min(_6768.x, _6768.y), min(max(_6768.x, _6768.y), _6768.z)) - 0.5) * esia_v3.x, _6792, clamp(abs(_6792) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _6734, length(max(_6833, vec2(0.0))) + min(max(_6833.x, _6833.y), 0.0)) - esia_v5.w;
+        float _6885 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+        vec4 _6919 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(esia_v0, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+        float _6943 = (_6919.w - 0.5) * esia_v3.y;
+        vec2 _6984 = abs(esia_v0 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _6885), vec2(0.0));
+        _29486 = max((-mix((max(min(_6919.x, _6919.y), min(max(_6919.x, _6919.y), _6919.z)) - 0.5) * esia_v3.x, _6943, clamp(abs(_6943) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _6885, length(max(_6984, vec2(0.0))) + min(max(_6984.x, _6984.y), 0.0)) - esia_v5.w;
     }
     else
     {
-        float _28220;
-        if ((esia_v7.x & _1757) != 0u)
+        float _29487;
+        if ((esia_v7.x & _1800) != 0u)
         {
-            float _28218;
+            float _29485;
             do
             {
-                bool _6895 = esia_v3.w > 0.5;
-                float _6899 = floor((esia_v3.z + 1.0) * 0.5);
-                float _6903 = floor((_6899 + 127.0) * 0.0078125);
-                float _6907 = floor((esia_v3.z - 1.0) * 0.5);
-                float _7035 = floor(_6907 * 0.0625);
-                uint _7040 = (esia_v1 + 1u) + uint(_7035);
-                uint _7053 = max(uint(_226.gConv.z), 1u);
-                vec4 _7087 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7040 % _7053) * 24u) + uint(_6907 - (_7035 * 16.0))), int(_7040 / _7053), 0).xy, 0);
-                vec2 _6919 = _7087.xy;
-                vec2 _6921 = _7087.zw;
-                bvec2 _6922 = bvec2(((esia_v3.z - 1.0) - (_6907 * 2.0)) < 0.5);
-                vec2 _28195;
-                if (_6895)
+                bool _7046 = esia_v3.w > 0.5;
+                float _7050 = floor((esia_v3.z + 1.0) * 0.5);
+                float _7054 = floor((_7050 + 127.0) * 0.0078125);
+                float _7058 = floor((esia_v3.z - 1.0) * 0.5);
+                float _7186 = floor(_7058 * 0.0625);
+                uint _7191 = (esia_v1 + 1u) + uint(_7186);
+                uint _7204 = max(uint(_239.gConv.z), 1u);
+                vec4 _7238 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7191 % _7204) * 24u) + uint(_7058 - (_7186 * 16.0))), int(_7191 / _7204), 0).xy, 0);
+                vec2 _7070 = _7238.xy;
+                vec2 _7072 = _7238.zw;
+                bvec2 _7073 = bvec2(((esia_v3.z - 1.0) - (_7058 * 2.0)) < 0.5);
+                vec2 _29462;
+                if (_7046)
                 {
-                    float _7095 = floor(0.0);
-                    uint _7100 = (esia_v1 + 1u) + uint(_7095);
-                    uint _7113 = max(uint(_226.gConv.z), 1u);
-                    _28195 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7100 % _7113) * 24u) + uint(_7095 * (-16.0))), int(_7100 / _7113), 0).xy, 0).xy;
+                    float _7246 = floor(0.0);
+                    uint _7251 = (esia_v1 + 1u) + uint(_7246);
+                    uint _7264 = max(uint(_239.gConv.z), 1u);
+                    _29462 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7251 % _7264) * 24u) + uint(_7246 * (-16.0))), int(_7251 / _7264), 0).xy, 0).xy;
                 }
                 else
                 {
-                    _28195 = vec2(_6922.x ? _6919.x : _6921.x, _6922.y ? _6919.y : _6921.y);
+                    _29462 = vec2(_7073.x ? _7070.x : _7072.x, _7073.y ? _7070.y : _7072.y);
                 }
-                vec2 _28194;
-                float _28197;
-                float _28200;
-                _28200 = 1.0;
-                _28197 = 1000000015047466219876688855040.0;
-                _28194 = _28195;
-                vec2 _28193;
-                float _28196;
-                float _28199;
+                vec2 _29461;
+                float _29464;
+                float _29467;
+                _29467 = 1.0;
+                _29464 = 1000000015047466219876688855040.0;
+                _29461 = _29462;
+                vec2 _29460;
+                float _29463;
+                float _29466;
                 SPIRV_CROSS_LOOP
-                for (float _28190 = 0.0; _28190 < 16.0; _28200 = _28199, _28197 = _28196, _28194 = _28193, _28190 += 1.0)
+                for (float _29457 = 0.0; _29457 < 16.0; _29467 = _29466, _29464 = _29463, _29461 = _29460, _29457 += 1.0)
                 {
-                    if (_28190 >= _6903)
+                    if (_29457 >= _7054)
                     {
                         break;
                     }
-                    _28199 = _28200;
-                    _28196 = _28197;
-                    _28193 = _28194;
-                    vec2 _32740;
-                    float _32742;
-                    float _32744;
+                    _29466 = _29467;
+                    _29463 = _29464;
+                    _29460 = _29461;
+                    vec2 _34256;
+                    float _34258;
+                    float _34260;
                     SPIRV_CROSS_LOOP
-                    for (float _28191 = 0.0; _28191 < 128.0; _28199 = _32744, _28196 = _32742, _28193 = _32740, _28191 += 1.0)
+                    for (float _29458 = 0.0; _29458 < 128.0; _29466 = _34260, _29463 = _34258, _29460 = _34256, _29458 += 1.0)
                     {
-                        float _6949 = (_28190 * 128.0) + _28191;
-                        if (_6949 >= _6899)
+                        float _7100 = (_29457 * 128.0) + _29458;
+                        if (_7100 >= _7050)
                         {
                             break;
                         }
-                        float _7155 = floor(_6949 * 0.0625);
-                        uint _7160 = (esia_v1 + 1u) + uint(_7155);
-                        uint _7173 = max(uint(_226.gConv.z), 1u);
-                        vec4 _7207 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7160 % _7173) * 24u) + uint(_6949 - (_7155 * 16.0))), int(_7160 / _7173), 0).xy, 0);
-                        vec2 _6961 = _7207.xy;
-                        vec2 _7218 = _28193 - _6961;
-                        vec2 _7221 = esia_v0 - _6961;
-                        vec2 _7234 = _7221 - (_7218 * clamp(dot(_7221, _7218) / max(dot(_7218, _7218), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                        float _7237 = dot(_7234, _7234);
-                        float _32945 = (_7237 < _28196) ? _7237 : _28196;
-                        bool _7249 = esia_v0.y >= _7207.y;
-                        bool _7254 = esia_v0.y < _28193.y;
-                        bool _7265 = (_7218.x * _7221.y) > (_7218.y * _7221.x);
-                        float _28205;
-                        if (((_7249 && _7254) && _7265) || (((!_7249) && (!_7254)) && (!_7265)))
+                        float _7306 = floor(_7100 * 0.0625);
+                        uint _7311 = (esia_v1 + 1u) + uint(_7306);
+                        uint _7324 = max(uint(_239.gConv.z), 1u);
+                        vec4 _7358 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_7311 % _7324) * 24u) + uint(_7100 - (_7306 * 16.0))), int(_7311 / _7324), 0).xy, 0);
+                        vec2 _7112 = _7358.xy;
+                        vec2 _7369 = _29460 - _7112;
+                        vec2 _7372 = esia_v0 - _7112;
+                        vec2 _7385 = _7372 - (_7369 * clamp(dot(_7372, _7369) / max(dot(_7369, _7369), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                        float _7388 = dot(_7385, _7385);
+                        float _34461 = (_7388 < _29463) ? _7388 : _29463;
+                        bool _7400 = esia_v0.y >= _7358.y;
+                        bool _7405 = esia_v0.y < _29460.y;
+                        bool _7416 = (_7369.x * _7372.y) > (_7369.y * _7372.x);
+                        float _29472;
+                        if (((_7400 && _7405) && _7416) || (((!_7400) && (!_7405)) && (!_7416)))
                         {
-                            _28205 = -_28199;
+                            _29472 = -_29466;
                         }
                         else
                         {
-                            _28205 = _28199;
+                            _29472 = _29466;
                         }
-                        vec2 _6971 = _7207.xy;
-                        if (((2.0 * _6949) + 1.0) < esia_v3.z)
+                        vec2 _7122 = _7358.xy;
+                        if (((2.0 * _7100) + 1.0) < esia_v3.z)
                         {
-                            vec2 _6980 = _7207.zw;
-                            vec2 _7294 = _6971 - _6980;
-                            vec2 _7297 = esia_v0 - _6980;
-                            vec2 _7310 = _7297 - (_7294 * clamp(dot(_7297, _7294) / max(dot(_7294, _7294), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                            float _7313 = dot(_7310, _7310);
-                            bool _7325 = esia_v0.y >= _7207.w;
-                            bool _7330 = esia_v0.y < _7207.y;
-                            bool _7341 = (_7294.x * _7297.y) > (_7294.y * _7297.x);
-                            float _28209;
-                            if (((_7325 && _7330) && _7341) || (((!_7325) && (!_7330)) && (!_7341)))
+                            vec2 _7131 = _7358.zw;
+                            vec2 _7445 = _7122 - _7131;
+                            vec2 _7448 = esia_v0 - _7131;
+                            vec2 _7461 = _7448 - (_7445 * clamp(dot(_7448, _7445) / max(dot(_7445, _7445), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                            float _7464 = dot(_7461, _7461);
+                            bool _7476 = esia_v0.y >= _7358.w;
+                            bool _7481 = esia_v0.y < _7358.y;
+                            bool _7492 = (_7445.x * _7448.y) > (_7445.y * _7448.x);
+                            float _29476;
+                            if (((_7476 && _7481) && _7492) || (((!_7476) && (!_7481)) && (!_7492)))
                             {
-                                _28209 = -_28205;
+                                _29476 = -_29472;
                             }
                             else
                             {
-                                _28209 = _28205;
+                                _29476 = _29472;
                             }
-                            _32744 = _28209;
-                            _32742 = (_7313 < _32945) ? _7313 : _32945;
-                            _32740 = _7207.zw;
+                            _34260 = _29476;
+                            _34258 = (_7464 < _34461) ? _7464 : _34461;
+                            _34256 = _7358.zw;
                         }
                         else
                         {
-                            _32744 = _28205;
-                            _32742 = _32945;
-                            _32740 = _6971;
+                            _34260 = _29472;
+                            _34258 = _34461;
+                            _34256 = _7122;
                         }
                     }
                 }
-                float _7001 = sqrt(_28197);
-                if (_6895)
+                float _7152 = sqrt(_29464);
+                if (_7046)
                 {
-                    _28218 = _7001 - esia_v3.x;
+                    _29485 = _7152 - esia_v3.x;
                     break;
                 }
-                _28218 = (_28200 * _7001) - esia_v3.x;
+                _29485 = (_29467 * _7152) - esia_v3.x;
                 break;
             } while(false);
-            _28220 = _28218;
+            _29487 = _29485;
         }
         else
         {
-            float _28221;
+            float _29488;
             if (esia_v7.z == 1u)
             {
-                vec2 _6642 = esia_v0 - _6608;
-                float _28189;
+                vec2 _6793 = esia_v0 - _6759;
+                float _29456;
                 do
                 {
                     if (esia_v5.w >= 6.282185077667236328125)
                     {
-                        _28189 = abs(length(_6642) - esia_v3.x) - esia_v3.y;
+                        _29456 = abs(length(_6793) - esia_v3.x) - esia_v3.y;
                         break;
                     }
-                    float _7384 = esia_v5.z + (esia_v5.w * 0.5);
-                    float _7386 = cos(_7384);
-                    float _7388 = sin(_7384);
-                    float _7397 = dot(_6642, vec2(-_7388, _7386));
-                    float _7400 = dot(_6642, vec2(_7386, _7388));
-                    vec2 _7401 = vec2(_7397, _7400);
-                    float _7404 = abs(_7397);
-                    _7401.x = _7404;
-                    float _7407 = esia_v5.w * 0.5;
-                    float _7409 = sin(_7407);
-                    float _7411 = cos(_7407);
-                    _28189 = (((_7411 * _7404) > (_7409 * _7400)) ? length(_7401 - (vec2(_7409, _7411) * esia_v3.x)) : abs(length(_7401) - esia_v3.x)) - esia_v3.y;
+                    float _7535 = esia_v5.z + (esia_v5.w * 0.5);
+                    float _7537 = cos(_7535);
+                    float _7539 = sin(_7535);
+                    float _7548 = dot(_6793, vec2(-_7539, _7537));
+                    float _7551 = dot(_6793, vec2(_7537, _7539));
+                    vec2 _7552 = vec2(_7548, _7551);
+                    float _7555 = abs(_7548);
+                    _7552.x = _7555;
+                    float _7558 = esia_v5.w * 0.5;
+                    float _7560 = sin(_7558);
+                    float _7562 = cos(_7558);
+                    _29456 = (((_7562 * _7555) > (_7560 * _7551)) ? length(_7552 - (vec2(_7560, _7562) * esia_v3.x)) : abs(length(_7552) - esia_v3.x)) - esia_v3.y;
                     break;
                 } while(false);
-                _28221 = _28189;
+                _29488 = _29456;
             }
             else
             {
-                float _28222;
+                float _29489;
                 if (esia_v7.z == 2u)
                 {
-                    vec2 _7447 = esia_v0 - _28171.xy;
-                    vec2 _7450 = _28171.zw - _28171.xy;
-                    _28222 = length(_7447 - (_7450 * clamp(dot(_7447, _7450) / max(dot(_7450, _7450), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                    vec2 _7598 = esia_v0 - _29442.xy;
+                    vec2 _7601 = _29442.zw - _29442.xy;
+                    _29489 = length(_7598 - (_7601 * clamp(dot(_7598, _7601) / max(dot(_7601, _7601), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                 }
                 else
                 {
-                    vec2 _6669 = esia_v0 - _6608;
-                    float _7503 = min(_6617.x, _6617.y);
-                    float _7506 = min((_6669.x > 0.0) ? ((_6669.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_6669.y > 0.0) ? esia_v3.w : esia_v3.x), _7503);
-                    float _7512 = _7506 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                    float _28174;
-                    float _28175;
-                    if (_7512 > _7503)
+                    vec2 _6820 = esia_v0 - _6759;
+                    float _7666 = min(_6768.x, _6768.y);
+                    float _7669 = min((_6820.x > 0.0) ? ((_6820.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_6820.y > 0.0) ? esia_v3.w : esia_v3.x), _7666);
+                    float _7675 = _7669 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                    float _29445;
+                    float _29446;
+                    if (_7675 > _7666)
                     {
-                        float _7526 = esia_v5.y * clamp((_7503 - _7506) / max(0.60000002384185791015625 * _7506, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                        _28175 = _7526;
-                        _28174 = _7506 * (1.0 + (0.60000002384185791015625 * _7526));
+                        float _7689 = esia_v5.y * clamp((_7666 - _7669) / max(0.60000002384185791015625 * _7669, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                        _29446 = _7689;
+                        _29445 = _7669 * (1.0 + (0.60000002384185791015625 * _7689));
                     }
                     else
                     {
-                        _28175 = esia_v5.y;
-                        _28174 = _7512;
+                        _29446 = esia_v5.y;
+                        _29445 = _7675;
                     }
-                    vec2 _7539 = (abs(_6669) - _6617) + vec2(_28174);
-                    vec2 _7541 = max(_7539, vec2(0.0));
-                    float _28176;
+                    vec2 _7718 = (abs(_6820) - _6768) + vec2(_29445);
+                    vec2 _7720 = max(_7718, vec2(0.0));
+                    float _29447;
                     SPIRV_CROSS_BRANCH
-                    if ((_7541.x > 0.0) && (_7541.y > 0.0))
+                    if ((_7720.x > 0.0) && (_7720.y > 0.0))
                     {
-                        float _28177;
-                        if ((_28175 > 0.001000000047497451305389404296875) && (_28174 > 9.9999997473787516355514526367188e-05))
+                        float _29448;
+                        if ((_29446 > 0.001000000047497451305389404296875) && (_29445 > 9.9999997473787516355514526367188e-05))
                         {
-                            float _7558 = 2.0 + (2.0 * _28175);
-                            vec2 _7563 = _7541 / vec2(max(_28174, 9.9999997473787516355514526367188e-05));
-                            _28177 = pow(pow(_7563.x, _7558) + pow(_7563.y, _7558), 1.0 / _7558) * _28174;
+                            float _7737 = 2.0 + (2.0 * _29446);
+                            vec2 _7742 = _7720 / vec2(max(_29445, 9.9999997473787516355514526367188e-05));
+                            _29448 = pow(pow(_7742.x, _7737) + pow(_7742.y, _7737), 1.0 / _7737) * _29445;
                         }
                         else
                         {
-                            _28177 = length(_7541);
+                            _29448 = length(_7720);
                         }
-                        _28176 = _28177;
+                        _29447 = _29448;
                     }
                     else
                     {
-                        _28176 = max(_7541.x, _7541.y);
+                        _29447 = max(_7720.x, _7720.y);
                     }
-                    float _7598 = (min(max(_7539.x, _7539.y), 0.0) + _28176) - _28174;
-                    float _28223;
+                    float _7777 = (min(max(_7718.x, _7718.y), 0.0) + _29447) - _29445;
+                    float _29490;
                     SPIRV_CROSS_BRANCH
-                    if ((esia_v7.x & _1828) != 0u)
+                    if ((esia_v7.x & _1871) != 0u)
                     {
-                        vec2 _6697 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                        vec2 _6700 = esia_v0 - ((_28171.xy + _28171.zw) * 0.5);
-                        float _7634 = min(_6697.x, _6697.y);
-                        float _7637 = min((_6700.x > 0.0) ? ((_6700.y > 0.0) ? _28169.x : _28169.x) : ((_6700.y > 0.0) ? _28169.x : _28169.x), _7634);
-                        float _7643 = _7637 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                        float _28180;
-                        float _28181;
-                        if (_7643 > _7634)
+                        vec2 _6848 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                        vec2 _6851 = esia_v0 - ((_29442.xy + _29442.zw) * 0.5);
+                        float _7825 = min(_6848.x, _6848.y);
+                        float _7828 = min((_6851.x > 0.0) ? ((_6851.y > 0.0) ? _29440.x : _29440.x) : ((_6851.y > 0.0) ? _29440.x : _29440.x), _7825);
+                        float _7834 = _7828 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                        float _29449;
+                        float _29450;
+                        if (_7834 > _7825)
                         {
-                            float _7657 = esia_v5.y * clamp((_7634 - _7637) / max(0.60000002384185791015625 * _7637, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                            _28181 = _7657;
-                            _28180 = _7637 * (1.0 + (0.60000002384185791015625 * _7657));
+                            float _7848 = esia_v5.y * clamp((_7825 - _7828) / max(0.60000002384185791015625 * _7828, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                            _29450 = _7848;
+                            _29449 = _7828 * (1.0 + (0.60000002384185791015625 * _7848));
                         }
                         else
                         {
-                            _28181 = esia_v5.y;
-                            _28180 = _7643;
+                            _29450 = esia_v5.y;
+                            _29449 = _7834;
                         }
-                        vec2 _7670 = (abs(_6700) - _6697) + vec2(_28180);
-                        vec2 _7672 = max(_7670, vec2(0.0));
-                        float _28182;
+                        vec2 _7877 = (abs(_6851) - _6848) + vec2(_29449);
+                        vec2 _7879 = max(_7877, vec2(0.0));
+                        float _29451;
                         SPIRV_CROSS_BRANCH
-                        if ((_7672.x > 0.0) && (_7672.y > 0.0))
+                        if ((_7879.x > 0.0) && (_7879.y > 0.0))
                         {
-                            float _28183;
-                            if ((_28181 > 0.001000000047497451305389404296875) && (_28180 > 9.9999997473787516355514526367188e-05))
+                            float _29452;
+                            if ((_29450 > 0.001000000047497451305389404296875) && (_29449 > 9.9999997473787516355514526367188e-05))
                             {
-                                float _7689 = 2.0 + (2.0 * _28181);
-                                vec2 _7694 = _7672 / vec2(max(_28180, 9.9999997473787516355514526367188e-05));
-                                _28183 = pow(pow(_7694.x, _7689) + pow(_7694.y, _7689), 1.0 / _7689) * _28180;
+                                float _7896 = 2.0 + (2.0 * _29450);
+                                vec2 _7901 = _7879 / vec2(max(_29449, 9.9999997473787516355514526367188e-05));
+                                _29452 = pow(pow(_7901.x, _7896) + pow(_7901.y, _7896), 1.0 / _7896) * _29449;
                             }
                             else
                             {
-                                _28183 = length(_7672);
+                                _29452 = length(_7879);
                             }
-                            _28182 = _28183;
+                            _29451 = _29452;
                         }
                         else
                         {
-                            _28182 = max(_7672.x, _7672.y);
+                            _29451 = max(_7879.x, _7879.y);
                         }
-                        float _7729 = (min(max(_7670.x, _7670.y), 0.0) + _28182) - _28180;
-                        float _7734 = max(_28169.y, 9.9999997473787516355514526367188e-05);
-                        float _7743 = max(_7734 - abs(_7598 - _7729), 0.0) / _7734;
-                        _28223 = min(_7598, _7729) - (((_7743 * _7743) * _7734) * 0.25);
+                        float _7936 = (min(max(_7877.x, _7877.y), 0.0) + _29451) - _29449;
+                        float _7941 = max(_29440.y, 9.9999997473787516355514526367188e-05);
+                        float _7950 = max(_7941 - abs(_7777 - _7936), 0.0) / _7941;
+                        _29490 = min(_7777, _7936) - (((_7950 * _7950) * _7941) * 0.25);
                     }
                     else
                     {
-                        _28223 = _7598;
+                        _29490 = _7777;
                     }
-                    _28222 = _28223;
+                    _29489 = _29490;
                 }
-                _28221 = _28222;
+                _29488 = _29489;
             }
-            _28220 = _28221;
+            _29487 = _29488;
         }
-        _28219 = _28220;
+        _29486 = _29487;
     }
-    float _28570;
-    float _32108;
+    float _29827;
+    float _33598;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3039) != 0u)
+    if ((esia_v7.x & _3190) != 0u)
     {
-        uint _7760 = max(uint(_226.gConv.z), 1u);
-        uint _7801 = max(uint(_226.gConv.z), 1u);
-        vec4 _7835 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _7801) * 24u) + 6u), int(esia_v1 / _7801), 0).xy, 0);
-        vec2 _5048 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _7760) * 24u) + 21u), int(esia_v1 / _7760), 0).xy, 0).xy;
-        float _5055 = clamp(ceil(length(_5048) / (4.0 * _4995)), 1.0, 8.0);
-        float _5060 = _7835.x * _7835.y;
-        float _5066 = _7835.x * (1.0 - _7835.y);
-        vec2 _5070 = esia_v0 + (_5048 * 0.5);
-        vec2 _7880 = (esia_v2.xy + esia_v2.zw) * 0.5;
-        vec2 _7889 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-        float _28338;
+        uint _7967 = max(uint(_239.gConv.z), 1u);
+        uint _8008 = max(uint(_239.gConv.z), 1u);
+        vec4 _8042 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _8008) * 24u) + 6u), int(esia_v1 / _8008), 0).xy, 0);
+        vec2 _5199 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _7967) * 24u) + 21u), int(esia_v1 / _7967), 0).xy, 0).xy;
+        float _5206 = clamp(ceil(length(_5199) / (4.0 * _5146)), 1.0, 8.0);
+        float _5211 = _8042.x * _8042.y;
+        float _5217 = _8042.x * (1.0 - _8042.y);
+        vec2 _5221 = esia_v0 + (_5199 * 0.5);
+        vec2 _8087 = (esia_v2.xy + esia_v2.zw) * 0.5;
+        vec2 _8096 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+        float _29601;
         SPIRV_CROSS_BRANCH
-        if ((esia_v7.x & _1742) != 0u)
+        if ((esia_v7.x & _1785) != 0u)
         {
-            float _8006 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-            vec4 _8040 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_5070, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-            float _8064 = (_8040.w - 0.5) * esia_v3.y;
-            vec2 _8105 = abs(_5070 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _8006), vec2(0.0));
-            _28338 = max((-mix((max(min(_8040.x, _8040.y), min(max(_8040.x, _8040.y), _8040.z)) - 0.5) * esia_v3.x, _8064, clamp(abs(_8064) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _8006, length(max(_8105, vec2(0.0))) + min(max(_8105.x, _8105.y), 0.0)) - esia_v5.w;
+            float _8213 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+            vec4 _8247 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_5221, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+            float _8271 = (_8247.w - 0.5) * esia_v3.y;
+            vec2 _8312 = abs(_5221 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _8213), vec2(0.0));
+            _29601 = max((-mix((max(min(_8247.x, _8247.y), min(max(_8247.x, _8247.y), _8247.z)) - 0.5) * esia_v3.x, _8271, clamp(abs(_8271) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _8213, length(max(_8312, vec2(0.0))) + min(max(_8312.x, _8312.y), 0.0)) - esia_v5.w;
         }
         else
         {
-            float _28339;
-            if ((esia_v7.x & _1757) != 0u)
+            float _29602;
+            if ((esia_v7.x & _1800) != 0u)
             {
-                float _28337;
+                float _29600;
                 do
                 {
-                    bool _8167 = esia_v3.w > 0.5;
-                    float _8171 = floor((esia_v3.z + 1.0) * 0.5);
-                    float _8175 = floor((_8171 + 127.0) * 0.0078125);
-                    float _8179 = floor((esia_v3.z - 1.0) * 0.5);
-                    float _8307 = floor(_8179 * 0.0625);
-                    uint _8312 = (esia_v1 + 1u) + uint(_8307);
-                    uint _8325 = max(uint(_226.gConv.z), 1u);
-                    vec4 _8359 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8312 % _8325) * 24u) + uint(_8179 - (_8307 * 16.0))), int(_8312 / _8325), 0).xy, 0);
-                    vec2 _8191 = _8359.xy;
-                    vec2 _8193 = _8359.zw;
-                    bvec2 _8194 = bvec2(((esia_v3.z - 1.0) - (_8179 * 2.0)) < 0.5);
-                    vec2 _28314;
-                    if (_8167)
+                    bool _8374 = esia_v3.w > 0.5;
+                    float _8378 = floor((esia_v3.z + 1.0) * 0.5);
+                    float _8382 = floor((_8378 + 127.0) * 0.0078125);
+                    float _8386 = floor((esia_v3.z - 1.0) * 0.5);
+                    float _8514 = floor(_8386 * 0.0625);
+                    uint _8519 = (esia_v1 + 1u) + uint(_8514);
+                    uint _8532 = max(uint(_239.gConv.z), 1u);
+                    vec4 _8566 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8519 % _8532) * 24u) + uint(_8386 - (_8514 * 16.0))), int(_8519 / _8532), 0).xy, 0);
+                    vec2 _8398 = _8566.xy;
+                    vec2 _8400 = _8566.zw;
+                    bvec2 _8401 = bvec2(((esia_v3.z - 1.0) - (_8386 * 2.0)) < 0.5);
+                    vec2 _29577;
+                    if (_8374)
                     {
-                        float _8367 = floor(0.0);
-                        uint _8372 = (esia_v1 + 1u) + uint(_8367);
-                        uint _8385 = max(uint(_226.gConv.z), 1u);
-                        _28314 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8372 % _8385) * 24u) + uint(_8367 * (-16.0))), int(_8372 / _8385), 0).xy, 0).xy;
+                        float _8574 = floor(0.0);
+                        uint _8579 = (esia_v1 + 1u) + uint(_8574);
+                        uint _8592 = max(uint(_239.gConv.z), 1u);
+                        _29577 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8579 % _8592) * 24u) + uint(_8574 * (-16.0))), int(_8579 / _8592), 0).xy, 0).xy;
                     }
                     else
                     {
-                        _28314 = vec2(_8194.x ? _8191.x : _8193.x, _8194.y ? _8191.y : _8193.y);
+                        _29577 = vec2(_8401.x ? _8398.x : _8400.x, _8401.y ? _8398.y : _8400.y);
                     }
-                    vec2 _28313;
-                    float _28316;
-                    float _28319;
-                    _28319 = 1.0;
-                    _28316 = 1000000015047466219876688855040.0;
-                    _28313 = _28314;
-                    vec2 _28312;
-                    float _28315;
-                    float _28318;
+                    vec2 _29576;
+                    float _29579;
+                    float _29582;
+                    _29582 = 1.0;
+                    _29579 = 1000000015047466219876688855040.0;
+                    _29576 = _29577;
+                    vec2 _29575;
+                    float _29578;
+                    float _29581;
                     SPIRV_CROSS_LOOP
-                    for (float _28309 = 0.0; _28309 < 16.0; _28319 = _28318, _28316 = _28315, _28313 = _28312, _28309 += 1.0)
+                    for (float _29572 = 0.0; _29572 < 16.0; _29582 = _29581, _29579 = _29578, _29576 = _29575, _29572 += 1.0)
                     {
-                        if (_28309 >= _8175)
+                        if (_29572 >= _8382)
                         {
                             break;
                         }
-                        _28318 = _28319;
-                        _28315 = _28316;
-                        _28312 = _28313;
-                        vec2 _32751;
-                        float _32753;
-                        float _32755;
+                        _29581 = _29582;
+                        _29578 = _29579;
+                        _29575 = _29576;
+                        vec2 _34267;
+                        float _34269;
+                        float _34271;
                         SPIRV_CROSS_LOOP
-                        for (float _28310 = 0.0; _28310 < 128.0; _28318 = _32755, _28315 = _32753, _28312 = _32751, _28310 += 1.0)
+                        for (float _29573 = 0.0; _29573 < 128.0; _29581 = _34271, _29578 = _34269, _29575 = _34267, _29573 += 1.0)
                         {
-                            float _8221 = (_28309 * 128.0) + _28310;
-                            if (_8221 >= _8171)
+                            float _8428 = (_29572 * 128.0) + _29573;
+                            if (_8428 >= _8378)
                             {
                                 break;
                             }
-                            float _8427 = floor(_8221 * 0.0625);
-                            uint _8432 = (esia_v1 + 1u) + uint(_8427);
-                            uint _8445 = max(uint(_226.gConv.z), 1u);
-                            vec4 _8479 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8432 % _8445) * 24u) + uint(_8221 - (_8427 * 16.0))), int(_8432 / _8445), 0).xy, 0);
-                            vec2 _8233 = _8479.xy;
-                            vec2 _8490 = _28312 - _8233;
-                            vec2 _8493 = _5070 - _8233;
-                            vec2 _8506 = _8493 - (_8490 * clamp(dot(_8493, _8490) / max(dot(_8490, _8490), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                            float _8509 = dot(_8506, _8506);
-                            float _32947 = (_8509 < _28315) ? _8509 : _28315;
-                            bool _8521 = _5070.y >= _8479.y;
-                            bool _8526 = _5070.y < _28312.y;
-                            bool _8537 = (_8490.x * _8493.y) > (_8490.y * _8493.x);
-                            float _28324;
-                            if (((_8521 && _8526) && _8537) || (((!_8521) && (!_8526)) && (!_8537)))
+                            float _8634 = floor(_8428 * 0.0625);
+                            uint _8639 = (esia_v1 + 1u) + uint(_8634);
+                            uint _8652 = max(uint(_239.gConv.z), 1u);
+                            vec4 _8686 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_8639 % _8652) * 24u) + uint(_8428 - (_8634 * 16.0))), int(_8639 / _8652), 0).xy, 0);
+                            vec2 _8440 = _8686.xy;
+                            vec2 _8697 = _29575 - _8440;
+                            vec2 _8700 = _5221 - _8440;
+                            vec2 _8713 = _8700 - (_8697 * clamp(dot(_8700, _8697) / max(dot(_8697, _8697), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                            float _8716 = dot(_8713, _8713);
+                            float _34463 = (_8716 < _29578) ? _8716 : _29578;
+                            bool _8728 = _5221.y >= _8686.y;
+                            bool _8733 = _5221.y < _29575.y;
+                            bool _8744 = (_8697.x * _8700.y) > (_8697.y * _8700.x);
+                            float _29587;
+                            if (((_8728 && _8733) && _8744) || (((!_8728) && (!_8733)) && (!_8744)))
                             {
-                                _28324 = -_28318;
+                                _29587 = -_29581;
                             }
                             else
                             {
-                                _28324 = _28318;
+                                _29587 = _29581;
                             }
-                            vec2 _8243 = _8479.xy;
-                            if (((2.0 * _8221) + 1.0) < esia_v3.z)
+                            vec2 _8450 = _8686.xy;
+                            if (((2.0 * _8428) + 1.0) < esia_v3.z)
                             {
-                                vec2 _8252 = _8479.zw;
-                                vec2 _8566 = _8243 - _8252;
-                                vec2 _8569 = _5070 - _8252;
-                                vec2 _8582 = _8569 - (_8566 * clamp(dot(_8569, _8566) / max(dot(_8566, _8566), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                float _8585 = dot(_8582, _8582);
-                                bool _8597 = _5070.y >= _8479.w;
-                                bool _8602 = _5070.y < _8479.y;
-                                bool _8613 = (_8566.x * _8569.y) > (_8566.y * _8569.x);
-                                float _28328;
-                                if (((_8597 && _8602) && _8613) || (((!_8597) && (!_8602)) && (!_8613)))
+                                vec2 _8459 = _8686.zw;
+                                vec2 _8773 = _8450 - _8459;
+                                vec2 _8776 = _5221 - _8459;
+                                vec2 _8789 = _8776 - (_8773 * clamp(dot(_8776, _8773) / max(dot(_8773, _8773), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                float _8792 = dot(_8789, _8789);
+                                bool _8804 = _5221.y >= _8686.w;
+                                bool _8809 = _5221.y < _8686.y;
+                                bool _8820 = (_8773.x * _8776.y) > (_8773.y * _8776.x);
+                                float _29591;
+                                if (((_8804 && _8809) && _8820) || (((!_8804) && (!_8809)) && (!_8820)))
                                 {
-                                    _28328 = -_28324;
+                                    _29591 = -_29587;
                                 }
                                 else
                                 {
-                                    _28328 = _28324;
+                                    _29591 = _29587;
                                 }
-                                _32755 = _28328;
-                                _32753 = (_8585 < _32947) ? _8585 : _32947;
-                                _32751 = _8479.zw;
+                                _34271 = _29591;
+                                _34269 = (_8792 < _34463) ? _8792 : _34463;
+                                _34267 = _8686.zw;
                             }
                             else
                             {
-                                _32755 = _28324;
-                                _32753 = _32947;
-                                _32751 = _8243;
+                                _34271 = _29587;
+                                _34269 = _34463;
+                                _34267 = _8450;
                             }
                         }
                     }
-                    float _8273 = sqrt(_28316);
-                    if (_8167)
+                    float _8480 = sqrt(_29579);
+                    if (_8374)
                     {
-                        _28337 = _8273 - esia_v3.x;
+                        _29600 = _8480 - esia_v3.x;
                         break;
                     }
-                    _28337 = (_28319 * _8273) - esia_v3.x;
+                    _29600 = (_29582 * _8480) - esia_v3.x;
                     break;
                 } while(false);
-                _28339 = _28337;
+                _29602 = _29600;
             }
             else
             {
-                float _28340;
+                float _29603;
                 if (esia_v7.z == 1u)
                 {
-                    vec2 _7914 = _5070 - _7880;
-                    float _28308;
+                    vec2 _8121 = _5221 - _8087;
+                    float _29571;
                     do
                     {
                         if (esia_v5.w >= 6.282185077667236328125)
                         {
-                            _28308 = abs(length(_7914) - esia_v3.x) - esia_v3.y;
+                            _29571 = abs(length(_8121) - esia_v3.x) - esia_v3.y;
                             break;
                         }
-                        float _8656 = esia_v5.z + (esia_v5.w * 0.5);
-                        float _8658 = cos(_8656);
-                        float _8660 = sin(_8656);
-                        float _8669 = dot(_7914, vec2(-_8660, _8658));
-                        float _8672 = dot(_7914, vec2(_8658, _8660));
-                        vec2 _8673 = vec2(_8669, _8672);
-                        float _8676 = abs(_8669);
-                        _8673.x = _8676;
-                        float _8679 = esia_v5.w * 0.5;
-                        float _8681 = sin(_8679);
-                        float _8683 = cos(_8679);
-                        _28308 = (((_8683 * _8676) > (_8681 * _8672)) ? length(_8673 - (vec2(_8681, _8683) * esia_v3.x)) : abs(length(_8673) - esia_v3.x)) - esia_v3.y;
+                        float _8863 = esia_v5.z + (esia_v5.w * 0.5);
+                        float _8865 = cos(_8863);
+                        float _8867 = sin(_8863);
+                        float _8876 = dot(_8121, vec2(-_8867, _8865));
+                        float _8879 = dot(_8121, vec2(_8865, _8867));
+                        vec2 _8880 = vec2(_8876, _8879);
+                        float _8883 = abs(_8876);
+                        _8880.x = _8883;
+                        float _8886 = esia_v5.w * 0.5;
+                        float _8888 = sin(_8886);
+                        float _8890 = cos(_8886);
+                        _29571 = (((_8890 * _8883) > (_8888 * _8879)) ? length(_8880 - (vec2(_8888, _8890) * esia_v3.x)) : abs(length(_8880) - esia_v3.x)) - esia_v3.y;
                         break;
                     } while(false);
-                    _28340 = _28308;
+                    _29603 = _29571;
                 }
                 else
                 {
-                    float _28341;
+                    float _29604;
                     if (esia_v7.z == 2u)
                     {
-                        vec2 _8719 = _5070 - _28171.xy;
-                        vec2 _8722 = _28171.zw - _28171.xy;
-                        _28341 = length(_8719 - (_8722 * clamp(dot(_8719, _8722) / max(dot(_8722, _8722), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                        vec2 _8926 = _5221 - _29442.xy;
+                        vec2 _8929 = _29442.zw - _29442.xy;
+                        _29604 = length(_8926 - (_8929 * clamp(dot(_8926, _8929) / max(dot(_8929, _8929), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                     }
                     else
                     {
-                        vec2 _7941 = _5070 - _7880;
-                        float _8775 = min(_7889.x, _7889.y);
-                        float _8778 = min((_7941.x > 0.0) ? ((_7941.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_7941.y > 0.0) ? esia_v3.w : esia_v3.x), _8775);
-                        float _8784 = _8778 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                        float _28293;
-                        float _28294;
-                        if (_8784 > _8775)
+                        vec2 _8148 = _5221 - _8087;
+                        float _8994 = min(_8096.x, _8096.y);
+                        float _8997 = min((_8148.x > 0.0) ? ((_8148.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_8148.y > 0.0) ? esia_v3.w : esia_v3.x), _8994);
+                        float _9003 = _8997 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                        float _29560;
+                        float _29561;
+                        if (_9003 > _8994)
                         {
-                            float _8798 = esia_v5.y * clamp((_8775 - _8778) / max(0.60000002384185791015625 * _8778, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                            _28294 = _8798;
-                            _28293 = _8778 * (1.0 + (0.60000002384185791015625 * _8798));
+                            float _9017 = esia_v5.y * clamp((_8994 - _8997) / max(0.60000002384185791015625 * _8997, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                            _29561 = _9017;
+                            _29560 = _8997 * (1.0 + (0.60000002384185791015625 * _9017));
                         }
                         else
                         {
-                            _28294 = esia_v5.y;
-                            _28293 = _8784;
+                            _29561 = esia_v5.y;
+                            _29560 = _9003;
                         }
-                        vec2 _8811 = (abs(_7941) - _7889) + vec2(_28293);
-                        vec2 _8813 = max(_8811, vec2(0.0));
-                        float _28295;
+                        vec2 _9046 = (abs(_8148) - _8096) + vec2(_29560);
+                        vec2 _9048 = max(_9046, vec2(0.0));
+                        float _29562;
                         SPIRV_CROSS_BRANCH
-                        if ((_8813.x > 0.0) && (_8813.y > 0.0))
+                        if ((_9048.x > 0.0) && (_9048.y > 0.0))
                         {
-                            float _28296;
-                            if ((_28294 > 0.001000000047497451305389404296875) && (_28293 > 9.9999997473787516355514526367188e-05))
+                            float _29563;
+                            if ((_29561 > 0.001000000047497451305389404296875) && (_29560 > 9.9999997473787516355514526367188e-05))
                             {
-                                float _8830 = 2.0 + (2.0 * _28294);
-                                vec2 _8835 = _8813 / vec2(max(_28293, 9.9999997473787516355514526367188e-05));
-                                _28296 = pow(pow(_8835.x, _8830) + pow(_8835.y, _8830), 1.0 / _8830) * _28293;
+                                float _9065 = 2.0 + (2.0 * _29561);
+                                vec2 _9070 = _9048 / vec2(max(_29560, 9.9999997473787516355514526367188e-05));
+                                _29563 = pow(pow(_9070.x, _9065) + pow(_9070.y, _9065), 1.0 / _9065) * _29560;
                             }
                             else
                             {
-                                _28296 = length(_8813);
+                                _29563 = length(_9048);
                             }
-                            _28295 = _28296;
+                            _29562 = _29563;
                         }
                         else
                         {
-                            _28295 = max(_8813.x, _8813.y);
+                            _29562 = max(_9048.x, _9048.y);
                         }
-                        float _8870 = (min(max(_8811.x, _8811.y), 0.0) + _28295) - _28293;
-                        float _28342;
+                        float _9105 = (min(max(_9046.x, _9046.y), 0.0) + _29562) - _29560;
+                        float _29605;
                         SPIRV_CROSS_BRANCH
-                        if ((esia_v7.x & _1828) != 0u)
+                        if ((esia_v7.x & _1871) != 0u)
                         {
-                            vec2 _7969 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                            vec2 _7972 = _5070 - ((_28171.xy + _28171.zw) * 0.5);
-                            float _8906 = min(_7969.x, _7969.y);
-                            float _8909 = min((_7972.x > 0.0) ? ((_7972.y > 0.0) ? _28169.x : _28169.x) : ((_7972.y > 0.0) ? _28169.x : _28169.x), _8906);
-                            float _8915 = _8909 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                            float _28299;
-                            float _28300;
-                            if (_8915 > _8906)
+                            vec2 _8176 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                            vec2 _8179 = _5221 - ((_29442.xy + _29442.zw) * 0.5);
+                            float _9153 = min(_8176.x, _8176.y);
+                            float _9156 = min((_8179.x > 0.0) ? ((_8179.y > 0.0) ? _29440.x : _29440.x) : ((_8179.y > 0.0) ? _29440.x : _29440.x), _9153);
+                            float _9162 = _9156 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                            float _29564;
+                            float _29565;
+                            if (_9162 > _9153)
                             {
-                                float _8929 = esia_v5.y * clamp((_8906 - _8909) / max(0.60000002384185791015625 * _8909, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                _28300 = _8929;
-                                _28299 = _8909 * (1.0 + (0.60000002384185791015625 * _8929));
+                                float _9176 = esia_v5.y * clamp((_9153 - _9156) / max(0.60000002384185791015625 * _9156, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                _29565 = _9176;
+                                _29564 = _9156 * (1.0 + (0.60000002384185791015625 * _9176));
                             }
                             else
                             {
-                                _28300 = esia_v5.y;
-                                _28299 = _8915;
+                                _29565 = esia_v5.y;
+                                _29564 = _9162;
                             }
-                            vec2 _8942 = (abs(_7972) - _7969) + vec2(_28299);
-                            vec2 _8944 = max(_8942, vec2(0.0));
-                            float _28301;
+                            vec2 _9205 = (abs(_8179) - _8176) + vec2(_29564);
+                            vec2 _9207 = max(_9205, vec2(0.0));
+                            float _29566;
                             SPIRV_CROSS_BRANCH
-                            if ((_8944.x > 0.0) && (_8944.y > 0.0))
+                            if ((_9207.x > 0.0) && (_9207.y > 0.0))
                             {
-                                float _28302;
-                                if ((_28300 > 0.001000000047497451305389404296875) && (_28299 > 9.9999997473787516355514526367188e-05))
+                                float _29567;
+                                if ((_29565 > 0.001000000047497451305389404296875) && (_29564 > 9.9999997473787516355514526367188e-05))
                                 {
-                                    float _8961 = 2.0 + (2.0 * _28300);
-                                    vec2 _8966 = _8944 / vec2(max(_28299, 9.9999997473787516355514526367188e-05));
-                                    _28302 = pow(pow(_8966.x, _8961) + pow(_8966.y, _8961), 1.0 / _8961) * _28299;
+                                    float _9224 = 2.0 + (2.0 * _29565);
+                                    vec2 _9229 = _9207 / vec2(max(_29564, 9.9999997473787516355514526367188e-05));
+                                    _29567 = pow(pow(_9229.x, _9224) + pow(_9229.y, _9224), 1.0 / _9224) * _29564;
                                 }
                                 else
                                 {
-                                    _28302 = length(_8944);
+                                    _29567 = length(_9207);
                                 }
-                                _28301 = _28302;
+                                _29566 = _29567;
                             }
                             else
                             {
-                                _28301 = max(_8944.x, _8944.y);
+                                _29566 = max(_9207.x, _9207.y);
                             }
-                            float _9001 = (min(max(_8942.x, _8942.y), 0.0) + _28301) - _28299;
-                            float _9006 = max(_28169.y, 9.9999997473787516355514526367188e-05);
-                            float _9015 = max(_9006 - abs(_8870 - _9001), 0.0) / _9006;
-                            _28342 = min(_8870, _9001) - (((_9015 * _9015) * _9006) * 0.25);
+                            float _9264 = (min(max(_9205.x, _9205.y), 0.0) + _29566) - _29564;
+                            float _9269 = max(_29440.y, 9.9999997473787516355514526367188e-05);
+                            float _9278 = max(_9269 - abs(_9105 - _9264), 0.0) / _9269;
+                            _29605 = min(_9105, _9264) - (((_9278 * _9278) * _9269) * 0.25);
                         }
                         else
                         {
-                            _28342 = _8870;
+                            _29605 = _9105;
                         }
-                        _28341 = _28342;
+                        _29604 = _29605;
                     }
-                    _28340 = _28341;
+                    _29603 = _29604;
                 }
-                _28339 = _28340;
+                _29602 = _29603;
             }
-            _28338 = _28339;
+            _29601 = _29602;
         }
-        float _28491;
-        float _28515;
-        _28515 = 0.0;
-        _28491 = 0.0;
-        float _5105;
-        float _5134;
-        float _28461;
-        int _28343 = 1;
-        float _28467 = _28338;
+        float _29750;
+        float _29774;
+        _29774 = 0.0;
+        _29750 = 0.0;
+        float _5256;
+        float _5285;
+        float _29720;
+        int _29606 = 1;
+        float _29726 = _29601;
         SPIRV_CROSS_LOOP
-        for (; _28343 <= 8; _28515 = _5134, _28491 = _5105, _28467 = _28461, _28343++)
+        for (; _29606 <= 8; _29774 = _5285, _29750 = _5256, _29726 = _29720, _29606++)
         {
-            if (float(_28343) > _5055)
+            if (float(_29606) > _5206)
             {
                 break;
             }
-            vec2 _5092 = esia_v0 + (_5048 * (0.5 - (float(_28343) / _5055)));
-            vec2 _9070 = (esia_v2.xy + esia_v2.zw) * 0.5;
-            vec2 _9079 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+            vec2 _5243 = esia_v0 + (_5199 * (0.5 - (float(_29606) / _5206)));
+            vec2 _9333 = (esia_v2.xy + esia_v2.zw) * 0.5;
+            vec2 _9342 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
             SPIRV_CROSS_BRANCH
-            if ((esia_v7.x & _1742) != 0u)
+            if ((esia_v7.x & _1785) != 0u)
             {
-                float _9196 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-                vec4 _9230 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_5092, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-                float _9254 = (_9230.w - 0.5) * esia_v3.y;
-                vec2 _9295 = abs(_5092 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _9196), vec2(0.0));
-                _28461 = max((-mix((max(min(_9230.x, _9230.y), min(max(_9230.x, _9230.y), _9230.z)) - 0.5) * esia_v3.x, _9254, clamp(abs(_9254) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _9196, length(max(_9295, vec2(0.0))) + min(max(_9295.x, _9295.y), 0.0)) - esia_v5.w;
+                float _9459 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+                vec4 _9493 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_5243, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+                float _9517 = (_9493.w - 0.5) * esia_v3.y;
+                vec2 _9558 = abs(_5243 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _9459), vec2(0.0));
+                _29720 = max((-mix((max(min(_9493.x, _9493.y), min(max(_9493.x, _9493.y), _9493.z)) - 0.5) * esia_v3.x, _9517, clamp(abs(_9517) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _9459, length(max(_9558, vec2(0.0))) + min(max(_9558.x, _9558.y), 0.0)) - esia_v5.w;
             }
             else
             {
-                float _28462;
-                if ((esia_v7.x & _1757) != 0u)
+                float _29721;
+                if ((esia_v7.x & _1800) != 0u)
                 {
-                    float _28460;
+                    float _29719;
                     do
                     {
-                        bool _9357 = esia_v3.w > 0.5;
-                        float _9361 = floor((esia_v3.z + 1.0) * 0.5);
-                        float _9365 = floor((_9361 + 127.0) * 0.0078125);
-                        float _9369 = floor((esia_v3.z - 1.0) * 0.5);
-                        float _9497 = floor(_9369 * 0.0625);
-                        uint _9502 = (esia_v1 + 1u) + uint(_9497);
-                        uint _9515 = max(uint(_226.gConv.z), 1u);
-                        vec4 _9549 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9502 % _9515) * 24u) + uint(_9369 - (_9497 * 16.0))), int(_9502 / _9515), 0).xy, 0);
-                        vec2 _9381 = _9549.xy;
-                        vec2 _9383 = _9549.zw;
-                        bvec2 _9384 = bvec2(((esia_v3.z - 1.0) - (_9369 * 2.0)) < 0.5);
-                        vec2 _28437;
-                        if (_9357)
+                        bool _9620 = esia_v3.w > 0.5;
+                        float _9624 = floor((esia_v3.z + 1.0) * 0.5);
+                        float _9628 = floor((_9624 + 127.0) * 0.0078125);
+                        float _9632 = floor((esia_v3.z - 1.0) * 0.5);
+                        float _9760 = floor(_9632 * 0.0625);
+                        uint _9765 = (esia_v1 + 1u) + uint(_9760);
+                        uint _9778 = max(uint(_239.gConv.z), 1u);
+                        vec4 _9812 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9765 % _9778) * 24u) + uint(_9632 - (_9760 * 16.0))), int(_9765 / _9778), 0).xy, 0);
+                        vec2 _9644 = _9812.xy;
+                        vec2 _9646 = _9812.zw;
+                        bvec2 _9647 = bvec2(((esia_v3.z - 1.0) - (_9632 * 2.0)) < 0.5);
+                        vec2 _29696;
+                        if (_9620)
                         {
-                            float _9557 = floor(0.0);
-                            uint _9562 = (esia_v1 + 1u) + uint(_9557);
-                            uint _9575 = max(uint(_226.gConv.z), 1u);
-                            _28437 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9562 % _9575) * 24u) + uint(_9557 * (-16.0))), int(_9562 / _9575), 0).xy, 0).xy;
+                            float _9820 = floor(0.0);
+                            uint _9825 = (esia_v1 + 1u) + uint(_9820);
+                            uint _9838 = max(uint(_239.gConv.z), 1u);
+                            _29696 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9825 % _9838) * 24u) + uint(_9820 * (-16.0))), int(_9825 / _9838), 0).xy, 0).xy;
                         }
                         else
                         {
-                            _28437 = vec2(_9384.x ? _9381.x : _9383.x, _9384.y ? _9381.y : _9383.y);
+                            _29696 = vec2(_9647.x ? _9644.x : _9646.x, _9647.y ? _9644.y : _9646.y);
                         }
-                        vec2 _28436;
-                        float _28439;
-                        float _28442;
-                        _28442 = 1.0;
-                        _28439 = 1000000015047466219876688855040.0;
-                        _28436 = _28437;
-                        vec2 _28435;
-                        float _28438;
-                        float _28441;
+                        vec2 _29695;
+                        float _29698;
+                        float _29701;
+                        _29701 = 1.0;
+                        _29698 = 1000000015047466219876688855040.0;
+                        _29695 = _29696;
+                        vec2 _29694;
+                        float _29697;
+                        float _29700;
                         SPIRV_CROSS_LOOP
-                        for (float _28432 = 0.0; _28432 < 16.0; _28442 = _28441, _28439 = _28438, _28436 = _28435, _28432 += 1.0)
+                        for (float _29691 = 0.0; _29691 < 16.0; _29701 = _29700, _29698 = _29697, _29695 = _29694, _29691 += 1.0)
                         {
-                            if (_28432 >= _9365)
+                            if (_29691 >= _9628)
                             {
                                 break;
                             }
-                            _28441 = _28442;
-                            _28438 = _28439;
-                            _28435 = _28436;
-                            vec2 _32831;
-                            float _32833;
-                            float _32835;
+                            _29700 = _29701;
+                            _29697 = _29698;
+                            _29694 = _29695;
+                            vec2 _34347;
+                            float _34349;
+                            float _34351;
                             SPIRV_CROSS_LOOP
-                            for (float _28433 = 0.0; _28433 < 128.0; _28441 = _32835, _28438 = _32833, _28435 = _32831, _28433 += 1.0)
+                            for (float _29692 = 0.0; _29692 < 128.0; _29700 = _34351, _29697 = _34349, _29694 = _34347, _29692 += 1.0)
                             {
-                                float _9411 = (_28432 * 128.0) + _28433;
-                                if (_9411 >= _9361)
+                                float _9674 = (_29691 * 128.0) + _29692;
+                                if (_9674 >= _9624)
                                 {
                                     break;
                                 }
-                                float _9617 = floor(_9411 * 0.0625);
-                                uint _9622 = (esia_v1 + 1u) + uint(_9617);
-                                uint _9635 = max(uint(_226.gConv.z), 1u);
-                                vec4 _9669 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9622 % _9635) * 24u) + uint(_9411 - (_9617 * 16.0))), int(_9622 / _9635), 0).xy, 0);
-                                vec2 _9423 = _9669.xy;
-                                vec2 _9680 = _28435 - _9423;
-                                vec2 _9683 = _5092 - _9423;
-                                vec2 _9696 = _9683 - (_9680 * clamp(dot(_9683, _9680) / max(dot(_9680, _9680), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                float _9699 = dot(_9696, _9696);
-                                float _32949 = (_9699 < _28438) ? _9699 : _28438;
-                                bool _9711 = _5092.y >= _9669.y;
-                                bool _9716 = _5092.y < _28435.y;
-                                bool _9727 = (_9680.x * _9683.y) > (_9680.y * _9683.x);
-                                float _28447;
-                                if (((_9711 && _9716) && _9727) || (((!_9711) && (!_9716)) && (!_9727)))
+                                float _9880 = floor(_9674 * 0.0625);
+                                uint _9885 = (esia_v1 + 1u) + uint(_9880);
+                                uint _9898 = max(uint(_239.gConv.z), 1u);
+                                vec4 _9932 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_9885 % _9898) * 24u) + uint(_9674 - (_9880 * 16.0))), int(_9885 / _9898), 0).xy, 0);
+                                vec2 _9686 = _9932.xy;
+                                vec2 _9943 = _29694 - _9686;
+                                vec2 _9946 = _5243 - _9686;
+                                vec2 _9959 = _9946 - (_9943 * clamp(dot(_9946, _9943) / max(dot(_9943, _9943), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                float _9962 = dot(_9959, _9959);
+                                float _34465 = (_9962 < _29697) ? _9962 : _29697;
+                                bool _9974 = _5243.y >= _9932.y;
+                                bool _9979 = _5243.y < _29694.y;
+                                bool _9990 = (_9943.x * _9946.y) > (_9943.y * _9946.x);
+                                float _29706;
+                                if (((_9974 && _9979) && _9990) || (((!_9974) && (!_9979)) && (!_9990)))
                                 {
-                                    _28447 = -_28441;
+                                    _29706 = -_29700;
                                 }
                                 else
                                 {
-                                    _28447 = _28441;
+                                    _29706 = _29700;
                                 }
-                                vec2 _9433 = _9669.xy;
-                                if (((2.0 * _9411) + 1.0) < esia_v3.z)
+                                vec2 _9696 = _9932.xy;
+                                if (((2.0 * _9674) + 1.0) < esia_v3.z)
                                 {
-                                    vec2 _9442 = _9669.zw;
-                                    vec2 _9756 = _9433 - _9442;
-                                    vec2 _9759 = _5092 - _9442;
-                                    vec2 _9772 = _9759 - (_9756 * clamp(dot(_9759, _9756) / max(dot(_9756, _9756), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _9775 = dot(_9772, _9772);
-                                    bool _9787 = _5092.y >= _9669.w;
-                                    bool _9792 = _5092.y < _9669.y;
-                                    bool _9803 = (_9756.x * _9759.y) > (_9756.y * _9759.x);
-                                    float _28451;
-                                    if (((_9787 && _9792) && _9803) || (((!_9787) && (!_9792)) && (!_9803)))
+                                    vec2 _9705 = _9932.zw;
+                                    vec2 _10019 = _9696 - _9705;
+                                    vec2 _10022 = _5243 - _9705;
+                                    vec2 _10035 = _10022 - (_10019 * clamp(dot(_10022, _10019) / max(dot(_10019, _10019), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                    float _10038 = dot(_10035, _10035);
+                                    bool _10050 = _5243.y >= _9932.w;
+                                    bool _10055 = _5243.y < _9932.y;
+                                    bool _10066 = (_10019.x * _10022.y) > (_10019.y * _10022.x);
+                                    float _29710;
+                                    if (((_10050 && _10055) && _10066) || (((!_10050) && (!_10055)) && (!_10066)))
                                     {
-                                        _28451 = -_28447;
+                                        _29710 = -_29706;
                                     }
                                     else
                                     {
-                                        _28451 = _28447;
+                                        _29710 = _29706;
                                     }
-                                    _32835 = _28451;
-                                    _32833 = (_9775 < _32949) ? _9775 : _32949;
-                                    _32831 = _9669.zw;
+                                    _34351 = _29710;
+                                    _34349 = (_10038 < _34465) ? _10038 : _34465;
+                                    _34347 = _9932.zw;
                                 }
                                 else
                                 {
-                                    _32835 = _28447;
-                                    _32833 = _32949;
-                                    _32831 = _9433;
+                                    _34351 = _29706;
+                                    _34349 = _34465;
+                                    _34347 = _9696;
                                 }
                             }
                         }
-                        float _9463 = sqrt(_28439);
-                        if (_9357)
+                        float _9726 = sqrt(_29698);
+                        if (_9620)
                         {
-                            _28460 = _9463 - esia_v3.x;
+                            _29719 = _9726 - esia_v3.x;
                             break;
                         }
-                        _28460 = (_28442 * _9463) - esia_v3.x;
+                        _29719 = (_29701 * _9726) - esia_v3.x;
                         break;
                     } while(false);
-                    _28462 = _28460;
+                    _29721 = _29719;
                 }
                 else
                 {
-                    float _28463;
+                    float _29722;
                     if (esia_v7.z == 1u)
                     {
-                        vec2 _9104 = _5092 - _9070;
-                        float _28431;
+                        vec2 _9367 = _5243 - _9333;
+                        float _29690;
                         do
                         {
                             if (esia_v5.w >= 6.282185077667236328125)
                             {
-                                _28431 = abs(length(_9104) - esia_v3.x) - esia_v3.y;
+                                _29690 = abs(length(_9367) - esia_v3.x) - esia_v3.y;
                                 break;
                             }
-                            float _9846 = esia_v5.z + (esia_v5.w * 0.5);
-                            float _9848 = cos(_9846);
-                            float _9850 = sin(_9846);
-                            float _9859 = dot(_9104, vec2(-_9850, _9848));
-                            float _9862 = dot(_9104, vec2(_9848, _9850));
-                            vec2 _9863 = vec2(_9859, _9862);
-                            float _9866 = abs(_9859);
-                            _9863.x = _9866;
-                            float _9869 = esia_v5.w * 0.5;
-                            float _9871 = sin(_9869);
-                            float _9873 = cos(_9869);
-                            _28431 = (((_9873 * _9866) > (_9871 * _9862)) ? length(_9863 - (vec2(_9871, _9873) * esia_v3.x)) : abs(length(_9863) - esia_v3.x)) - esia_v3.y;
+                            float _10109 = esia_v5.z + (esia_v5.w * 0.5);
+                            float _10111 = cos(_10109);
+                            float _10113 = sin(_10109);
+                            float _10122 = dot(_9367, vec2(-_10113, _10111));
+                            float _10125 = dot(_9367, vec2(_10111, _10113));
+                            vec2 _10126 = vec2(_10122, _10125);
+                            float _10129 = abs(_10122);
+                            _10126.x = _10129;
+                            float _10132 = esia_v5.w * 0.5;
+                            float _10134 = sin(_10132);
+                            float _10136 = cos(_10132);
+                            _29690 = (((_10136 * _10129) > (_10134 * _10125)) ? length(_10126 - (vec2(_10134, _10136) * esia_v3.x)) : abs(length(_10126) - esia_v3.x)) - esia_v3.y;
                             break;
                         } while(false);
-                        _28463 = _28431;
+                        _29722 = _29690;
                     }
                     else
                     {
-                        float _28464;
+                        float _29723;
                         if (esia_v7.z == 2u)
                         {
-                            vec2 _9909 = _5092 - _28171.xy;
-                            vec2 _9912 = _28171.zw - _28171.xy;
-                            _28464 = length(_9909 - (_9912 * clamp(dot(_9909, _9912) / max(dot(_9912, _9912), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                            vec2 _10172 = _5243 - _29442.xy;
+                            vec2 _10175 = _29442.zw - _29442.xy;
+                            _29723 = length(_10172 - (_10175 * clamp(dot(_10172, _10175) / max(dot(_10175, _10175), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                         }
                         else
                         {
-                            vec2 _9131 = _5092 - _9070;
-                            float _9965 = min(_9079.x, _9079.y);
-                            float _9968 = min((_9131.x > 0.0) ? ((_9131.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_9131.y > 0.0) ? esia_v3.w : esia_v3.x), _9965);
-                            float _9974 = _9968 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                            float _28416;
-                            float _28417;
-                            if (_9974 > _9965)
+                            vec2 _9394 = _5243 - _9333;
+                            float _10240 = min(_9342.x, _9342.y);
+                            float _10243 = min((_9394.x > 0.0) ? ((_9394.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_9394.y > 0.0) ? esia_v3.w : esia_v3.x), _10240);
+                            float _10249 = _10243 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                            float _29679;
+                            float _29680;
+                            if (_10249 > _10240)
                             {
-                                float _9988 = esia_v5.y * clamp((_9965 - _9968) / max(0.60000002384185791015625 * _9968, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                _28417 = _9988;
-                                _28416 = _9968 * (1.0 + (0.60000002384185791015625 * _9988));
+                                float _10263 = esia_v5.y * clamp((_10240 - _10243) / max(0.60000002384185791015625 * _10243, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                _29680 = _10263;
+                                _29679 = _10243 * (1.0 + (0.60000002384185791015625 * _10263));
                             }
                             else
                             {
-                                _28417 = esia_v5.y;
-                                _28416 = _9974;
+                                _29680 = esia_v5.y;
+                                _29679 = _10249;
                             }
-                            vec2 _10001 = (abs(_9131) - _9079) + vec2(_28416);
-                            vec2 _10003 = max(_10001, vec2(0.0));
-                            float _28418;
+                            vec2 _10292 = (abs(_9394) - _9342) + vec2(_29679);
+                            vec2 _10294 = max(_10292, vec2(0.0));
+                            float _29681;
                             SPIRV_CROSS_BRANCH
-                            if ((_10003.x > 0.0) && (_10003.y > 0.0))
+                            if ((_10294.x > 0.0) && (_10294.y > 0.0))
                             {
-                                float _28419;
-                                if ((_28417 > 0.001000000047497451305389404296875) && (_28416 > 9.9999997473787516355514526367188e-05))
+                                float _29682;
+                                if ((_29680 > 0.001000000047497451305389404296875) && (_29679 > 9.9999997473787516355514526367188e-05))
                                 {
-                                    float _10020 = 2.0 + (2.0 * _28417);
-                                    vec2 _10025 = _10003 / vec2(max(_28416, 9.9999997473787516355514526367188e-05));
-                                    _28419 = pow(pow(_10025.x, _10020) + pow(_10025.y, _10020), 1.0 / _10020) * _28416;
+                                    float _10311 = 2.0 + (2.0 * _29680);
+                                    vec2 _10316 = _10294 / vec2(max(_29679, 9.9999997473787516355514526367188e-05));
+                                    _29682 = pow(pow(_10316.x, _10311) + pow(_10316.y, _10311), 1.0 / _10311) * _29679;
                                 }
                                 else
                                 {
-                                    _28419 = length(_10003);
+                                    _29682 = length(_10294);
                                 }
-                                _28418 = _28419;
+                                _29681 = _29682;
                             }
                             else
                             {
-                                _28418 = max(_10003.x, _10003.y);
+                                _29681 = max(_10294.x, _10294.y);
                             }
-                            float _10060 = (min(max(_10001.x, _10001.y), 0.0) + _28418) - _28416;
-                            float _28465;
+                            float _10351 = (min(max(_10292.x, _10292.y), 0.0) + _29681) - _29679;
+                            float _29724;
                             SPIRV_CROSS_BRANCH
-                            if ((esia_v7.x & _1828) != 0u)
+                            if ((esia_v7.x & _1871) != 0u)
                             {
-                                vec2 _9159 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                                vec2 _9162 = _5092 - ((_28171.xy + _28171.zw) * 0.5);
-                                float _10096 = min(_9159.x, _9159.y);
-                                float _10099 = min((_9162.x > 0.0) ? ((_9162.y > 0.0) ? _28169.x : _28169.x) : ((_9162.y > 0.0) ? _28169.x : _28169.x), _10096);
-                                float _10105 = _10099 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                float _28422;
-                                float _28423;
-                                if (_10105 > _10096)
+                                vec2 _9422 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                                vec2 _9425 = _5243 - ((_29442.xy + _29442.zw) * 0.5);
+                                float _10399 = min(_9422.x, _9422.y);
+                                float _10402 = min((_9425.x > 0.0) ? ((_9425.y > 0.0) ? _29440.x : _29440.x) : ((_9425.y > 0.0) ? _29440.x : _29440.x), _10399);
+                                float _10408 = _10402 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                float _29683;
+                                float _29684;
+                                if (_10408 > _10399)
                                 {
-                                    float _10119 = esia_v5.y * clamp((_10096 - _10099) / max(0.60000002384185791015625 * _10099, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                    _28423 = _10119;
-                                    _28422 = _10099 * (1.0 + (0.60000002384185791015625 * _10119));
+                                    float _10422 = esia_v5.y * clamp((_10399 - _10402) / max(0.60000002384185791015625 * _10402, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                    _29684 = _10422;
+                                    _29683 = _10402 * (1.0 + (0.60000002384185791015625 * _10422));
                                 }
                                 else
                                 {
-                                    _28423 = esia_v5.y;
-                                    _28422 = _10105;
+                                    _29684 = esia_v5.y;
+                                    _29683 = _10408;
                                 }
-                                vec2 _10132 = (abs(_9162) - _9159) + vec2(_28422);
-                                vec2 _10134 = max(_10132, vec2(0.0));
-                                float _28424;
+                                vec2 _10451 = (abs(_9425) - _9422) + vec2(_29683);
+                                vec2 _10453 = max(_10451, vec2(0.0));
+                                float _29685;
                                 SPIRV_CROSS_BRANCH
-                                if ((_10134.x > 0.0) && (_10134.y > 0.0))
+                                if ((_10453.x > 0.0) && (_10453.y > 0.0))
                                 {
-                                    float _28425;
-                                    if ((_28423 > 0.001000000047497451305389404296875) && (_28422 > 9.9999997473787516355514526367188e-05))
+                                    float _29686;
+                                    if ((_29684 > 0.001000000047497451305389404296875) && (_29683 > 9.9999997473787516355514526367188e-05))
                                     {
-                                        float _10151 = 2.0 + (2.0 * _28423);
-                                        vec2 _10156 = _10134 / vec2(max(_28422, 9.9999997473787516355514526367188e-05));
-                                        _28425 = pow(pow(_10156.x, _10151) + pow(_10156.y, _10151), 1.0 / _10151) * _28422;
+                                        float _10470 = 2.0 + (2.0 * _29684);
+                                        vec2 _10475 = _10453 / vec2(max(_29683, 9.9999997473787516355514526367188e-05));
+                                        _29686 = pow(pow(_10475.x, _10470) + pow(_10475.y, _10470), 1.0 / _10470) * _29683;
                                     }
                                     else
                                     {
-                                        _28425 = length(_10134);
+                                        _29686 = length(_10453);
                                     }
-                                    _28424 = _28425;
+                                    _29685 = _29686;
                                 }
                                 else
                                 {
-                                    _28424 = max(_10134.x, _10134.y);
+                                    _29685 = max(_10453.x, _10453.y);
                                 }
-                                float _10191 = (min(max(_10132.x, _10132.y), 0.0) + _28424) - _28422;
-                                float _10196 = max(_28169.y, 9.9999997473787516355514526367188e-05);
-                                float _10205 = max(_10196 - abs(_10060 - _10191), 0.0) / _10196;
-                                _28465 = min(_10060, _10191) - (((_10205 * _10205) * _10196) * 0.25);
+                                float _10510 = (min(max(_10451.x, _10451.y), 0.0) + _29685) - _29683;
+                                float _10515 = max(_29440.y, 9.9999997473787516355514526367188e-05);
+                                float _10524 = max(_10515 - abs(_10351 - _10510), 0.0) / _10515;
+                                _29724 = min(_10351, _10510) - (((_10524 * _10524) * _10515) * 0.25);
                             }
                             else
                             {
-                                _28465 = _10060;
+                                _29724 = _10351;
                             }
-                            _28464 = _28465;
+                            _29723 = _29724;
                         }
-                        _28463 = _28464;
+                        _29722 = _29723;
                     }
-                    _28462 = _28463;
+                    _29721 = _29722;
                 }
-                _28461 = _28462;
+                _29720 = _29721;
             }
-            float _5097 = _28467 / _4995;
-            float _5098 = 0.5 - _5097;
-            float _5101 = _28461 / _4995;
-            float _5102 = 0.5 - _5101;
-            float _10223 = _5102 - _5098;
-            _5105 = _28491 + ((abs(_10223) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5098 + _5102), 0.0, 1.0) : ((((_5102 <= 0.0) ? 0.0 : ((_5102 >= 1.0) ? (-_5101) : ((0.5 * _5102) * _5102))) - ((_5098 <= 0.0) ? 0.0 : ((_5098 >= 1.0) ? (-_5097) : ((0.5 * _5098) * _5098)))) / _10223));
-            float _5110 = (_28467 - _5060) / _4995;
-            float _5111 = 0.5 - _5110;
-            float _5116 = (_28461 - _5060) / _4995;
-            float _5117 = 0.5 - _5116;
-            float _10275 = _5117 - _5111;
-            float _5123 = (_28467 + _5066) / _4995;
-            float _5124 = 0.5 - _5123;
-            float _5129 = (_28461 + _5066) / _4995;
-            float _5130 = 0.5 - _5129;
-            float _10327 = _5130 - _5124;
-            _5134 = _28515 + (((abs(_10275) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5111 + _5117), 0.0, 1.0) : ((((_5117 <= 0.0) ? 0.0 : ((_5117 >= 1.0) ? (-_5116) : ((0.5 * _5117) * _5117))) - ((_5111 <= 0.0) ? 0.0 : ((_5111 >= 1.0) ? (-_5110) : ((0.5 * _5111) * _5111)))) / _10275)) - ((abs(_10327) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5124 + _5130), 0.0, 1.0) : ((((_5130 <= 0.0) ? 0.0 : ((_5130 >= 1.0) ? (-_5129) : ((0.5 * _5130) * _5130))) - ((_5124 <= 0.0) ? 0.0 : ((_5124 >= 1.0) ? (-_5123) : ((0.5 * _5124) * _5124)))) / _10327)));
+            float _5248 = _29726 / _5146;
+            float _5249 = 0.5 - _5248;
+            float _5252 = _29720 / _5146;
+            float _5253 = 0.5 - _5252;
+            float _10542 = _5253 - _5249;
+            _5256 = _29750 + ((abs(_10542) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5249 + _5253), 0.0, 1.0) : ((((_5253 <= 0.0) ? 0.0 : ((_5253 >= 1.0) ? (-_5252) : ((0.5 * _5253) * _5253))) - ((_5249 <= 0.0) ? 0.0 : ((_5249 >= 1.0) ? (-_5248) : ((0.5 * _5249) * _5249)))) / _10542));
+            float _5261 = (_29726 - _5211) / _5146;
+            float _5262 = 0.5 - _5261;
+            float _5267 = (_29720 - _5211) / _5146;
+            float _5268 = 0.5 - _5267;
+            float _10594 = _5268 - _5262;
+            float _5274 = (_29726 + _5217) / _5146;
+            float _5275 = 0.5 - _5274;
+            float _5280 = (_29720 + _5217) / _5146;
+            float _5281 = 0.5 - _5280;
+            float _10646 = _5281 - _5275;
+            _5285 = _29774 + (((abs(_10594) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5262 + _5268), 0.0, 1.0) : ((((_5268 <= 0.0) ? 0.0 : ((_5268 >= 1.0) ? (-_5267) : ((0.5 * _5268) * _5268))) - ((_5262 <= 0.0) ? 0.0 : ((_5262 >= 1.0) ? (-_5261) : ((0.5 * _5262) * _5262)))) / _10594)) - ((abs(_10646) < 0.001000000047497451305389404296875) ? clamp(0.5 * (_5275 + _5281), 0.0, 1.0) : ((((_5281 <= 0.0) ? 0.0 : ((_5281 >= 1.0) ? (-_5280) : ((0.5 * _5281) * _5281))) - ((_5275 <= 0.0) ? 0.0 : ((_5275 >= 1.0) ? (-_5274) : ((0.5 * _5275) * _5275)))) / _10646)));
         }
-        _32108 = ((esia_v7.x & _3175) != 0u) ? (_28515 / _5055) : (-1.0);
-        _28570 = _28491 / _5055;
+        _33598 = ((esia_v7.x & _3326) != 0u) ? (_29774 / _5206) : (-1.0);
+        _29827 = _29750 / _5206;
     }
     else
     {
-        _32108 = -1.0;
-        _28570 = clamp(0.5 - (_28219 / _4995), 0.0, 1.0);
+        _33598 = -1.0;
+        _29827 = clamp(0.5 - (_29486 / _5146), 0.0, 1.0);
     }
-    float _32423;
+    float _33926;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3185) != 0u)
+    if ((esia_v7.x & _3336) != 0u)
     {
-        uint _10378 = max(uint(_226.gConv.z), 1u);
-        vec4 _10412 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10378) * 24u) + 19u), int(esia_v1 / _10378), 0).xy, 0);
-        uint _10419 = max(uint(_226.gConv.z), 1u);
-        vec4 _10453 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10419) * 24u) + 20u), int(esia_v1 / _10419), 0).xy, 0);
-        vec2 _5179 = max((_10412.zw - _10412.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-        vec2 _5182 = esia_v0 - ((_10412.xy + _10412.zw) * 0.5);
-        float _5188 = _10453.y;
-        float _10489 = min(_5179.x, _5179.y);
-        float _10492 = min((_5182.x > 0.0) ? ((_5182.y > 0.0) ? _10453.x : _10453.x) : ((_5182.y > 0.0) ? _10453.x : _10453.x), _10489);
-        float _10498 = _10492 * (1.0 + (0.60000002384185791015625 * _5188));
-        float _28563;
-        float _28564;
-        if (_10498 > _10489)
+        uint _10697 = max(uint(_239.gConv.z), 1u);
+        vec4 _10731 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10697) * 24u) + 19u), int(esia_v1 / _10697), 0).xy, 0);
+        uint _10738 = max(uint(_239.gConv.z), 1u);
+        vec4 _10772 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10738) * 24u) + 20u), int(esia_v1 / _10738), 0).xy, 0);
+        vec2 _5330 = max((_10731.zw - _10731.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+        vec2 _5333 = esia_v0 - ((_10731.xy + _10731.zw) * 0.5);
+        float _5339 = _10772.y;
+        float _10820 = min(_5330.x, _5330.y);
+        float _10823 = min((_5333.x > 0.0) ? ((_5333.y > 0.0) ? _10772.x : _10772.x) : ((_5333.y > 0.0) ? _10772.x : _10772.x), _10820);
+        float _10829 = _10823 * (1.0 + (0.60000002384185791015625 * _5339));
+        float _29822;
+        float _29823;
+        if (_10829 > _10820)
         {
-            float _10512 = _5188 * clamp((_10489 - _10492) / max(0.60000002384185791015625 * _10492, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-            _28564 = _10512;
-            _28563 = _10492 * (1.0 + (0.60000002384185791015625 * _10512));
+            float _10843 = _5339 * clamp((_10820 - _10823) / max(0.60000002384185791015625 * _10823, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+            _29823 = _10843;
+            _29822 = _10823 * (1.0 + (0.60000002384185791015625 * _10843));
         }
         else
         {
-            _28564 = _5188;
-            _28563 = _10498;
+            _29823 = _5339;
+            _29822 = _10829;
         }
-        vec2 _10525 = (abs(_5182) - _5179) + vec2(_28563);
-        vec2 _10527 = max(_10525, vec2(0.0));
-        float _28565;
+        vec2 _10872 = (abs(_5333) - _5330) + vec2(_29822);
+        vec2 _10874 = max(_10872, vec2(0.0));
+        float _29824;
         SPIRV_CROSS_BRANCH
-        if ((_10527.x > 0.0) && (_10527.y > 0.0))
+        if ((_10874.x > 0.0) && (_10874.y > 0.0))
         {
-            float _28566;
-            if ((_28564 > 0.001000000047497451305389404296875) && (_28563 > 9.9999997473787516355514526367188e-05))
+            float _29825;
+            if ((_29823 > 0.001000000047497451305389404296875) && (_29822 > 9.9999997473787516355514526367188e-05))
             {
-                float _10544 = 2.0 + (2.0 * _28564);
-                vec2 _10549 = _10527 / vec2(max(_28563, 9.9999997473787516355514526367188e-05));
-                _28566 = pow(pow(_10549.x, _10544) + pow(_10549.y, _10544), 1.0 / _10544) * _28563;
+                float _10891 = 2.0 + (2.0 * _29823);
+                vec2 _10896 = _10874 / vec2(max(_29822, 9.9999997473787516355514526367188e-05));
+                _29825 = pow(pow(_10896.x, _10891) + pow(_10896.y, _10891), 1.0 / _10891) * _29822;
             }
             else
             {
-                _28566 = length(_10527);
+                _29825 = length(_10874);
             }
-            _28565 = _28566;
+            _29824 = _29825;
         }
         else
         {
-            _28565 = max(_10527.x, _10527.y);
+            _29824 = max(_10874.x, _10874.y);
         }
-        float _5194 = clamp(0.5 - (((min(max(_10525.x, _10525.y), 0.0) + _28565) - _28563) / _4995), 0.0, 1.0);
-        if (_5194 <= 0.0)
+        float _5345 = clamp(0.5 - (((min(max(_10872.x, _10872.y), 0.0) + _29824) - _29822) / _5146), 0.0, 1.0);
+        if (_5345 <= 0.0)
         {
             discard;
         }
-        _32423 = _5194;
+        _33926 = _5345;
     }
     else
     {
-        _32423 = 1.0;
+        _33926 = 1.0;
     }
-    bool _5205 = ((esia_v7.x & _3252) != 0u) && (_28570 >= 0.999000012874603271484375);
-    vec4 _28720;
+    bool _5356 = ((esia_v7.x & _3403) != 0u) && (_29827 >= 0.999000012874603271484375);
+    vec4 _29980;
     SPIRV_CROSS_BRANCH
-    if ((((esia_v7.x & _3260) != 0u) && (!((esia_v7.x & _3265) != 0u))) && (!_5205))
+    if ((((esia_v7.x & _3411) != 0u) && (!((esia_v7.x & _3416) != 0u))) && (!_5356))
     {
-        uint _10591 = max(uint(_226.gConv.z), 1u);
-        vec4 _10625 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10591) * 24u) + 7u), int(esia_v1 / _10591), 0).xy, 0);
-        uint _10632 = max(uint(_226.gConv.z), 1u);
-        vec4 _10666 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10632) * 24u) + 8u), int(esia_v1 / _10632), 0).xy, 0);
-        vec2 _10706 = _268.gDrawInfo.yz - ((esia_v2.xy + esia_v2.zw) * 0.5);
-        bvec2 _10710 = bvec2(_268.gDrawInfo.w > 1.0);
-        vec2 _10711 = vec2(_10710.x ? _10706.x : _268.gDrawInfo.yz.x, _10710.y ? _10706.y : _268.gDrawInfo.yz.y);
-        vec2 _10685 = (-(_10711 / vec2(max(length(_10711), 9.9999997473787516355514526367188e-05)))) * length(_10666.zw);
-        vec2 _10688 = _10666.zw;
-        bvec2 _10689 = bvec2(_268.gDrawInfo.w > 0.5);
-        vec2 _5235 = esia_v0 - vec2(_10689.x ? _10685.x : _10688.x, _10689.y ? _10685.y : _10688.y);
-        vec2 _10762 = (esia_v2.xy + esia_v2.zw) * 0.5;
-        vec2 _10771 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-        float _28637;
+        uint _10938 = max(uint(_239.gConv.z), 1u);
+        vec4 _10972 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10938) * 24u) + 7u), int(esia_v1 / _10938), 0).xy, 0);
+        uint _10979 = max(uint(_239.gConv.z), 1u);
+        vec4 _11013 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _10979) * 24u) + 8u), int(esia_v1 / _10979), 0).xy, 0);
+        vec2 _29831;
         SPIRV_CROSS_BRANCH
-        if ((esia_v7.x & _1742) != 0u)
+        if (_281.gDrawInfo.w > 0.5)
         {
-            float _10888 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-            vec4 _10922 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_5235, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-            float _10946 = (_10922.w - 0.5) * esia_v3.y;
-            vec2 _10987 = abs(_5235 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _10888), vec2(0.0));
-            _28637 = max((-mix((max(min(_10922.x, _10922.y), min(max(_10922.x, _10922.y), _10922.z)) - 0.5) * esia_v3.x, _10946, clamp(abs(_10946) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _10888, length(max(_10987, vec2(0.0))) + min(max(_10987.x, _10987.y), 0.0)) - esia_v5.w;
+            vec2 _11055 = _281.gDrawInfo.yz - ((esia_v2.xy + esia_v2.zw) * 0.5);
+            bvec2 _11059 = bvec2(_281.gDrawInfo.w > 1.0);
+            vec2 _11060 = vec2(_11059.x ? _11055.x : _281.gDrawInfo.yz.x, _11059.y ? _11055.y : _281.gDrawInfo.yz.y);
+            _29831 = (-(_11060 / vec2(max(length(_11060), 9.9999997473787516355514526367188e-05)))) * length(_11013.zw);
         }
         else
         {
-            float _28638;
-            if ((esia_v7.x & _1757) != 0u)
+            _29831 = _11013.zw;
+        }
+        vec2 _5386 = esia_v0 - _29831;
+        vec2 _11111 = (esia_v2.xy + esia_v2.zw) * 0.5;
+        vec2 _11120 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+        float _29894;
+        SPIRV_CROSS_BRANCH
+        if ((esia_v7.x & _1785) != 0u)
+        {
+            float _11237 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+            vec4 _11271 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_5386, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+            float _11295 = (_11271.w - 0.5) * esia_v3.y;
+            vec2 _11336 = abs(_5386 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _11237), vec2(0.0));
+            _29894 = max((-mix((max(min(_11271.x, _11271.y), min(max(_11271.x, _11271.y), _11271.z)) - 0.5) * esia_v3.x, _11295, clamp(abs(_11295) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _11237, length(max(_11336, vec2(0.0))) + min(max(_11336.x, _11336.y), 0.0)) - esia_v5.w;
+        }
+        else
+        {
+            float _29895;
+            if ((esia_v7.x & _1800) != 0u)
             {
-                float _28636;
+                float _29893;
                 do
                 {
-                    bool _11049 = esia_v3.w > 0.5;
-                    float _11053 = floor((esia_v3.z + 1.0) * 0.5);
-                    float _11057 = floor((_11053 + 127.0) * 0.0078125);
-                    float _11061 = floor((esia_v3.z - 1.0) * 0.5);
-                    float _11189 = floor(_11061 * 0.0625);
-                    uint _11194 = (esia_v1 + 1u) + uint(_11189);
-                    uint _11207 = max(uint(_226.gConv.z), 1u);
-                    vec4 _11241 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11194 % _11207) * 24u) + uint(_11061 - (_11189 * 16.0))), int(_11194 / _11207), 0).xy, 0);
-                    vec2 _11073 = _11241.xy;
-                    vec2 _11075 = _11241.zw;
-                    bvec2 _11076 = bvec2(((esia_v3.z - 1.0) - (_11061 * 2.0)) < 0.5);
-                    vec2 _28613;
-                    if (_11049)
+                    bool _11398 = esia_v3.w > 0.5;
+                    float _11402 = floor((esia_v3.z + 1.0) * 0.5);
+                    float _11406 = floor((_11402 + 127.0) * 0.0078125);
+                    float _11410 = floor((esia_v3.z - 1.0) * 0.5);
+                    float _11538 = floor(_11410 * 0.0625);
+                    uint _11543 = (esia_v1 + 1u) + uint(_11538);
+                    uint _11556 = max(uint(_239.gConv.z), 1u);
+                    vec4 _11590 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11543 % _11556) * 24u) + uint(_11410 - (_11538 * 16.0))), int(_11543 / _11556), 0).xy, 0);
+                    vec2 _11422 = _11590.xy;
+                    vec2 _11424 = _11590.zw;
+                    bvec2 _11425 = bvec2(((esia_v3.z - 1.0) - (_11410 * 2.0)) < 0.5);
+                    vec2 _29870;
+                    if (_11398)
                     {
-                        float _11249 = floor(0.0);
-                        uint _11254 = (esia_v1 + 1u) + uint(_11249);
-                        uint _11267 = max(uint(_226.gConv.z), 1u);
-                        _28613 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11254 % _11267) * 24u) + uint(_11249 * (-16.0))), int(_11254 / _11267), 0).xy, 0).xy;
+                        float _11598 = floor(0.0);
+                        uint _11603 = (esia_v1 + 1u) + uint(_11598);
+                        uint _11616 = max(uint(_239.gConv.z), 1u);
+                        _29870 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11603 % _11616) * 24u) + uint(_11598 * (-16.0))), int(_11603 / _11616), 0).xy, 0).xy;
                     }
                     else
                     {
-                        _28613 = vec2(_11076.x ? _11073.x : _11075.x, _11076.y ? _11073.y : _11075.y);
+                        _29870 = vec2(_11425.x ? _11422.x : _11424.x, _11425.y ? _11422.y : _11424.y);
                     }
-                    vec2 _28612;
-                    float _28615;
-                    float _28618;
-                    _28618 = 1.0;
-                    _28615 = 1000000015047466219876688855040.0;
-                    _28612 = _28613;
-                    vec2 _28611;
-                    float _28614;
-                    float _28617;
+                    vec2 _29869;
+                    float _29872;
+                    float _29875;
+                    _29875 = 1.0;
+                    _29872 = 1000000015047466219876688855040.0;
+                    _29869 = _29870;
+                    vec2 _29868;
+                    float _29871;
+                    float _29874;
                     SPIRV_CROSS_LOOP
-                    for (float _28608 = 0.0; _28608 < 16.0; _28618 = _28617, _28615 = _28614, _28612 = _28611, _28608 += 1.0)
+                    for (float _29865 = 0.0; _29865 < 16.0; _29875 = _29874, _29872 = _29871, _29869 = _29868, _29865 += 1.0)
                     {
-                        if (_28608 >= _11057)
+                        if (_29865 >= _11406)
                         {
                             break;
                         }
-                        _28617 = _28618;
-                        _28614 = _28615;
-                        _28611 = _28612;
-                        vec2 _32842;
-                        float _32844;
-                        float _32846;
+                        _29874 = _29875;
+                        _29871 = _29872;
+                        _29868 = _29869;
+                        vec2 _34358;
+                        float _34360;
+                        float _34362;
                         SPIRV_CROSS_LOOP
-                        for (float _28609 = 0.0; _28609 < 128.0; _28617 = _32846, _28614 = _32844, _28611 = _32842, _28609 += 1.0)
+                        for (float _29866 = 0.0; _29866 < 128.0; _29874 = _34362, _29871 = _34360, _29868 = _34358, _29866 += 1.0)
                         {
-                            float _11103 = (_28608 * 128.0) + _28609;
-                            if (_11103 >= _11053)
+                            float _11452 = (_29865 * 128.0) + _29866;
+                            if (_11452 >= _11402)
                             {
                                 break;
                             }
-                            float _11309 = floor(_11103 * 0.0625);
-                            uint _11314 = (esia_v1 + 1u) + uint(_11309);
-                            uint _11327 = max(uint(_226.gConv.z), 1u);
-                            vec4 _11361 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11314 % _11327) * 24u) + uint(_11103 - (_11309 * 16.0))), int(_11314 / _11327), 0).xy, 0);
-                            vec2 _11115 = _11361.xy;
-                            vec2 _11372 = _28611 - _11115;
-                            vec2 _11375 = _5235 - _11115;
-                            vec2 _11388 = _11375 - (_11372 * clamp(dot(_11375, _11372) / max(dot(_11372, _11372), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                            float _11391 = dot(_11388, _11388);
-                            float _32951 = (_11391 < _28614) ? _11391 : _28614;
-                            bool _11403 = _5235.y >= _11361.y;
-                            bool _11408 = _5235.y < _28611.y;
-                            bool _11419 = (_11372.x * _11375.y) > (_11372.y * _11375.x);
-                            float _28623;
-                            if (((_11403 && _11408) && _11419) || (((!_11403) && (!_11408)) && (!_11419)))
+                            float _11658 = floor(_11452 * 0.0625);
+                            uint _11663 = (esia_v1 + 1u) + uint(_11658);
+                            uint _11676 = max(uint(_239.gConv.z), 1u);
+                            vec4 _11710 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_11663 % _11676) * 24u) + uint(_11452 - (_11658 * 16.0))), int(_11663 / _11676), 0).xy, 0);
+                            vec2 _11464 = _11710.xy;
+                            vec2 _11721 = _29868 - _11464;
+                            vec2 _11724 = _5386 - _11464;
+                            vec2 _11737 = _11724 - (_11721 * clamp(dot(_11724, _11721) / max(dot(_11721, _11721), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                            float _11740 = dot(_11737, _11737);
+                            float _34467 = (_11740 < _29871) ? _11740 : _29871;
+                            bool _11752 = _5386.y >= _11710.y;
+                            bool _11757 = _5386.y < _29868.y;
+                            bool _11768 = (_11721.x * _11724.y) > (_11721.y * _11724.x);
+                            float _29880;
+                            if (((_11752 && _11757) && _11768) || (((!_11752) && (!_11757)) && (!_11768)))
                             {
-                                _28623 = -_28617;
+                                _29880 = -_29874;
                             }
                             else
                             {
-                                _28623 = _28617;
+                                _29880 = _29874;
                             }
-                            vec2 _11125 = _11361.xy;
-                            if (((2.0 * _11103) + 1.0) < esia_v3.z)
+                            vec2 _11474 = _11710.xy;
+                            if (((2.0 * _11452) + 1.0) < esia_v3.z)
                             {
-                                vec2 _11134 = _11361.zw;
-                                vec2 _11448 = _11125 - _11134;
-                                vec2 _11451 = _5235 - _11134;
-                                vec2 _11464 = _11451 - (_11448 * clamp(dot(_11451, _11448) / max(dot(_11448, _11448), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                float _11467 = dot(_11464, _11464);
-                                bool _11479 = _5235.y >= _11361.w;
-                                bool _11484 = _5235.y < _11361.y;
-                                bool _11495 = (_11448.x * _11451.y) > (_11448.y * _11451.x);
-                                float _28627;
-                                if (((_11479 && _11484) && _11495) || (((!_11479) && (!_11484)) && (!_11495)))
+                                vec2 _11483 = _11710.zw;
+                                vec2 _11797 = _11474 - _11483;
+                                vec2 _11800 = _5386 - _11483;
+                                vec2 _11813 = _11800 - (_11797 * clamp(dot(_11800, _11797) / max(dot(_11797, _11797), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                float _11816 = dot(_11813, _11813);
+                                bool _11828 = _5386.y >= _11710.w;
+                                bool _11833 = _5386.y < _11710.y;
+                                bool _11844 = (_11797.x * _11800.y) > (_11797.y * _11800.x);
+                                float _29884;
+                                if (((_11828 && _11833) && _11844) || (((!_11828) && (!_11833)) && (!_11844)))
                                 {
-                                    _28627 = -_28623;
+                                    _29884 = -_29880;
                                 }
                                 else
                                 {
-                                    _28627 = _28623;
+                                    _29884 = _29880;
                                 }
-                                _32846 = _28627;
-                                _32844 = (_11467 < _32951) ? _11467 : _32951;
-                                _32842 = _11361.zw;
+                                _34362 = _29884;
+                                _34360 = (_11816 < _34467) ? _11816 : _34467;
+                                _34358 = _11710.zw;
                             }
                             else
                             {
-                                _32846 = _28623;
-                                _32844 = _32951;
-                                _32842 = _11125;
+                                _34362 = _29880;
+                                _34360 = _34467;
+                                _34358 = _11474;
                             }
                         }
                     }
-                    float _11155 = sqrt(_28615);
-                    if (_11049)
+                    float _11504 = sqrt(_29872);
+                    if (_11398)
                     {
-                        _28636 = _11155 - esia_v3.x;
+                        _29893 = _11504 - esia_v3.x;
                         break;
                     }
-                    _28636 = (_28618 * _11155) - esia_v3.x;
+                    _29893 = (_29875 * _11504) - esia_v3.x;
                     break;
                 } while(false);
-                _28638 = _28636;
+                _29895 = _29893;
             }
             else
             {
-                float _28639;
+                float _29896;
                 if (esia_v7.z == 1u)
                 {
-                    vec2 _10796 = _5235 - _10762;
-                    float _28607;
+                    vec2 _11145 = _5386 - _11111;
+                    float _29864;
                     do
                     {
                         if (esia_v5.w >= 6.282185077667236328125)
                         {
-                            _28607 = abs(length(_10796) - esia_v3.x) - esia_v3.y;
+                            _29864 = abs(length(_11145) - esia_v3.x) - esia_v3.y;
                             break;
                         }
-                        float _11538 = esia_v5.z + (esia_v5.w * 0.5);
-                        float _11540 = cos(_11538);
-                        float _11542 = sin(_11538);
-                        float _11551 = dot(_10796, vec2(-_11542, _11540));
-                        float _11554 = dot(_10796, vec2(_11540, _11542));
-                        vec2 _11555 = vec2(_11551, _11554);
-                        float _11558 = abs(_11551);
-                        _11555.x = _11558;
-                        float _11561 = esia_v5.w * 0.5;
-                        float _11563 = sin(_11561);
-                        float _11565 = cos(_11561);
-                        _28607 = (((_11565 * _11558) > (_11563 * _11554)) ? length(_11555 - (vec2(_11563, _11565) * esia_v3.x)) : abs(length(_11555) - esia_v3.x)) - esia_v3.y;
+                        float _11887 = esia_v5.z + (esia_v5.w * 0.5);
+                        float _11889 = cos(_11887);
+                        float _11891 = sin(_11887);
+                        float _11900 = dot(_11145, vec2(-_11891, _11889));
+                        float _11903 = dot(_11145, vec2(_11889, _11891));
+                        vec2 _11904 = vec2(_11900, _11903);
+                        float _11907 = abs(_11900);
+                        _11904.x = _11907;
+                        float _11910 = esia_v5.w * 0.5;
+                        float _11912 = sin(_11910);
+                        float _11914 = cos(_11910);
+                        _29864 = (((_11914 * _11907) > (_11912 * _11903)) ? length(_11904 - (vec2(_11912, _11914) * esia_v3.x)) : abs(length(_11904) - esia_v3.x)) - esia_v3.y;
                         break;
                     } while(false);
-                    _28639 = _28607;
+                    _29896 = _29864;
                 }
                 else
                 {
-                    float _28640;
+                    float _29897;
                     if (esia_v7.z == 2u)
                     {
-                        vec2 _11601 = _5235 - _28171.xy;
-                        vec2 _11604 = _28171.zw - _28171.xy;
-                        _28640 = length(_11601 - (_11604 * clamp(dot(_11601, _11604) / max(dot(_11604, _11604), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                        vec2 _11950 = _5386 - _29442.xy;
+                        vec2 _11953 = _29442.zw - _29442.xy;
+                        _29897 = length(_11950 - (_11953 * clamp(dot(_11950, _11953) / max(dot(_11953, _11953), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                     }
                     else
                     {
-                        vec2 _10823 = _5235 - _10762;
-                        float _11657 = min(_10771.x, _10771.y);
-                        float _11660 = min((_10823.x > 0.0) ? ((_10823.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_10823.y > 0.0) ? esia_v3.w : esia_v3.x), _11657);
-                        float _11666 = _11660 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                        float _28592;
-                        float _28593;
-                        if (_11666 > _11657)
+                        vec2 _11172 = _5386 - _11111;
+                        float _12018 = min(_11120.x, _11120.y);
+                        float _12021 = min((_11172.x > 0.0) ? ((_11172.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_11172.y > 0.0) ? esia_v3.w : esia_v3.x), _12018);
+                        float _12027 = _12021 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                        float _29853;
+                        float _29854;
+                        if (_12027 > _12018)
                         {
-                            float _11680 = esia_v5.y * clamp((_11657 - _11660) / max(0.60000002384185791015625 * _11660, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                            _28593 = _11680;
-                            _28592 = _11660 * (1.0 + (0.60000002384185791015625 * _11680));
+                            float _12041 = esia_v5.y * clamp((_12018 - _12021) / max(0.60000002384185791015625 * _12021, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                            _29854 = _12041;
+                            _29853 = _12021 * (1.0 + (0.60000002384185791015625 * _12041));
                         }
                         else
                         {
-                            _28593 = esia_v5.y;
-                            _28592 = _11666;
+                            _29854 = esia_v5.y;
+                            _29853 = _12027;
                         }
-                        vec2 _11693 = (abs(_10823) - _10771) + vec2(_28592);
-                        vec2 _11695 = max(_11693, vec2(0.0));
-                        float _28594;
+                        vec2 _12070 = (abs(_11172) - _11120) + vec2(_29853);
+                        vec2 _12072 = max(_12070, vec2(0.0));
+                        float _29855;
                         SPIRV_CROSS_BRANCH
-                        if ((_11695.x > 0.0) && (_11695.y > 0.0))
+                        if ((_12072.x > 0.0) && (_12072.y > 0.0))
                         {
-                            float _28595;
-                            if ((_28593 > 0.001000000047497451305389404296875) && (_28592 > 9.9999997473787516355514526367188e-05))
+                            float _29856;
+                            if ((_29854 > 0.001000000047497451305389404296875) && (_29853 > 9.9999997473787516355514526367188e-05))
                             {
-                                float _11712 = 2.0 + (2.0 * _28593);
-                                vec2 _11717 = _11695 / vec2(max(_28592, 9.9999997473787516355514526367188e-05));
-                                _28595 = pow(pow(_11717.x, _11712) + pow(_11717.y, _11712), 1.0 / _11712) * _28592;
+                                float _12089 = 2.0 + (2.0 * _29854);
+                                vec2 _12094 = _12072 / vec2(max(_29853, 9.9999997473787516355514526367188e-05));
+                                _29856 = pow(pow(_12094.x, _12089) + pow(_12094.y, _12089), 1.0 / _12089) * _29853;
                             }
                             else
                             {
-                                _28595 = length(_11695);
+                                _29856 = length(_12072);
                             }
-                            _28594 = _28595;
+                            _29855 = _29856;
                         }
                         else
                         {
-                            _28594 = max(_11695.x, _11695.y);
+                            _29855 = max(_12072.x, _12072.y);
                         }
-                        float _11752 = (min(max(_11693.x, _11693.y), 0.0) + _28594) - _28592;
-                        float _28641;
+                        float _12129 = (min(max(_12070.x, _12070.y), 0.0) + _29855) - _29853;
+                        float _29898;
                         SPIRV_CROSS_BRANCH
-                        if ((esia_v7.x & _1828) != 0u)
+                        if ((esia_v7.x & _1871) != 0u)
                         {
-                            vec2 _10851 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                            vec2 _10854 = _5235 - ((_28171.xy + _28171.zw) * 0.5);
-                            float _11788 = min(_10851.x, _10851.y);
-                            float _11791 = min((_10854.x > 0.0) ? ((_10854.y > 0.0) ? _28169.x : _28169.x) : ((_10854.y > 0.0) ? _28169.x : _28169.x), _11788);
-                            float _11797 = _11791 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                            float _28598;
-                            float _28599;
-                            if (_11797 > _11788)
+                            vec2 _11200 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                            vec2 _11203 = _5386 - ((_29442.xy + _29442.zw) * 0.5);
+                            float _12177 = min(_11200.x, _11200.y);
+                            float _12180 = min((_11203.x > 0.0) ? ((_11203.y > 0.0) ? _29440.x : _29440.x) : ((_11203.y > 0.0) ? _29440.x : _29440.x), _12177);
+                            float _12186 = _12180 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                            float _29857;
+                            float _29858;
+                            if (_12186 > _12177)
                             {
-                                float _11811 = esia_v5.y * clamp((_11788 - _11791) / max(0.60000002384185791015625 * _11791, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                _28599 = _11811;
-                                _28598 = _11791 * (1.0 + (0.60000002384185791015625 * _11811));
+                                float _12200 = esia_v5.y * clamp((_12177 - _12180) / max(0.60000002384185791015625 * _12180, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                _29858 = _12200;
+                                _29857 = _12180 * (1.0 + (0.60000002384185791015625 * _12200));
                             }
                             else
                             {
-                                _28599 = esia_v5.y;
-                                _28598 = _11797;
+                                _29858 = esia_v5.y;
+                                _29857 = _12186;
                             }
-                            vec2 _11824 = (abs(_10854) - _10851) + vec2(_28598);
-                            vec2 _11826 = max(_11824, vec2(0.0));
-                            float _28600;
+                            vec2 _12229 = (abs(_11203) - _11200) + vec2(_29857);
+                            vec2 _12231 = max(_12229, vec2(0.0));
+                            float _29859;
                             SPIRV_CROSS_BRANCH
-                            if ((_11826.x > 0.0) && (_11826.y > 0.0))
+                            if ((_12231.x > 0.0) && (_12231.y > 0.0))
                             {
-                                float _28601;
-                                if ((_28599 > 0.001000000047497451305389404296875) && (_28598 > 9.9999997473787516355514526367188e-05))
+                                float _29860;
+                                if ((_29858 > 0.001000000047497451305389404296875) && (_29857 > 9.9999997473787516355514526367188e-05))
                                 {
-                                    float _11843 = 2.0 + (2.0 * _28599);
-                                    vec2 _11848 = _11826 / vec2(max(_28598, 9.9999997473787516355514526367188e-05));
-                                    _28601 = pow(pow(_11848.x, _11843) + pow(_11848.y, _11843), 1.0 / _11843) * _28598;
+                                    float _12248 = 2.0 + (2.0 * _29858);
+                                    vec2 _12253 = _12231 / vec2(max(_29857, 9.9999997473787516355514526367188e-05));
+                                    _29860 = pow(pow(_12253.x, _12248) + pow(_12253.y, _12248), 1.0 / _12248) * _29857;
                                 }
                                 else
                                 {
-                                    _28601 = length(_11826);
+                                    _29860 = length(_12231);
                                 }
-                                _28600 = _28601;
+                                _29859 = _29860;
                             }
                             else
                             {
-                                _28600 = max(_11826.x, _11826.y);
+                                _29859 = max(_12231.x, _12231.y);
                             }
-                            float _11883 = (min(max(_11824.x, _11824.y), 0.0) + _28600) - _28598;
-                            float _11888 = max(_28169.y, 9.9999997473787516355514526367188e-05);
-                            float _11897 = max(_11888 - abs(_11752 - _11883), 0.0) / _11888;
-                            _28641 = min(_11752, _11883) - (((_11897 * _11897) * _11888) * 0.25);
+                            float _12288 = (min(max(_12229.x, _12229.y), 0.0) + _29859) - _29857;
+                            float _12293 = max(_29440.y, 9.9999997473787516355514526367188e-05);
+                            float _12302 = max(_12293 - abs(_12129 - _12288), 0.0) / _12293;
+                            _29898 = min(_12129, _12288) - (((_12302 * _12302) * _12293) * 0.25);
                         }
                         else
                         {
-                            _28641 = _11752;
+                            _29898 = _12129;
                         }
-                        _28640 = _28641;
+                        _29897 = _29898;
                     }
-                    _28639 = _28640;
+                    _29896 = _29897;
                 }
-                _28638 = _28639;
+                _29895 = _29896;
             }
-            _28637 = _28638;
+            _29894 = _29895;
         }
-        float _5244 = (_28637 - _10666.y) / (max(_10666.x * 0.5, _4995 * 0.5) * 1.41421353816986083984375);
-        float _11914 = sign(_5244);
-        float _11916 = abs(_5244);
-        float _11927 = 1.0 + ((0.2783930003643035888671875 + ((0.23038899898529052734375 + (0.07810799777507781982421875 * (_11916 * _11916))) * _11916)) * _11916);
-        float _11930 = _11927 * _11927;
-        float _11945 = clamp(_10625.w * (0.5 - (0.5 * (_11914 - (_11914 / (_11930 * _11930))))), 0.0, 1.0);
-        _28720 = vec4(_10625.xyz * _11945, _11945);
+        float _5395 = (_29894 - _11013.y) / (max(_11013.x * 0.5, _5146 * 0.5) * 1.41421353816986083984375);
+        float _12319 = sign(_5395);
+        float _12321 = abs(_5395);
+        float _12332 = 1.0 + ((0.2783930003643035888671875 + ((0.23038899898529052734375 + (0.07810799777507781982421875 * (_12321 * _12321))) * _12321)) * _12321);
+        float _12335 = _12332 * _12332;
+        float _12350 = clamp(_10972.w * (0.5 - (0.5 * (_12319 - (_12319 / (_12335 * _12335))))), 0.0, 1.0);
+        _29980 = vec4(_10972.xyz * _12350, _12350);
     }
     else
     {
-        _28720 = vec4(0.0);
+        _29980 = vec4(0.0);
     }
-    vec4 _28820;
+    vec4 _30080;
     SPIRV_CROSS_BRANCH
-    if (((esia_v7.x & _3330) != 0u) && (!_5205))
+    if (((esia_v7.x & _3481) != 0u) && (!_5356))
     {
-        uint _11970 = max(uint(_226.gConv.z), 1u);
-        vec4 _12004 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _11970) * 24u) + 9u), int(esia_v1 / _11970), 0).xy, 0);
-        uint _12011 = max(uint(_226.gConv.z), 1u);
-        vec4 _12045 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _12011) * 24u) + 10u), int(esia_v1 / _12011), 0).xy, 0);
-        float _5272 = max(_12045.x, 0.001000000047497451305389404296875);
-        float _28713;
-        float _28716;
+        uint _12375 = max(uint(_239.gConv.z), 1u);
+        vec4 _12409 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _12375) * 24u) + 9u), int(esia_v1 / _12375), 0).xy, 0);
+        uint _12416 = max(uint(_239.gConv.z), 1u);
+        vec4 _12450 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _12416) * 24u) + 10u), int(esia_v1 / _12416), 0).xy, 0);
+        float _5423 = max(_12450.x, 0.001000000047497451305389404296875);
+        float _29973;
+        float _29976;
         SPIRV_CROSS_BRANCH
-        if ((esia_v7.x & _3359) != 0u)
+        if ((esia_v7.x & _3510) != 0u)
         {
-            uint _12052 = max(uint(_226.gConv.z), 1u);
-            vec4 _12086 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _12052) * 24u) + 22u), int(esia_v1 / _12052), 0).xy, 0);
-            vec2 _5288 = (esia_v2.xy + esia_v2.zw) * 0.5;
-            vec2 _5297 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-            vec2 _5304 = esia_v2.xy - _12086.xy;
-            vec2 _5311 = _12086.zw - esia_v2.zw;
-            vec2 _5341 = clamp(vec2((esia_v0.x < _5288.x) ? _5304.x : _5311.x, (esia_v0.y < _5288.y) ? _5304.y : _5311.y) * vec2(0.58823525905609130859375), vec2(min(_5272, 1.5)), vec2(_5272));
-            float _5346 = min(_5297.x, _5297.y);
-            float _28711;
+            uint _12457 = max(uint(_239.gConv.z), 1u);
+            vec4 _12491 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _12457) * 24u) + 22u), int(esia_v1 / _12457), 0).xy, 0);
+            vec2 _5439 = (esia_v2.xy + esia_v2.zw) * 0.5;
+            vec2 _5448 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+            vec2 _5455 = esia_v2.xy - _12491.xy;
+            vec2 _5462 = _12491.zw - esia_v2.zw;
+            vec2 _5492 = clamp(vec2((esia_v0.x < _5439.x) ? _5455.x : _5462.x, (esia_v0.y < _5439.y) ? _5455.y : _5462.y) * vec2(0.58823525905609130859375), vec2(min(_5423, 1.5)), vec2(_5423));
+            float _5497 = min(_5448.x, _5448.y);
+            float _29971;
             SPIRV_CROSS_BRANCH
             if (esia_v7.z == 0u)
             {
-                _28711 = min(((esia_v0.x > _5288.x) ? ((esia_v0.y > _5288.y) ? esia_v3.z : esia_v3.y) : ((esia_v0.y > _5288.y) ? esia_v3.w : esia_v3.x)) * (1.0 + (0.60000002384185791015625 * esia_v5.y)), _5346);
+                _29971 = min(((esia_v0.x > _5439.x) ? ((esia_v0.y > _5439.y) ? esia_v3.z : esia_v3.y) : ((esia_v0.y > _5439.y) ? esia_v3.w : esia_v3.x)) * (1.0 + (0.60000002384185791015625 * esia_v5.y)), _5497);
             }
             else
             {
-                _28711 = _5346;
+                _29971 = _5497;
             }
-            vec2 _5395 = max(abs(esia_v0 - _5288) - (_5297 - vec2(_28711)), vec2(0.0));
-            float _5397 = length(_5395);
-            vec2 _5403 = _5395 / vec2(_5397);
-            bvec2 _5404 = bvec2(_5397 > 9.9999997473787516355514526367188e-05);
-            vec2 _5405 = vec2(_5404.x ? _5403.x : vec2(0.707099974155426025390625).x, _5404.y ? _5403.y : vec2(0.707099974155426025390625).y);
-            vec2 _5420 = esia_v0 - _12086.xy;
-            vec2 _5425 = _12086.zw - esia_v0;
-            _28716 = clamp(min(min(_5420.x, _5420.y), min(_5425.x, _5425.y)) * 0.666666686534881591796875, 0.0, 1.0);
-            _28713 = inversesqrt(dot(_5405 * _5405, vec2(1.0) / (_5341 * _5341)));
+            vec2 _5546 = max(abs(esia_v0 - _5439) - (_5448 - vec2(_29971)), vec2(0.0));
+            float _5548 = length(_5546);
+            vec2 _5554 = _5546 / vec2(_5548);
+            bvec2 _5555 = bvec2(_5548 > 9.9999997473787516355514526367188e-05);
+            vec2 _5556 = vec2(_5555.x ? _5554.x : vec2(0.707099974155426025390625).x, _5555.y ? _5554.y : vec2(0.707099974155426025390625).y);
+            vec2 _5571 = esia_v0 - _12491.xy;
+            vec2 _5576 = _12491.zw - esia_v0;
+            _29976 = clamp(min(min(_5571.x, _5571.y), min(_5576.x, _5576.y)) * 0.666666686534881591796875, 0.0, 1.0);
+            _29973 = inversesqrt(dot(_5556 * _5556, vec2(1.0) / (_5492 * _5492)));
         }
         else
         {
-            _28716 = 1.0;
-            _28713 = _5272;
+            _29976 = 1.0;
+            _29973 = _5423;
         }
-        float _5443 = max(_28219, 0.0) / _28713;
-        float _12094 = clamp(_12004.w * clamp((exp(((-_5443) * _5443) * 2.2000000476837158203125) * _12045.y) * _28716, 0.0, 1.0), 0.0, 1.0);
-        _28820 = vec4(_12004.xyz * _12094, _12094) + (_28720 * (1.0 - _12094));
+        float _5594 = max(_29486, 0.0) / _29973;
+        float _12499 = clamp(_12409.w * clamp((exp(((-_5594) * _5594) * 2.2000000476837158203125) * _12450.y) * _29976, 0.0, 1.0), 0.0, 1.0);
+        _30080 = vec4(_12409.xyz * _12499, _12499) + (_29980 * (1.0 - _12499));
     }
     else
     {
-        _28820 = _28720;
+        _30080 = _29980;
     }
-    vec4 _30262;
+    vec4 _31680;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3576) != 0u)
+    if ((esia_v7.x & _3727) != 0u)
     {
-        vec2 _5474 = _28164 * _226.gTarget.zw;
-        float _12127 = clamp(log2(max(max(esia_v3.w / _4995, 4.0), 1.0)) - 1.0, 0.0, 5.0);
-        int _12130 = int(floor(_12127));
-        float _12134 = _12127 - float(_12130);
-        bool _12139 = (_12134 > 0.0199999995529651641845703125) && (_12130 < 5);
-        vec3 _28792;
-        _28792 = vec3(0.0);
-        vec3 _12168;
+        vec2 _5625 = _29435 * _239.gTarget.zw;
+        float _12532 = clamp(log2(max(max(esia_v3.w / _5146, 4.0), 1.0)) - 1.0, 0.0, 5.0);
+        int _12535 = int(floor(_12532));
+        float _12539 = _12532 - float(_12535);
+        bool _12544 = (_12539 > 0.0199999995529651641845703125) && (_12535 < 5);
+        vec3 _30052;
+        _30052 = vec3(0.0);
+        vec3 _12573;
         SPIRV_CROSS_LOOP
-        for (int _28722 = 0; _28722 < 2; _28792 = _12168, _28722++)
+        for (int _29982 = 0; _29982 < 2; _30052 = _12573, _29982++)
         {
-            if ((_28722 > 0) && (!_12139))
+            if ((_29982 > 0) && (!_12544))
             {
                 break;
             }
-            int _12154 = _12130 + _28722;
-            int _12192 = clamp(_12154, 1, 5);
-            vec2 _12261 = (_5474 * _226.gLevel[_12192].xy) - vec2(0.5);
-            vec2 _12263 = floor(_12261);
-            vec2 _12266 = _12261 - _12263;
-            vec2 _12269 = _12266 * _12266;
-            vec2 _12272 = _12269 * _12266;
-            vec2 _12291 = (((_12272 * 3.0) - (_12269 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
-            vec2 _12304 = _12272 * 0.16666667163372039794921875;
-            vec2 _12307 = (((((-_12272) + (_12269 * 3.0)) - (_12266 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _12291;
-            vec2 _12311 = (((((_12272 * (-3.0)) + (_12269 * 3.0)) + (_12266 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _12304;
-            vec2 _12323 = ((_12263 - vec2(0.5)) + (_12291 / _12307)) * _226.gLevel[_12192].zw;
-            vec2 _12335 = ((_12263 + vec2(1.5)) + (_12304 / _12311)) * _226.gLevel[_12192].zw;
-            vec4 _28759;
+            int _12559 = _12535 + _29982;
+            int _12597 = clamp(_12559, 1, 5);
+            vec2 _12666 = (_5625 * _239.gLevel[_12597].xy) - vec2(0.5);
+            vec2 _12668 = floor(_12666);
+            vec2 _12671 = _12666 - _12668;
+            vec2 _12674 = _12671 * _12671;
+            vec2 _12677 = _12674 * _12671;
+            vec2 _12696 = (((_12677 * 3.0) - (_12674 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
+            vec2 _12709 = _12677 * 0.16666667163372039794921875;
+            vec2 _12712 = (((((-_12677) + (_12674 * 3.0)) - (_12671 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _12696;
+            vec2 _12716 = (((((_12677 * (-3.0)) + (_12674 * 3.0)) + (_12671 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _12709;
+            vec2 _12728 = ((_12668 - vec2(0.5)) + (_12696 / _12712)) * _239.gLevel[_12597].zw;
+            vec2 _12740 = ((_12668 + vec2(1.5)) + (_12709 / _12716)) * _239.gLevel[_12597].zw;
+            vec4 _30019;
             SPIRV_CROSS_BRANCH
-            if (_12154 <= 0)
+            if (_12559 <= 0)
             {
-                vec2 _28758;
-                if (_226.gConv.x > 0.5)
+                vec2 _30018;
+                if (_239.gConv.x > 0.5)
                 {
-                    vec2 _26925 = _5474;
-                    _26925.y = 1.0 - _5474.y;
-                    _28758 = _26925;
+                    vec2 _28119 = _5625;
+                    _28119.y = 1.0 - _5625.y;
+                    _30018 = _28119;
                 }
                 else
                 {
-                    _28758 = _5474;
+                    _30018 = _5625;
                 }
-                _28759 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _28758, 0.0);
+                _30019 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _30018, 0.0);
             }
             else
             {
-                vec4 _28760;
-                if (_12154 == 1)
+                vec4 _30020;
+                if (_12559 == 1)
                 {
-                    vec2 _28751;
-                    if (_226.gConv.x > 0.5)
+                    vec2 _30011;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _26930 = _12323;
-                        _26930.y = 1.0 - _12323.y;
-                        _28751 = _26930;
+                        vec2 _28124 = _12728;
+                        _28124.y = 1.0 - _12728.y;
+                        _30011 = _28124;
                     }
                     else
                     {
-                        _28751 = _12323;
+                        _30011 = _12728;
                     }
-                    float _12380 = _12323.y;
-                    vec2 _12381 = vec2(_12335.x, _12380);
-                    vec2 _28752;
-                    if (_226.gConv.x > 0.5)
+                    float _12785 = _12728.y;
+                    vec2 _12786 = vec2(_12740.x, _12785);
+                    vec2 _30012;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _26937 = _12381;
-                        _26937.y = 1.0 - _12380;
-                        _28752 = _26937;
+                        vec2 _28131 = _12786;
+                        _28131.y = 1.0 - _12785;
+                        _30012 = _28131;
                     }
                     else
                     {
-                        _28752 = _12381;
+                        _30012 = _12786;
                     }
-                    float _12398 = _12335.y;
-                    vec2 _12399 = vec2(_12323.x, _12398);
-                    vec2 _28754;
-                    if (_226.gConv.x > 0.5)
+                    float _12803 = _12740.y;
+                    vec2 _12804 = vec2(_12728.x, _12803);
+                    vec2 _30014;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _26944 = _12399;
-                        _26944.y = 1.0 - _12398;
-                        _28754 = _26944;
+                        vec2 _28138 = _12804;
+                        _28138.y = 1.0 - _12803;
+                        _30014 = _28138;
                     }
                     else
                     {
-                        _28754 = _12399;
+                        _30014 = _12804;
                     }
-                    vec2 _28756;
-                    if (_226.gConv.x > 0.5)
+                    vec2 _30016;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _26951 = _12335;
-                        _26951.y = 1.0 - _12335.y;
-                        _28756 = _26951;
+                        vec2 _28145 = _12740;
+                        _28145.y = 1.0 - _12740.y;
+                        _30016 = _28145;
                     }
                     else
                     {
-                        _28756 = _12335;
+                        _30016 = _12740;
                     }
-                    _28760 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _28751, 0.0) * (_12307.x * _12307.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _28752, 0.0) * (_12311.x * _12307.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _28754, 0.0) * (_12307.x * _12311.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _28756, 0.0) * (_12311.x * _12311.y));
+                    _30020 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30011, 0.0) * (_12712.x * _12712.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30012, 0.0) * (_12716.x * _12712.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30014, 0.0) * (_12712.x * _12716.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30016, 0.0) * (_12716.x * _12716.y));
                 }
                 else
                 {
-                    vec4 _28761;
-                    if (_12154 == 2)
+                    vec4 _30021;
+                    if (_12559 == 2)
                     {
-                        vec2 _28744;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30004;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _26958 = _12323;
-                            _26958.y = 1.0 - _12323.y;
-                            _28744 = _26958;
+                            vec2 _28152 = _12728;
+                            _28152.y = 1.0 - _12728.y;
+                            _30004 = _28152;
                         }
                         else
                         {
-                            _28744 = _12323;
+                            _30004 = _12728;
                         }
-                        float _12510 = _12323.y;
-                        vec2 _12511 = vec2(_12335.x, _12510);
-                        vec2 _28745;
-                        if (_226.gConv.x > 0.5)
+                        float _12915 = _12728.y;
+                        vec2 _12916 = vec2(_12740.x, _12915);
+                        vec2 _30005;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _26965 = _12511;
-                            _26965.y = 1.0 - _12510;
-                            _28745 = _26965;
+                            vec2 _28159 = _12916;
+                            _28159.y = 1.0 - _12915;
+                            _30005 = _28159;
                         }
                         else
                         {
-                            _28745 = _12511;
+                            _30005 = _12916;
                         }
-                        float _12528 = _12335.y;
-                        vec2 _12529 = vec2(_12323.x, _12528);
-                        vec2 _28747;
-                        if (_226.gConv.x > 0.5)
+                        float _12933 = _12740.y;
+                        vec2 _12934 = vec2(_12728.x, _12933);
+                        vec2 _30007;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _26972 = _12529;
-                            _26972.y = 1.0 - _12528;
-                            _28747 = _26972;
+                            vec2 _28166 = _12934;
+                            _28166.y = 1.0 - _12933;
+                            _30007 = _28166;
                         }
                         else
                         {
-                            _28747 = _12529;
+                            _30007 = _12934;
                         }
-                        vec2 _28749;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30009;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _26979 = _12335;
-                            _26979.y = 1.0 - _12335.y;
-                            _28749 = _26979;
+                            vec2 _28173 = _12740;
+                            _28173.y = 1.0 - _12740.y;
+                            _30009 = _28173;
                         }
                         else
                         {
-                            _28749 = _12335;
+                            _30009 = _12740;
                         }
-                        _28761 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _28744, 0.0) * (_12307.x * _12307.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _28745, 0.0) * (_12311.x * _12307.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _28747, 0.0) * (_12307.x * _12311.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _28749, 0.0) * (_12311.x * _12311.y));
+                        _30021 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30004, 0.0) * (_12712.x * _12712.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30005, 0.0) * (_12716.x * _12712.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30007, 0.0) * (_12712.x * _12716.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30009, 0.0) * (_12716.x * _12716.y));
                     }
                     else
                     {
-                        vec4 _28762;
-                        if (_12154 == 3)
+                        vec4 _30022;
+                        if (_12559 == 3)
                         {
-                            vec2 _28737;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _29997;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _26986 = _12323;
-                                _26986.y = 1.0 - _12323.y;
-                                _28737 = _26986;
+                                vec2 _28180 = _12728;
+                                _28180.y = 1.0 - _12728.y;
+                                _29997 = _28180;
                             }
                             else
                             {
-                                _28737 = _12323;
+                                _29997 = _12728;
                             }
-                            float _12640 = _12323.y;
-                            vec2 _12641 = vec2(_12335.x, _12640);
-                            vec2 _28738;
-                            if (_226.gConv.x > 0.5)
+                            float _13045 = _12728.y;
+                            vec2 _13046 = vec2(_12740.x, _13045);
+                            vec2 _29998;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _26993 = _12641;
-                                _26993.y = 1.0 - _12640;
-                                _28738 = _26993;
+                                vec2 _28187 = _13046;
+                                _28187.y = 1.0 - _13045;
+                                _29998 = _28187;
                             }
                             else
                             {
-                                _28738 = _12641;
+                                _29998 = _13046;
                             }
-                            float _12658 = _12335.y;
-                            vec2 _12659 = vec2(_12323.x, _12658);
-                            vec2 _28740;
-                            if (_226.gConv.x > 0.5)
+                            float _13063 = _12740.y;
+                            vec2 _13064 = vec2(_12728.x, _13063);
+                            vec2 _30000;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27000 = _12659;
-                                _27000.y = 1.0 - _12658;
-                                _28740 = _27000;
+                                vec2 _28194 = _13064;
+                                _28194.y = 1.0 - _13063;
+                                _30000 = _28194;
                             }
                             else
                             {
-                                _28740 = _12659;
+                                _30000 = _13064;
                             }
-                            vec2 _28742;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30002;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27007 = _12335;
-                                _27007.y = 1.0 - _12335.y;
-                                _28742 = _27007;
+                                vec2 _28201 = _12740;
+                                _28201.y = 1.0 - _12740.y;
+                                _30002 = _28201;
                             }
                             else
                             {
-                                _28742 = _12335;
+                                _30002 = _12740;
                             }
-                            _28762 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _28737, 0.0) * (_12307.x * _12307.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _28738, 0.0) * (_12311.x * _12307.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _28740, 0.0) * (_12307.x * _12311.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _28742, 0.0) * (_12311.x * _12311.y));
+                            _30022 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29997, 0.0) * (_12712.x * _12712.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29998, 0.0) * (_12716.x * _12712.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30000, 0.0) * (_12712.x * _12716.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30002, 0.0) * (_12716.x * _12716.y));
                         }
                         else
                         {
-                            vec4 _28763;
-                            if (_12154 == 4)
+                            vec4 _30023;
+                            if (_12559 == 4)
                             {
-                                vec2 _28730;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _29990;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27014 = _12323;
-                                    _27014.y = 1.0 - _12323.y;
-                                    _28730 = _27014;
+                                    vec2 _28208 = _12728;
+                                    _28208.y = 1.0 - _12728.y;
+                                    _29990 = _28208;
                                 }
                                 else
                                 {
-                                    _28730 = _12323;
+                                    _29990 = _12728;
                                 }
-                                float _12770 = _12323.y;
-                                vec2 _12771 = vec2(_12335.x, _12770);
-                                vec2 _28731;
-                                if (_226.gConv.x > 0.5)
+                                float _13175 = _12728.y;
+                                vec2 _13176 = vec2(_12740.x, _13175);
+                                vec2 _29991;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27021 = _12771;
-                                    _27021.y = 1.0 - _12770;
-                                    _28731 = _27021;
+                                    vec2 _28215 = _13176;
+                                    _28215.y = 1.0 - _13175;
+                                    _29991 = _28215;
                                 }
                                 else
                                 {
-                                    _28731 = _12771;
+                                    _29991 = _13176;
                                 }
-                                float _12788 = _12335.y;
-                                vec2 _12789 = vec2(_12323.x, _12788);
-                                vec2 _28733;
-                                if (_226.gConv.x > 0.5)
+                                float _13193 = _12740.y;
+                                vec2 _13194 = vec2(_12728.x, _13193);
+                                vec2 _29993;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27028 = _12789;
-                                    _27028.y = 1.0 - _12788;
-                                    _28733 = _27028;
+                                    vec2 _28222 = _13194;
+                                    _28222.y = 1.0 - _13193;
+                                    _29993 = _28222;
                                 }
                                 else
                                 {
-                                    _28733 = _12789;
+                                    _29993 = _13194;
                                 }
-                                vec2 _28735;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _29995;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27035 = _12335;
-                                    _27035.y = 1.0 - _12335.y;
-                                    _28735 = _27035;
+                                    vec2 _28229 = _12740;
+                                    _28229.y = 1.0 - _12740.y;
+                                    _29995 = _28229;
                                 }
                                 else
                                 {
-                                    _28735 = _12335;
+                                    _29995 = _12740;
                                 }
-                                _28763 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _28730, 0.0) * (_12307.x * _12307.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _28731, 0.0) * (_12311.x * _12307.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _28733, 0.0) * (_12307.x * _12311.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _28735, 0.0) * (_12311.x * _12311.y));
+                                _30023 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29990, 0.0) * (_12712.x * _12712.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29991, 0.0) * (_12716.x * _12712.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29993, 0.0) * (_12712.x * _12716.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29995, 0.0) * (_12716.x * _12716.y));
                             }
                             else
                             {
-                                vec2 _28723;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _29983;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27042 = _12323;
-                                    _27042.y = 1.0 - _12323.y;
-                                    _28723 = _27042;
+                                    vec2 _28236 = _12728;
+                                    _28236.y = 1.0 - _12728.y;
+                                    _29983 = _28236;
                                 }
                                 else
                                 {
-                                    _28723 = _12323;
+                                    _29983 = _12728;
                                 }
-                                float _12900 = _12323.y;
-                                vec2 _12901 = vec2(_12335.x, _12900);
-                                vec2 _28724;
-                                if (_226.gConv.x > 0.5)
+                                float _13305 = _12728.y;
+                                vec2 _13306 = vec2(_12740.x, _13305);
+                                vec2 _29984;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27049 = _12901;
-                                    _27049.y = 1.0 - _12900;
-                                    _28724 = _27049;
+                                    vec2 _28243 = _13306;
+                                    _28243.y = 1.0 - _13305;
+                                    _29984 = _28243;
                                 }
                                 else
                                 {
-                                    _28724 = _12901;
+                                    _29984 = _13306;
                                 }
-                                float _12918 = _12335.y;
-                                vec2 _12919 = vec2(_12323.x, _12918);
-                                vec2 _28726;
-                                if (_226.gConv.x > 0.5)
+                                float _13323 = _12740.y;
+                                vec2 _13324 = vec2(_12728.x, _13323);
+                                vec2 _29986;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27056 = _12919;
-                                    _27056.y = 1.0 - _12918;
-                                    _28726 = _27056;
+                                    vec2 _28250 = _13324;
+                                    _28250.y = 1.0 - _13323;
+                                    _29986 = _28250;
                                 }
                                 else
                                 {
-                                    _28726 = _12919;
+                                    _29986 = _13324;
                                 }
-                                vec2 _28728;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _29988;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27063 = _12335;
-                                    _27063.y = 1.0 - _12335.y;
-                                    _28728 = _27063;
+                                    vec2 _28257 = _12740;
+                                    _28257.y = 1.0 - _12740.y;
+                                    _29988 = _28257;
                                 }
                                 else
                                 {
-                                    _28728 = _12335;
+                                    _29988 = _12740;
                                 }
-                                _28763 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _28723, 0.0) * (_12307.x * _12307.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _28724, 0.0) * (_12311.x * _12307.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _28726, 0.0) * (_12307.x * _12311.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _28728, 0.0) * (_12311.x * _12311.y));
+                                _30023 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29983, 0.0) * (_12712.x * _12712.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29984, 0.0) * (_12716.x * _12712.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29986, 0.0) * (_12712.x * _12716.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29988, 0.0) * (_12716.x * _12716.y));
                             }
-                            _28762 = _28763;
+                            _30022 = _30023;
                         }
-                        _28761 = _28762;
+                        _30021 = _30022;
                     }
-                    _28760 = _28761;
+                    _30020 = _30021;
                 }
-                _28759 = _28760;
+                _30019 = _30020;
             }
-            _12168 = _28792 + (_28759.xyz * (_12139 ? ((_28722 == 0) ? (1.0 - _12134) : _12134) : 1.0));
+            _12573 = _30052 + (_30019.xyz * (_12544 ? ((_29982 == 0) ? (1.0 - _12539) : _12539) : 1.0));
         }
-        bvec3 _5481 = bvec3(_226.gTime.z > 0.5);
-        float _13004 = dot(esia_v4.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
-        float _5504 = max(_28219, 0.0) / max(esia_v3.w, 0.001000000047497451305389404296875);
-        float _5507 = (_13004 > 0.5) ? 0.0 : 1.0;
-        float _13016 = clamp(0.85000002384185791015625 * ((clamp((0.5 - abs(_13004 - dot(vec3(_5481.x ? _28792.x : vec3(0.5).x, _5481.y ? _28792.y : vec3(0.5).y, _5481.z ? _28792.z : vec3(0.5).z), vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)))) * 4.0, 0.0, 1.0) * esia_v3.z) * exp(((-_5504) * _5504) * 2.2000000476837158203125)), 0.0, 1.0);
-        _30262 = vec4(vec4(_5507, _5507, _5507, 0.85000002384185791015625).xyz * _13016, _13016) + (_28820 * (1.0 - _13016));
+        bvec3 _5632 = bvec3(_239.gTime.z > 0.5);
+        float _13409 = dot(esia_v4.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+        float _5655 = max(_29486, 0.0) / max(esia_v3.w, 0.001000000047497451305389404296875);
+        float _5658 = (_13409 > 0.5) ? 0.0 : 1.0;
+        float _13421 = clamp(0.85000002384185791015625 * ((clamp((0.5 - abs(_13409 - dot(vec3(_5632.x ? _30052.x : vec3(0.5).x, _5632.y ? _30052.y : vec3(0.5).y, _5632.z ? _30052.z : vec3(0.5).z), vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)))) * 4.0, 0.0, 1.0) * esia_v3.z) * exp(((-_5655) * _5655) * 2.2000000476837158203125)), 0.0, 1.0);
+        _31680 = vec4(vec4(_5658, _5658, _5658, 0.85000002384185791015625).xyz * _13421, _13421) + (_30080 * (1.0 - _13421));
     }
     else
     {
-        _30262 = _28820;
+        _31680 = _30080;
     }
-    vec4 _31183;
-    vec4 _31419;
-    float _32065;
+    vec4 _32635;
+    vec4 _32885;
+    float _33554;
     SPIRV_CROSS_BRANCH
-    if (((esia_v7.x & _3652) != 0u) && (_28570 > 0.0))
+    if (((esia_v7.x & _3803) != 0u) && (_29827 > 0.0))
     {
-        uint _13041 = max(uint(_226.gConv.z), 1u);
-        vec4 _13075 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13041) * 24u) + 11u), int(esia_v1 / _13041), 0).xy, 0);
-        uint _13082 = max(uint(_226.gConv.z), 1u);
-        vec4 _13116 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13082) * 24u) + 12u), int(esia_v1 / _13082), 0).xy, 0);
-        uint _13123 = max(uint(_226.gConv.z), 1u);
-        vec4 _13157 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13123) * 24u) + 13u), int(esia_v1 / _13123), 0).xy, 0);
-        uint _13164 = max(uint(_226.gConv.z), 1u);
-        vec4 _13198 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13164) * 24u) + 16u), int(esia_v1 / _13164), 0).xy, 0);
-        float _13269 = _13075.x * _226.gDisplay.z;
-        float _13271 = _13075.y;
-        vec2 _13280 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(1.0));
-        float _13288 = clamp(_13075.z, 0.001000000047497451305389404296875, min(_13280.x, _13280.y));
-        float _13290 = _13075.w;
-        float _13297 = clamp(1.0 - (max(-_28219, 0.0) / _13288), 0.0, 1.0);
-        float _13303 = sqrt(clamp(1.0 - (_13297 * _13297), 0.0, 1.0));
-        vec2 _29253;
-        vec3 _29830;
+        uint _13446 = max(uint(_239.gConv.z), 1u);
+        vec4 _13480 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13446) * 24u) + 11u), int(esia_v1 / _13446), 0).xy, 0);
+        uint _13487 = max(uint(_239.gConv.z), 1u);
+        vec4 _13521 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13487) * 24u) + 12u), int(esia_v1 / _13487), 0).xy, 0);
+        uint _13528 = max(uint(_239.gConv.z), 1u);
+        vec4 _13562 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13528) * 24u) + 13u), int(esia_v1 / _13528), 0).xy, 0);
+        uint _13569 = max(uint(_239.gConv.z), 1u);
+        vec4 _13603 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _13569) * 24u) + 16u), int(esia_v1 / _13569), 0).xy, 0);
+        float _13674 = _13480.x * _239.gDisplay.z;
+        float _13676 = _13480.y;
+        vec2 _13685 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(1.0));
+        float _13693 = clamp(_13480.z, 0.001000000047497451305389404296875, min(_13685.x, _13685.y));
+        float _13695 = _13480.w;
+        float _13702 = clamp(1.0 - (max(-_29486, 0.0) / _13693), 0.0, 1.0);
+        float _13708 = sqrt(clamp(1.0 - (_13702 * _13702), 0.0, 1.0));
+        vec2 _30655;
+        vec3 _31232;
         SPIRV_CROSS_BRANCH
-        if (_13297 > 0.0)
+        if (_13702 > 0.0)
         {
-            vec2 _29252;
+            vec2 _30654;
             do
             {
                 SPIRV_CROSS_BRANCH
-                if ((esia_v7.x & _1880) != 0u)
+                if ((esia_v7.x & _1923) != 0u)
                 {
-                    vec2 _29251;
+                    vec2 _30653;
                     do
                     {
-                        bool _13807 = esia_v3.w > 0.5;
-                        float _13811 = floor((esia_v3.z + 1.0) * 0.5);
-                        float _13815 = floor((_13811 + 127.0) * 0.0078125);
-                        float _13819 = floor((esia_v3.z - 1.0) * 0.5);
-                        float _13947 = floor(_13819 * 0.0625);
-                        uint _13952 = (esia_v1 + 1u) + uint(_13947);
-                        uint _13965 = max(uint(_226.gConv.z), 1u);
-                        vec4 _13999 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_13952 % _13965) * 24u) + uint(_13819 - (_13947 * 16.0))), int(_13952 / _13965), 0).xy, 0);
-                        vec2 _13831 = _13999.xy;
-                        vec2 _13833 = _13999.zw;
-                        bvec2 _13834 = bvec2(((esia_v3.z - 1.0) - (_13819 * 2.0)) < 0.5);
-                        vec2 _29220;
-                        if (_13807)
+                        bool _14318 = esia_v3.w > 0.5;
+                        float _14322 = floor((esia_v3.z + 1.0) * 0.5);
+                        float _14326 = floor((_14322 + 127.0) * 0.0078125);
+                        float _14330 = floor((esia_v3.z - 1.0) * 0.5);
+                        float _14458 = floor(_14330 * 0.0625);
+                        uint _14463 = (esia_v1 + 1u) + uint(_14458);
+                        uint _14476 = max(uint(_239.gConv.z), 1u);
+                        vec4 _14510 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14463 % _14476) * 24u) + uint(_14330 - (_14458 * 16.0))), int(_14463 / _14476), 0).xy, 0);
+                        vec2 _14342 = _14510.xy;
+                        vec2 _14344 = _14510.zw;
+                        bvec2 _14345 = bvec2(((esia_v3.z - 1.0) - (_14330 * 2.0)) < 0.5);
+                        vec2 _30622;
+                        if (_14318)
                         {
-                            float _14007 = floor(0.0);
-                            uint _14012 = (esia_v1 + 1u) + uint(_14007);
-                            uint _14025 = max(uint(_226.gConv.z), 1u);
-                            _29220 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14012 % _14025) * 24u) + uint(_14007 * (-16.0))), int(_14012 / _14025), 0).xy, 0).xy;
+                            float _14518 = floor(0.0);
+                            uint _14523 = (esia_v1 + 1u) + uint(_14518);
+                            uint _14536 = max(uint(_239.gConv.z), 1u);
+                            _30622 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14523 % _14536) * 24u) + uint(_14518 * (-16.0))), int(_14523 / _14536), 0).xy, 0).xy;
                         }
                         else
                         {
-                            _29220 = vec2(_13834.x ? _13831.x : _13833.x, _13834.y ? _13831.y : _13833.y);
+                            _30622 = vec2(_14345.x ? _14342.x : _14344.x, _14345.y ? _14342.y : _14344.y);
                         }
-                        vec2 _29219;
-                        float _29222;
-                        vec2 _29225;
-                        float _29228;
-                        _29228 = 1.0;
-                        _29225 = vec2(0.0, -1.0);
-                        _29222 = 1000000015047466219876688855040.0;
-                        _29219 = _29220;
-                        vec2 _29218;
-                        float _29221;
-                        vec2 _29224;
-                        float _29227;
+                        vec2 _30621;
+                        float _30624;
+                        vec2 _30627;
+                        float _30630;
+                        _30630 = 1.0;
+                        _30627 = vec2(0.0, -1.0);
+                        _30624 = 1000000015047466219876688855040.0;
+                        _30621 = _30622;
+                        vec2 _30620;
+                        float _30623;
+                        vec2 _30626;
+                        float _30629;
                         SPIRV_CROSS_LOOP
-                        for (float _29215 = 0.0; _29215 < 16.0; _29228 = _29227, _29225 = _29224, _29222 = _29221, _29219 = _29218, _29215 += 1.0)
+                        for (float _30617 = 0.0; _30617 < 16.0; _30630 = _30629, _30627 = _30626, _30624 = _30623, _30621 = _30620, _30617 += 1.0)
                         {
-                            if (_29215 >= _13815)
+                            if (_30617 >= _14326)
                             {
                                 break;
                             }
-                            _29227 = _29228;
-                            _29224 = _29225;
-                            _29221 = _29222;
-                            _29218 = _29219;
-                            vec2 _32897;
-                            float _32899;
-                            vec2 _32901;
-                            float _32903;
+                            _30629 = _30630;
+                            _30626 = _30627;
+                            _30623 = _30624;
+                            _30620 = _30621;
+                            vec2 _34413;
+                            float _34415;
+                            vec2 _34417;
+                            float _34419;
                             SPIRV_CROSS_LOOP
-                            for (float _29216 = 0.0; _29216 < 128.0; _29227 = _32903, _29224 = _32901, _29221 = _32899, _29218 = _32897, _29216 += 1.0)
+                            for (float _30618 = 0.0; _30618 < 128.0; _30629 = _34419, _30626 = _34417, _30623 = _34415, _30620 = _34413, _30618 += 1.0)
                             {
-                                float _13861 = (_29215 * 128.0) + _29216;
-                                if (_13861 >= _13811)
+                                float _14372 = (_30617 * 128.0) + _30618;
+                                if (_14372 >= _14322)
                                 {
                                     break;
                                 }
-                                float _14067 = floor(_13861 * 0.0625);
-                                uint _14072 = (esia_v1 + 1u) + uint(_14067);
-                                uint _14085 = max(uint(_226.gConv.z), 1u);
-                                vec4 _14119 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14072 % _14085) * 24u) + uint(_13861 - (_14067 * 16.0))), int(_14072 / _14085), 0).xy, 0);
-                                vec2 _13873 = _14119.xy;
-                                vec2 _14130 = _29218 - _13873;
-                                vec2 _14133 = esia_v0 - _13873;
-                                vec2 _14146 = _14133 - (_14130 * clamp(dot(_14133, _14130) / max(dot(_14130, _14130), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                float _14149 = dot(_14146, _14146);
-                                bool _14152 = _14149 < _29221;
-                                bvec2 _32953 = bvec2(_14152);
-                                vec2 _32954 = vec2(_32953.x ? _14146.x : _29224.x, _32953.y ? _14146.y : _29224.y);
-                                float _32955 = _14152 ? _14149 : _29221;
-                                bool _14161 = esia_v0.y >= _14119.y;
-                                bool _14166 = esia_v0.y < _29218.y;
-                                bool _14177 = (_14130.x * _14133.y) > (_14130.y * _14133.x);
-                                float _29235;
-                                if (((_14161 && _14166) && _14177) || (((!_14161) && (!_14166)) && (!_14177)))
+                                float _14578 = floor(_14372 * 0.0625);
+                                uint _14583 = (esia_v1 + 1u) + uint(_14578);
+                                uint _14596 = max(uint(_239.gConv.z), 1u);
+                                vec4 _14630 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14583 % _14596) * 24u) + uint(_14372 - (_14578 * 16.0))), int(_14583 / _14596), 0).xy, 0);
+                                vec2 _14384 = _14630.xy;
+                                vec2 _14641 = _30620 - _14384;
+                                vec2 _14644 = esia_v0 - _14384;
+                                vec2 _14657 = _14644 - (_14641 * clamp(dot(_14644, _14641) / max(dot(_14641, _14641), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                float _14660 = dot(_14657, _14657);
+                                bool _14663 = _14660 < _30623;
+                                bvec2 _34469 = bvec2(_14663);
+                                vec2 _34470 = vec2(_34469.x ? _14657.x : _30626.x, _34469.y ? _14657.y : _30626.y);
+                                float _34471 = _14663 ? _14660 : _30623;
+                                bool _14672 = esia_v0.y >= _14630.y;
+                                bool _14677 = esia_v0.y < _30620.y;
+                                bool _14688 = (_14641.x * _14644.y) > (_14641.y * _14644.x);
+                                float _30637;
+                                if (((_14672 && _14677) && _14688) || (((!_14672) && (!_14677)) && (!_14688)))
                                 {
-                                    _29235 = -_29227;
+                                    _30637 = -_30629;
                                 }
                                 else
                                 {
-                                    _29235 = _29227;
+                                    _30637 = _30629;
                                 }
-                                vec2 _13883 = _14119.xy;
-                                if (((2.0 * _13861) + 1.0) < esia_v3.z)
+                                vec2 _14394 = _14630.xy;
+                                if (((2.0 * _14372) + 1.0) < esia_v3.z)
                                 {
-                                    vec2 _13892 = _14119.zw;
-                                    vec2 _14206 = _13883 - _13892;
-                                    vec2 _14209 = esia_v0 - _13892;
-                                    vec2 _14222 = _14209 - (_14206 * clamp(dot(_14209, _14206) / max(dot(_14206, _14206), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _14225 = dot(_14222, _14222);
-                                    bool _14228 = _14225 < _32955;
-                                    bvec2 _32956 = bvec2(_14228);
-                                    bool _14237 = esia_v0.y >= _14119.w;
-                                    bool _14242 = esia_v0.y < _14119.y;
-                                    bool _14253 = (_14206.x * _14209.y) > (_14206.y * _14209.x);
-                                    float _29241;
-                                    if (((_14237 && _14242) && _14253) || (((!_14237) && (!_14242)) && (!_14253)))
+                                    vec2 _14403 = _14630.zw;
+                                    vec2 _14717 = _14394 - _14403;
+                                    vec2 _14720 = esia_v0 - _14403;
+                                    vec2 _14733 = _14720 - (_14717 * clamp(dot(_14720, _14717) / max(dot(_14717, _14717), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                    float _14736 = dot(_14733, _14733);
+                                    bool _14739 = _14736 < _34471;
+                                    bvec2 _34472 = bvec2(_14739);
+                                    bool _14748 = esia_v0.y >= _14630.w;
+                                    bool _14753 = esia_v0.y < _14630.y;
+                                    bool _14764 = (_14717.x * _14720.y) > (_14717.y * _14720.x);
+                                    float _30643;
+                                    if (((_14748 && _14753) && _14764) || (((!_14748) && (!_14753)) && (!_14764)))
                                     {
-                                        _29241 = -_29235;
+                                        _30643 = -_30637;
                                     }
                                     else
                                     {
-                                        _29241 = _29235;
+                                        _30643 = _30637;
                                     }
-                                    _32903 = _29241;
-                                    _32901 = vec2(_32956.x ? _14222.x : _32954.x, _32956.y ? _14222.y : _32954.y);
-                                    _32899 = _14228 ? _14225 : _32955;
-                                    _32897 = _14119.zw;
+                                    _34419 = _30643;
+                                    _34417 = vec2(_34472.x ? _14733.x : _34470.x, _34472.y ? _14733.y : _34470.y);
+                                    _34415 = _14739 ? _14736 : _34471;
+                                    _34413 = _14630.zw;
                                 }
                                 else
                                 {
-                                    _32903 = _29235;
-                                    _32901 = _32954;
-                                    _32899 = _32955;
-                                    _32897 = _13883;
+                                    _34419 = _30637;
+                                    _34417 = _34470;
+                                    _34415 = _34471;
+                                    _34413 = _14394;
                                 }
                             }
                         }
-                        float _13913 = sqrt(_29222);
-                        vec2 _13919 = _29225 / vec2(_13913);
-                        bvec2 _13920 = bvec2(_13913 > 9.9999999747524270787835121154785e-07);
-                        vec2 _13921 = vec2(_13920.x ? _13919.x : vec2(0.0, -1.0).x, _13920.y ? _13919.y : vec2(0.0, -1.0).y);
-                        if (_13807)
+                        float _14424 = sqrt(_30624);
+                        vec2 _14430 = _30627 / vec2(_14424);
+                        bvec2 _14431 = bvec2(_14424 > 9.9999999747524270787835121154785e-07);
+                        vec2 _14432 = vec2(_14431.x ? _14430.x : vec2(0.0, -1.0).x, _14431.y ? _14430.y : vec2(0.0, -1.0).y);
+                        if (_14318)
                         {
-                            _29251 = _13921;
+                            _30653 = _14432;
                             break;
                         }
-                        _29251 = _13921 * _29228;
+                        _30653 = _14432 * _30630;
                         break;
                     } while(false);
-                    _29252 = _29251;
+                    _30654 = _30653;
                     break;
                 }
-                vec2 _13733 = esia_v0 + vec2(0.5, 0.0);
-                vec2 _14316 = (esia_v2.xy + esia_v2.zw) * 0.5;
-                vec2 _14325 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                float _29060;
+                vec2 _30616;
                 SPIRV_CROSS_BRANCH
-                if ((esia_v7.x & _1742) != 0u)
+                if ((((esia_v7.z == 0u) && (!((esia_v7.x & _1943) != 0u))) && (!((esia_v7.x & _1950) != 0u))) && all(equal(esia_v3.xyz, esia_v3.yzw)))
                 {
-                    float _14442 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-                    vec4 _14476 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_13733, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-                    float _14500 = (_14476.w - 0.5) * esia_v3.y;
-                    vec2 _14541 = abs(_13733 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _14442), vec2(0.0));
-                    _29060 = max((-mix((max(min(_14476.x, _14476.y), min(max(_14476.x, _14476.y), _14476.z)) - 0.5) * esia_v3.x, _14500, clamp(abs(_14500) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _14442, length(max(_14541, vec2(0.0))) + min(max(_14541.x, _14541.y), 0.0)) - esia_v5.w;
-                }
-                else
-                {
-                    float _29061;
-                    if ((esia_v7.x & _1757) != 0u)
+                    vec2 _14190 = (esia_v2.xy + esia_v2.zw) * 0.5;
+                    vec2 _14199 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                    vec2 _14202 = esia_v0 - _14190;
+                    float _14813 = min(_14199.x, _14199.y);
+                    float _14816 = min((_14202.x > 0.0) ? ((_14202.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_14202.y > 0.0) ? esia_v3.w : esia_v3.x), _14813);
+                    float _14822 = _14816 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                    float _30460;
+                    float _30461;
+                    if (_14822 > _14813)
                     {
-                        float _29059;
-                        do
-                        {
-                            bool _14603 = esia_v3.w > 0.5;
-                            float _14607 = floor((esia_v3.z + 1.0) * 0.5);
-                            float _14611 = floor((_14607 + 127.0) * 0.0078125);
-                            float _14615 = floor((esia_v3.z - 1.0) * 0.5);
-                            float _14743 = floor(_14615 * 0.0625);
-                            uint _14748 = (esia_v1 + 1u) + uint(_14743);
-                            uint _14761 = max(uint(_226.gConv.z), 1u);
-                            vec4 _14795 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14748 % _14761) * 24u) + uint(_14615 - (_14743 * 16.0))), int(_14748 / _14761), 0).xy, 0);
-                            vec2 _14627 = _14795.xy;
-                            vec2 _14629 = _14795.zw;
-                            bvec2 _14630 = bvec2(((esia_v3.z - 1.0) - (_14615 * 2.0)) < 0.5);
-                            vec2 _29036;
-                            if (_14603)
-                            {
-                                float _14803 = floor(0.0);
-                                uint _14808 = (esia_v1 + 1u) + uint(_14803);
-                                uint _14821 = max(uint(_226.gConv.z), 1u);
-                                _29036 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14808 % _14821) * 24u) + uint(_14803 * (-16.0))), int(_14808 / _14821), 0).xy, 0).xy;
-                            }
-                            else
-                            {
-                                _29036 = vec2(_14630.x ? _14627.x : _14629.x, _14630.y ? _14627.y : _14629.y);
-                            }
-                            vec2 _29035;
-                            float _29038;
-                            float _29041;
-                            _29041 = 1.0;
-                            _29038 = 1000000015047466219876688855040.0;
-                            _29035 = _29036;
-                            vec2 _29034;
-                            float _29037;
-                            float _29040;
-                            SPIRV_CROSS_LOOP
-                            for (float _29031 = 0.0; _29031 < 16.0; _29041 = _29040, _29038 = _29037, _29035 = _29034, _29031 += 1.0)
-                            {
-                                if (_29031 >= _14611)
-                                {
-                                    break;
-                                }
-                                _29040 = _29041;
-                                _29037 = _29038;
-                                _29034 = _29035;
-                                vec2 _32853;
-                                float _32855;
-                                float _32857;
-                                SPIRV_CROSS_LOOP
-                                for (float _29032 = 0.0; _29032 < 128.0; _29040 = _32857, _29037 = _32855, _29034 = _32853, _29032 += 1.0)
-                                {
-                                    float _14657 = (_29031 * 128.0) + _29032;
-                                    if (_14657 >= _14607)
-                                    {
-                                        break;
-                                    }
-                                    float _14863 = floor(_14657 * 0.0625);
-                                    uint _14868 = (esia_v1 + 1u) + uint(_14863);
-                                    uint _14881 = max(uint(_226.gConv.z), 1u);
-                                    vec4 _14915 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_14868 % _14881) * 24u) + uint(_14657 - (_14863 * 16.0))), int(_14868 / _14881), 0).xy, 0);
-                                    vec2 _14669 = _14915.xy;
-                                    vec2 _14926 = _29034 - _14669;
-                                    vec2 _14929 = _13733 - _14669;
-                                    vec2 _14942 = _14929 - (_14926 * clamp(dot(_14929, _14926) / max(dot(_14926, _14926), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _14945 = dot(_14942, _14942);
-                                    float _32959 = (_14945 < _29037) ? _14945 : _29037;
-                                    bool _14957 = _13733.y >= _14915.y;
-                                    bool _14962 = _13733.y < _29034.y;
-                                    bool _14973 = (_14926.x * _14929.y) > (_14926.y * _14929.x);
-                                    float _29046;
-                                    if (((_14957 && _14962) && _14973) || (((!_14957) && (!_14962)) && (!_14973)))
-                                    {
-                                        _29046 = -_29040;
-                                    }
-                                    else
-                                    {
-                                        _29046 = _29040;
-                                    }
-                                    vec2 _14679 = _14915.xy;
-                                    if (((2.0 * _14657) + 1.0) < esia_v3.z)
-                                    {
-                                        vec2 _14688 = _14915.zw;
-                                        vec2 _15002 = _14679 - _14688;
-                                        vec2 _15005 = _13733 - _14688;
-                                        vec2 _15018 = _15005 - (_15002 * clamp(dot(_15005, _15002) / max(dot(_15002, _15002), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                        float _15021 = dot(_15018, _15018);
-                                        bool _15033 = _13733.y >= _14915.w;
-                                        bool _15038 = _13733.y < _14915.y;
-                                        bool _15049 = (_15002.x * _15005.y) > (_15002.y * _15005.x);
-                                        float _29050;
-                                        if (((_15033 && _15038) && _15049) || (((!_15033) && (!_15038)) && (!_15049)))
-                                        {
-                                            _29050 = -_29046;
-                                        }
-                                        else
-                                        {
-                                            _29050 = _29046;
-                                        }
-                                        _32857 = _29050;
-                                        _32855 = (_15021 < _32959) ? _15021 : _32959;
-                                        _32853 = _14915.zw;
-                                    }
-                                    else
-                                    {
-                                        _32857 = _29046;
-                                        _32855 = _32959;
-                                        _32853 = _14679;
-                                    }
-                                }
-                            }
-                            float _14709 = sqrt(_29038);
-                            if (_14603)
-                            {
-                                _29059 = _14709 - esia_v3.x;
-                                break;
-                            }
-                            _29059 = (_29041 * _14709) - esia_v3.x;
-                            break;
-                        } while(false);
-                        _29061 = _29059;
+                        float _14836 = esia_v5.y * clamp((_14813 - _14816) / max(0.60000002384185791015625 * _14816, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                        _30461 = _14836;
+                        _30460 = _14816 * (1.0 + (0.60000002384185791015625 * _14836));
                     }
                     else
                     {
-                        float _29062;
-                        if (esia_v7.z == 1u)
+                        _30461 = esia_v5.y;
+                        _30460 = _14822;
+                    }
+                    vec2 _14865 = (abs((esia_v0 + vec2(0.5, 0.0)) - _14190) - _14199) + vec2(_30460);
+                    vec2 _14867 = max(_14865, vec2(0.0));
+                    float _30462;
+                    SPIRV_CROSS_BRANCH
+                    if ((_14867.x > 0.0) && (_14867.y > 0.0))
+                    {
+                        float _30463;
+                        if ((_30461 > 0.001000000047497451305389404296875) && (_30460 > 9.9999997473787516355514526367188e-05))
                         {
-                            vec2 _14350 = _13733 - _14316;
-                            float _29030;
-                            do
-                            {
-                                if (esia_v5.w >= 6.282185077667236328125)
-                                {
-                                    _29030 = abs(length(_14350) - esia_v3.x) - esia_v3.y;
-                                    break;
-                                }
-                                float _15092 = esia_v5.z + (esia_v5.w * 0.5);
-                                float _15094 = cos(_15092);
-                                float _15096 = sin(_15092);
-                                float _15105 = dot(_14350, vec2(-_15096, _15094));
-                                float _15108 = dot(_14350, vec2(_15094, _15096));
-                                vec2 _15109 = vec2(_15105, _15108);
-                                float _15112 = abs(_15105);
-                                _15109.x = _15112;
-                                float _15115 = esia_v5.w * 0.5;
-                                float _15117 = sin(_15115);
-                                float _15119 = cos(_15115);
-                                _29030 = (((_15119 * _15112) > (_15117 * _15108)) ? length(_15109 - (vec2(_15117, _15119) * esia_v3.x)) : abs(length(_15109) - esia_v3.x)) - esia_v3.y;
-                                break;
-                            } while(false);
-                            _29062 = _29030;
+                            float _14884 = 2.0 + (2.0 * _30461);
+                            vec2 _14889 = _14867 / vec2(max(_30460, 9.9999997473787516355514526367188e-05));
+                            _30463 = pow(pow(_14889.x, _14884) + pow(_14889.y, _14884), 1.0 / _14884) * _30460;
                         }
                         else
                         {
-                            float _29063;
-                            if (esia_v7.z == 2u)
-                            {
-                                vec2 _15155 = _13733 - _28171.xy;
-                                vec2 _15158 = _28171.zw - _28171.xy;
-                                _29063 = length(_15155 - (_15158 * clamp(dot(_15155, _15158) / max(dot(_15158, _15158), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
-                            }
-                            else
-                            {
-                                vec2 _14377 = _13733 - _14316;
-                                float _15211 = min(_14325.x, _14325.y);
-                                float _15214 = min((_14377.x > 0.0) ? ((_14377.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_14377.y > 0.0) ? esia_v3.w : esia_v3.x), _15211);
-                                float _15220 = _15214 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                float _29015;
-                                float _29016;
-                                if (_15220 > _15211)
-                                {
-                                    float _15234 = esia_v5.y * clamp((_15211 - _15214) / max(0.60000002384185791015625 * _15214, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                    _29016 = _15234;
-                                    _29015 = _15214 * (1.0 + (0.60000002384185791015625 * _15234));
-                                }
-                                else
-                                {
-                                    _29016 = esia_v5.y;
-                                    _29015 = _15220;
-                                }
-                                vec2 _15247 = (abs(_14377) - _14325) + vec2(_29015);
-                                vec2 _15249 = max(_15247, vec2(0.0));
-                                float _29017;
-                                SPIRV_CROSS_BRANCH
-                                if ((_15249.x > 0.0) && (_15249.y > 0.0))
-                                {
-                                    float _29018;
-                                    if ((_29016 > 0.001000000047497451305389404296875) && (_29015 > 9.9999997473787516355514526367188e-05))
-                                    {
-                                        float _15266 = 2.0 + (2.0 * _29016);
-                                        vec2 _15271 = _15249 / vec2(max(_29015, 9.9999997473787516355514526367188e-05));
-                                        _29018 = pow(pow(_15271.x, _15266) + pow(_15271.y, _15266), 1.0 / _15266) * _29015;
-                                    }
-                                    else
-                                    {
-                                        _29018 = length(_15249);
-                                    }
-                                    _29017 = _29018;
-                                }
-                                else
-                                {
-                                    _29017 = max(_15249.x, _15249.y);
-                                }
-                                float _15306 = (min(max(_15247.x, _15247.y), 0.0) + _29017) - _29015;
-                                float _29064;
-                                SPIRV_CROSS_BRANCH
-                                if ((esia_v7.x & _1828) != 0u)
-                                {
-                                    vec2 _14405 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                                    vec2 _14408 = _13733 - ((_28171.xy + _28171.zw) * 0.5);
-                                    float _15342 = min(_14405.x, _14405.y);
-                                    float _15345 = min((_14408.x > 0.0) ? ((_14408.y > 0.0) ? _13198.x : _13198.x) : ((_14408.y > 0.0) ? _13198.x : _13198.x), _15342);
-                                    float _15351 = _15345 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                    float _29021;
-                                    float _29022;
-                                    if (_15351 > _15342)
-                                    {
-                                        float _15365 = esia_v5.y * clamp((_15342 - _15345) / max(0.60000002384185791015625 * _15345, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                        _29022 = _15365;
-                                        _29021 = _15345 * (1.0 + (0.60000002384185791015625 * _15365));
-                                    }
-                                    else
-                                    {
-                                        _29022 = esia_v5.y;
-                                        _29021 = _15351;
-                                    }
-                                    vec2 _15378 = (abs(_14408) - _14405) + vec2(_29021);
-                                    vec2 _15380 = max(_15378, vec2(0.0));
-                                    float _29023;
-                                    SPIRV_CROSS_BRANCH
-                                    if ((_15380.x > 0.0) && (_15380.y > 0.0))
-                                    {
-                                        float _29024;
-                                        if ((_29022 > 0.001000000047497451305389404296875) && (_29021 > 9.9999997473787516355514526367188e-05))
-                                        {
-                                            float _15397 = 2.0 + (2.0 * _29022);
-                                            vec2 _15402 = _15380 / vec2(max(_29021, 9.9999997473787516355514526367188e-05));
-                                            _29024 = pow(pow(_15402.x, _15397) + pow(_15402.y, _15397), 1.0 / _15397) * _29021;
-                                        }
-                                        else
-                                        {
-                                            _29024 = length(_15380);
-                                        }
-                                        _29023 = _29024;
-                                    }
-                                    else
-                                    {
-                                        _29023 = max(_15380.x, _15380.y);
-                                    }
-                                    float _15437 = (min(max(_15378.x, _15378.y), 0.0) + _29023) - _29021;
-                                    float _15442 = max(_13198.y, 9.9999997473787516355514526367188e-05);
-                                    float _15451 = max(_15442 - abs(_15306 - _15437), 0.0) / _15442;
-                                    _29064 = min(_15306, _15437) - (((_15451 * _15451) * _15442) * 0.25);
-                                }
-                                else
-                                {
-                                    _29064 = _15306;
-                                }
-                                _29063 = _29064;
-                            }
-                            _29062 = _29063;
+                            _30463 = length(_14867);
                         }
-                        _29061 = _29062;
-                    }
-                    _29060 = _29061;
-                }
-                vec2 _13737 = esia_v0 - vec2(0.5, 0.0);
-                vec2 _15506 = (esia_v2.xy + esia_v2.zw) * 0.5;
-                vec2 _15515 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                float _29110;
-                SPIRV_CROSS_BRANCH
-                if ((esia_v7.x & _1742) != 0u)
-                {
-                    float _15632 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-                    vec4 _15666 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_13737, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-                    float _15690 = (_15666.w - 0.5) * esia_v3.y;
-                    vec2 _15731 = abs(_13737 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _15632), vec2(0.0));
-                    _29110 = max((-mix((max(min(_15666.x, _15666.y), min(max(_15666.x, _15666.y), _15666.z)) - 0.5) * esia_v3.x, _15690, clamp(abs(_15690) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _15632, length(max(_15731, vec2(0.0))) + min(max(_15731.x, _15731.y), 0.0)) - esia_v5.w;
-                }
-                else
-                {
-                    float _29111;
-                    if ((esia_v7.x & _1757) != 0u)
-                    {
-                        float _29109;
-                        do
-                        {
-                            bool _15793 = esia_v3.w > 0.5;
-                            float _15797 = floor((esia_v3.z + 1.0) * 0.5);
-                            float _15801 = floor((_15797 + 127.0) * 0.0078125);
-                            float _15805 = floor((esia_v3.z - 1.0) * 0.5);
-                            float _15933 = floor(_15805 * 0.0625);
-                            uint _15938 = (esia_v1 + 1u) + uint(_15933);
-                            uint _15951 = max(uint(_226.gConv.z), 1u);
-                            vec4 _15985 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_15938 % _15951) * 24u) + uint(_15805 - (_15933 * 16.0))), int(_15938 / _15951), 0).xy, 0);
-                            vec2 _15817 = _15985.xy;
-                            vec2 _15819 = _15985.zw;
-                            bvec2 _15820 = bvec2(((esia_v3.z - 1.0) - (_15805 * 2.0)) < 0.5);
-                            vec2 _29086;
-                            if (_15793)
-                            {
-                                float _15993 = floor(0.0);
-                                uint _15998 = (esia_v1 + 1u) + uint(_15993);
-                                uint _16011 = max(uint(_226.gConv.z), 1u);
-                                _29086 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_15998 % _16011) * 24u) + uint(_15993 * (-16.0))), int(_15998 / _16011), 0).xy, 0).xy;
-                            }
-                            else
-                            {
-                                _29086 = vec2(_15820.x ? _15817.x : _15819.x, _15820.y ? _15817.y : _15819.y);
-                            }
-                            vec2 _29085;
-                            float _29088;
-                            float _29091;
-                            _29091 = 1.0;
-                            _29088 = 1000000015047466219876688855040.0;
-                            _29085 = _29086;
-                            vec2 _29084;
-                            float _29087;
-                            float _29090;
-                            SPIRV_CROSS_LOOP
-                            for (float _29081 = 0.0; _29081 < 16.0; _29091 = _29090, _29088 = _29087, _29085 = _29084, _29081 += 1.0)
-                            {
-                                if (_29081 >= _15801)
-                                {
-                                    break;
-                                }
-                                _29090 = _29091;
-                                _29087 = _29088;
-                                _29084 = _29085;
-                                vec2 _32864;
-                                float _32866;
-                                float _32868;
-                                SPIRV_CROSS_LOOP
-                                for (float _29082 = 0.0; _29082 < 128.0; _29090 = _32868, _29087 = _32866, _29084 = _32864, _29082 += 1.0)
-                                {
-                                    float _15847 = (_29081 * 128.0) + _29082;
-                                    if (_15847 >= _15797)
-                                    {
-                                        break;
-                                    }
-                                    float _16053 = floor(_15847 * 0.0625);
-                                    uint _16058 = (esia_v1 + 1u) + uint(_16053);
-                                    uint _16071 = max(uint(_226.gConv.z), 1u);
-                                    vec4 _16105 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_16058 % _16071) * 24u) + uint(_15847 - (_16053 * 16.0))), int(_16058 / _16071), 0).xy, 0);
-                                    vec2 _15859 = _16105.xy;
-                                    vec2 _16116 = _29084 - _15859;
-                                    vec2 _16119 = _13737 - _15859;
-                                    vec2 _16132 = _16119 - (_16116 * clamp(dot(_16119, _16116) / max(dot(_16116, _16116), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _16135 = dot(_16132, _16132);
-                                    float _32961 = (_16135 < _29087) ? _16135 : _29087;
-                                    bool _16147 = _13737.y >= _16105.y;
-                                    bool _16152 = _13737.y < _29084.y;
-                                    bool _16163 = (_16116.x * _16119.y) > (_16116.y * _16119.x);
-                                    float _29096;
-                                    if (((_16147 && _16152) && _16163) || (((!_16147) && (!_16152)) && (!_16163)))
-                                    {
-                                        _29096 = -_29090;
-                                    }
-                                    else
-                                    {
-                                        _29096 = _29090;
-                                    }
-                                    vec2 _15869 = _16105.xy;
-                                    if (((2.0 * _15847) + 1.0) < esia_v3.z)
-                                    {
-                                        vec2 _15878 = _16105.zw;
-                                        vec2 _16192 = _15869 - _15878;
-                                        vec2 _16195 = _13737 - _15878;
-                                        vec2 _16208 = _16195 - (_16192 * clamp(dot(_16195, _16192) / max(dot(_16192, _16192), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                        float _16211 = dot(_16208, _16208);
-                                        bool _16223 = _13737.y >= _16105.w;
-                                        bool _16228 = _13737.y < _16105.y;
-                                        bool _16239 = (_16192.x * _16195.y) > (_16192.y * _16195.x);
-                                        float _29100;
-                                        if (((_16223 && _16228) && _16239) || (((!_16223) && (!_16228)) && (!_16239)))
-                                        {
-                                            _29100 = -_29096;
-                                        }
-                                        else
-                                        {
-                                            _29100 = _29096;
-                                        }
-                                        _32868 = _29100;
-                                        _32866 = (_16211 < _32961) ? _16211 : _32961;
-                                        _32864 = _16105.zw;
-                                    }
-                                    else
-                                    {
-                                        _32868 = _29096;
-                                        _32866 = _32961;
-                                        _32864 = _15869;
-                                    }
-                                }
-                            }
-                            float _15899 = sqrt(_29088);
-                            if (_15793)
-                            {
-                                _29109 = _15899 - esia_v3.x;
-                                break;
-                            }
-                            _29109 = (_29091 * _15899) - esia_v3.x;
-                            break;
-                        } while(false);
-                        _29111 = _29109;
+                        _30462 = _30463;
                     }
                     else
                     {
-                        float _29112;
-                        if (esia_v7.z == 1u)
+                        _30462 = max(_14867.x, _14867.y);
+                    }
+                    vec2 _14944 = (abs((esia_v0 - vec2(0.5, 0.0)) - _14190) - _14199) + vec2(_30460);
+                    vec2 _14946 = max(_14944, vec2(0.0));
+                    float _30464;
+                    SPIRV_CROSS_BRANCH
+                    if ((_14946.x > 0.0) && (_14946.y > 0.0))
+                    {
+                        float _30465;
+                        if ((_30461 > 0.001000000047497451305389404296875) && (_30460 > 9.9999997473787516355514526367188e-05))
                         {
-                            vec2 _15540 = _13737 - _15506;
-                            float _29080;
-                            do
-                            {
-                                if (esia_v5.w >= 6.282185077667236328125)
-                                {
-                                    _29080 = abs(length(_15540) - esia_v3.x) - esia_v3.y;
-                                    break;
-                                }
-                                float _16282 = esia_v5.z + (esia_v5.w * 0.5);
-                                float _16284 = cos(_16282);
-                                float _16286 = sin(_16282);
-                                float _16295 = dot(_15540, vec2(-_16286, _16284));
-                                float _16298 = dot(_15540, vec2(_16284, _16286));
-                                vec2 _16299 = vec2(_16295, _16298);
-                                float _16302 = abs(_16295);
-                                _16299.x = _16302;
-                                float _16305 = esia_v5.w * 0.5;
-                                float _16307 = sin(_16305);
-                                float _16309 = cos(_16305);
-                                _29080 = (((_16309 * _16302) > (_16307 * _16298)) ? length(_16299 - (vec2(_16307, _16309) * esia_v3.x)) : abs(length(_16299) - esia_v3.x)) - esia_v3.y;
-                                break;
-                            } while(false);
-                            _29112 = _29080;
+                            float _14963 = 2.0 + (2.0 * _30461);
+                            vec2 _14968 = _14946 / vec2(max(_30460, 9.9999997473787516355514526367188e-05));
+                            _30465 = pow(pow(_14968.x, _14963) + pow(_14968.y, _14963), 1.0 / _14963) * _30460;
                         }
                         else
                         {
-                            float _29113;
-                            if (esia_v7.z == 2u)
-                            {
-                                vec2 _16345 = _13737 - _28171.xy;
-                                vec2 _16348 = _28171.zw - _28171.xy;
-                                _29113 = length(_16345 - (_16348 * clamp(dot(_16345, _16348) / max(dot(_16348, _16348), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
-                            }
-                            else
-                            {
-                                vec2 _15567 = _13737 - _15506;
-                                float _16401 = min(_15515.x, _15515.y);
-                                float _16404 = min((_15567.x > 0.0) ? ((_15567.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_15567.y > 0.0) ? esia_v3.w : esia_v3.x), _16401);
-                                float _16410 = _16404 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                float _29065;
-                                float _29066;
-                                if (_16410 > _16401)
-                                {
-                                    float _16424 = esia_v5.y * clamp((_16401 - _16404) / max(0.60000002384185791015625 * _16404, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                    _29066 = _16424;
-                                    _29065 = _16404 * (1.0 + (0.60000002384185791015625 * _16424));
-                                }
-                                else
-                                {
-                                    _29066 = esia_v5.y;
-                                    _29065 = _16410;
-                                }
-                                vec2 _16437 = (abs(_15567) - _15515) + vec2(_29065);
-                                vec2 _16439 = max(_16437, vec2(0.0));
-                                float _29067;
-                                SPIRV_CROSS_BRANCH
-                                if ((_16439.x > 0.0) && (_16439.y > 0.0))
-                                {
-                                    float _29068;
-                                    if ((_29066 > 0.001000000047497451305389404296875) && (_29065 > 9.9999997473787516355514526367188e-05))
-                                    {
-                                        float _16456 = 2.0 + (2.0 * _29066);
-                                        vec2 _16461 = _16439 / vec2(max(_29065, 9.9999997473787516355514526367188e-05));
-                                        _29068 = pow(pow(_16461.x, _16456) + pow(_16461.y, _16456), 1.0 / _16456) * _29065;
-                                    }
-                                    else
-                                    {
-                                        _29068 = length(_16439);
-                                    }
-                                    _29067 = _29068;
-                                }
-                                else
-                                {
-                                    _29067 = max(_16439.x, _16439.y);
-                                }
-                                float _16496 = (min(max(_16437.x, _16437.y), 0.0) + _29067) - _29065;
-                                float _29114;
-                                SPIRV_CROSS_BRANCH
-                                if ((esia_v7.x & _1828) != 0u)
-                                {
-                                    vec2 _15595 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                                    vec2 _15598 = _13737 - ((_28171.xy + _28171.zw) * 0.5);
-                                    float _16532 = min(_15595.x, _15595.y);
-                                    float _16535 = min((_15598.x > 0.0) ? ((_15598.y > 0.0) ? _13198.x : _13198.x) : ((_15598.y > 0.0) ? _13198.x : _13198.x), _16532);
-                                    float _16541 = _16535 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                    float _29071;
-                                    float _29072;
-                                    if (_16541 > _16532)
-                                    {
-                                        float _16555 = esia_v5.y * clamp((_16532 - _16535) / max(0.60000002384185791015625 * _16535, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                        _29072 = _16555;
-                                        _29071 = _16535 * (1.0 + (0.60000002384185791015625 * _16555));
-                                    }
-                                    else
-                                    {
-                                        _29072 = esia_v5.y;
-                                        _29071 = _16541;
-                                    }
-                                    vec2 _16568 = (abs(_15598) - _15595) + vec2(_29071);
-                                    vec2 _16570 = max(_16568, vec2(0.0));
-                                    float _29073;
-                                    SPIRV_CROSS_BRANCH
-                                    if ((_16570.x > 0.0) && (_16570.y > 0.0))
-                                    {
-                                        float _29074;
-                                        if ((_29072 > 0.001000000047497451305389404296875) && (_29071 > 9.9999997473787516355514526367188e-05))
-                                        {
-                                            float _16587 = 2.0 + (2.0 * _29072);
-                                            vec2 _16592 = _16570 / vec2(max(_29071, 9.9999997473787516355514526367188e-05));
-                                            _29074 = pow(pow(_16592.x, _16587) + pow(_16592.y, _16587), 1.0 / _16587) * _29071;
-                                        }
-                                        else
-                                        {
-                                            _29074 = length(_16570);
-                                        }
-                                        _29073 = _29074;
-                                    }
-                                    else
-                                    {
-                                        _29073 = max(_16570.x, _16570.y);
-                                    }
-                                    float _16627 = (min(max(_16568.x, _16568.y), 0.0) + _29073) - _29071;
-                                    float _16632 = max(_13198.y, 9.9999997473787516355514526367188e-05);
-                                    float _16641 = max(_16632 - abs(_16496 - _16627), 0.0) / _16632;
-                                    _29114 = min(_16496, _16627) - (((_16641 * _16641) * _16632) * 0.25);
-                                }
-                                else
-                                {
-                                    _29114 = _16496;
-                                }
-                                _29113 = _29114;
-                            }
-                            _29112 = _29113;
+                            _30465 = length(_14946);
                         }
-                        _29111 = _29112;
-                    }
-                    _29110 = _29111;
-                }
-                vec2 _13742 = esia_v0 + vec2(0.0, 0.5);
-                vec2 _16696 = (esia_v2.xy + esia_v2.zw) * 0.5;
-                vec2 _16705 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                float _29160;
-                SPIRV_CROSS_BRANCH
-                if ((esia_v7.x & _1742) != 0u)
-                {
-                    float _16822 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-                    vec4 _16856 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_13742, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-                    float _16880 = (_16856.w - 0.5) * esia_v3.y;
-                    vec2 _16921 = abs(_13742 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _16822), vec2(0.0));
-                    _29160 = max((-mix((max(min(_16856.x, _16856.y), min(max(_16856.x, _16856.y), _16856.z)) - 0.5) * esia_v3.x, _16880, clamp(abs(_16880) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _16822, length(max(_16921, vec2(0.0))) + min(max(_16921.x, _16921.y), 0.0)) - esia_v5.w;
-                }
-                else
-                {
-                    float _29161;
-                    if ((esia_v7.x & _1757) != 0u)
-                    {
-                        float _29159;
-                        do
-                        {
-                            bool _16983 = esia_v3.w > 0.5;
-                            float _16987 = floor((esia_v3.z + 1.0) * 0.5);
-                            float _16991 = floor((_16987 + 127.0) * 0.0078125);
-                            float _16995 = floor((esia_v3.z - 1.0) * 0.5);
-                            float _17123 = floor(_16995 * 0.0625);
-                            uint _17128 = (esia_v1 + 1u) + uint(_17123);
-                            uint _17141 = max(uint(_226.gConv.z), 1u);
-                            vec4 _17175 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_17128 % _17141) * 24u) + uint(_16995 - (_17123 * 16.0))), int(_17128 / _17141), 0).xy, 0);
-                            vec2 _17007 = _17175.xy;
-                            vec2 _17009 = _17175.zw;
-                            bvec2 _17010 = bvec2(((esia_v3.z - 1.0) - (_16995 * 2.0)) < 0.5);
-                            vec2 _29136;
-                            if (_16983)
-                            {
-                                float _17183 = floor(0.0);
-                                uint _17188 = (esia_v1 + 1u) + uint(_17183);
-                                uint _17201 = max(uint(_226.gConv.z), 1u);
-                                _29136 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_17188 % _17201) * 24u) + uint(_17183 * (-16.0))), int(_17188 / _17201), 0).xy, 0).xy;
-                            }
-                            else
-                            {
-                                _29136 = vec2(_17010.x ? _17007.x : _17009.x, _17010.y ? _17007.y : _17009.y);
-                            }
-                            vec2 _29135;
-                            float _29138;
-                            float _29141;
-                            _29141 = 1.0;
-                            _29138 = 1000000015047466219876688855040.0;
-                            _29135 = _29136;
-                            vec2 _29134;
-                            float _29137;
-                            float _29140;
-                            SPIRV_CROSS_LOOP
-                            for (float _29131 = 0.0; _29131 < 16.0; _29141 = _29140, _29138 = _29137, _29135 = _29134, _29131 += 1.0)
-                            {
-                                if (_29131 >= _16991)
-                                {
-                                    break;
-                                }
-                                _29140 = _29141;
-                                _29137 = _29138;
-                                _29134 = _29135;
-                                vec2 _32875;
-                                float _32877;
-                                float _32879;
-                                SPIRV_CROSS_LOOP
-                                for (float _29132 = 0.0; _29132 < 128.0; _29140 = _32879, _29137 = _32877, _29134 = _32875, _29132 += 1.0)
-                                {
-                                    float _17037 = (_29131 * 128.0) + _29132;
-                                    if (_17037 >= _16987)
-                                    {
-                                        break;
-                                    }
-                                    float _17243 = floor(_17037 * 0.0625);
-                                    uint _17248 = (esia_v1 + 1u) + uint(_17243);
-                                    uint _17261 = max(uint(_226.gConv.z), 1u);
-                                    vec4 _17295 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_17248 % _17261) * 24u) + uint(_17037 - (_17243 * 16.0))), int(_17248 / _17261), 0).xy, 0);
-                                    vec2 _17049 = _17295.xy;
-                                    vec2 _17306 = _29134 - _17049;
-                                    vec2 _17309 = _13742 - _17049;
-                                    vec2 _17322 = _17309 - (_17306 * clamp(dot(_17309, _17306) / max(dot(_17306, _17306), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _17325 = dot(_17322, _17322);
-                                    float _32963 = (_17325 < _29137) ? _17325 : _29137;
-                                    bool _17337 = _13742.y >= _17295.y;
-                                    bool _17342 = _13742.y < _29134.y;
-                                    bool _17353 = (_17306.x * _17309.y) > (_17306.y * _17309.x);
-                                    float _29146;
-                                    if (((_17337 && _17342) && _17353) || (((!_17337) && (!_17342)) && (!_17353)))
-                                    {
-                                        _29146 = -_29140;
-                                    }
-                                    else
-                                    {
-                                        _29146 = _29140;
-                                    }
-                                    vec2 _17059 = _17295.xy;
-                                    if (((2.0 * _17037) + 1.0) < esia_v3.z)
-                                    {
-                                        vec2 _17068 = _17295.zw;
-                                        vec2 _17382 = _17059 - _17068;
-                                        vec2 _17385 = _13742 - _17068;
-                                        vec2 _17398 = _17385 - (_17382 * clamp(dot(_17385, _17382) / max(dot(_17382, _17382), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                        float _17401 = dot(_17398, _17398);
-                                        bool _17413 = _13742.y >= _17295.w;
-                                        bool _17418 = _13742.y < _17295.y;
-                                        bool _17429 = (_17382.x * _17385.y) > (_17382.y * _17385.x);
-                                        float _29150;
-                                        if (((_17413 && _17418) && _17429) || (((!_17413) && (!_17418)) && (!_17429)))
-                                        {
-                                            _29150 = -_29146;
-                                        }
-                                        else
-                                        {
-                                            _29150 = _29146;
-                                        }
-                                        _32879 = _29150;
-                                        _32877 = (_17401 < _32963) ? _17401 : _32963;
-                                        _32875 = _17295.zw;
-                                    }
-                                    else
-                                    {
-                                        _32879 = _29146;
-                                        _32877 = _32963;
-                                        _32875 = _17059;
-                                    }
-                                }
-                            }
-                            float _17089 = sqrt(_29138);
-                            if (_16983)
-                            {
-                                _29159 = _17089 - esia_v3.x;
-                                break;
-                            }
-                            _29159 = (_29141 * _17089) - esia_v3.x;
-                            break;
-                        } while(false);
-                        _29161 = _29159;
+                        _30464 = _30465;
                     }
                     else
                     {
-                        float _29162;
-                        if (esia_v7.z == 1u)
+                        _30464 = max(_14946.x, _14946.y);
+                    }
+                    vec2 _15023 = (abs((esia_v0 + vec2(0.0, 0.5)) - _14190) - _14199) + vec2(_30460);
+                    vec2 _15025 = max(_15023, vec2(0.0));
+                    float _30608;
+                    SPIRV_CROSS_BRANCH
+                    if ((_15025.x > 0.0) && (_15025.y > 0.0))
+                    {
+                        float _30609;
+                        if ((_30461 > 0.001000000047497451305389404296875) && (_30460 > 9.9999997473787516355514526367188e-05))
                         {
-                            vec2 _16730 = _13742 - _16696;
-                            float _29130;
-                            do
-                            {
-                                if (esia_v5.w >= 6.282185077667236328125)
-                                {
-                                    _29130 = abs(length(_16730) - esia_v3.x) - esia_v3.y;
-                                    break;
-                                }
-                                float _17472 = esia_v5.z + (esia_v5.w * 0.5);
-                                float _17474 = cos(_17472);
-                                float _17476 = sin(_17472);
-                                float _17485 = dot(_16730, vec2(-_17476, _17474));
-                                float _17488 = dot(_16730, vec2(_17474, _17476));
-                                vec2 _17489 = vec2(_17485, _17488);
-                                float _17492 = abs(_17485);
-                                _17489.x = _17492;
-                                float _17495 = esia_v5.w * 0.5;
-                                float _17497 = sin(_17495);
-                                float _17499 = cos(_17495);
-                                _29130 = (((_17499 * _17492) > (_17497 * _17488)) ? length(_17489 - (vec2(_17497, _17499) * esia_v3.x)) : abs(length(_17489) - esia_v3.x)) - esia_v3.y;
-                                break;
-                            } while(false);
-                            _29162 = _29130;
+                            float _15042 = 2.0 + (2.0 * _30461);
+                            vec2 _15047 = _15025 / vec2(max(_30460, 9.9999997473787516355514526367188e-05));
+                            _30609 = pow(pow(_15047.x, _15042) + pow(_15047.y, _15042), 1.0 / _15042) * _30460;
                         }
                         else
                         {
-                            float _29163;
-                            if (esia_v7.z == 2u)
-                            {
-                                vec2 _17535 = _13742 - _28171.xy;
-                                vec2 _17538 = _28171.zw - _28171.xy;
-                                _29163 = length(_17535 - (_17538 * clamp(dot(_17535, _17538) / max(dot(_17538, _17538), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
-                            }
-                            else
-                            {
-                                vec2 _16757 = _13742 - _16696;
-                                float _17591 = min(_16705.x, _16705.y);
-                                float _17594 = min((_16757.x > 0.0) ? ((_16757.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_16757.y > 0.0) ? esia_v3.w : esia_v3.x), _17591);
-                                float _17600 = _17594 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                float _29115;
-                                float _29116;
-                                if (_17600 > _17591)
-                                {
-                                    float _17614 = esia_v5.y * clamp((_17591 - _17594) / max(0.60000002384185791015625 * _17594, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                    _29116 = _17614;
-                                    _29115 = _17594 * (1.0 + (0.60000002384185791015625 * _17614));
-                                }
-                                else
-                                {
-                                    _29116 = esia_v5.y;
-                                    _29115 = _17600;
-                                }
-                                vec2 _17627 = (abs(_16757) - _16705) + vec2(_29115);
-                                vec2 _17629 = max(_17627, vec2(0.0));
-                                float _29117;
-                                SPIRV_CROSS_BRANCH
-                                if ((_17629.x > 0.0) && (_17629.y > 0.0))
-                                {
-                                    float _29118;
-                                    if ((_29116 > 0.001000000047497451305389404296875) && (_29115 > 9.9999997473787516355514526367188e-05))
-                                    {
-                                        float _17646 = 2.0 + (2.0 * _29116);
-                                        vec2 _17651 = _17629 / vec2(max(_29115, 9.9999997473787516355514526367188e-05));
-                                        _29118 = pow(pow(_17651.x, _17646) + pow(_17651.y, _17646), 1.0 / _17646) * _29115;
-                                    }
-                                    else
-                                    {
-                                        _29118 = length(_17629);
-                                    }
-                                    _29117 = _29118;
-                                }
-                                else
-                                {
-                                    _29117 = max(_17629.x, _17629.y);
-                                }
-                                float _17686 = (min(max(_17627.x, _17627.y), 0.0) + _29117) - _29115;
-                                float _29164;
-                                SPIRV_CROSS_BRANCH
-                                if ((esia_v7.x & _1828) != 0u)
-                                {
-                                    vec2 _16785 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                                    vec2 _16788 = _13742 - ((_28171.xy + _28171.zw) * 0.5);
-                                    float _17722 = min(_16785.x, _16785.y);
-                                    float _17725 = min((_16788.x > 0.0) ? ((_16788.y > 0.0) ? _13198.x : _13198.x) : ((_16788.y > 0.0) ? _13198.x : _13198.x), _17722);
-                                    float _17731 = _17725 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                    float _29121;
-                                    float _29122;
-                                    if (_17731 > _17722)
-                                    {
-                                        float _17745 = esia_v5.y * clamp((_17722 - _17725) / max(0.60000002384185791015625 * _17725, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                        _29122 = _17745;
-                                        _29121 = _17725 * (1.0 + (0.60000002384185791015625 * _17745));
-                                    }
-                                    else
-                                    {
-                                        _29122 = esia_v5.y;
-                                        _29121 = _17731;
-                                    }
-                                    vec2 _17758 = (abs(_16788) - _16785) + vec2(_29121);
-                                    vec2 _17760 = max(_17758, vec2(0.0));
-                                    float _29123;
-                                    SPIRV_CROSS_BRANCH
-                                    if ((_17760.x > 0.0) && (_17760.y > 0.0))
-                                    {
-                                        float _29124;
-                                        if ((_29122 > 0.001000000047497451305389404296875) && (_29121 > 9.9999997473787516355514526367188e-05))
-                                        {
-                                            float _17777 = 2.0 + (2.0 * _29122);
-                                            vec2 _17782 = _17760 / vec2(max(_29121, 9.9999997473787516355514526367188e-05));
-                                            _29124 = pow(pow(_17782.x, _17777) + pow(_17782.y, _17777), 1.0 / _17777) * _29121;
-                                        }
-                                        else
-                                        {
-                                            _29124 = length(_17760);
-                                        }
-                                        _29123 = _29124;
-                                    }
-                                    else
-                                    {
-                                        _29123 = max(_17760.x, _17760.y);
-                                    }
-                                    float _17817 = (min(max(_17758.x, _17758.y), 0.0) + _29123) - _29121;
-                                    float _17822 = max(_13198.y, 9.9999997473787516355514526367188e-05);
-                                    float _17831 = max(_17822 - abs(_17686 - _17817), 0.0) / _17822;
-                                    _29164 = min(_17686, _17817) - (((_17831 * _17831) * _17822) * 0.25);
-                                }
-                                else
-                                {
-                                    _29164 = _17686;
-                                }
-                                _29163 = _29164;
-                            }
-                            _29162 = _29163;
+                            _30609 = length(_15025);
                         }
-                        _29161 = _29162;
-                    }
-                    _29160 = _29161;
-                }
-                vec2 _13746 = esia_v0 - vec2(0.0, 0.5);
-                vec2 _17886 = (esia_v2.xy + esia_v2.zw) * 0.5;
-                vec2 _17895 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                float _29210;
-                SPIRV_CROSS_BRANCH
-                if ((esia_v7.x & _1742) != 0u)
-                {
-                    float _18012 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-                    vec4 _18046 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_28165.xy, _28165.zw, (clamp(_13746, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-                    float _18070 = (_18046.w - 0.5) * esia_v3.y;
-                    vec2 _18111 = abs(_13746 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _18012), vec2(0.0));
-                    _29210 = max((-mix((max(min(_18046.x, _18046.y), min(max(_18046.x, _18046.y), _18046.z)) - 0.5) * esia_v3.x, _18070, clamp(abs(_18070) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _18012, length(max(_18111, vec2(0.0))) + min(max(_18111.x, _18111.y), 0.0)) - esia_v5.w;
-                }
-                else
-                {
-                    float _29211;
-                    if ((esia_v7.x & _1757) != 0u)
-                    {
-                        float _29209;
-                        do
-                        {
-                            bool _18173 = esia_v3.w > 0.5;
-                            float _18177 = floor((esia_v3.z + 1.0) * 0.5);
-                            float _18181 = floor((_18177 + 127.0) * 0.0078125);
-                            float _18185 = floor((esia_v3.z - 1.0) * 0.5);
-                            float _18313 = floor(_18185 * 0.0625);
-                            uint _18318 = (esia_v1 + 1u) + uint(_18313);
-                            uint _18331 = max(uint(_226.gConv.z), 1u);
-                            vec4 _18365 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18318 % _18331) * 24u) + uint(_18185 - (_18313 * 16.0))), int(_18318 / _18331), 0).xy, 0);
-                            vec2 _18197 = _18365.xy;
-                            vec2 _18199 = _18365.zw;
-                            bvec2 _18200 = bvec2(((esia_v3.z - 1.0) - (_18185 * 2.0)) < 0.5);
-                            vec2 _29186;
-                            if (_18173)
-                            {
-                                float _18373 = floor(0.0);
-                                uint _18378 = (esia_v1 + 1u) + uint(_18373);
-                                uint _18391 = max(uint(_226.gConv.z), 1u);
-                                _29186 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18378 % _18391) * 24u) + uint(_18373 * (-16.0))), int(_18378 / _18391), 0).xy, 0).xy;
-                            }
-                            else
-                            {
-                                _29186 = vec2(_18200.x ? _18197.x : _18199.x, _18200.y ? _18197.y : _18199.y);
-                            }
-                            vec2 _29185;
-                            float _29188;
-                            float _29191;
-                            _29191 = 1.0;
-                            _29188 = 1000000015047466219876688855040.0;
-                            _29185 = _29186;
-                            vec2 _29184;
-                            float _29187;
-                            float _29190;
-                            SPIRV_CROSS_LOOP
-                            for (float _29181 = 0.0; _29181 < 16.0; _29191 = _29190, _29188 = _29187, _29185 = _29184, _29181 += 1.0)
-                            {
-                                if (_29181 >= _18181)
-                                {
-                                    break;
-                                }
-                                _29190 = _29191;
-                                _29187 = _29188;
-                                _29184 = _29185;
-                                vec2 _32886;
-                                float _32888;
-                                float _32890;
-                                SPIRV_CROSS_LOOP
-                                for (float _29182 = 0.0; _29182 < 128.0; _29190 = _32890, _29187 = _32888, _29184 = _32886, _29182 += 1.0)
-                                {
-                                    float _18227 = (_29181 * 128.0) + _29182;
-                                    if (_18227 >= _18177)
-                                    {
-                                        break;
-                                    }
-                                    float _18433 = floor(_18227 * 0.0625);
-                                    uint _18438 = (esia_v1 + 1u) + uint(_18433);
-                                    uint _18451 = max(uint(_226.gConv.z), 1u);
-                                    vec4 _18485 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18438 % _18451) * 24u) + uint(_18227 - (_18433 * 16.0))), int(_18438 / _18451), 0).xy, 0);
-                                    vec2 _18239 = _18485.xy;
-                                    vec2 _18496 = _29184 - _18239;
-                                    vec2 _18499 = _13746 - _18239;
-                                    vec2 _18512 = _18499 - (_18496 * clamp(dot(_18499, _18496) / max(dot(_18496, _18496), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                    float _18515 = dot(_18512, _18512);
-                                    float _32965 = (_18515 < _29187) ? _18515 : _29187;
-                                    bool _18527 = _13746.y >= _18485.y;
-                                    bool _18532 = _13746.y < _29184.y;
-                                    bool _18543 = (_18496.x * _18499.y) > (_18496.y * _18499.x);
-                                    float _29196;
-                                    if (((_18527 && _18532) && _18543) || (((!_18527) && (!_18532)) && (!_18543)))
-                                    {
-                                        _29196 = -_29190;
-                                    }
-                                    else
-                                    {
-                                        _29196 = _29190;
-                                    }
-                                    vec2 _18249 = _18485.xy;
-                                    if (((2.0 * _18227) + 1.0) < esia_v3.z)
-                                    {
-                                        vec2 _18258 = _18485.zw;
-                                        vec2 _18572 = _18249 - _18258;
-                                        vec2 _18575 = _13746 - _18258;
-                                        vec2 _18588 = _18575 - (_18572 * clamp(dot(_18575, _18572) / max(dot(_18572, _18572), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                        float _18591 = dot(_18588, _18588);
-                                        bool _18603 = _13746.y >= _18485.w;
-                                        bool _18608 = _13746.y < _18485.y;
-                                        bool _18619 = (_18572.x * _18575.y) > (_18572.y * _18575.x);
-                                        float _29200;
-                                        if (((_18603 && _18608) && _18619) || (((!_18603) && (!_18608)) && (!_18619)))
-                                        {
-                                            _29200 = -_29196;
-                                        }
-                                        else
-                                        {
-                                            _29200 = _29196;
-                                        }
-                                        _32890 = _29200;
-                                        _32888 = (_18591 < _32965) ? _18591 : _32965;
-                                        _32886 = _18485.zw;
-                                    }
-                                    else
-                                    {
-                                        _32890 = _29196;
-                                        _32888 = _32965;
-                                        _32886 = _18249;
-                                    }
-                                }
-                            }
-                            float _18279 = sqrt(_29188);
-                            if (_18173)
-                            {
-                                _29209 = _18279 - esia_v3.x;
-                                break;
-                            }
-                            _29209 = (_29191 * _18279) - esia_v3.x;
-                            break;
-                        } while(false);
-                        _29211 = _29209;
+                        _30608 = _30609;
                     }
                     else
                     {
-                        float _29212;
-                        if (esia_v7.z == 1u)
+                        _30608 = max(_15025.x, _15025.y);
+                    }
+                    vec2 _15102 = (abs((esia_v0 - vec2(0.0, 0.5)) - _14190) - _14199) + vec2(_30460);
+                    vec2 _15104 = max(_15102, vec2(0.0));
+                    float _30610;
+                    SPIRV_CROSS_BRANCH
+                    if ((_15104.x > 0.0) && (_15104.y > 0.0))
+                    {
+                        float _30611;
+                        if ((_30461 > 0.001000000047497451305389404296875) && (_30460 > 9.9999997473787516355514526367188e-05))
                         {
-                            vec2 _17920 = _13746 - _17886;
-                            float _29180;
-                            do
-                            {
-                                if (esia_v5.w >= 6.282185077667236328125)
-                                {
-                                    _29180 = abs(length(_17920) - esia_v3.x) - esia_v3.y;
-                                    break;
-                                }
-                                float _18662 = esia_v5.z + (esia_v5.w * 0.5);
-                                float _18664 = cos(_18662);
-                                float _18666 = sin(_18662);
-                                float _18675 = dot(_17920, vec2(-_18666, _18664));
-                                float _18678 = dot(_17920, vec2(_18664, _18666));
-                                vec2 _18679 = vec2(_18675, _18678);
-                                float _18682 = abs(_18675);
-                                _18679.x = _18682;
-                                float _18685 = esia_v5.w * 0.5;
-                                float _18687 = sin(_18685);
-                                float _18689 = cos(_18685);
-                                _29180 = (((_18689 * _18682) > (_18687 * _18678)) ? length(_18679 - (vec2(_18687, _18689) * esia_v3.x)) : abs(length(_18679) - esia_v3.x)) - esia_v3.y;
-                                break;
-                            } while(false);
-                            _29212 = _29180;
+                            float _15121 = 2.0 + (2.0 * _30461);
+                            vec2 _15126 = _15104 / vec2(max(_30460, 9.9999997473787516355514526367188e-05));
+                            _30611 = pow(pow(_15126.x, _15121) + pow(_15126.y, _15121), 1.0 / _15121) * _30460;
                         }
                         else
                         {
-                            float _29213;
-                            if (esia_v7.z == 2u)
+                            _30611 = length(_15104);
+                        }
+                        _30610 = _30611;
+                    }
+                    else
+                    {
+                        _30610 = max(_15104.x, _15104.y);
+                    }
+                    _30616 = vec2(((min(max(_14865.x, _14865.y), 0.0) + _30462) - _30460) - ((min(max(_14944.x, _14944.y), 0.0) + _30464) - _30460), ((min(max(_15023.x, _15023.y), 0.0) + _30608) - _30460) - ((min(max(_15102.x, _15102.y), 0.0) + _30610) - _30460));
+                }
+                else
+                {
+                    vec2 _14243 = esia_v0 + vec2(0.5, 0.0);
+                    vec2 _15206 = (esia_v2.xy + esia_v2.zw) * 0.5;
+                    vec2 _15215 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                    float _30317;
+                    SPIRV_CROSS_BRANCH
+                    if ((esia_v7.x & _1785) != 0u)
+                    {
+                        float _15332 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+                        vec4 _15366 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_14243, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+                        float _15390 = (_15366.w - 0.5) * esia_v3.y;
+                        vec2 _15431 = abs(_14243 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _15332), vec2(0.0));
+                        _30317 = max((-mix((max(min(_15366.x, _15366.y), min(max(_15366.x, _15366.y), _15366.z)) - 0.5) * esia_v3.x, _15390, clamp(abs(_15390) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _15332, length(max(_15431, vec2(0.0))) + min(max(_15431.x, _15431.y), 0.0)) - esia_v5.w;
+                    }
+                    else
+                    {
+                        float _30318;
+                        if ((esia_v7.x & _1800) != 0u)
+                        {
+                            float _30316;
+                            do
                             {
-                                vec2 _18725 = _13746 - _28171.xy;
-                                vec2 _18728 = _28171.zw - _28171.xy;
-                                _29213 = length(_18725 - (_18728 * clamp(dot(_18725, _18728) / max(dot(_18728, _18728), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
-                            }
-                            else
-                            {
-                                vec2 _17947 = _13746 - _17886;
-                                float _18781 = min(_17895.x, _17895.y);
-                                float _18784 = min((_17947.x > 0.0) ? ((_17947.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_17947.y > 0.0) ? esia_v3.w : esia_v3.x), _18781);
-                                float _18790 = _18784 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                float _29165;
-                                float _29166;
-                                if (_18790 > _18781)
+                                bool _15493 = esia_v3.w > 0.5;
+                                float _15497 = floor((esia_v3.z + 1.0) * 0.5);
+                                float _15501 = floor((_15497 + 127.0) * 0.0078125);
+                                float _15505 = floor((esia_v3.z - 1.0) * 0.5);
+                                float _15633 = floor(_15505 * 0.0625);
+                                uint _15638 = (esia_v1 + 1u) + uint(_15633);
+                                uint _15651 = max(uint(_239.gConv.z), 1u);
+                                vec4 _15685 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_15638 % _15651) * 24u) + uint(_15505 - (_15633 * 16.0))), int(_15638 / _15651), 0).xy, 0);
+                                vec2 _15517 = _15685.xy;
+                                vec2 _15519 = _15685.zw;
+                                bvec2 _15520 = bvec2(((esia_v3.z - 1.0) - (_15505 * 2.0)) < 0.5);
+                                vec2 _30293;
+                                if (_15493)
                                 {
-                                    float _18804 = esia_v5.y * clamp((_18781 - _18784) / max(0.60000002384185791015625 * _18784, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                    _29166 = _18804;
-                                    _29165 = _18784 * (1.0 + (0.60000002384185791015625 * _18804));
+                                    float _15693 = floor(0.0);
+                                    uint _15698 = (esia_v1 + 1u) + uint(_15693);
+                                    uint _15711 = max(uint(_239.gConv.z), 1u);
+                                    _30293 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_15698 % _15711) * 24u) + uint(_15693 * (-16.0))), int(_15698 / _15711), 0).xy, 0).xy;
                                 }
                                 else
                                 {
-                                    _29166 = esia_v5.y;
-                                    _29165 = _18790;
+                                    _30293 = vec2(_15520.x ? _15517.x : _15519.x, _15520.y ? _15517.y : _15519.y);
                                 }
-                                vec2 _18817 = (abs(_17947) - _17895) + vec2(_29165);
-                                vec2 _18819 = max(_18817, vec2(0.0));
-                                float _29167;
-                                SPIRV_CROSS_BRANCH
-                                if ((_18819.x > 0.0) && (_18819.y > 0.0))
+                                vec2 _30292;
+                                float _30295;
+                                float _30298;
+                                _30298 = 1.0;
+                                _30295 = 1000000015047466219876688855040.0;
+                                _30292 = _30293;
+                                vec2 _30291;
+                                float _30294;
+                                float _30297;
+                                SPIRV_CROSS_LOOP
+                                for (float _30288 = 0.0; _30288 < 16.0; _30298 = _30297, _30295 = _30294, _30292 = _30291, _30288 += 1.0)
                                 {
-                                    float _29168;
-                                    if ((_29166 > 0.001000000047497451305389404296875) && (_29165 > 9.9999997473787516355514526367188e-05))
+                                    if (_30288 >= _15501)
                                     {
-                                        float _18836 = 2.0 + (2.0 * _29166);
-                                        vec2 _18841 = _18819 / vec2(max(_29165, 9.9999997473787516355514526367188e-05));
-                                        _29168 = pow(pow(_18841.x, _18836) + pow(_18841.y, _18836), 1.0 / _18836) * _29165;
+                                        break;
                                     }
-                                    else
+                                    _30297 = _30298;
+                                    _30294 = _30295;
+                                    _30291 = _30292;
+                                    vec2 _34369;
+                                    float _34371;
+                                    float _34373;
+                                    SPIRV_CROSS_LOOP
+                                    for (float _30289 = 0.0; _30289 < 128.0; _30297 = _34373, _30294 = _34371, _30291 = _34369, _30289 += 1.0)
                                     {
-                                        _29168 = length(_18819);
-                                    }
-                                    _29167 = _29168;
-                                }
-                                else
-                                {
-                                    _29167 = max(_18819.x, _18819.y);
-                                }
-                                float _18876 = (min(max(_18817.x, _18817.y), 0.0) + _29167) - _29165;
-                                float _29214;
-                                SPIRV_CROSS_BRANCH
-                                if ((esia_v7.x & _1828) != 0u)
-                                {
-                                    vec2 _17975 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                                    vec2 _17978 = _13746 - ((_28171.xy + _28171.zw) * 0.5);
-                                    float _18912 = min(_17975.x, _17975.y);
-                                    float _18915 = min((_17978.x > 0.0) ? ((_17978.y > 0.0) ? _13198.x : _13198.x) : ((_17978.y > 0.0) ? _13198.x : _13198.x), _18912);
-                                    float _18921 = _18915 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                                    float _29171;
-                                    float _29172;
-                                    if (_18921 > _18912)
-                                    {
-                                        float _18935 = esia_v5.y * clamp((_18912 - _18915) / max(0.60000002384185791015625 * _18915, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                        _29172 = _18935;
-                                        _29171 = _18915 * (1.0 + (0.60000002384185791015625 * _18935));
-                                    }
-                                    else
-                                    {
-                                        _29172 = esia_v5.y;
-                                        _29171 = _18921;
-                                    }
-                                    vec2 _18948 = (abs(_17978) - _17975) + vec2(_29171);
-                                    vec2 _18950 = max(_18948, vec2(0.0));
-                                    float _29173;
-                                    SPIRV_CROSS_BRANCH
-                                    if ((_18950.x > 0.0) && (_18950.y > 0.0))
-                                    {
-                                        float _29174;
-                                        if ((_29172 > 0.001000000047497451305389404296875) && (_29171 > 9.9999997473787516355514526367188e-05))
+                                        float _15547 = (_30288 * 128.0) + _30289;
+                                        if (_15547 >= _15497)
                                         {
-                                            float _18967 = 2.0 + (2.0 * _29172);
-                                            vec2 _18972 = _18950 / vec2(max(_29171, 9.9999997473787516355514526367188e-05));
-                                            _29174 = pow(pow(_18972.x, _18967) + pow(_18972.y, _18967), 1.0 / _18967) * _29171;
+                                            break;
+                                        }
+                                        float _15753 = floor(_15547 * 0.0625);
+                                        uint _15758 = (esia_v1 + 1u) + uint(_15753);
+                                        uint _15771 = max(uint(_239.gConv.z), 1u);
+                                        vec4 _15805 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_15758 % _15771) * 24u) + uint(_15547 - (_15753 * 16.0))), int(_15758 / _15771), 0).xy, 0);
+                                        vec2 _15559 = _15805.xy;
+                                        vec2 _15816 = _30291 - _15559;
+                                        vec2 _15819 = _14243 - _15559;
+                                        vec2 _15832 = _15819 - (_15816 * clamp(dot(_15819, _15816) / max(dot(_15816, _15816), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                        float _15835 = dot(_15832, _15832);
+                                        float _34475 = (_15835 < _30294) ? _15835 : _30294;
+                                        bool _15847 = _14243.y >= _15805.y;
+                                        bool _15852 = _14243.y < _30291.y;
+                                        bool _15863 = (_15816.x * _15819.y) > (_15816.y * _15819.x);
+                                        float _30303;
+                                        if (((_15847 && _15852) && _15863) || (((!_15847) && (!_15852)) && (!_15863)))
+                                        {
+                                            _30303 = -_30297;
                                         }
                                         else
                                         {
-                                            _29174 = length(_18950);
+                                            _30303 = _30297;
                                         }
-                                        _29173 = _29174;
+                                        vec2 _15569 = _15805.xy;
+                                        if (((2.0 * _15547) + 1.0) < esia_v3.z)
+                                        {
+                                            vec2 _15578 = _15805.zw;
+                                            vec2 _15892 = _15569 - _15578;
+                                            vec2 _15895 = _14243 - _15578;
+                                            vec2 _15908 = _15895 - (_15892 * clamp(dot(_15895, _15892) / max(dot(_15892, _15892), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                            float _15911 = dot(_15908, _15908);
+                                            bool _15923 = _14243.y >= _15805.w;
+                                            bool _15928 = _14243.y < _15805.y;
+                                            bool _15939 = (_15892.x * _15895.y) > (_15892.y * _15895.x);
+                                            float _30307;
+                                            if (((_15923 && _15928) && _15939) || (((!_15923) && (!_15928)) && (!_15939)))
+                                            {
+                                                _30307 = -_30303;
+                                            }
+                                            else
+                                            {
+                                                _30307 = _30303;
+                                            }
+                                            _34373 = _30307;
+                                            _34371 = (_15911 < _34475) ? _15911 : _34475;
+                                            _34369 = _15805.zw;
+                                        }
+                                        else
+                                        {
+                                            _34373 = _30303;
+                                            _34371 = _34475;
+                                            _34369 = _15569;
+                                        }
                                     }
-                                    else
+                                }
+                                float _15599 = sqrt(_30295);
+                                if (_15493)
+                                {
+                                    _30316 = _15599 - esia_v3.x;
+                                    break;
+                                }
+                                _30316 = (_30298 * _15599) - esia_v3.x;
+                                break;
+                            } while(false);
+                            _30318 = _30316;
+                        }
+                        else
+                        {
+                            float _30319;
+                            if (esia_v7.z == 1u)
+                            {
+                                vec2 _15240 = _14243 - _15206;
+                                float _30287;
+                                do
+                                {
+                                    if (esia_v5.w >= 6.282185077667236328125)
                                     {
-                                        _29173 = max(_18950.x, _18950.y);
+                                        _30287 = abs(length(_15240) - esia_v3.x) - esia_v3.y;
+                                        break;
                                     }
-                                    float _19007 = (min(max(_18948.x, _18948.y), 0.0) + _29173) - _29171;
-                                    float _19012 = max(_13198.y, 9.9999997473787516355514526367188e-05);
-                                    float _19021 = max(_19012 - abs(_18876 - _19007), 0.0) / _19012;
-                                    _29214 = min(_18876, _19007) - (((_19021 * _19021) * _19012) * 0.25);
+                                    float _15982 = esia_v5.z + (esia_v5.w * 0.5);
+                                    float _15984 = cos(_15982);
+                                    float _15986 = sin(_15982);
+                                    float _15995 = dot(_15240, vec2(-_15986, _15984));
+                                    float _15998 = dot(_15240, vec2(_15984, _15986));
+                                    vec2 _15999 = vec2(_15995, _15998);
+                                    float _16002 = abs(_15995);
+                                    _15999.x = _16002;
+                                    float _16005 = esia_v5.w * 0.5;
+                                    float _16007 = sin(_16005);
+                                    float _16009 = cos(_16005);
+                                    _30287 = (((_16009 * _16002) > (_16007 * _15998)) ? length(_15999 - (vec2(_16007, _16009) * esia_v3.x)) : abs(length(_15999) - esia_v3.x)) - esia_v3.y;
+                                    break;
+                                } while(false);
+                                _30319 = _30287;
+                            }
+                            else
+                            {
+                                float _30320;
+                                if (esia_v7.z == 2u)
+                                {
+                                    vec2 _16045 = _14243 - _29442.xy;
+                                    vec2 _16048 = _29442.zw - _29442.xy;
+                                    _30320 = length(_16045 - (_16048 * clamp(dot(_16045, _16048) / max(dot(_16048, _16048), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                                 }
                                 else
                                 {
-                                    _29214 = _18876;
+                                    vec2 _15267 = _14243 - _15206;
+                                    float _16113 = min(_15215.x, _15215.y);
+                                    float _16116 = min((_15267.x > 0.0) ? ((_15267.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_15267.y > 0.0) ? esia_v3.w : esia_v3.x), _16113);
+                                    float _16122 = _16116 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                    float _30276;
+                                    float _30277;
+                                    if (_16122 > _16113)
+                                    {
+                                        float _16136 = esia_v5.y * clamp((_16113 - _16116) / max(0.60000002384185791015625 * _16116, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                        _30277 = _16136;
+                                        _30276 = _16116 * (1.0 + (0.60000002384185791015625 * _16136));
+                                    }
+                                    else
+                                    {
+                                        _30277 = esia_v5.y;
+                                        _30276 = _16122;
+                                    }
+                                    vec2 _16165 = (abs(_15267) - _15215) + vec2(_30276);
+                                    vec2 _16167 = max(_16165, vec2(0.0));
+                                    float _30278;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((_16167.x > 0.0) && (_16167.y > 0.0))
+                                    {
+                                        float _30279;
+                                        if ((_30277 > 0.001000000047497451305389404296875) && (_30276 > 9.9999997473787516355514526367188e-05))
+                                        {
+                                            float _16184 = 2.0 + (2.0 * _30277);
+                                            vec2 _16189 = _16167 / vec2(max(_30276, 9.9999997473787516355514526367188e-05));
+                                            _30279 = pow(pow(_16189.x, _16184) + pow(_16189.y, _16184), 1.0 / _16184) * _30276;
+                                        }
+                                        else
+                                        {
+                                            _30279 = length(_16167);
+                                        }
+                                        _30278 = _30279;
+                                    }
+                                    else
+                                    {
+                                        _30278 = max(_16167.x, _16167.y);
+                                    }
+                                    float _16224 = (min(max(_16165.x, _16165.y), 0.0) + _30278) - _30276;
+                                    float _30321;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((esia_v7.x & _1871) != 0u)
+                                    {
+                                        vec2 _15295 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                                        vec2 _15298 = _14243 - ((_29442.xy + _29442.zw) * 0.5);
+                                        float _16272 = min(_15295.x, _15295.y);
+                                        float _16275 = min((_15298.x > 0.0) ? ((_15298.y > 0.0) ? _13603.x : _13603.x) : ((_15298.y > 0.0) ? _13603.x : _13603.x), _16272);
+                                        float _16281 = _16275 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                        float _30280;
+                                        float _30281;
+                                        if (_16281 > _16272)
+                                        {
+                                            float _16295 = esia_v5.y * clamp((_16272 - _16275) / max(0.60000002384185791015625 * _16275, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                            _30281 = _16295;
+                                            _30280 = _16275 * (1.0 + (0.60000002384185791015625 * _16295));
+                                        }
+                                        else
+                                        {
+                                            _30281 = esia_v5.y;
+                                            _30280 = _16281;
+                                        }
+                                        vec2 _16324 = (abs(_15298) - _15295) + vec2(_30280);
+                                        vec2 _16326 = max(_16324, vec2(0.0));
+                                        float _30282;
+                                        SPIRV_CROSS_BRANCH
+                                        if ((_16326.x > 0.0) && (_16326.y > 0.0))
+                                        {
+                                            float _30283;
+                                            if ((_30281 > 0.001000000047497451305389404296875) && (_30280 > 9.9999997473787516355514526367188e-05))
+                                            {
+                                                float _16343 = 2.0 + (2.0 * _30281);
+                                                vec2 _16348 = _16326 / vec2(max(_30280, 9.9999997473787516355514526367188e-05));
+                                                _30283 = pow(pow(_16348.x, _16343) + pow(_16348.y, _16343), 1.0 / _16343) * _30280;
+                                            }
+                                            else
+                                            {
+                                                _30283 = length(_16326);
+                                            }
+                                            _30282 = _30283;
+                                        }
+                                        else
+                                        {
+                                            _30282 = max(_16326.x, _16326.y);
+                                        }
+                                        float _16383 = (min(max(_16324.x, _16324.y), 0.0) + _30282) - _30280;
+                                        float _16388 = max(_13603.y, 9.9999997473787516355514526367188e-05);
+                                        float _16397 = max(_16388 - abs(_16224 - _16383), 0.0) / _16388;
+                                        _30321 = min(_16224, _16383) - (((_16397 * _16397) * _16388) * 0.25);
+                                    }
+                                    else
+                                    {
+                                        _30321 = _16224;
+                                    }
+                                    _30320 = _30321;
                                 }
-                                _29213 = _29214;
+                                _30319 = _30320;
                             }
-                            _29212 = _29213;
+                            _30318 = _30319;
                         }
-                        _29211 = _29212;
+                        _30317 = _30318;
                     }
-                    _29210 = _29211;
+                    vec2 _14247 = esia_v0 - vec2(0.5, 0.0);
+                    vec2 _16452 = (esia_v2.xy + esia_v2.zw) * 0.5;
+                    vec2 _16461 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                    float _30363;
+                    SPIRV_CROSS_BRANCH
+                    if ((esia_v7.x & _1785) != 0u)
+                    {
+                        float _16578 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+                        vec4 _16612 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_14247, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+                        float _16636 = (_16612.w - 0.5) * esia_v3.y;
+                        vec2 _16677 = abs(_14247 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _16578), vec2(0.0));
+                        _30363 = max((-mix((max(min(_16612.x, _16612.y), min(max(_16612.x, _16612.y), _16612.z)) - 0.5) * esia_v3.x, _16636, clamp(abs(_16636) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _16578, length(max(_16677, vec2(0.0))) + min(max(_16677.x, _16677.y), 0.0)) - esia_v5.w;
+                    }
+                    else
+                    {
+                        float _30364;
+                        if ((esia_v7.x & _1800) != 0u)
+                        {
+                            float _30362;
+                            do
+                            {
+                                bool _16739 = esia_v3.w > 0.5;
+                                float _16743 = floor((esia_v3.z + 1.0) * 0.5);
+                                float _16747 = floor((_16743 + 127.0) * 0.0078125);
+                                float _16751 = floor((esia_v3.z - 1.0) * 0.5);
+                                float _16879 = floor(_16751 * 0.0625);
+                                uint _16884 = (esia_v1 + 1u) + uint(_16879);
+                                uint _16897 = max(uint(_239.gConv.z), 1u);
+                                vec4 _16931 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_16884 % _16897) * 24u) + uint(_16751 - (_16879 * 16.0))), int(_16884 / _16897), 0).xy, 0);
+                                vec2 _16763 = _16931.xy;
+                                vec2 _16765 = _16931.zw;
+                                bvec2 _16766 = bvec2(((esia_v3.z - 1.0) - (_16751 * 2.0)) < 0.5);
+                                vec2 _30339;
+                                if (_16739)
+                                {
+                                    float _16939 = floor(0.0);
+                                    uint _16944 = (esia_v1 + 1u) + uint(_16939);
+                                    uint _16957 = max(uint(_239.gConv.z), 1u);
+                                    _30339 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_16944 % _16957) * 24u) + uint(_16939 * (-16.0))), int(_16944 / _16957), 0).xy, 0).xy;
+                                }
+                                else
+                                {
+                                    _30339 = vec2(_16766.x ? _16763.x : _16765.x, _16766.y ? _16763.y : _16765.y);
+                                }
+                                vec2 _30338;
+                                float _30341;
+                                float _30344;
+                                _30344 = 1.0;
+                                _30341 = 1000000015047466219876688855040.0;
+                                _30338 = _30339;
+                                vec2 _30337;
+                                float _30340;
+                                float _30343;
+                                SPIRV_CROSS_LOOP
+                                for (float _30334 = 0.0; _30334 < 16.0; _30344 = _30343, _30341 = _30340, _30338 = _30337, _30334 += 1.0)
+                                {
+                                    if (_30334 >= _16747)
+                                    {
+                                        break;
+                                    }
+                                    _30343 = _30344;
+                                    _30340 = _30341;
+                                    _30337 = _30338;
+                                    vec2 _34380;
+                                    float _34382;
+                                    float _34384;
+                                    SPIRV_CROSS_LOOP
+                                    for (float _30335 = 0.0; _30335 < 128.0; _30343 = _34384, _30340 = _34382, _30337 = _34380, _30335 += 1.0)
+                                    {
+                                        float _16793 = (_30334 * 128.0) + _30335;
+                                        if (_16793 >= _16743)
+                                        {
+                                            break;
+                                        }
+                                        float _16999 = floor(_16793 * 0.0625);
+                                        uint _17004 = (esia_v1 + 1u) + uint(_16999);
+                                        uint _17017 = max(uint(_239.gConv.z), 1u);
+                                        vec4 _17051 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_17004 % _17017) * 24u) + uint(_16793 - (_16999 * 16.0))), int(_17004 / _17017), 0).xy, 0);
+                                        vec2 _16805 = _17051.xy;
+                                        vec2 _17062 = _30337 - _16805;
+                                        vec2 _17065 = _14247 - _16805;
+                                        vec2 _17078 = _17065 - (_17062 * clamp(dot(_17065, _17062) / max(dot(_17062, _17062), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                        float _17081 = dot(_17078, _17078);
+                                        float _34477 = (_17081 < _30340) ? _17081 : _30340;
+                                        bool _17093 = _14247.y >= _17051.y;
+                                        bool _17098 = _14247.y < _30337.y;
+                                        bool _17109 = (_17062.x * _17065.y) > (_17062.y * _17065.x);
+                                        float _30349;
+                                        if (((_17093 && _17098) && _17109) || (((!_17093) && (!_17098)) && (!_17109)))
+                                        {
+                                            _30349 = -_30343;
+                                        }
+                                        else
+                                        {
+                                            _30349 = _30343;
+                                        }
+                                        vec2 _16815 = _17051.xy;
+                                        if (((2.0 * _16793) + 1.0) < esia_v3.z)
+                                        {
+                                            vec2 _16824 = _17051.zw;
+                                            vec2 _17138 = _16815 - _16824;
+                                            vec2 _17141 = _14247 - _16824;
+                                            vec2 _17154 = _17141 - (_17138 * clamp(dot(_17141, _17138) / max(dot(_17138, _17138), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                            float _17157 = dot(_17154, _17154);
+                                            bool _17169 = _14247.y >= _17051.w;
+                                            bool _17174 = _14247.y < _17051.y;
+                                            bool _17185 = (_17138.x * _17141.y) > (_17138.y * _17141.x);
+                                            float _30353;
+                                            if (((_17169 && _17174) && _17185) || (((!_17169) && (!_17174)) && (!_17185)))
+                                            {
+                                                _30353 = -_30349;
+                                            }
+                                            else
+                                            {
+                                                _30353 = _30349;
+                                            }
+                                            _34384 = _30353;
+                                            _34382 = (_17157 < _34477) ? _17157 : _34477;
+                                            _34380 = _17051.zw;
+                                        }
+                                        else
+                                        {
+                                            _34384 = _30349;
+                                            _34382 = _34477;
+                                            _34380 = _16815;
+                                        }
+                                    }
+                                }
+                                float _16845 = sqrt(_30341);
+                                if (_16739)
+                                {
+                                    _30362 = _16845 - esia_v3.x;
+                                    break;
+                                }
+                                _30362 = (_30344 * _16845) - esia_v3.x;
+                                break;
+                            } while(false);
+                            _30364 = _30362;
+                        }
+                        else
+                        {
+                            float _30365;
+                            if (esia_v7.z == 1u)
+                            {
+                                vec2 _16486 = _14247 - _16452;
+                                float _30333;
+                                do
+                                {
+                                    if (esia_v5.w >= 6.282185077667236328125)
+                                    {
+                                        _30333 = abs(length(_16486) - esia_v3.x) - esia_v3.y;
+                                        break;
+                                    }
+                                    float _17228 = esia_v5.z + (esia_v5.w * 0.5);
+                                    float _17230 = cos(_17228);
+                                    float _17232 = sin(_17228);
+                                    float _17241 = dot(_16486, vec2(-_17232, _17230));
+                                    float _17244 = dot(_16486, vec2(_17230, _17232));
+                                    vec2 _17245 = vec2(_17241, _17244);
+                                    float _17248 = abs(_17241);
+                                    _17245.x = _17248;
+                                    float _17251 = esia_v5.w * 0.5;
+                                    float _17253 = sin(_17251);
+                                    float _17255 = cos(_17251);
+                                    _30333 = (((_17255 * _17248) > (_17253 * _17244)) ? length(_17245 - (vec2(_17253, _17255) * esia_v3.x)) : abs(length(_17245) - esia_v3.x)) - esia_v3.y;
+                                    break;
+                                } while(false);
+                                _30365 = _30333;
+                            }
+                            else
+                            {
+                                float _30366;
+                                if (esia_v7.z == 2u)
+                                {
+                                    vec2 _17291 = _14247 - _29442.xy;
+                                    vec2 _17294 = _29442.zw - _29442.xy;
+                                    _30366 = length(_17291 - (_17294 * clamp(dot(_17291, _17294) / max(dot(_17294, _17294), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                                }
+                                else
+                                {
+                                    vec2 _16513 = _14247 - _16452;
+                                    float _17359 = min(_16461.x, _16461.y);
+                                    float _17362 = min((_16513.x > 0.0) ? ((_16513.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_16513.y > 0.0) ? esia_v3.w : esia_v3.x), _17359);
+                                    float _17368 = _17362 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                    float _30322;
+                                    float _30323;
+                                    if (_17368 > _17359)
+                                    {
+                                        float _17382 = esia_v5.y * clamp((_17359 - _17362) / max(0.60000002384185791015625 * _17362, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                        _30323 = _17382;
+                                        _30322 = _17362 * (1.0 + (0.60000002384185791015625 * _17382));
+                                    }
+                                    else
+                                    {
+                                        _30323 = esia_v5.y;
+                                        _30322 = _17368;
+                                    }
+                                    vec2 _17411 = (abs(_16513) - _16461) + vec2(_30322);
+                                    vec2 _17413 = max(_17411, vec2(0.0));
+                                    float _30324;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((_17413.x > 0.0) && (_17413.y > 0.0))
+                                    {
+                                        float _30325;
+                                        if ((_30323 > 0.001000000047497451305389404296875) && (_30322 > 9.9999997473787516355514526367188e-05))
+                                        {
+                                            float _17430 = 2.0 + (2.0 * _30323);
+                                            vec2 _17435 = _17413 / vec2(max(_30322, 9.9999997473787516355514526367188e-05));
+                                            _30325 = pow(pow(_17435.x, _17430) + pow(_17435.y, _17430), 1.0 / _17430) * _30322;
+                                        }
+                                        else
+                                        {
+                                            _30325 = length(_17413);
+                                        }
+                                        _30324 = _30325;
+                                    }
+                                    else
+                                    {
+                                        _30324 = max(_17413.x, _17413.y);
+                                    }
+                                    float _17470 = (min(max(_17411.x, _17411.y), 0.0) + _30324) - _30322;
+                                    float _30367;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((esia_v7.x & _1871) != 0u)
+                                    {
+                                        vec2 _16541 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                                        vec2 _16544 = _14247 - ((_29442.xy + _29442.zw) * 0.5);
+                                        float _17518 = min(_16541.x, _16541.y);
+                                        float _17521 = min((_16544.x > 0.0) ? ((_16544.y > 0.0) ? _13603.x : _13603.x) : ((_16544.y > 0.0) ? _13603.x : _13603.x), _17518);
+                                        float _17527 = _17521 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                        float _30326;
+                                        float _30327;
+                                        if (_17527 > _17518)
+                                        {
+                                            float _17541 = esia_v5.y * clamp((_17518 - _17521) / max(0.60000002384185791015625 * _17521, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                            _30327 = _17541;
+                                            _30326 = _17521 * (1.0 + (0.60000002384185791015625 * _17541));
+                                        }
+                                        else
+                                        {
+                                            _30327 = esia_v5.y;
+                                            _30326 = _17527;
+                                        }
+                                        vec2 _17570 = (abs(_16544) - _16541) + vec2(_30326);
+                                        vec2 _17572 = max(_17570, vec2(0.0));
+                                        float _30328;
+                                        SPIRV_CROSS_BRANCH
+                                        if ((_17572.x > 0.0) && (_17572.y > 0.0))
+                                        {
+                                            float _30329;
+                                            if ((_30327 > 0.001000000047497451305389404296875) && (_30326 > 9.9999997473787516355514526367188e-05))
+                                            {
+                                                float _17589 = 2.0 + (2.0 * _30327);
+                                                vec2 _17594 = _17572 / vec2(max(_30326, 9.9999997473787516355514526367188e-05));
+                                                _30329 = pow(pow(_17594.x, _17589) + pow(_17594.y, _17589), 1.0 / _17589) * _30326;
+                                            }
+                                            else
+                                            {
+                                                _30329 = length(_17572);
+                                            }
+                                            _30328 = _30329;
+                                        }
+                                        else
+                                        {
+                                            _30328 = max(_17572.x, _17572.y);
+                                        }
+                                        float _17629 = (min(max(_17570.x, _17570.y), 0.0) + _30328) - _30326;
+                                        float _17634 = max(_13603.y, 9.9999997473787516355514526367188e-05);
+                                        float _17643 = max(_17634 - abs(_17470 - _17629), 0.0) / _17634;
+                                        _30367 = min(_17470, _17629) - (((_17643 * _17643) * _17634) * 0.25);
+                                    }
+                                    else
+                                    {
+                                        _30367 = _17470;
+                                    }
+                                    _30366 = _30367;
+                                }
+                                _30365 = _30366;
+                            }
+                            _30364 = _30365;
+                        }
+                        _30363 = _30364;
+                    }
+                    vec2 _14252 = esia_v0 + vec2(0.0, 0.5);
+                    vec2 _17698 = (esia_v2.xy + esia_v2.zw) * 0.5;
+                    vec2 _17707 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                    float _30409;
+                    SPIRV_CROSS_BRANCH
+                    if ((esia_v7.x & _1785) != 0u)
+                    {
+                        float _17824 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+                        vec4 _17858 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_14252, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+                        float _17882 = (_17858.w - 0.5) * esia_v3.y;
+                        vec2 _17923 = abs(_14252 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _17824), vec2(0.0));
+                        _30409 = max((-mix((max(min(_17858.x, _17858.y), min(max(_17858.x, _17858.y), _17858.z)) - 0.5) * esia_v3.x, _17882, clamp(abs(_17882) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _17824, length(max(_17923, vec2(0.0))) + min(max(_17923.x, _17923.y), 0.0)) - esia_v5.w;
+                    }
+                    else
+                    {
+                        float _30410;
+                        if ((esia_v7.x & _1800) != 0u)
+                        {
+                            float _30408;
+                            do
+                            {
+                                bool _17985 = esia_v3.w > 0.5;
+                                float _17989 = floor((esia_v3.z + 1.0) * 0.5);
+                                float _17993 = floor((_17989 + 127.0) * 0.0078125);
+                                float _17997 = floor((esia_v3.z - 1.0) * 0.5);
+                                float _18125 = floor(_17997 * 0.0625);
+                                uint _18130 = (esia_v1 + 1u) + uint(_18125);
+                                uint _18143 = max(uint(_239.gConv.z), 1u);
+                                vec4 _18177 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18130 % _18143) * 24u) + uint(_17997 - (_18125 * 16.0))), int(_18130 / _18143), 0).xy, 0);
+                                vec2 _18009 = _18177.xy;
+                                vec2 _18011 = _18177.zw;
+                                bvec2 _18012 = bvec2(((esia_v3.z - 1.0) - (_17997 * 2.0)) < 0.5);
+                                vec2 _30385;
+                                if (_17985)
+                                {
+                                    float _18185 = floor(0.0);
+                                    uint _18190 = (esia_v1 + 1u) + uint(_18185);
+                                    uint _18203 = max(uint(_239.gConv.z), 1u);
+                                    _30385 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18190 % _18203) * 24u) + uint(_18185 * (-16.0))), int(_18190 / _18203), 0).xy, 0).xy;
+                                }
+                                else
+                                {
+                                    _30385 = vec2(_18012.x ? _18009.x : _18011.x, _18012.y ? _18009.y : _18011.y);
+                                }
+                                vec2 _30384;
+                                float _30387;
+                                float _30390;
+                                _30390 = 1.0;
+                                _30387 = 1000000015047466219876688855040.0;
+                                _30384 = _30385;
+                                vec2 _30383;
+                                float _30386;
+                                float _30389;
+                                SPIRV_CROSS_LOOP
+                                for (float _30380 = 0.0; _30380 < 16.0; _30390 = _30389, _30387 = _30386, _30384 = _30383, _30380 += 1.0)
+                                {
+                                    if (_30380 >= _17993)
+                                    {
+                                        break;
+                                    }
+                                    _30389 = _30390;
+                                    _30386 = _30387;
+                                    _30383 = _30384;
+                                    vec2 _34391;
+                                    float _34393;
+                                    float _34395;
+                                    SPIRV_CROSS_LOOP
+                                    for (float _30381 = 0.0; _30381 < 128.0; _30389 = _34395, _30386 = _34393, _30383 = _34391, _30381 += 1.0)
+                                    {
+                                        float _18039 = (_30380 * 128.0) + _30381;
+                                        if (_18039 >= _17989)
+                                        {
+                                            break;
+                                        }
+                                        float _18245 = floor(_18039 * 0.0625);
+                                        uint _18250 = (esia_v1 + 1u) + uint(_18245);
+                                        uint _18263 = max(uint(_239.gConv.z), 1u);
+                                        vec4 _18297 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_18250 % _18263) * 24u) + uint(_18039 - (_18245 * 16.0))), int(_18250 / _18263), 0).xy, 0);
+                                        vec2 _18051 = _18297.xy;
+                                        vec2 _18308 = _30383 - _18051;
+                                        vec2 _18311 = _14252 - _18051;
+                                        vec2 _18324 = _18311 - (_18308 * clamp(dot(_18311, _18308) / max(dot(_18308, _18308), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                        float _18327 = dot(_18324, _18324);
+                                        float _34479 = (_18327 < _30386) ? _18327 : _30386;
+                                        bool _18339 = _14252.y >= _18297.y;
+                                        bool _18344 = _14252.y < _30383.y;
+                                        bool _18355 = (_18308.x * _18311.y) > (_18308.y * _18311.x);
+                                        float _30395;
+                                        if (((_18339 && _18344) && _18355) || (((!_18339) && (!_18344)) && (!_18355)))
+                                        {
+                                            _30395 = -_30389;
+                                        }
+                                        else
+                                        {
+                                            _30395 = _30389;
+                                        }
+                                        vec2 _18061 = _18297.xy;
+                                        if (((2.0 * _18039) + 1.0) < esia_v3.z)
+                                        {
+                                            vec2 _18070 = _18297.zw;
+                                            vec2 _18384 = _18061 - _18070;
+                                            vec2 _18387 = _14252 - _18070;
+                                            vec2 _18400 = _18387 - (_18384 * clamp(dot(_18387, _18384) / max(dot(_18384, _18384), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                            float _18403 = dot(_18400, _18400);
+                                            bool _18415 = _14252.y >= _18297.w;
+                                            bool _18420 = _14252.y < _18297.y;
+                                            bool _18431 = (_18384.x * _18387.y) > (_18384.y * _18387.x);
+                                            float _30399;
+                                            if (((_18415 && _18420) && _18431) || (((!_18415) && (!_18420)) && (!_18431)))
+                                            {
+                                                _30399 = -_30395;
+                                            }
+                                            else
+                                            {
+                                                _30399 = _30395;
+                                            }
+                                            _34395 = _30399;
+                                            _34393 = (_18403 < _34479) ? _18403 : _34479;
+                                            _34391 = _18297.zw;
+                                        }
+                                        else
+                                        {
+                                            _34395 = _30395;
+                                            _34393 = _34479;
+                                            _34391 = _18061;
+                                        }
+                                    }
+                                }
+                                float _18091 = sqrt(_30387);
+                                if (_17985)
+                                {
+                                    _30408 = _18091 - esia_v3.x;
+                                    break;
+                                }
+                                _30408 = (_30390 * _18091) - esia_v3.x;
+                                break;
+                            } while(false);
+                            _30410 = _30408;
+                        }
+                        else
+                        {
+                            float _30411;
+                            if (esia_v7.z == 1u)
+                            {
+                                vec2 _17732 = _14252 - _17698;
+                                float _30379;
+                                do
+                                {
+                                    if (esia_v5.w >= 6.282185077667236328125)
+                                    {
+                                        _30379 = abs(length(_17732) - esia_v3.x) - esia_v3.y;
+                                        break;
+                                    }
+                                    float _18474 = esia_v5.z + (esia_v5.w * 0.5);
+                                    float _18476 = cos(_18474);
+                                    float _18478 = sin(_18474);
+                                    float _18487 = dot(_17732, vec2(-_18478, _18476));
+                                    float _18490 = dot(_17732, vec2(_18476, _18478));
+                                    vec2 _18491 = vec2(_18487, _18490);
+                                    float _18494 = abs(_18487);
+                                    _18491.x = _18494;
+                                    float _18497 = esia_v5.w * 0.5;
+                                    float _18499 = sin(_18497);
+                                    float _18501 = cos(_18497);
+                                    _30379 = (((_18501 * _18494) > (_18499 * _18490)) ? length(_18491 - (vec2(_18499, _18501) * esia_v3.x)) : abs(length(_18491) - esia_v3.x)) - esia_v3.y;
+                                    break;
+                                } while(false);
+                                _30411 = _30379;
+                            }
+                            else
+                            {
+                                float _30412;
+                                if (esia_v7.z == 2u)
+                                {
+                                    vec2 _18537 = _14252 - _29442.xy;
+                                    vec2 _18540 = _29442.zw - _29442.xy;
+                                    _30412 = length(_18537 - (_18540 * clamp(dot(_18537, _18540) / max(dot(_18540, _18540), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                                }
+                                else
+                                {
+                                    vec2 _17759 = _14252 - _17698;
+                                    float _18605 = min(_17707.x, _17707.y);
+                                    float _18608 = min((_17759.x > 0.0) ? ((_17759.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_17759.y > 0.0) ? esia_v3.w : esia_v3.x), _18605);
+                                    float _18614 = _18608 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                    float _30368;
+                                    float _30369;
+                                    if (_18614 > _18605)
+                                    {
+                                        float _18628 = esia_v5.y * clamp((_18605 - _18608) / max(0.60000002384185791015625 * _18608, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                        _30369 = _18628;
+                                        _30368 = _18608 * (1.0 + (0.60000002384185791015625 * _18628));
+                                    }
+                                    else
+                                    {
+                                        _30369 = esia_v5.y;
+                                        _30368 = _18614;
+                                    }
+                                    vec2 _18657 = (abs(_17759) - _17707) + vec2(_30368);
+                                    vec2 _18659 = max(_18657, vec2(0.0));
+                                    float _30370;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((_18659.x > 0.0) && (_18659.y > 0.0))
+                                    {
+                                        float _30371;
+                                        if ((_30369 > 0.001000000047497451305389404296875) && (_30368 > 9.9999997473787516355514526367188e-05))
+                                        {
+                                            float _18676 = 2.0 + (2.0 * _30369);
+                                            vec2 _18681 = _18659 / vec2(max(_30368, 9.9999997473787516355514526367188e-05));
+                                            _30371 = pow(pow(_18681.x, _18676) + pow(_18681.y, _18676), 1.0 / _18676) * _30368;
+                                        }
+                                        else
+                                        {
+                                            _30371 = length(_18659);
+                                        }
+                                        _30370 = _30371;
+                                    }
+                                    else
+                                    {
+                                        _30370 = max(_18659.x, _18659.y);
+                                    }
+                                    float _18716 = (min(max(_18657.x, _18657.y), 0.0) + _30370) - _30368;
+                                    float _30413;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((esia_v7.x & _1871) != 0u)
+                                    {
+                                        vec2 _17787 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                                        vec2 _17790 = _14252 - ((_29442.xy + _29442.zw) * 0.5);
+                                        float _18764 = min(_17787.x, _17787.y);
+                                        float _18767 = min((_17790.x > 0.0) ? ((_17790.y > 0.0) ? _13603.x : _13603.x) : ((_17790.y > 0.0) ? _13603.x : _13603.x), _18764);
+                                        float _18773 = _18767 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                        float _30372;
+                                        float _30373;
+                                        if (_18773 > _18764)
+                                        {
+                                            float _18787 = esia_v5.y * clamp((_18764 - _18767) / max(0.60000002384185791015625 * _18767, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                            _30373 = _18787;
+                                            _30372 = _18767 * (1.0 + (0.60000002384185791015625 * _18787));
+                                        }
+                                        else
+                                        {
+                                            _30373 = esia_v5.y;
+                                            _30372 = _18773;
+                                        }
+                                        vec2 _18816 = (abs(_17790) - _17787) + vec2(_30372);
+                                        vec2 _18818 = max(_18816, vec2(0.0));
+                                        float _30374;
+                                        SPIRV_CROSS_BRANCH
+                                        if ((_18818.x > 0.0) && (_18818.y > 0.0))
+                                        {
+                                            float _30375;
+                                            if ((_30373 > 0.001000000047497451305389404296875) && (_30372 > 9.9999997473787516355514526367188e-05))
+                                            {
+                                                float _18835 = 2.0 + (2.0 * _30373);
+                                                vec2 _18840 = _18818 / vec2(max(_30372, 9.9999997473787516355514526367188e-05));
+                                                _30375 = pow(pow(_18840.x, _18835) + pow(_18840.y, _18835), 1.0 / _18835) * _30372;
+                                            }
+                                            else
+                                            {
+                                                _30375 = length(_18818);
+                                            }
+                                            _30374 = _30375;
+                                        }
+                                        else
+                                        {
+                                            _30374 = max(_18818.x, _18818.y);
+                                        }
+                                        float _18875 = (min(max(_18816.x, _18816.y), 0.0) + _30374) - _30372;
+                                        float _18880 = max(_13603.y, 9.9999997473787516355514526367188e-05);
+                                        float _18889 = max(_18880 - abs(_18716 - _18875), 0.0) / _18880;
+                                        _30413 = min(_18716, _18875) - (((_18889 * _18889) * _18880) * 0.25);
+                                    }
+                                    else
+                                    {
+                                        _30413 = _18716;
+                                    }
+                                    _30412 = _30413;
+                                }
+                                _30411 = _30412;
+                            }
+                            _30410 = _30411;
+                        }
+                        _30409 = _30410;
+                    }
+                    vec2 _14256 = esia_v0 - vec2(0.0, 0.5);
+                    vec2 _18944 = (esia_v2.xy + esia_v2.zw) * 0.5;
+                    vec2 _18953 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                    float _30455;
+                    SPIRV_CROSS_BRANCH
+                    if ((esia_v7.x & _1785) != 0u)
+                    {
+                        float _19070 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+                        vec4 _19104 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_29436.xy, _29436.zw, (clamp(_14256, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+                        float _19128 = (_19104.w - 0.5) * esia_v3.y;
+                        vec2 _19169 = abs(_14256 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _19070), vec2(0.0));
+                        _30455 = max((-mix((max(min(_19104.x, _19104.y), min(max(_19104.x, _19104.y), _19104.z)) - 0.5) * esia_v3.x, _19128, clamp(abs(_19128) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _19070, length(max(_19169, vec2(0.0))) + min(max(_19169.x, _19169.y), 0.0)) - esia_v5.w;
+                    }
+                    else
+                    {
+                        float _30456;
+                        if ((esia_v7.x & _1800) != 0u)
+                        {
+                            float _30454;
+                            do
+                            {
+                                bool _19231 = esia_v3.w > 0.5;
+                                float _19235 = floor((esia_v3.z + 1.0) * 0.5);
+                                float _19239 = floor((_19235 + 127.0) * 0.0078125);
+                                float _19243 = floor((esia_v3.z - 1.0) * 0.5);
+                                float _19371 = floor(_19243 * 0.0625);
+                                uint _19376 = (esia_v1 + 1u) + uint(_19371);
+                                uint _19389 = max(uint(_239.gConv.z), 1u);
+                                vec4 _19423 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_19376 % _19389) * 24u) + uint(_19243 - (_19371 * 16.0))), int(_19376 / _19389), 0).xy, 0);
+                                vec2 _19255 = _19423.xy;
+                                vec2 _19257 = _19423.zw;
+                                bvec2 _19258 = bvec2(((esia_v3.z - 1.0) - (_19243 * 2.0)) < 0.5);
+                                vec2 _30431;
+                                if (_19231)
+                                {
+                                    float _19431 = floor(0.0);
+                                    uint _19436 = (esia_v1 + 1u) + uint(_19431);
+                                    uint _19449 = max(uint(_239.gConv.z), 1u);
+                                    _30431 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_19436 % _19449) * 24u) + uint(_19431 * (-16.0))), int(_19436 / _19449), 0).xy, 0).xy;
+                                }
+                                else
+                                {
+                                    _30431 = vec2(_19258.x ? _19255.x : _19257.x, _19258.y ? _19255.y : _19257.y);
+                                }
+                                vec2 _30430;
+                                float _30433;
+                                float _30436;
+                                _30436 = 1.0;
+                                _30433 = 1000000015047466219876688855040.0;
+                                _30430 = _30431;
+                                vec2 _30429;
+                                float _30432;
+                                float _30435;
+                                SPIRV_CROSS_LOOP
+                                for (float _30426 = 0.0; _30426 < 16.0; _30436 = _30435, _30433 = _30432, _30430 = _30429, _30426 += 1.0)
+                                {
+                                    if (_30426 >= _19239)
+                                    {
+                                        break;
+                                    }
+                                    _30435 = _30436;
+                                    _30432 = _30433;
+                                    _30429 = _30430;
+                                    vec2 _34402;
+                                    float _34404;
+                                    float _34406;
+                                    SPIRV_CROSS_LOOP
+                                    for (float _30427 = 0.0; _30427 < 128.0; _30435 = _34406, _30432 = _34404, _30429 = _34402, _30427 += 1.0)
+                                    {
+                                        float _19285 = (_30426 * 128.0) + _30427;
+                                        if (_19285 >= _19235)
+                                        {
+                                            break;
+                                        }
+                                        float _19491 = floor(_19285 * 0.0625);
+                                        uint _19496 = (esia_v1 + 1u) + uint(_19491);
+                                        uint _19509 = max(uint(_239.gConv.z), 1u);
+                                        vec4 _19543 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_19496 % _19509) * 24u) + uint(_19285 - (_19491 * 16.0))), int(_19496 / _19509), 0).xy, 0);
+                                        vec2 _19297 = _19543.xy;
+                                        vec2 _19554 = _30429 - _19297;
+                                        vec2 _19557 = _14256 - _19297;
+                                        vec2 _19570 = _19557 - (_19554 * clamp(dot(_19557, _19554) / max(dot(_19554, _19554), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                        float _19573 = dot(_19570, _19570);
+                                        float _34481 = (_19573 < _30432) ? _19573 : _30432;
+                                        bool _19585 = _14256.y >= _19543.y;
+                                        bool _19590 = _14256.y < _30429.y;
+                                        bool _19601 = (_19554.x * _19557.y) > (_19554.y * _19557.x);
+                                        float _30441;
+                                        if (((_19585 && _19590) && _19601) || (((!_19585) && (!_19590)) && (!_19601)))
+                                        {
+                                            _30441 = -_30435;
+                                        }
+                                        else
+                                        {
+                                            _30441 = _30435;
+                                        }
+                                        vec2 _19307 = _19543.xy;
+                                        if (((2.0 * _19285) + 1.0) < esia_v3.z)
+                                        {
+                                            vec2 _19316 = _19543.zw;
+                                            vec2 _19630 = _19307 - _19316;
+                                            vec2 _19633 = _14256 - _19316;
+                                            vec2 _19646 = _19633 - (_19630 * clamp(dot(_19633, _19630) / max(dot(_19630, _19630), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                            float _19649 = dot(_19646, _19646);
+                                            bool _19661 = _14256.y >= _19543.w;
+                                            bool _19666 = _14256.y < _19543.y;
+                                            bool _19677 = (_19630.x * _19633.y) > (_19630.y * _19633.x);
+                                            float _30445;
+                                            if (((_19661 && _19666) && _19677) || (((!_19661) && (!_19666)) && (!_19677)))
+                                            {
+                                                _30445 = -_30441;
+                                            }
+                                            else
+                                            {
+                                                _30445 = _30441;
+                                            }
+                                            _34406 = _30445;
+                                            _34404 = (_19649 < _34481) ? _19649 : _34481;
+                                            _34402 = _19543.zw;
+                                        }
+                                        else
+                                        {
+                                            _34406 = _30441;
+                                            _34404 = _34481;
+                                            _34402 = _19307;
+                                        }
+                                    }
+                                }
+                                float _19337 = sqrt(_30433);
+                                if (_19231)
+                                {
+                                    _30454 = _19337 - esia_v3.x;
+                                    break;
+                                }
+                                _30454 = (_30436 * _19337) - esia_v3.x;
+                                break;
+                            } while(false);
+                            _30456 = _30454;
+                        }
+                        else
+                        {
+                            float _30457;
+                            if (esia_v7.z == 1u)
+                            {
+                                vec2 _18978 = _14256 - _18944;
+                                float _30425;
+                                do
+                                {
+                                    if (esia_v5.w >= 6.282185077667236328125)
+                                    {
+                                        _30425 = abs(length(_18978) - esia_v3.x) - esia_v3.y;
+                                        break;
+                                    }
+                                    float _19720 = esia_v5.z + (esia_v5.w * 0.5);
+                                    float _19722 = cos(_19720);
+                                    float _19724 = sin(_19720);
+                                    float _19733 = dot(_18978, vec2(-_19724, _19722));
+                                    float _19736 = dot(_18978, vec2(_19722, _19724));
+                                    vec2 _19737 = vec2(_19733, _19736);
+                                    float _19740 = abs(_19733);
+                                    _19737.x = _19740;
+                                    float _19743 = esia_v5.w * 0.5;
+                                    float _19745 = sin(_19743);
+                                    float _19747 = cos(_19743);
+                                    _30425 = (((_19747 * _19740) > (_19745 * _19736)) ? length(_19737 - (vec2(_19745, _19747) * esia_v3.x)) : abs(length(_19737) - esia_v3.x)) - esia_v3.y;
+                                    break;
+                                } while(false);
+                                _30457 = _30425;
+                            }
+                            else
+                            {
+                                float _30458;
+                                if (esia_v7.z == 2u)
+                                {
+                                    vec2 _19783 = _14256 - _29442.xy;
+                                    vec2 _19786 = _29442.zw - _29442.xy;
+                                    _30458 = length(_19783 - (_19786 * clamp(dot(_19783, _19786) / max(dot(_19786, _19786), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                                }
+                                else
+                                {
+                                    vec2 _19005 = _14256 - _18944;
+                                    float _19851 = min(_18953.x, _18953.y);
+                                    float _19854 = min((_19005.x > 0.0) ? ((_19005.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_19005.y > 0.0) ? esia_v3.w : esia_v3.x), _19851);
+                                    float _19860 = _19854 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                    float _30414;
+                                    float _30415;
+                                    if (_19860 > _19851)
+                                    {
+                                        float _19874 = esia_v5.y * clamp((_19851 - _19854) / max(0.60000002384185791015625 * _19854, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                        _30415 = _19874;
+                                        _30414 = _19854 * (1.0 + (0.60000002384185791015625 * _19874));
+                                    }
+                                    else
+                                    {
+                                        _30415 = esia_v5.y;
+                                        _30414 = _19860;
+                                    }
+                                    vec2 _19903 = (abs(_19005) - _18953) + vec2(_30414);
+                                    vec2 _19905 = max(_19903, vec2(0.0));
+                                    float _30416;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((_19905.x > 0.0) && (_19905.y > 0.0))
+                                    {
+                                        float _30417;
+                                        if ((_30415 > 0.001000000047497451305389404296875) && (_30414 > 9.9999997473787516355514526367188e-05))
+                                        {
+                                            float _19922 = 2.0 + (2.0 * _30415);
+                                            vec2 _19927 = _19905 / vec2(max(_30414, 9.9999997473787516355514526367188e-05));
+                                            _30417 = pow(pow(_19927.x, _19922) + pow(_19927.y, _19922), 1.0 / _19922) * _30414;
+                                        }
+                                        else
+                                        {
+                                            _30417 = length(_19905);
+                                        }
+                                        _30416 = _30417;
+                                    }
+                                    else
+                                    {
+                                        _30416 = max(_19905.x, _19905.y);
+                                    }
+                                    float _19962 = (min(max(_19903.x, _19903.y), 0.0) + _30416) - _30414;
+                                    float _30459;
+                                    SPIRV_CROSS_BRANCH
+                                    if ((esia_v7.x & _1871) != 0u)
+                                    {
+                                        vec2 _19033 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                                        vec2 _19036 = _14256 - ((_29442.xy + _29442.zw) * 0.5);
+                                        float _20010 = min(_19033.x, _19033.y);
+                                        float _20013 = min((_19036.x > 0.0) ? ((_19036.y > 0.0) ? _13603.x : _13603.x) : ((_19036.y > 0.0) ? _13603.x : _13603.x), _20010);
+                                        float _20019 = _20013 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                                        float _30418;
+                                        float _30419;
+                                        if (_20019 > _20010)
+                                        {
+                                            float _20033 = esia_v5.y * clamp((_20010 - _20013) / max(0.60000002384185791015625 * _20013, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                            _30419 = _20033;
+                                            _30418 = _20013 * (1.0 + (0.60000002384185791015625 * _20033));
+                                        }
+                                        else
+                                        {
+                                            _30419 = esia_v5.y;
+                                            _30418 = _20019;
+                                        }
+                                        vec2 _20062 = (abs(_19036) - _19033) + vec2(_30418);
+                                        vec2 _20064 = max(_20062, vec2(0.0));
+                                        float _30420;
+                                        SPIRV_CROSS_BRANCH
+                                        if ((_20064.x > 0.0) && (_20064.y > 0.0))
+                                        {
+                                            float _30421;
+                                            if ((_30419 > 0.001000000047497451305389404296875) && (_30418 > 9.9999997473787516355514526367188e-05))
+                                            {
+                                                float _20081 = 2.0 + (2.0 * _30419);
+                                                vec2 _20086 = _20064 / vec2(max(_30418, 9.9999997473787516355514526367188e-05));
+                                                _30421 = pow(pow(_20086.x, _20081) + pow(_20086.y, _20081), 1.0 / _20081) * _30418;
+                                            }
+                                            else
+                                            {
+                                                _30421 = length(_20064);
+                                            }
+                                            _30420 = _30421;
+                                        }
+                                        else
+                                        {
+                                            _30420 = max(_20064.x, _20064.y);
+                                        }
+                                        float _20121 = (min(max(_20062.x, _20062.y), 0.0) + _30420) - _30418;
+                                        float _20126 = max(_13603.y, 9.9999997473787516355514526367188e-05);
+                                        float _20135 = max(_20126 - abs(_19962 - _20121), 0.0) / _20126;
+                                        _30459 = min(_19962, _20121) - (((_20135 * _20135) * _20126) * 0.25);
+                                    }
+                                    else
+                                    {
+                                        _30459 = _19962;
+                                    }
+                                    _30458 = _30459;
+                                }
+                                _30457 = _30458;
+                            }
+                            _30456 = _30457;
+                        }
+                        _30455 = _30456;
+                    }
+                    _30616 = vec2(_30317 - _30363, _30409 - _30455);
                 }
-                vec2 _13752 = vec2(_29060 - _29110, _29160 - _29210);
-                float _13754 = length(_13752);
-                vec2 _13760 = _13752 / vec2(_13754);
-                bvec2 _13761 = bvec2(_13754 > 9.9999997473787516355514526367188e-06);
-                _29252 = vec2(_13761.x ? _13760.x : vec2(0.0, -1.0).x, _13761.y ? _13760.y : vec2(0.0, -1.0).y);
+                float _14265 = length(_30616);
+                vec2 _14271 = _30616 / vec2(_14265);
+                bvec2 _14272 = bvec2(_14265 > 9.9999997473787516355514526367188e-06);
+                _30654 = vec2(_14272.x ? _14271.x : vec2(0.0, -1.0).x, _14272.y ? _14271.y : vec2(0.0, -1.0).y);
                 break;
             } while(false);
-            _29830 = normalize(vec3(_29252 * min(_13297 / max(_13303, 0.001000000047497451305389404296875), 8.0), 1.0));
-            _29253 = _29252;
+            _31232 = normalize(vec3(_30654 * min(_13702 / max(_13708, 0.001000000047497451305389404296875), 8.0), 1.0));
+            _30655 = _30654;
         }
         else
         {
-            _29830 = vec3(0.0, 0.0, 1.0);
-            _29253 = vec2(0.0, -1.0);
+            _31232 = vec3(0.0, 0.0, 1.0);
+            _30655 = vec2(0.0, -1.0);
         }
-        vec2 _13329 = ((-_29253) * _13271) * (1.0 - _13303);
-        float _13331 = _13198.z;
-        vec2 _29254;
+        vec2 _13734 = ((-_30655) * _13676) * (1.0 - _13708);
+        float _13736 = _13603.z;
+        vec2 _30656;
         SPIRV_CROSS_BRANCH
-        if (_13331 > 0.0)
+        if (_13736 > 0.0)
         {
-            _29254 = (((esia_v2.xy + esia_v2.zw) * 0.5) - esia_v0) * (_13331 / (1.0 + _13331));
+            _30656 = (((esia_v2.xy + esia_v2.zw) * 0.5) - esia_v0) * (_13736 / (1.0 + _13736));
         }
         else
         {
-            _29254 = vec2(0.0);
+            _30656 = vec2(0.0);
         }
-        vec2 _13355 = _28164 * _226.gTarget.zw;
-        vec2 _13362 = _226.gDisplay.zw * _226.gTarget.zw;
-        vec2 _13367 = (_13329 + _29254) * _13362;
-        vec2 _13370 = _13329 * _13362;
-        vec3 _29712;
-        float _29730;
-        vec3 _29933;
-        if (_226.gTime.z > 0.5)
+        vec2 _13760 = _29435 * _239.gTarget.zw;
+        vec2 _13767 = _239.gDisplay.zw * _239.gTarget.zw;
+        vec2 _13772 = (_13734 + _30656) * _13767;
+        vec2 _13775 = _13734 * _13767;
+        vec3 _31114;
+        float _31132;
+        vec3 _31335;
+        if (_239.gTime.z > 0.5)
         {
-            vec2 _13377 = _13355 + _13367;
-            float _19046 = clamp(log2(max(_13269, 1.0)) - 1.0, 0.0, 5.0);
-            int _19049 = int(floor(_19046));
-            float _19053 = _19046 - float(_19049);
-            bool _19058 = (_19053 > 0.0199999995529651641845703125) && (_19049 < 5);
-            vec3 _29325;
-            _29325 = vec3(0.0);
-            vec3 _19087;
+            vec2 _13782 = _13760 + _13772;
+            float _20160 = clamp(log2(max(_13674, 1.0)) - 1.0, 0.0, 5.0);
+            int _20163 = int(floor(_20160));
+            float _20167 = _20160 - float(_20163);
+            bool _20172 = (_20167 > 0.0199999995529651641845703125) && (_20163 < 5);
+            vec3 _30727;
+            _30727 = vec3(0.0);
+            vec3 _20201;
             SPIRV_CROSS_LOOP
-            for (int _29255 = 0; _29255 < 2; _29325 = _19087, _29255++)
+            for (int _30657 = 0; _30657 < 2; _30727 = _20201, _30657++)
             {
-                if ((_29255 > 0) && (!_19058))
+                if ((_30657 > 0) && (!_20172))
                 {
                     break;
                 }
-                int _19073 = _19049 + _29255;
-                int _19111 = clamp(_19073, 1, 5);
-                vec2 _19180 = (_13377 * _226.gLevel[_19111].xy) - vec2(0.5);
-                vec2 _19182 = floor(_19180);
-                vec2 _19185 = _19180 - _19182;
-                vec2 _19188 = _19185 * _19185;
-                vec2 _19191 = _19188 * _19185;
-                vec2 _19210 = (((_19191 * 3.0) - (_19188 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
-                vec2 _19223 = _19191 * 0.16666667163372039794921875;
-                vec2 _19226 = (((((-_19191) + (_19188 * 3.0)) - (_19185 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _19210;
-                vec2 _19230 = (((((_19191 * (-3.0)) + (_19188 * 3.0)) + (_19185 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _19223;
-                vec2 _19242 = ((_19182 - vec2(0.5)) + (_19210 / _19226)) * _226.gLevel[_19111].zw;
-                vec2 _19254 = ((_19182 + vec2(1.5)) + (_19223 / _19230)) * _226.gLevel[_19111].zw;
-                vec4 _29292;
+                int _20187 = _20163 + _30657;
+                int _20225 = clamp(_20187, 1, 5);
+                vec2 _20294 = (_13782 * _239.gLevel[_20225].xy) - vec2(0.5);
+                vec2 _20296 = floor(_20294);
+                vec2 _20299 = _20294 - _20296;
+                vec2 _20302 = _20299 * _20299;
+                vec2 _20305 = _20302 * _20299;
+                vec2 _20324 = (((_20305 * 3.0) - (_20302 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
+                vec2 _20337 = _20305 * 0.16666667163372039794921875;
+                vec2 _20340 = (((((-_20305) + (_20302 * 3.0)) - (_20299 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20324;
+                vec2 _20344 = (((((_20305 * (-3.0)) + (_20302 * 3.0)) + (_20299 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20337;
+                vec2 _20356 = ((_20296 - vec2(0.5)) + (_20324 / _20340)) * _239.gLevel[_20225].zw;
+                vec2 _20368 = ((_20296 + vec2(1.5)) + (_20337 / _20344)) * _239.gLevel[_20225].zw;
+                vec4 _30694;
                 SPIRV_CROSS_BRANCH
-                if (_19073 <= 0)
+                if (_20187 <= 0)
                 {
-                    vec2 _29291;
-                    if (_226.gConv.x > 0.5)
+                    vec2 _30693;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _27456 = _13377;
-                        _27456.y = 1.0 - _13377.y;
-                        _29291 = _27456;
+                        vec2 _28723 = _13782;
+                        _28723.y = 1.0 - _13782.y;
+                        _30693 = _28723;
                     }
                     else
                     {
-                        _29291 = _13377;
+                        _30693 = _13782;
                     }
-                    _29292 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _29291, 0.0);
+                    _30694 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _30693, 0.0);
                 }
                 else
                 {
-                    vec4 _29293;
-                    if (_19073 == 1)
+                    vec4 _30695;
+                    if (_20187 == 1)
                     {
-                        vec2 _29284;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30686;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27461 = _19242;
-                            _27461.y = 1.0 - _19242.y;
-                            _29284 = _27461;
+                            vec2 _28728 = _20356;
+                            _28728.y = 1.0 - _20356.y;
+                            _30686 = _28728;
                         }
                         else
                         {
-                            _29284 = _19242;
+                            _30686 = _20356;
                         }
-                        float _19299 = _19242.y;
-                        vec2 _19300 = vec2(_19254.x, _19299);
-                        vec2 _29285;
-                        if (_226.gConv.x > 0.5)
+                        float _20413 = _20356.y;
+                        vec2 _20414 = vec2(_20368.x, _20413);
+                        vec2 _30687;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27468 = _19300;
-                            _27468.y = 1.0 - _19299;
-                            _29285 = _27468;
+                            vec2 _28735 = _20414;
+                            _28735.y = 1.0 - _20413;
+                            _30687 = _28735;
                         }
                         else
                         {
-                            _29285 = _19300;
+                            _30687 = _20414;
                         }
-                        float _19317 = _19254.y;
-                        vec2 _19318 = vec2(_19242.x, _19317);
-                        vec2 _29287;
-                        if (_226.gConv.x > 0.5)
+                        float _20431 = _20368.y;
+                        vec2 _20432 = vec2(_20356.x, _20431);
+                        vec2 _30689;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27475 = _19318;
-                            _27475.y = 1.0 - _19317;
-                            _29287 = _27475;
+                            vec2 _28742 = _20432;
+                            _28742.y = 1.0 - _20431;
+                            _30689 = _28742;
                         }
                         else
                         {
-                            _29287 = _19318;
+                            _30689 = _20432;
                         }
-                        vec2 _29289;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30691;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27482 = _19254;
-                            _27482.y = 1.0 - _19254.y;
-                            _29289 = _27482;
+                            vec2 _28749 = _20368;
+                            _28749.y = 1.0 - _20368.y;
+                            _30691 = _28749;
                         }
                         else
                         {
-                            _29289 = _19254;
+                            _30691 = _20368;
                         }
-                        _29293 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29284, 0.0) * (_19226.x * _19226.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29285, 0.0) * (_19230.x * _19226.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29287, 0.0) * (_19226.x * _19230.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29289, 0.0) * (_19230.x * _19230.y));
+                        _30695 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30686, 0.0) * (_20340.x * _20340.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30687, 0.0) * (_20344.x * _20340.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30689, 0.0) * (_20340.x * _20344.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30691, 0.0) * (_20344.x * _20344.y));
                     }
                     else
                     {
-                        vec4 _29294;
-                        if (_19073 == 2)
+                        vec4 _30696;
+                        if (_20187 == 2)
                         {
-                            vec2 _29277;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30679;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27489 = _19242;
-                                _27489.y = 1.0 - _19242.y;
-                                _29277 = _27489;
+                                vec2 _28756 = _20356;
+                                _28756.y = 1.0 - _20356.y;
+                                _30679 = _28756;
                             }
                             else
                             {
-                                _29277 = _19242;
+                                _30679 = _20356;
                             }
-                            float _19429 = _19242.y;
-                            vec2 _19430 = vec2(_19254.x, _19429);
-                            vec2 _29278;
-                            if (_226.gConv.x > 0.5)
+                            float _20543 = _20356.y;
+                            vec2 _20544 = vec2(_20368.x, _20543);
+                            vec2 _30680;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27496 = _19430;
-                                _27496.y = 1.0 - _19429;
-                                _29278 = _27496;
+                                vec2 _28763 = _20544;
+                                _28763.y = 1.0 - _20543;
+                                _30680 = _28763;
                             }
                             else
                             {
-                                _29278 = _19430;
+                                _30680 = _20544;
                             }
-                            float _19447 = _19254.y;
-                            vec2 _19448 = vec2(_19242.x, _19447);
-                            vec2 _29280;
-                            if (_226.gConv.x > 0.5)
+                            float _20561 = _20368.y;
+                            vec2 _20562 = vec2(_20356.x, _20561);
+                            vec2 _30682;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27503 = _19448;
-                                _27503.y = 1.0 - _19447;
-                                _29280 = _27503;
+                                vec2 _28770 = _20562;
+                                _28770.y = 1.0 - _20561;
+                                _30682 = _28770;
                             }
                             else
                             {
-                                _29280 = _19448;
+                                _30682 = _20562;
                             }
-                            vec2 _29282;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30684;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27510 = _19254;
-                                _27510.y = 1.0 - _19254.y;
-                                _29282 = _27510;
+                                vec2 _28777 = _20368;
+                                _28777.y = 1.0 - _20368.y;
+                                _30684 = _28777;
                             }
                             else
                             {
-                                _29282 = _19254;
+                                _30684 = _20368;
                             }
-                            _29294 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29277, 0.0) * (_19226.x * _19226.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29278, 0.0) * (_19230.x * _19226.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29280, 0.0) * (_19226.x * _19230.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29282, 0.0) * (_19230.x * _19230.y));
+                            _30696 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30679, 0.0) * (_20340.x * _20340.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30680, 0.0) * (_20344.x * _20340.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30682, 0.0) * (_20340.x * _20344.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30684, 0.0) * (_20344.x * _20344.y));
                         }
                         else
                         {
-                            vec4 _29295;
-                            if (_19073 == 3)
+                            vec4 _30697;
+                            if (_20187 == 3)
                             {
-                                vec2 _29270;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30672;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27517 = _19242;
-                                    _27517.y = 1.0 - _19242.y;
-                                    _29270 = _27517;
+                                    vec2 _28784 = _20356;
+                                    _28784.y = 1.0 - _20356.y;
+                                    _30672 = _28784;
                                 }
                                 else
                                 {
-                                    _29270 = _19242;
+                                    _30672 = _20356;
                                 }
-                                float _19559 = _19242.y;
-                                vec2 _19560 = vec2(_19254.x, _19559);
-                                vec2 _29271;
-                                if (_226.gConv.x > 0.5)
+                                float _20673 = _20356.y;
+                                vec2 _20674 = vec2(_20368.x, _20673);
+                                vec2 _30673;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27524 = _19560;
-                                    _27524.y = 1.0 - _19559;
-                                    _29271 = _27524;
+                                    vec2 _28791 = _20674;
+                                    _28791.y = 1.0 - _20673;
+                                    _30673 = _28791;
                                 }
                                 else
                                 {
-                                    _29271 = _19560;
+                                    _30673 = _20674;
                                 }
-                                float _19577 = _19254.y;
-                                vec2 _19578 = vec2(_19242.x, _19577);
-                                vec2 _29273;
-                                if (_226.gConv.x > 0.5)
+                                float _20691 = _20368.y;
+                                vec2 _20692 = vec2(_20356.x, _20691);
+                                vec2 _30675;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27531 = _19578;
-                                    _27531.y = 1.0 - _19577;
-                                    _29273 = _27531;
+                                    vec2 _28798 = _20692;
+                                    _28798.y = 1.0 - _20691;
+                                    _30675 = _28798;
                                 }
                                 else
                                 {
-                                    _29273 = _19578;
+                                    _30675 = _20692;
                                 }
-                                vec2 _29275;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30677;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27538 = _19254;
-                                    _27538.y = 1.0 - _19254.y;
-                                    _29275 = _27538;
+                                    vec2 _28805 = _20368;
+                                    _28805.y = 1.0 - _20368.y;
+                                    _30677 = _28805;
                                 }
                                 else
                                 {
-                                    _29275 = _19254;
+                                    _30677 = _20368;
                                 }
-                                _29295 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29270, 0.0) * (_19226.x * _19226.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29271, 0.0) * (_19230.x * _19226.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29273, 0.0) * (_19226.x * _19230.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29275, 0.0) * (_19230.x * _19230.y));
+                                _30697 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30672, 0.0) * (_20340.x * _20340.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30673, 0.0) * (_20344.x * _20340.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30675, 0.0) * (_20340.x * _20344.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30677, 0.0) * (_20344.x * _20344.y));
                             }
                             else
                             {
-                                vec4 _29296;
-                                if (_19073 == 4)
+                                vec4 _30698;
+                                if (_20187 == 4)
                                 {
-                                    vec2 _29263;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30665;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27545 = _19242;
-                                        _27545.y = 1.0 - _19242.y;
-                                        _29263 = _27545;
+                                        vec2 _28812 = _20356;
+                                        _28812.y = 1.0 - _20356.y;
+                                        _30665 = _28812;
                                     }
                                     else
                                     {
-                                        _29263 = _19242;
+                                        _30665 = _20356;
                                     }
-                                    float _19689 = _19242.y;
-                                    vec2 _19690 = vec2(_19254.x, _19689);
-                                    vec2 _29264;
-                                    if (_226.gConv.x > 0.5)
+                                    float _20803 = _20356.y;
+                                    vec2 _20804 = vec2(_20368.x, _20803);
+                                    vec2 _30666;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27552 = _19690;
-                                        _27552.y = 1.0 - _19689;
-                                        _29264 = _27552;
+                                        vec2 _28819 = _20804;
+                                        _28819.y = 1.0 - _20803;
+                                        _30666 = _28819;
                                     }
                                     else
                                     {
-                                        _29264 = _19690;
+                                        _30666 = _20804;
                                     }
-                                    float _19707 = _19254.y;
-                                    vec2 _19708 = vec2(_19242.x, _19707);
-                                    vec2 _29266;
-                                    if (_226.gConv.x > 0.5)
+                                    float _20821 = _20368.y;
+                                    vec2 _20822 = vec2(_20356.x, _20821);
+                                    vec2 _30668;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27559 = _19708;
-                                        _27559.y = 1.0 - _19707;
-                                        _29266 = _27559;
+                                        vec2 _28826 = _20822;
+                                        _28826.y = 1.0 - _20821;
+                                        _30668 = _28826;
                                     }
                                     else
                                     {
-                                        _29266 = _19708;
+                                        _30668 = _20822;
                                     }
-                                    vec2 _29268;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30670;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27566 = _19254;
-                                        _27566.y = 1.0 - _19254.y;
-                                        _29268 = _27566;
+                                        vec2 _28833 = _20368;
+                                        _28833.y = 1.0 - _20368.y;
+                                        _30670 = _28833;
                                     }
                                     else
                                     {
-                                        _29268 = _19254;
+                                        _30670 = _20368;
                                     }
-                                    _29296 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29263, 0.0) * (_19226.x * _19226.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29264, 0.0) * (_19230.x * _19226.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29266, 0.0) * (_19226.x * _19230.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29268, 0.0) * (_19230.x * _19230.y));
+                                    _30698 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30665, 0.0) * (_20340.x * _20340.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30666, 0.0) * (_20344.x * _20340.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30668, 0.0) * (_20340.x * _20344.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30670, 0.0) * (_20344.x * _20344.y));
                                 }
                                 else
                                 {
-                                    vec2 _29256;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30658;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27573 = _19242;
-                                        _27573.y = 1.0 - _19242.y;
-                                        _29256 = _27573;
+                                        vec2 _28840 = _20356;
+                                        _28840.y = 1.0 - _20356.y;
+                                        _30658 = _28840;
                                     }
                                     else
                                     {
-                                        _29256 = _19242;
+                                        _30658 = _20356;
                                     }
-                                    float _19819 = _19242.y;
-                                    vec2 _19820 = vec2(_19254.x, _19819);
-                                    vec2 _29257;
-                                    if (_226.gConv.x > 0.5)
+                                    float _20933 = _20356.y;
+                                    vec2 _20934 = vec2(_20368.x, _20933);
+                                    vec2 _30659;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27580 = _19820;
-                                        _27580.y = 1.0 - _19819;
-                                        _29257 = _27580;
+                                        vec2 _28847 = _20934;
+                                        _28847.y = 1.0 - _20933;
+                                        _30659 = _28847;
                                     }
                                     else
                                     {
-                                        _29257 = _19820;
+                                        _30659 = _20934;
                                     }
-                                    float _19837 = _19254.y;
-                                    vec2 _19838 = vec2(_19242.x, _19837);
-                                    vec2 _29259;
-                                    if (_226.gConv.x > 0.5)
+                                    float _20951 = _20368.y;
+                                    vec2 _20952 = vec2(_20356.x, _20951);
+                                    vec2 _30661;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27587 = _19838;
-                                        _27587.y = 1.0 - _19837;
-                                        _29259 = _27587;
+                                        vec2 _28854 = _20952;
+                                        _28854.y = 1.0 - _20951;
+                                        _30661 = _28854;
                                     }
                                     else
                                     {
-                                        _29259 = _19838;
+                                        _30661 = _20952;
                                     }
-                                    vec2 _29261;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30663;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27594 = _19254;
-                                        _27594.y = 1.0 - _19254.y;
-                                        _29261 = _27594;
+                                        vec2 _28861 = _20368;
+                                        _28861.y = 1.0 - _20368.y;
+                                        _30663 = _28861;
                                     }
                                     else
                                     {
-                                        _29261 = _19254;
+                                        _30663 = _20368;
                                     }
-                                    _29296 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29256, 0.0) * (_19226.x * _19226.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29257, 0.0) * (_19230.x * _19226.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29259, 0.0) * (_19226.x * _19230.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29261, 0.0) * (_19230.x * _19230.y));
+                                    _30698 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30658, 0.0) * (_20340.x * _20340.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30659, 0.0) * (_20344.x * _20340.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30661, 0.0) * (_20340.x * _20344.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30663, 0.0) * (_20344.x * _20344.y));
                                 }
-                                _29295 = _29296;
+                                _30697 = _30698;
                             }
-                            _29294 = _29295;
+                            _30696 = _30697;
                         }
-                        _29293 = _29294;
+                        _30695 = _30696;
                     }
-                    _29292 = _29293;
+                    _30694 = _30695;
                 }
-                _19087 = _29325 + (_29292.xyz * (_19058 ? ((_29255 == 0) ? (1.0 - _19053) : _19053) : 1.0));
+                _20201 = _30727 + (_30694.xyz * (_20172 ? ((_30657 == 0) ? (1.0 - _20167) : _20167) : 1.0));
             }
-            vec3 _29715;
+            vec3 _31117;
             SPIRV_CROSS_BRANCH
-            if (((_13290 > 0.001000000047497451305389404296875) && (_13297 > 0.0)) && ((((_13271 * 0.300000011920928955078125) * _13290) * _226.gDisplay.z) > (_13269 * 0.3499999940395355224609375)))
+            if (((_13695 > 0.001000000047497451305389404296875) && (_13702 > 0.0)) && ((((_13676 * 0.300000011920928955078125) * _13695) * _239.gDisplay.z) > (_13674 * 0.3499999940395355224609375)))
             {
-                float _13397 = 0.300000011920928955078125 * _13290;
-                vec2 _13404 = (_13355 + _13367) - (_13370 * _13397);
-                float _19934 = clamp(log2(max(_13269, 1.0)) - 1.0, 0.0, 5.0);
-                int _19937 = int(floor(_19934));
-                float _19941 = _19934 - float(_19937);
-                bool _19946 = (_19941 > 0.0199999995529651641845703125) && (_19937 < 5);
-                vec3 _29421;
-                _29421 = vec3(0.0);
-                vec3 _19975;
+                float _13802 = 0.300000011920928955078125 * _13695;
+                vec2 _13809 = (_13760 + _13772) - (_13775 * _13802);
+                float _21048 = clamp(log2(max(_13674, 1.0)) - 1.0, 0.0, 5.0);
+                int _21051 = int(floor(_21048));
+                float _21055 = _21048 - float(_21051);
+                bool _21060 = (_21055 > 0.0199999995529651641845703125) && (_21051 < 5);
+                vec3 _30823;
+                _30823 = vec3(0.0);
+                vec3 _21089;
                 SPIRV_CROSS_LOOP
-                for (int _29351 = 0; _29351 < 2; _29421 = _19975, _29351++)
+                for (int _30753 = 0; _30753 < 2; _30823 = _21089, _30753++)
                 {
-                    if ((_29351 > 0) && (!_19946))
+                    if ((_30753 > 0) && (!_21060))
                     {
                         break;
                     }
-                    int _19961 = _19937 + _29351;
-                    int _19999 = clamp(_19961, 1, 5);
-                    vec2 _20068 = (_13404 * _226.gLevel[_19999].xy) - vec2(0.5);
-                    vec2 _20070 = floor(_20068);
-                    vec2 _20073 = _20068 - _20070;
-                    vec2 _20076 = _20073 * _20073;
-                    vec2 _20079 = _20076 * _20073;
-                    vec2 _20098 = (((_20079 * 3.0) - (_20076 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
-                    vec2 _20111 = _20079 * 0.16666667163372039794921875;
-                    vec2 _20114 = (((((-_20079) + (_20076 * 3.0)) - (_20073 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20098;
-                    vec2 _20118 = (((((_20079 * (-3.0)) + (_20076 * 3.0)) + (_20073 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20111;
-                    vec2 _20130 = ((_20070 - vec2(0.5)) + (_20098 / _20114)) * _226.gLevel[_19999].zw;
-                    vec2 _20142 = ((_20070 + vec2(1.5)) + (_20111 / _20118)) * _226.gLevel[_19999].zw;
-                    vec4 _29388;
+                    int _21075 = _21051 + _30753;
+                    int _21113 = clamp(_21075, 1, 5);
+                    vec2 _21182 = (_13809 * _239.gLevel[_21113].xy) - vec2(0.5);
+                    vec2 _21184 = floor(_21182);
+                    vec2 _21187 = _21182 - _21184;
+                    vec2 _21190 = _21187 * _21187;
+                    vec2 _21193 = _21190 * _21187;
+                    vec2 _21212 = (((_21193 * 3.0) - (_21190 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
+                    vec2 _21225 = _21193 * 0.16666667163372039794921875;
+                    vec2 _21228 = (((((-_21193) + (_21190 * 3.0)) - (_21187 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _21212;
+                    vec2 _21232 = (((((_21193 * (-3.0)) + (_21190 * 3.0)) + (_21187 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _21225;
+                    vec2 _21244 = ((_21184 - vec2(0.5)) + (_21212 / _21228)) * _239.gLevel[_21113].zw;
+                    vec2 _21256 = ((_21184 + vec2(1.5)) + (_21225 / _21232)) * _239.gLevel[_21113].zw;
+                    vec4 _30790;
                     SPIRV_CROSS_BRANCH
-                    if (_19961 <= 0)
+                    if (_21075 <= 0)
                     {
-                        vec2 _29387;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30789;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27599 = _13404;
-                            _27599.y = 1.0 - _13404.y;
-                            _29387 = _27599;
+                            vec2 _28866 = _13809;
+                            _28866.y = 1.0 - _13809.y;
+                            _30789 = _28866;
                         }
                         else
                         {
-                            _29387 = _13404;
+                            _30789 = _13809;
                         }
-                        _29388 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _29387, 0.0);
+                        _30790 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _30789, 0.0);
                     }
                     else
                     {
-                        vec4 _29389;
-                        if (_19961 == 1)
+                        vec4 _30791;
+                        if (_21075 == 1)
                         {
-                            vec2 _29380;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30782;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27604 = _20130;
-                                _27604.y = 1.0 - _20130.y;
-                                _29380 = _27604;
+                                vec2 _28871 = _21244;
+                                _28871.y = 1.0 - _21244.y;
+                                _30782 = _28871;
                             }
                             else
                             {
-                                _29380 = _20130;
+                                _30782 = _21244;
                             }
-                            float _20187 = _20130.y;
-                            vec2 _20188 = vec2(_20142.x, _20187);
-                            vec2 _29381;
-                            if (_226.gConv.x > 0.5)
+                            float _21301 = _21244.y;
+                            vec2 _21302 = vec2(_21256.x, _21301);
+                            vec2 _30783;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27611 = _20188;
-                                _27611.y = 1.0 - _20187;
-                                _29381 = _27611;
+                                vec2 _28878 = _21302;
+                                _28878.y = 1.0 - _21301;
+                                _30783 = _28878;
                             }
                             else
                             {
-                                _29381 = _20188;
+                                _30783 = _21302;
                             }
-                            float _20205 = _20142.y;
-                            vec2 _20206 = vec2(_20130.x, _20205);
-                            vec2 _29383;
-                            if (_226.gConv.x > 0.5)
+                            float _21319 = _21256.y;
+                            vec2 _21320 = vec2(_21244.x, _21319);
+                            vec2 _30785;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27618 = _20206;
-                                _27618.y = 1.0 - _20205;
-                                _29383 = _27618;
+                                vec2 _28885 = _21320;
+                                _28885.y = 1.0 - _21319;
+                                _30785 = _28885;
                             }
                             else
                             {
-                                _29383 = _20206;
+                                _30785 = _21320;
                             }
-                            vec2 _29385;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30787;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27625 = _20142;
-                                _27625.y = 1.0 - _20142.y;
-                                _29385 = _27625;
+                                vec2 _28892 = _21256;
+                                _28892.y = 1.0 - _21256.y;
+                                _30787 = _28892;
                             }
                             else
                             {
-                                _29385 = _20142;
+                                _30787 = _21256;
                             }
-                            _29389 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29380, 0.0) * (_20114.x * _20114.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29381, 0.0) * (_20118.x * _20114.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29383, 0.0) * (_20114.x * _20118.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29385, 0.0) * (_20118.x * _20118.y));
+                            _30791 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30782, 0.0) * (_21228.x * _21228.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30783, 0.0) * (_21232.x * _21228.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30785, 0.0) * (_21228.x * _21232.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30787, 0.0) * (_21232.x * _21232.y));
                         }
                         else
                         {
-                            vec4 _29390;
-                            if (_19961 == 2)
+                            vec4 _30792;
+                            if (_21075 == 2)
                             {
-                                vec2 _29373;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30775;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27632 = _20130;
-                                    _27632.y = 1.0 - _20130.y;
-                                    _29373 = _27632;
+                                    vec2 _28899 = _21244;
+                                    _28899.y = 1.0 - _21244.y;
+                                    _30775 = _28899;
                                 }
                                 else
                                 {
-                                    _29373 = _20130;
+                                    _30775 = _21244;
                                 }
-                                float _20317 = _20130.y;
-                                vec2 _20318 = vec2(_20142.x, _20317);
-                                vec2 _29374;
-                                if (_226.gConv.x > 0.5)
+                                float _21431 = _21244.y;
+                                vec2 _21432 = vec2(_21256.x, _21431);
+                                vec2 _30776;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27639 = _20318;
-                                    _27639.y = 1.0 - _20317;
-                                    _29374 = _27639;
+                                    vec2 _28906 = _21432;
+                                    _28906.y = 1.0 - _21431;
+                                    _30776 = _28906;
                                 }
                                 else
                                 {
-                                    _29374 = _20318;
+                                    _30776 = _21432;
                                 }
-                                float _20335 = _20142.y;
-                                vec2 _20336 = vec2(_20130.x, _20335);
-                                vec2 _29376;
-                                if (_226.gConv.x > 0.5)
+                                float _21449 = _21256.y;
+                                vec2 _21450 = vec2(_21244.x, _21449);
+                                vec2 _30778;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27646 = _20336;
-                                    _27646.y = 1.0 - _20335;
-                                    _29376 = _27646;
+                                    vec2 _28913 = _21450;
+                                    _28913.y = 1.0 - _21449;
+                                    _30778 = _28913;
                                 }
                                 else
                                 {
-                                    _29376 = _20336;
+                                    _30778 = _21450;
                                 }
-                                vec2 _29378;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30780;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27653 = _20142;
-                                    _27653.y = 1.0 - _20142.y;
-                                    _29378 = _27653;
+                                    vec2 _28920 = _21256;
+                                    _28920.y = 1.0 - _21256.y;
+                                    _30780 = _28920;
                                 }
                                 else
                                 {
-                                    _29378 = _20142;
+                                    _30780 = _21256;
                                 }
-                                _29390 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29373, 0.0) * (_20114.x * _20114.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29374, 0.0) * (_20118.x * _20114.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29376, 0.0) * (_20114.x * _20118.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29378, 0.0) * (_20118.x * _20118.y));
+                                _30792 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30775, 0.0) * (_21228.x * _21228.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30776, 0.0) * (_21232.x * _21228.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30778, 0.0) * (_21228.x * _21232.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30780, 0.0) * (_21232.x * _21232.y));
                             }
                             else
                             {
-                                vec4 _29391;
-                                if (_19961 == 3)
+                                vec4 _30793;
+                                if (_21075 == 3)
                                 {
-                                    vec2 _29366;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30768;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27660 = _20130;
-                                        _27660.y = 1.0 - _20130.y;
-                                        _29366 = _27660;
+                                        vec2 _28927 = _21244;
+                                        _28927.y = 1.0 - _21244.y;
+                                        _30768 = _28927;
                                     }
                                     else
                                     {
-                                        _29366 = _20130;
+                                        _30768 = _21244;
                                     }
-                                    float _20447 = _20130.y;
-                                    vec2 _20448 = vec2(_20142.x, _20447);
-                                    vec2 _29367;
-                                    if (_226.gConv.x > 0.5)
+                                    float _21561 = _21244.y;
+                                    vec2 _21562 = vec2(_21256.x, _21561);
+                                    vec2 _30769;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27667 = _20448;
-                                        _27667.y = 1.0 - _20447;
-                                        _29367 = _27667;
+                                        vec2 _28934 = _21562;
+                                        _28934.y = 1.0 - _21561;
+                                        _30769 = _28934;
                                     }
                                     else
                                     {
-                                        _29367 = _20448;
+                                        _30769 = _21562;
                                     }
-                                    float _20465 = _20142.y;
-                                    vec2 _20466 = vec2(_20130.x, _20465);
-                                    vec2 _29369;
-                                    if (_226.gConv.x > 0.5)
+                                    float _21579 = _21256.y;
+                                    vec2 _21580 = vec2(_21244.x, _21579);
+                                    vec2 _30771;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27674 = _20466;
-                                        _27674.y = 1.0 - _20465;
-                                        _29369 = _27674;
+                                        vec2 _28941 = _21580;
+                                        _28941.y = 1.0 - _21579;
+                                        _30771 = _28941;
                                     }
                                     else
                                     {
-                                        _29369 = _20466;
+                                        _30771 = _21580;
                                     }
-                                    vec2 _29371;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30773;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27681 = _20142;
-                                        _27681.y = 1.0 - _20142.y;
-                                        _29371 = _27681;
+                                        vec2 _28948 = _21256;
+                                        _28948.y = 1.0 - _21256.y;
+                                        _30773 = _28948;
                                     }
                                     else
                                     {
-                                        _29371 = _20142;
+                                        _30773 = _21256;
                                     }
-                                    _29391 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29366, 0.0) * (_20114.x * _20114.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29367, 0.0) * (_20118.x * _20114.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29369, 0.0) * (_20114.x * _20118.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29371, 0.0) * (_20118.x * _20118.y));
+                                    _30793 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30768, 0.0) * (_21228.x * _21228.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30769, 0.0) * (_21232.x * _21228.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30771, 0.0) * (_21228.x * _21232.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30773, 0.0) * (_21232.x * _21232.y));
                                 }
                                 else
                                 {
-                                    vec4 _29392;
-                                    if (_19961 == 4)
+                                    vec4 _30794;
+                                    if (_21075 == 4)
                                     {
-                                        vec2 _29359;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30761;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27688 = _20130;
-                                            _27688.y = 1.0 - _20130.y;
-                                            _29359 = _27688;
+                                            vec2 _28955 = _21244;
+                                            _28955.y = 1.0 - _21244.y;
+                                            _30761 = _28955;
                                         }
                                         else
                                         {
-                                            _29359 = _20130;
+                                            _30761 = _21244;
                                         }
-                                        float _20577 = _20130.y;
-                                        vec2 _20578 = vec2(_20142.x, _20577);
-                                        vec2 _29360;
-                                        if (_226.gConv.x > 0.5)
+                                        float _21691 = _21244.y;
+                                        vec2 _21692 = vec2(_21256.x, _21691);
+                                        vec2 _30762;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27695 = _20578;
-                                            _27695.y = 1.0 - _20577;
-                                            _29360 = _27695;
+                                            vec2 _28962 = _21692;
+                                            _28962.y = 1.0 - _21691;
+                                            _30762 = _28962;
                                         }
                                         else
                                         {
-                                            _29360 = _20578;
+                                            _30762 = _21692;
                                         }
-                                        float _20595 = _20142.y;
-                                        vec2 _20596 = vec2(_20130.x, _20595);
-                                        vec2 _29362;
-                                        if (_226.gConv.x > 0.5)
+                                        float _21709 = _21256.y;
+                                        vec2 _21710 = vec2(_21244.x, _21709);
+                                        vec2 _30764;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27702 = _20596;
-                                            _27702.y = 1.0 - _20595;
-                                            _29362 = _27702;
+                                            vec2 _28969 = _21710;
+                                            _28969.y = 1.0 - _21709;
+                                            _30764 = _28969;
                                         }
                                         else
                                         {
-                                            _29362 = _20596;
+                                            _30764 = _21710;
                                         }
-                                        vec2 _29364;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30766;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27709 = _20142;
-                                            _27709.y = 1.0 - _20142.y;
-                                            _29364 = _27709;
+                                            vec2 _28976 = _21256;
+                                            _28976.y = 1.0 - _21256.y;
+                                            _30766 = _28976;
                                         }
                                         else
                                         {
-                                            _29364 = _20142;
+                                            _30766 = _21256;
                                         }
-                                        _29392 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29359, 0.0) * (_20114.x * _20114.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29360, 0.0) * (_20118.x * _20114.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29362, 0.0) * (_20114.x * _20118.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29364, 0.0) * (_20118.x * _20118.y));
+                                        _30794 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30761, 0.0) * (_21228.x * _21228.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30762, 0.0) * (_21232.x * _21228.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30764, 0.0) * (_21228.x * _21232.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30766, 0.0) * (_21232.x * _21232.y));
                                     }
                                     else
                                     {
-                                        vec2 _29352;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30754;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27716 = _20130;
-                                            _27716.y = 1.0 - _20130.y;
-                                            _29352 = _27716;
+                                            vec2 _28983 = _21244;
+                                            _28983.y = 1.0 - _21244.y;
+                                            _30754 = _28983;
                                         }
                                         else
                                         {
-                                            _29352 = _20130;
+                                            _30754 = _21244;
                                         }
-                                        float _20707 = _20130.y;
-                                        vec2 _20708 = vec2(_20142.x, _20707);
-                                        vec2 _29353;
-                                        if (_226.gConv.x > 0.5)
+                                        float _21821 = _21244.y;
+                                        vec2 _21822 = vec2(_21256.x, _21821);
+                                        vec2 _30755;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27723 = _20708;
-                                            _27723.y = 1.0 - _20707;
-                                            _29353 = _27723;
+                                            vec2 _28990 = _21822;
+                                            _28990.y = 1.0 - _21821;
+                                            _30755 = _28990;
                                         }
                                         else
                                         {
-                                            _29353 = _20708;
+                                            _30755 = _21822;
                                         }
-                                        float _20725 = _20142.y;
-                                        vec2 _20726 = vec2(_20130.x, _20725);
-                                        vec2 _29355;
-                                        if (_226.gConv.x > 0.5)
+                                        float _21839 = _21256.y;
+                                        vec2 _21840 = vec2(_21244.x, _21839);
+                                        vec2 _30757;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27730 = _20726;
-                                            _27730.y = 1.0 - _20725;
-                                            _29355 = _27730;
+                                            vec2 _28997 = _21840;
+                                            _28997.y = 1.0 - _21839;
+                                            _30757 = _28997;
                                         }
                                         else
                                         {
-                                            _29355 = _20726;
+                                            _30757 = _21840;
                                         }
-                                        vec2 _29357;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30759;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27737 = _20142;
-                                            _27737.y = 1.0 - _20142.y;
-                                            _29357 = _27737;
+                                            vec2 _29004 = _21256;
+                                            _29004.y = 1.0 - _21256.y;
+                                            _30759 = _29004;
                                         }
                                         else
                                         {
-                                            _29357 = _20142;
+                                            _30759 = _21256;
                                         }
-                                        _29392 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29352, 0.0) * (_20114.x * _20114.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29353, 0.0) * (_20118.x * _20114.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29355, 0.0) * (_20114.x * _20118.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29357, 0.0) * (_20118.x * _20118.y));
+                                        _30794 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30754, 0.0) * (_21228.x * _21228.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30755, 0.0) * (_21232.x * _21228.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30757, 0.0) * (_21228.x * _21232.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30759, 0.0) * (_21232.x * _21232.y));
                                     }
-                                    _29391 = _29392;
+                                    _30793 = _30794;
                                 }
-                                _29390 = _29391;
+                                _30792 = _30793;
                             }
-                            _29389 = _29390;
+                            _30791 = _30792;
                         }
-                        _29388 = _29389;
+                        _30790 = _30791;
                     }
-                    _19975 = _29421 + (_29388.xyz * (_19946 ? ((_29351 == 0) ? (1.0 - _19941) : _19941) : 1.0));
+                    _21089 = _30823 + (_30790.xyz * (_21060 ? ((_30753 == 0) ? (1.0 - _21055) : _21055) : 1.0));
                 }
-                vec3 _27741 = _29325;
-                _27741.x = _29421.x;
-                vec2 _13415 = (_13355 + _13367) + (_13370 * _13397);
-                float _20822 = clamp(log2(max(_13269, 1.0)) - 1.0, 0.0, 5.0);
-                int _20825 = int(floor(_20822));
-                float _20829 = _20822 - float(_20825);
-                bool _20834 = (_20829 > 0.0199999995529651641845703125) && (_20825 < 5);
-                vec3 _29545;
-                _29545 = vec3(0.0);
-                vec3 _20863;
+                vec3 _29008 = _30727;
+                _29008.x = _30823.x;
+                vec2 _13820 = (_13760 + _13772) + (_13775 * _13802);
+                float _21936 = clamp(log2(max(_13674, 1.0)) - 1.0, 0.0, 5.0);
+                int _21939 = int(floor(_21936));
+                float _21943 = _21936 - float(_21939);
+                bool _21948 = (_21943 > 0.0199999995529651641845703125) && (_21939 < 5);
+                vec3 _30947;
+                _30947 = vec3(0.0);
+                vec3 _21977;
                 SPIRV_CROSS_LOOP
-                for (int _29475 = 0; _29475 < 2; _29545 = _20863, _29475++)
+                for (int _30877 = 0; _30877 < 2; _30947 = _21977, _30877++)
                 {
-                    if ((_29475 > 0) && (!_20834))
+                    if ((_30877 > 0) && (!_21948))
                     {
                         break;
                     }
-                    int _20849 = _20825 + _29475;
-                    int _20887 = clamp(_20849, 1, 5);
-                    vec2 _20956 = (_13415 * _226.gLevel[_20887].xy) - vec2(0.5);
-                    vec2 _20958 = floor(_20956);
-                    vec2 _20961 = _20956 - _20958;
-                    vec2 _20964 = _20961 * _20961;
-                    vec2 _20967 = _20964 * _20961;
-                    vec2 _20986 = (((_20967 * 3.0) - (_20964 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
-                    vec2 _20999 = _20967 * 0.16666667163372039794921875;
-                    vec2 _21002 = (((((-_20967) + (_20964 * 3.0)) - (_20961 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20986;
-                    vec2 _21006 = (((((_20967 * (-3.0)) + (_20964 * 3.0)) + (_20961 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _20999;
-                    vec2 _21018 = ((_20958 - vec2(0.5)) + (_20986 / _21002)) * _226.gLevel[_20887].zw;
-                    vec2 _21030 = ((_20958 + vec2(1.5)) + (_20999 / _21006)) * _226.gLevel[_20887].zw;
-                    vec4 _29512;
+                    int _21963 = _21939 + _30877;
+                    int _22001 = clamp(_21963, 1, 5);
+                    vec2 _22070 = (_13820 * _239.gLevel[_22001].xy) - vec2(0.5);
+                    vec2 _22072 = floor(_22070);
+                    vec2 _22075 = _22070 - _22072;
+                    vec2 _22078 = _22075 * _22075;
+                    vec2 _22081 = _22078 * _22075;
+                    vec2 _22100 = (((_22081 * 3.0) - (_22078 * 6.0)) + vec2(4.0)) * 0.16666667163372039794921875;
+                    vec2 _22113 = _22081 * 0.16666667163372039794921875;
+                    vec2 _22116 = (((((-_22081) + (_22078 * 3.0)) - (_22075 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _22100;
+                    vec2 _22120 = (((((_22081 * (-3.0)) + (_22078 * 3.0)) + (_22075 * 3.0)) + vec2(1.0)) * 0.16666667163372039794921875) + _22113;
+                    vec2 _22132 = ((_22072 - vec2(0.5)) + (_22100 / _22116)) * _239.gLevel[_22001].zw;
+                    vec2 _22144 = ((_22072 + vec2(1.5)) + (_22113 / _22120)) * _239.gLevel[_22001].zw;
+                    vec4 _30914;
                     SPIRV_CROSS_BRANCH
-                    if (_20849 <= 0)
+                    if (_21963 <= 0)
                     {
-                        vec2 _29511;
-                        if (_226.gConv.x > 0.5)
+                        vec2 _30913;
+                        if (_239.gConv.x > 0.5)
                         {
-                            vec2 _27744 = _13415;
-                            _27744.y = 1.0 - _13415.y;
-                            _29511 = _27744;
+                            vec2 _29011 = _13820;
+                            _29011.y = 1.0 - _13820.y;
+                            _30913 = _29011;
                         }
                         else
                         {
-                            _29511 = _13415;
+                            _30913 = _13820;
                         }
-                        _29512 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _29511, 0.0);
+                        _30914 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _30913, 0.0);
                     }
                     else
                     {
-                        vec4 _29513;
-                        if (_20849 == 1)
+                        vec4 _30915;
+                        if (_21963 == 1)
                         {
-                            vec2 _29504;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30906;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27749 = _21018;
-                                _27749.y = 1.0 - _21018.y;
-                                _29504 = _27749;
+                                vec2 _29016 = _22132;
+                                _29016.y = 1.0 - _22132.y;
+                                _30906 = _29016;
                             }
                             else
                             {
-                                _29504 = _21018;
+                                _30906 = _22132;
                             }
-                            float _21075 = _21018.y;
-                            vec2 _21076 = vec2(_21030.x, _21075);
-                            vec2 _29505;
-                            if (_226.gConv.x > 0.5)
+                            float _22189 = _22132.y;
+                            vec2 _22190 = vec2(_22144.x, _22189);
+                            vec2 _30907;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27756 = _21076;
-                                _27756.y = 1.0 - _21075;
-                                _29505 = _27756;
+                                vec2 _29023 = _22190;
+                                _29023.y = 1.0 - _22189;
+                                _30907 = _29023;
                             }
                             else
                             {
-                                _29505 = _21076;
+                                _30907 = _22190;
                             }
-                            float _21093 = _21030.y;
-                            vec2 _21094 = vec2(_21018.x, _21093);
-                            vec2 _29507;
-                            if (_226.gConv.x > 0.5)
+                            float _22207 = _22144.y;
+                            vec2 _22208 = vec2(_22132.x, _22207);
+                            vec2 _30909;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27763 = _21094;
-                                _27763.y = 1.0 - _21093;
-                                _29507 = _27763;
+                                vec2 _29030 = _22208;
+                                _29030.y = 1.0 - _22207;
+                                _30909 = _29030;
                             }
                             else
                             {
-                                _29507 = _21094;
+                                _30909 = _22208;
                             }
-                            vec2 _29509;
-                            if (_226.gConv.x > 0.5)
+                            vec2 _30911;
+                            if (_239.gConv.x > 0.5)
                             {
-                                vec2 _27770 = _21030;
-                                _27770.y = 1.0 - _21030.y;
-                                _29509 = _27770;
+                                vec2 _29037 = _22144;
+                                _29037.y = 1.0 - _22144.y;
+                                _30911 = _29037;
                             }
                             else
                             {
-                                _29509 = _21030;
+                                _30911 = _22144;
                             }
-                            _29513 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29504, 0.0) * (_21002.x * _21002.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29505, 0.0) * (_21006.x * _21002.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29507, 0.0) * (_21002.x * _21006.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29509, 0.0) * (_21006.x * _21006.y));
+                            _30915 = (((textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30906, 0.0) * (_22116.x * _22116.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30907, 0.0) * (_22120.x * _22116.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30909, 0.0) * (_22116.x * _22120.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _30911, 0.0) * (_22120.x * _22120.y));
                         }
                         else
                         {
-                            vec4 _29514;
-                            if (_20849 == 2)
+                            vec4 _30916;
+                            if (_21963 == 2)
                             {
-                                vec2 _29497;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30899;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27777 = _21018;
-                                    _27777.y = 1.0 - _21018.y;
-                                    _29497 = _27777;
+                                    vec2 _29044 = _22132;
+                                    _29044.y = 1.0 - _22132.y;
+                                    _30899 = _29044;
                                 }
                                 else
                                 {
-                                    _29497 = _21018;
+                                    _30899 = _22132;
                                 }
-                                float _21205 = _21018.y;
-                                vec2 _21206 = vec2(_21030.x, _21205);
-                                vec2 _29498;
-                                if (_226.gConv.x > 0.5)
+                                float _22319 = _22132.y;
+                                vec2 _22320 = vec2(_22144.x, _22319);
+                                vec2 _30900;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27784 = _21206;
-                                    _27784.y = 1.0 - _21205;
-                                    _29498 = _27784;
+                                    vec2 _29051 = _22320;
+                                    _29051.y = 1.0 - _22319;
+                                    _30900 = _29051;
                                 }
                                 else
                                 {
-                                    _29498 = _21206;
+                                    _30900 = _22320;
                                 }
-                                float _21223 = _21030.y;
-                                vec2 _21224 = vec2(_21018.x, _21223);
-                                vec2 _29500;
-                                if (_226.gConv.x > 0.5)
+                                float _22337 = _22144.y;
+                                vec2 _22338 = vec2(_22132.x, _22337);
+                                vec2 _30902;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27791 = _21224;
-                                    _27791.y = 1.0 - _21223;
-                                    _29500 = _27791;
+                                    vec2 _29058 = _22338;
+                                    _29058.y = 1.0 - _22337;
+                                    _30902 = _29058;
                                 }
                                 else
                                 {
-                                    _29500 = _21224;
+                                    _30902 = _22338;
                                 }
-                                vec2 _29502;
-                                if (_226.gConv.x > 0.5)
+                                vec2 _30904;
+                                if (_239.gConv.x > 0.5)
                                 {
-                                    vec2 _27798 = _21030;
-                                    _27798.y = 1.0 - _21030.y;
-                                    _29502 = _27798;
+                                    vec2 _29065 = _22144;
+                                    _29065.y = 1.0 - _22144.y;
+                                    _30904 = _29065;
                                 }
                                 else
                                 {
-                                    _29502 = _21030;
+                                    _30904 = _22144;
                                 }
-                                _29514 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29497, 0.0) * (_21002.x * _21002.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29498, 0.0) * (_21006.x * _21002.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29500, 0.0) * (_21002.x * _21006.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29502, 0.0) * (_21006.x * _21006.y));
+                                _30916 = (((textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30899, 0.0) * (_22116.x * _22116.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30900, 0.0) * (_22120.x * _22116.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30902, 0.0) * (_22116.x * _22120.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _30904, 0.0) * (_22120.x * _22120.y));
                             }
                             else
                             {
-                                vec4 _29515;
-                                if (_20849 == 3)
+                                vec4 _30917;
+                                if (_21963 == 3)
                                 {
-                                    vec2 _29490;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30892;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27805 = _21018;
-                                        _27805.y = 1.0 - _21018.y;
-                                        _29490 = _27805;
+                                        vec2 _29072 = _22132;
+                                        _29072.y = 1.0 - _22132.y;
+                                        _30892 = _29072;
                                     }
                                     else
                                     {
-                                        _29490 = _21018;
+                                        _30892 = _22132;
                                     }
-                                    float _21335 = _21018.y;
-                                    vec2 _21336 = vec2(_21030.x, _21335);
-                                    vec2 _29491;
-                                    if (_226.gConv.x > 0.5)
+                                    float _22449 = _22132.y;
+                                    vec2 _22450 = vec2(_22144.x, _22449);
+                                    vec2 _30893;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27812 = _21336;
-                                        _27812.y = 1.0 - _21335;
-                                        _29491 = _27812;
+                                        vec2 _29079 = _22450;
+                                        _29079.y = 1.0 - _22449;
+                                        _30893 = _29079;
                                     }
                                     else
                                     {
-                                        _29491 = _21336;
+                                        _30893 = _22450;
                                     }
-                                    float _21353 = _21030.y;
-                                    vec2 _21354 = vec2(_21018.x, _21353);
-                                    vec2 _29493;
-                                    if (_226.gConv.x > 0.5)
+                                    float _22467 = _22144.y;
+                                    vec2 _22468 = vec2(_22132.x, _22467);
+                                    vec2 _30895;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27819 = _21354;
-                                        _27819.y = 1.0 - _21353;
-                                        _29493 = _27819;
+                                        vec2 _29086 = _22468;
+                                        _29086.y = 1.0 - _22467;
+                                        _30895 = _29086;
                                     }
                                     else
                                     {
-                                        _29493 = _21354;
+                                        _30895 = _22468;
                                     }
-                                    vec2 _29495;
-                                    if (_226.gConv.x > 0.5)
+                                    vec2 _30897;
+                                    if (_239.gConv.x > 0.5)
                                     {
-                                        vec2 _27826 = _21030;
-                                        _27826.y = 1.0 - _21030.y;
-                                        _29495 = _27826;
+                                        vec2 _29093 = _22144;
+                                        _29093.y = 1.0 - _22144.y;
+                                        _30897 = _29093;
                                     }
                                     else
                                     {
-                                        _29495 = _21030;
+                                        _30897 = _22144;
                                     }
-                                    _29515 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29490, 0.0) * (_21002.x * _21002.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29491, 0.0) * (_21006.x * _21002.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29493, 0.0) * (_21002.x * _21006.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29495, 0.0) * (_21006.x * _21006.y));
+                                    _30917 = (((textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30892, 0.0) * (_22116.x * _22116.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30893, 0.0) * (_22120.x * _22116.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30895, 0.0) * (_22116.x * _22120.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _30897, 0.0) * (_22120.x * _22120.y));
                                 }
                                 else
                                 {
-                                    vec4 _29516;
-                                    if (_20849 == 4)
+                                    vec4 _30918;
+                                    if (_21963 == 4)
                                     {
-                                        vec2 _29483;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30885;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27833 = _21018;
-                                            _27833.y = 1.0 - _21018.y;
-                                            _29483 = _27833;
+                                            vec2 _29100 = _22132;
+                                            _29100.y = 1.0 - _22132.y;
+                                            _30885 = _29100;
                                         }
                                         else
                                         {
-                                            _29483 = _21018;
+                                            _30885 = _22132;
                                         }
-                                        float _21465 = _21018.y;
-                                        vec2 _21466 = vec2(_21030.x, _21465);
-                                        vec2 _29484;
-                                        if (_226.gConv.x > 0.5)
+                                        float _22579 = _22132.y;
+                                        vec2 _22580 = vec2(_22144.x, _22579);
+                                        vec2 _30886;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27840 = _21466;
-                                            _27840.y = 1.0 - _21465;
-                                            _29484 = _27840;
+                                            vec2 _29107 = _22580;
+                                            _29107.y = 1.0 - _22579;
+                                            _30886 = _29107;
                                         }
                                         else
                                         {
-                                            _29484 = _21466;
+                                            _30886 = _22580;
                                         }
-                                        float _21483 = _21030.y;
-                                        vec2 _21484 = vec2(_21018.x, _21483);
-                                        vec2 _29486;
-                                        if (_226.gConv.x > 0.5)
+                                        float _22597 = _22144.y;
+                                        vec2 _22598 = vec2(_22132.x, _22597);
+                                        vec2 _30888;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27847 = _21484;
-                                            _27847.y = 1.0 - _21483;
-                                            _29486 = _27847;
+                                            vec2 _29114 = _22598;
+                                            _29114.y = 1.0 - _22597;
+                                            _30888 = _29114;
                                         }
                                         else
                                         {
-                                            _29486 = _21484;
+                                            _30888 = _22598;
                                         }
-                                        vec2 _29488;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30890;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27854 = _21030;
-                                            _27854.y = 1.0 - _21030.y;
-                                            _29488 = _27854;
+                                            vec2 _29121 = _22144;
+                                            _29121.y = 1.0 - _22144.y;
+                                            _30890 = _29121;
                                         }
                                         else
                                         {
-                                            _29488 = _21030;
+                                            _30890 = _22144;
                                         }
-                                        _29516 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29483, 0.0) * (_21002.x * _21002.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29484, 0.0) * (_21006.x * _21002.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29486, 0.0) * (_21002.x * _21006.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29488, 0.0) * (_21006.x * _21006.y));
+                                        _30918 = (((textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30885, 0.0) * (_22116.x * _22116.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30886, 0.0) * (_22120.x * _22116.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30888, 0.0) * (_22116.x * _22120.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _30890, 0.0) * (_22120.x * _22120.y));
                                     }
                                     else
                                     {
-                                        vec2 _29476;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30878;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27861 = _21018;
-                                            _27861.y = 1.0 - _21018.y;
-                                            _29476 = _27861;
+                                            vec2 _29128 = _22132;
+                                            _29128.y = 1.0 - _22132.y;
+                                            _30878 = _29128;
                                         }
                                         else
                                         {
-                                            _29476 = _21018;
+                                            _30878 = _22132;
                                         }
-                                        float _21595 = _21018.y;
-                                        vec2 _21596 = vec2(_21030.x, _21595);
-                                        vec2 _29477;
-                                        if (_226.gConv.x > 0.5)
+                                        float _22709 = _22132.y;
+                                        vec2 _22710 = vec2(_22144.x, _22709);
+                                        vec2 _30879;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27868 = _21596;
-                                            _27868.y = 1.0 - _21595;
-                                            _29477 = _27868;
+                                            vec2 _29135 = _22710;
+                                            _29135.y = 1.0 - _22709;
+                                            _30879 = _29135;
                                         }
                                         else
                                         {
-                                            _29477 = _21596;
+                                            _30879 = _22710;
                                         }
-                                        float _21613 = _21030.y;
-                                        vec2 _21614 = vec2(_21018.x, _21613);
-                                        vec2 _29479;
-                                        if (_226.gConv.x > 0.5)
+                                        float _22727 = _22144.y;
+                                        vec2 _22728 = vec2(_22132.x, _22727);
+                                        vec2 _30881;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27875 = _21614;
-                                            _27875.y = 1.0 - _21613;
-                                            _29479 = _27875;
+                                            vec2 _29142 = _22728;
+                                            _29142.y = 1.0 - _22727;
+                                            _30881 = _29142;
                                         }
                                         else
                                         {
-                                            _29479 = _21614;
+                                            _30881 = _22728;
                                         }
-                                        vec2 _29481;
-                                        if (_226.gConv.x > 0.5)
+                                        vec2 _30883;
+                                        if (_239.gConv.x > 0.5)
                                         {
-                                            vec2 _27882 = _21030;
-                                            _27882.y = 1.0 - _21030.y;
-                                            _29481 = _27882;
+                                            vec2 _29149 = _22144;
+                                            _29149.y = 1.0 - _22144.y;
+                                            _30883 = _29149;
                                         }
                                         else
                                         {
-                                            _29481 = _21030;
+                                            _30883 = _22144;
                                         }
-                                        _29516 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29476, 0.0) * (_21002.x * _21002.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29477, 0.0) * (_21006.x * _21002.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29479, 0.0) * (_21002.x * _21006.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29481, 0.0) * (_21006.x * _21006.y));
+                                        _30918 = (((textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30878, 0.0) * (_22116.x * _22116.y)) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30879, 0.0) * (_22120.x * _22116.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30881, 0.0) * (_22116.x * _22120.y))) + (textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _30883, 0.0) * (_22120.x * _22120.y));
                                     }
-                                    _29515 = _29516;
+                                    _30917 = _30918;
                                 }
-                                _29514 = _29515;
+                                _30916 = _30917;
                             }
-                            _29513 = _29514;
+                            _30915 = _30916;
                         }
-                        _29512 = _29513;
+                        _30914 = _30915;
                     }
-                    _20863 = _29545 + (_29512.xyz * (_20834 ? ((_29475 == 0) ? (1.0 - _20829) : _20829) : 1.0));
+                    _21977 = _30947 + (_30914.xyz * (_21948 ? ((_30877 == 0) ? (1.0 - _21943) : _21943) : 1.0));
                 }
-                _27741.z = _29545.z;
-                _29715 = _27741;
+                _29008.z = _30947.z;
+                _31117 = _29008;
             }
             else
             {
-                _29715 = _29325;
+                _31117 = _30727;
             }
-            vec3 _29935;
+            vec3 _31337;
             SPIRV_CROSS_BRANCH
-            if (_13297 > 0.0)
+            if (_13702 > 0.0)
             {
-                vec2 _13438 = _13355 + (((_29253 * min(_13288 * 0.5, 16.0)) * _226.gDisplay.zw) * _226.gTarget.zw);
-                float _21710 = clamp(log2(max(16.0 * _226.gDisplay.z, 1.0)) - 1.0, 0.0, 5.0);
-                int _21713 = int(floor(_21710));
-                float _21717 = _21710 - float(_21713);
-                bool _21722 = (_21717 > 0.0199999995529651641845703125) && (_21713 < 5);
-                vec3 _29700;
-                _29700 = vec3(0.0);
-                vec3 _21751;
+                vec2 _13843 = _13760 + (((_30655 * min(_13693 * 0.5, 16.0)) * _239.gDisplay.zw) * _239.gTarget.zw);
+                float _22824 = clamp(log2(max(16.0 * _239.gDisplay.z, 1.0)) - 1.0, 0.0, 5.0);
+                int _22827 = int(floor(_22824));
+                float _22831 = _22824 - float(_22827);
+                bool _22836 = (_22831 > 0.0199999995529651641845703125) && (_22827 < 5);
+                vec3 _31102;
+                _31102 = vec3(0.0);
+                vec3 _22865;
                 SPIRV_CROSS_LOOP
-                for (int _29685 = 0; _29685 < 2; _29700 = _21751, _29685++)
+                for (int _31087 = 0; _31087 < 2; _31102 = _22865, _31087++)
                 {
-                    if ((_29685 > 0) && (!_21722))
+                    if ((_31087 > 0) && (!_22836))
                     {
                         break;
                     }
-                    int _21737 = _21713 + _29685;
-                    vec2 _29686;
-                    if (_226.gConv.x > 0.5)
+                    int _22851 = _22827 + _31087;
+                    vec2 _31088;
+                    if (_239.gConv.x > 0.5)
                     {
-                        vec2 _27889 = _13438;
-                        _27889.y = 1.0 - _13438.y;
-                        _29686 = _27889;
+                        vec2 _29156 = _13843;
+                        _29156.y = 1.0 - _13843.y;
+                        _31088 = _29156;
                     }
                     else
                     {
-                        _29686 = _13438;
+                        _31088 = _13843;
                     }
-                    vec4 _29687;
+                    vec4 _31089;
                     SPIRV_CROSS_BRANCH
-                    if (_21737 <= 0)
+                    if (_22851 <= 0)
                     {
-                        _29687 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _29686, 0.0);
+                        _31089 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _31088, 0.0);
                     }
                     else
                     {
-                        vec4 _29688;
-                        if (_21737 == 1)
+                        vec4 _31090;
+                        if (_22851 == 1)
                         {
-                            _29688 = textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29686, 0.0);
+                            _31090 = textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _31088, 0.0);
                         }
                         else
                         {
-                            vec4 _29689;
-                            if (_21737 == 2)
+                            vec4 _31091;
+                            if (_22851 == 2)
                             {
-                                _29689 = textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29686, 0.0);
+                                _31091 = textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _31088, 0.0);
                             }
                             else
                             {
-                                vec4 _29690;
-                                if (_21737 == 3)
+                                vec4 _31092;
+                                if (_22851 == 3)
                                 {
-                                    _29690 = textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29686, 0.0);
+                                    _31092 = textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _31088, 0.0);
                                 }
                                 else
                                 {
-                                    vec4 _29691;
-                                    if (_21737 == 4)
+                                    vec4 _31093;
+                                    if (_22851 == 4)
                                     {
-                                        _29691 = textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29686, 0.0);
+                                        _31093 = textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _31088, 0.0);
                                     }
                                     else
                                     {
-                                        _29691 = textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29686, 0.0);
+                                        _31093 = textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _31088, 0.0);
                                     }
-                                    _29690 = _29691;
+                                    _31092 = _31093;
                                 }
-                                _29689 = _29690;
+                                _31091 = _31092;
                             }
-                            _29688 = _29689;
+                            _31090 = _31091;
                         }
-                        _29687 = _29688;
+                        _31089 = _31090;
                     }
-                    _21751 = _29700 + (_29687.xyz * (_21722 ? ((_29685 == 0) ? (1.0 - _21717) : _21717) : 1.0));
+                    _22865 = _31102 + (_31089.xyz * (_22836 ? ((_31087 == 0) ? (1.0 - _22831) : _22831) : 1.0));
                 }
-                _29935 = _29700;
+                _31337 = _31102;
             }
             else
             {
-                _29935 = vec3(0.5);
+                _31337 = vec3(0.5);
             }
-            float _29731;
+            float _31133;
             SPIRV_CROSS_BRANCH
             if (esia_v5.x > 0.001000000047497451305389404296875)
             {
-                int _21840 = clamp(int(roundEven(log2(36.0 * _226.gDisplay.z) - 1.0)), 1, 4);
-                vec2 _29706;
-                if (_226.gConv.x > 0.5)
+                int _22954 = clamp(int(roundEven(log2(36.0 * _239.gDisplay.z) - 1.0)), 1, 4);
+                vec2 _31108;
+                if (_239.gConv.x > 0.5)
                 {
-                    vec2 _27893 = _13355;
-                    _27893.y = 1.0 - _13355.y;
-                    _29706 = _27893;
+                    vec2 _29160 = _13760;
+                    _29160.y = 1.0 - _13760.y;
+                    _31108 = _29160;
                 }
                 else
                 {
-                    _29706 = _13355;
+                    _31108 = _13760;
                 }
-                vec4 _29707;
+                vec4 _31109;
                 SPIRV_CROSS_BRANCH
-                if (_21840 <= 0)
+                if (_22954 <= 0)
                 {
-                    _29707 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _29706, 0.0);
+                    _31109 = textureLod(SPIRV_Cross_CombinedgBackdrop0gLinear, _31108, 0.0);
                 }
                 else
                 {
-                    vec4 _29708;
-                    if (_21840 == 1)
+                    vec4 _31110;
+                    if (_22954 == 1)
                     {
-                        _29708 = textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _29706, 0.0);
+                        _31110 = textureLod(SPIRV_Cross_CombinedgBackdrop1gLinear, _31108, 0.0);
                     }
                     else
                     {
-                        vec4 _29709;
-                        if (_21840 == 2)
+                        vec4 _31111;
+                        if (_22954 == 2)
                         {
-                            _29709 = textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _29706, 0.0);
+                            _31111 = textureLod(SPIRV_Cross_CombinedgBackdrop2gLinear, _31108, 0.0);
                         }
                         else
                         {
-                            vec4 _29710;
-                            if (_21840 == 3)
+                            vec4 _31112;
+                            if (_22954 == 3)
                             {
-                                _29710 = textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _29706, 0.0);
+                                _31112 = textureLod(SPIRV_Cross_CombinedgBackdrop3gLinear, _31108, 0.0);
                             }
                             else
                             {
-                                vec4 _29711;
-                                if (_21840 == 4)
+                                vec4 _31113;
+                                if (_22954 == 4)
                                 {
-                                    _29711 = textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _29706, 0.0);
+                                    _31113 = textureLod(SPIRV_Cross_CombinedgBackdrop4gLinear, _31108, 0.0);
                                 }
                                 else
                                 {
-                                    _29711 = textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _29706, 0.0);
+                                    _31113 = textureLod(SPIRV_Cross_CombinedgBackdrop5gLinear, _31108, 0.0);
                                 }
-                                _29710 = _29711;
+                                _31112 = _31113;
                             }
-                            _29709 = _29710;
+                            _31111 = _31112;
                         }
-                        _29708 = _29709;
+                        _31110 = _31111;
                     }
-                    _29707 = _29708;
+                    _31109 = _31110;
                 }
-                _29731 = dot(_29707.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
+                _31133 = dot(_31109.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875));
             }
             else
             {
-                _29731 = 0.5;
+                _31133 = 0.5;
             }
-            _29933 = _29935;
-            _29730 = _29731;
-            _29712 = _29715;
+            _31335 = _31337;
+            _31132 = _31133;
+            _31114 = _31117;
         }
         else
         {
-            _29933 = vec3(0.5);
-            _29730 = 0.5;
-            _29712 = vec3(0.5);
+            _31335 = vec3(0.5);
+            _31132 = 0.5;
+            _31114 = vec3(0.5);
         }
-        vec3 _13466 = mix(vec3(dot(_29712, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875))), _29712, vec3(_13157.x)) + vec3(_13157.y);
-        vec3 _29826;
+        vec3 _13871 = mix(vec3(dot(_31114, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875))), _31114, vec3(_13562.x)) + vec3(_13562.y);
+        vec3 _31228;
         SPIRV_CROSS_BRANCH
         if (esia_v5.x > 0.001000000047497451305389404296875)
         {
-            float _13476 = clamp(max(_29730 + _13157.y, 0.001000000047497451305389404296875), 0.0, 1.0);
-            float _13484 = mix(_13476, dot(_13116.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)), esia_v5.x);
-            vec3 _13492 = _13466 * (_13484 / _13476);
-            vec3 _13502 = mix(_13466, vec3(1.0), vec3((_13484 - _13476) / max(1.0 - _13476, 0.001000000047497451305389404296875)));
-            bvec3 _13503 = bvec3(_13484 < _13476);
-            _29826 = vec3(_13503.x ? _13492.x : _13502.x, _13503.y ? _13492.y : _13502.y, _13503.z ? _13492.z : _13502.z);
+            float _13881 = clamp(max(_31132 + _13562.y, 0.001000000047497451305389404296875), 0.0, 1.0);
+            float _13889 = mix(_13881, dot(_13521.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)), esia_v5.x);
+            vec3 _13897 = _13871 * (_13889 / _13881);
+            vec3 _13907 = mix(_13871, vec3(1.0), vec3((_13889 - _13881) / max(1.0 - _13881, 0.001000000047497451305389404296875)));
+            bvec3 _13908 = bvec3(_13889 < _13881);
+            _31228 = vec3(_13908.x ? _13897.x : _13907.x, _13908.y ? _13897.y : _13907.y, _13908.z ? _13897.z : _13907.z);
         }
         else
         {
-            _29826 = _13466;
+            _31228 = _13871;
         }
-        vec2 _13522 = clamp((esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875)), vec2(0.0), vec2(1.0));
-        vec2 _21947 = _268.gDrawInfo.yz - esia_v0;
-        bvec2 _21951 = bvec2(_268.gDrawInfo.w > 1.0);
-        vec2 _21952 = vec2(_21951.x ? _21947.x : _268.gDrawInfo.yz.x, _21951.y ? _21947.y : _268.gDrawInfo.yz.y);
-        vec2 _21958 = _21952 / vec2(max(length(_21952), 9.9999997473787516355514526367188e-05));
-        vec2 _13573 = vec2(cos(_13157.w), sin(_13157.w));
-        bvec2 _13574 = bvec2(_268.gDrawInfo.w > 0.5);
-        vec2 _13575 = vec2(_13574.x ? _21958.x : _13573.x, _13574.y ? _21958.y : _13573.y);
-        float _13578 = dot(_29253, _13575);
-        float _13589 = -_28219;
-        float _13596 = _4995 * ((0.5 * abs(_29253.x)) + 0.0199999995529651641845703125);
-        float _13603 = _4995 * ((0.5 * abs(_29253.y)) + 0.0199999995529651641845703125);
-        float _30045;
+        vec2 _13927 = clamp((esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875)), vec2(0.0), vec2(1.0));
+        vec2 _31448;
         SPIRV_CROSS_BRANCH
-        if ((((_13589 + _13596) + _13603) > 0.0) && (((_13589 - _13596) - _13603) < (0.5 * _13288)))
+        if (_281.gDrawInfo.w > 0.5)
         {
-            float _21971 = max((_13589 + _13596) + _13603, 0.0) / _13288;
-            float _21975 = clamp(sqrt(2.0 * _21971), 0.12399999797344207763671875, 1.0);
-            float _21977 = 1.0 - _21975;
-            float _21980 = _21977 * _21977;
-            float _22034 = max((_13589 + _13596) - _13603, 0.0) / _13288;
-            float _22038 = clamp(sqrt(2.0 * _22034), 0.12399999797344207763671875, 1.0);
-            float _22040 = 1.0 - _22038;
-            float _22043 = _22040 * _22040;
-            float _22097 = max((_13589 - _13596) + _13603, 0.0) / _13288;
-            float _22101 = clamp(sqrt(2.0 * _22097), 0.12399999797344207763671875, 1.0);
-            float _22103 = 1.0 - _22101;
-            float _22106 = _22103 * _22103;
-            float _22160 = max((_13589 - _13596) - _13603, 0.0) / _13288;
-            float _22164 = clamp(sqrt(2.0 * _22160), 0.12399999797344207763671875, 1.0);
-            float _22166 = 1.0 - _22164;
-            float _22169 = _22166 * _22166;
-            float _13650 = ((((((_21971 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _21971) * _21971) : ((_21971 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _21975) * _21975)) + ((((_21980 * _21980) * _21980) * _21977) * (0.02380952425301074981689453125 + (_21977 * ((-0.0386904776096343994140625) + (_21977 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_21971 - 0.5))))) * _13288) * _13288) - ((((_22034 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _22034) * _22034) : ((_22034 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _22038) * _22038)) + ((((_22043 * _22043) * _22043) * _22040) * (0.02380952425301074981689453125 + (_22040 * ((-0.0386904776096343994140625) + (_22040 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_22034 - 0.5))))) * _13288) * _13288)) - ((((_22097 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _22097) * _22097) : ((_22097 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _22101) * _22101)) + ((((_22106 * _22106) * _22106) * _22103) * (0.02380952425301074981689453125 + (_22103 * ((-0.0386904776096343994140625) + (_22103 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_22097 - 0.5))))) * _13288) * _13288)) + ((((_22160 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _22160) * _22160) : ((_22160 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _22164) * _22164)) + ((((_22169 * _22169) * _22169) * _22166) * (0.02380952425301074981689453125 + (_22166 * ((-0.0386904776096343994140625) + (_22166 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_22160 - 0.5))))) * _13288) * _13288);
-            _30045 = _13650 / ((4.0 * _13596) * _13603);
+            vec2 _23061 = _281.gDrawInfo.yz - esia_v0;
+            bvec2 _23065 = bvec2(_281.gDrawInfo.w > 1.0);
+            vec2 _23066 = vec2(_23065.x ? _23061.x : _281.gDrawInfo.yz.x, _23065.y ? _23061.y : _281.gDrawInfo.yz.y);
+            _31448 = _23066 / vec2(max(length(_23066), 9.9999997473787516355514526367188e-05));
         }
         else
         {
-            _30045 = 0.0;
+            _31448 = vec2(cos(_13562.w), sin(_13562.w));
         }
-        float _13682 = clamp(0.5 + (0.5 * dot((esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5)) / _13280, _13575)), 0.0, 1.0);
-        _32065 = ((_30045 * (pow(clamp(_13578, 0.0, 1.0), 1.5) + (0.4000000059604644775390625 * pow(clamp(-_13578, 0.0, 1.0), 1.5)))) * _13157.z) * 1.60000002384185791015625;
-        _31419 = _13198;
-        _31183 = vec4((mix(mix(_29826, _13116.xyz, vec3(clamp(_13116.w * ((0.7200000286102294921875 + (0.550000011920928955078125 * (1.0 - _13303))) + (0.3499999940395355224609375 * ((dot(_13116.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)) > 0.5) ? (1.0 - _13522.y) : _13522.y))), 0.0, 1.0))), (_29933 * 1.10000002384185791015625) + vec3(0.07999999821186065673828125), vec3(pow(1.0 - _29830.z, 5.0) * 0.3499999940395355224609375)) + vec3((((0.039999999105930328369140625 * _13682) * _13682) + (0.0500000007450580596923828125 * (1.0 - _13303))) * _13157.z)) * _28570, _28570) + (_30262 * (1.0 - _28570));
+        float _13983 = -_29486;
+        float _13990 = _5146 * ((0.5 * abs(_30655.x)) + 0.0199999995529651641845703125);
+        float _13997 = _5146 * ((0.5 * abs(_30655.y)) + 0.0199999995529651641845703125);
+        float _31452;
+        SPIRV_CROSS_BRANCH
+        if ((((_13983 + _13990) + _13997) > 0.0) && (((_13983 - _13990) - _13997) < (0.5 * _13693)))
+        {
+            float _23085 = max((_13983 + _13990) + _13997, 0.0) / _13693;
+            float _23089 = clamp(sqrt(2.0 * _23085), 0.12399999797344207763671875, 1.0);
+            float _23091 = 1.0 - _23089;
+            float _23094 = _23091 * _23091;
+            float _23148 = max((_13983 + _13990) - _13997, 0.0) / _13693;
+            float _23152 = clamp(sqrt(2.0 * _23148), 0.12399999797344207763671875, 1.0);
+            float _23154 = 1.0 - _23152;
+            float _23157 = _23154 * _23154;
+            float _23211 = max((_13983 - _13990) + _13997, 0.0) / _13693;
+            float _23215 = clamp(sqrt(2.0 * _23211), 0.12399999797344207763671875, 1.0);
+            float _23217 = 1.0 - _23215;
+            float _23220 = _23217 * _23217;
+            float _23274 = max((_13983 - _13990) - _13997, 0.0) / _13693;
+            float _23278 = clamp(sqrt(2.0 * _23274), 0.12399999797344207763671875, 1.0);
+            float _23280 = 1.0 - _23278;
+            float _23283 = _23280 * _23280;
+            float _14045 = ((((((_23085 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _23085) * _23085) : ((_23085 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _23089) * _23089)) + ((((_23094 * _23094) * _23094) * _23091) * (0.02380952425301074981689453125 + (_23091 * ((-0.0386904776096343994140625) + (_23091 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_23085 - 0.5))))) * _13693) * _13693) - ((((_23148 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _23148) * _23148) : ((_23148 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _23152) * _23152)) + ((((_23157 * _23157) * _23157) * _23154) * (0.02380952425301074981689453125 + (_23154 * ((-0.0386904776096343994140625) + (_23154 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_23148 - 0.5))))) * _13693) * _13693)) - ((((_23211 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _23211) * _23211) : ((_23211 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _23215) * _23215)) + ((((_23220 * _23220) * _23220) * _23217) * (0.02380952425301074981689453125 + (_23217 * ((-0.0386904776096343994140625) + (_23217 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_23211 - 0.5))))) * _13693) * _13693)) + ((((_23274 < 0.007687999866902828216552734375) ? ((0.2579232752323150634765625 * _23274) * _23274) : ((_23274 < 0.5) ? (((-0.000989689142443239688873291015625) + ((0.0113648362457752227783203125 * _23278) * _23278)) + ((((_23283 * _23283) * _23283) * _23280) * (0.02380952425301074981689453125 + (_23280 * ((-0.0386904776096343994140625) + (_23280 * 0.01587301678955554962158203125)))))) : (0.01037514768540859222412109375 + (0.022729672491550445556640625 * (_23274 - 0.5))))) * _13693) * _13693);
+            float _14053 = dot(_30655, _31448);
+            _31452 = (((_14045 / ((4.0 * _13990) * _13997)) * (pow(clamp(_14053, 0.0, 1.0), 1.5) + (0.4000000059604644775390625 * pow(clamp(-_14053, 0.0, 1.0), 1.5)))) * _13562.z) * 1.60000002384185791015625;
+        }
+        else
+        {
+            _31452 = 0.0;
+        }
+        float _14089 = clamp(0.5 + (0.5 * dot((esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5)) / _13685, _31448)), 0.0, 1.0);
+        _33554 = _31452;
+        _32885 = _13603;
+        _32635 = vec4((mix(mix(_31228, _13521.xyz, vec3(clamp(_13521.w * ((0.7200000286102294921875 + (0.550000011920928955078125 * (1.0 - _13708))) + (0.3499999940395355224609375 * ((dot(_13521.xyz, vec3(0.2125999927520751953125, 0.715200006961822509765625, 0.072200000286102294921875)) > 0.5) ? (1.0 - _13927.y) : _13927.y))), 0.0, 1.0))), (_31335 * 1.10000002384185791015625) + vec3(0.07999999821186065673828125), vec3(pow(1.0 - _31232.z, 5.0) * 0.3499999940395355224609375)) + vec3((((0.039999999105930328369140625 * _14089) * _14089) + (0.0500000007450580596923828125 * (1.0 - _13708))) * _13562.z)) * _29827, _29827) + (_31680 * (1.0 - _29827));
     }
     else
     {
-        _32065 = 0.0;
-        _31419 = _28169;
-        _31183 = _30262;
+        _33554 = 0.0;
+        _32885 = _29440;
+        _32635 = _31680;
     }
-    vec4 _31195;
-    vec4 _31197;
+    vec4 _32647;
+    vec4 _32651;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3716) != 0u)
+    if ((esia_v7.x & _3867) != 0u)
     {
-        vec4 _30468;
-        vec4 _30815;
+        vec4 _31896;
+        vec4 _32255;
         SPIRV_CROSS_BRANCH
         if (esia_v7.y != 0u)
         {
-            uint _22226 = max(uint(_226.gConv.z), 1u);
-            uint _22267 = max(uint(_226.gConv.z), 1u);
-            _30815 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22226) * 24u) + 3u), int(esia_v1 / _22226), 0).xy, 0);
-            _30468 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22267) * 24u) + 4u), int(esia_v1 / _22267), 0).xy, 0);
+            uint _23340 = max(uint(_239.gConv.z), 1u);
+            uint _23381 = max(uint(_239.gConv.z), 1u);
+            _32255 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23340) * 24u) + 3u), int(esia_v1 / _23340), 0).xy, 0);
+            _31896 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23381) * 24u) + 4u), int(esia_v1 / _23381), 0).xy, 0);
         }
         else
         {
-            _30815 = vec4(0.0);
-            _30468 = vec4(0.0);
+            _32255 = vec4(0.0);
+            _31896 = vec4(0.0);
         }
-        vec4 _31170;
+        vec4 _32622;
         do
         {
             if (esia_v7.y == 0u)
             {
-                _31170 = esia_v4;
+                _32622 = esia_v4;
                 break;
             }
-            vec2 _22339 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
-            vec2 _22349 = fwidth(esia_v0);
-            float _22351 = max(length(_22349), 9.9999997473787516355514526367188e-05);
-            float _31162;
-            float _31166;
+            vec2 _23453 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
+            vec2 _23463 = fwidth(esia_v0);
+            float _23465 = max(length(_23463), 9.9999997473787516355514526367188e-05);
+            float _32614;
+            float _32618;
             if ((esia_v7.y == 1u) || (esia_v7.y == 4u))
             {
-                float _22360 = cos(_30468.x);
-                float _22363 = sin(_30468.x);
-                float _22389 = ((dot(esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5), vec2(_22360, _22363)) / max(0.5 * ((abs(_22360) * _22339.x) + (abs(_22363) * _22339.y)), 0.001000000047497451305389404296875)) * 0.5) + 0.5;
+                float _23474 = cos(_31896.x);
+                float _23477 = sin(_31896.x);
+                float _23503 = ((dot(esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5), vec2(_23474, _23477)) / max(0.5 * ((abs(_23474) * _23453.x) + (abs(_23477) * _23453.y)), 0.001000000047497451305389404296875)) * 0.5) + 0.5;
                 if (esia_v7.y == 4u)
                 {
-                    float _22404 = clamp((_22389 - _30468.y) / max(_30468.z - _30468.y, 0.001000000047497451305389404296875), 0.0, 1.0);
-                    _31170 = vec4(clamp(abs((fract(vec3(_22404 * 0.800000011920928955078125) + vec3(1.0, 0.66670000553131103515625, 0.33329999446868896484375)) * 6.0) - vec3(3.0)) - vec3(1.0), vec3(0.0), vec3(1.0)), esia_v4.w * pow(max(sin(_22404 * 3.1415927410125732421875), 0.0), 0.60000002384185791015625));
+                    float _23518 = clamp((_23503 - _31896.y) / max(_31896.z - _31896.y, 0.001000000047497451305389404296875), 0.0, 1.0);
+                    _32622 = vec4(clamp(abs((fract(vec3(_23518 * 0.800000011920928955078125) + vec3(1.0, 0.66670000553131103515625, 0.33329999446868896484375)) * 6.0) - vec3(3.0)) - vec3(1.0), vec3(0.0), vec3(1.0)), esia_v4.w * pow(max(sin(_23518 * 3.1415927410125732421875), 0.0), 0.60000002384185791015625));
                     break;
                 }
-                _31166 = -1.0;
-                _31162 = _22389;
+                _32618 = -1.0;
+                _32614 = _23503;
             }
             else
             {
-                float _31163;
-                float _31167;
+                float _32615;
+                float _32619;
                 if (esia_v7.y == 2u)
                 {
-                    _31167 = -1.0;
-                    _31163 = length(esia_v0 - (esia_v2.xy + (_30468.xy * _22339))) / max(_30468.z * max(_22339.x, _22339.y), 0.001000000047497451305389404296875);
+                    _32619 = -1.0;
+                    _32615 = length(esia_v0 - (esia_v2.xy + (_31896.xy * _23453))) / max(_31896.z * max(_23453.x, _23453.y), 0.001000000047497451305389404296875);
                 }
                 else
                 {
-                    vec2 _22472 = esia_v0 - (esia_v2.xy + (_30468.xy * _22339));
-                    float _22483 = fract(((atan(_22472.y, _22472.x) - _30468.z) * 0.15915493667125701904296875) + 1.0);
-                    float _31164;
-                    float _31168;
-                    if (_30468.w > 0.5)
+                    vec2 _23586 = esia_v0 - (esia_v2.xy + (_31896.xy * _23453));
+                    float _23597 = fract(((atan(_23586.y, _23586.x) - _31896.z) * 0.15915493667125701904296875) + 1.0);
+                    float _32616;
+                    float _32620;
+                    if (_31896.w > 0.5)
                     {
-                        _31168 = -1.0;
-                        _31164 = 0.5 - (0.5 * cos(_22483 * 6.283185482025146484375));
+                        _32620 = -1.0;
+                        _32616 = 0.5 - (0.5 * cos(_23597 * 6.283185482025146484375));
                     }
                     else
                     {
-                        float _22503 = (((_22483 < 0.5) ? _22483 : (_22483 - 1.0)) * 6.283185482025146484375) * length(_22472);
-                        float _31169;
-                        if (abs(_22503) < _22351)
+                        float _23617 = (((_23597 < 0.5) ? _23597 : (_23597 - 1.0)) * 6.283185482025146484375) * length(_23586);
+                        float _32621;
+                        if (abs(_23617) < _23465)
                         {
-                            _31169 = clamp(((_22503 / _22351) * 0.5) + 0.5, 0.0, 1.0);
+                            _32621 = clamp(((_23617 / _23465) * 0.5) + 0.5, 0.0, 1.0);
                         }
                         else
                         {
-                            _31169 = -1.0;
+                            _32621 = -1.0;
                         }
-                        _31168 = _31169;
-                        _31164 = _22483;
+                        _32620 = _32621;
+                        _32616 = _23597;
                     }
-                    _31167 = _31168;
-                    _31163 = _31164;
+                    _32619 = _32620;
+                    _32615 = _32616;
                 }
-                _31166 = _31167;
-                _31162 = _31163;
+                _32618 = _32619;
+                _32614 = _32615;
             }
-            vec4 _22532 = vec4(esia_v4.xyz * esia_v4.w, esia_v4.w);
-            vec4 _22544 = vec4(_30815.xyz * _30815.w, _30815.w);
-            vec4 _22551 = mix(_22544, _22532, vec4(_31166));
-            vec4 _22556 = mix(_22532, _22544, vec4(clamp(_31162, 0.0, 1.0)));
-            bvec4 _22557 = bvec4(_31166 >= 0.0);
-            vec4 _22558 = vec4(_22557.x ? _22551.x : _22556.x, _22557.y ? _22551.y : _22556.y, _22557.z ? _22551.z : _22556.z, _22557.w ? _22551.w : _22556.w);
-            vec4 _22573 = vec4(_22558.xyz / vec3(_22558.w), _22558.w);
-            bvec4 _22574 = bvec4(_22558.w > 9.9999997473787516355514526367188e-06);
-            _31170 = vec4(_22574.x ? _22573.x : vec4(0.0).x, _22574.y ? _22573.y : vec4(0.0).y, _22574.z ? _22573.z : vec4(0.0).z, _22574.w ? _22573.w : vec4(0.0).w);
+            vec4 _23646 = vec4(esia_v4.xyz * esia_v4.w, esia_v4.w);
+            vec4 _23658 = vec4(_32255.xyz * _32255.w, _32255.w);
+            vec4 _23665 = mix(_23658, _23646, vec4(_32618));
+            vec4 _23670 = mix(_23646, _23658, vec4(clamp(_32614, 0.0, 1.0)));
+            bvec4 _23671 = bvec4(_32618 >= 0.0);
+            vec4 _23672 = vec4(_23671.x ? _23665.x : _23670.x, _23671.y ? _23665.y : _23670.y, _23671.z ? _23665.z : _23670.z, _23671.w ? _23665.w : _23670.w);
+            vec4 _23687 = vec4(_23672.xyz / vec3(_23672.w), _23672.w);
+            bvec4 _23688 = bvec4(_23672.w > 9.9999997473787516355514526367188e-06);
+            _32622 = vec4(_23688.x ? _23687.x : vec4(0.0).x, _23688.y ? _23687.y : vec4(0.0).y, _23688.z ? _23687.z : vec4(0.0).z, _23688.w ? _23687.w : vec4(0.0).w);
             break;
         } while(false);
-        vec4 _31171;
-        vec4 _31409;
+        vec4 _32623;
+        vec4 _32874;
         SPIRV_CROSS_BRANCH
-        if ((esia_v7.x & _3745) != 0u)
+        if ((esia_v7.x & _3896) != 0u)
         {
-            uint _22584 = max(uint(_226.gConv.z), 1u);
-            vec4 _22618 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22584) * 24u) + 18u), int(esia_v1 / _22584), 0).xy, 0);
-            _31409 = _22618;
-            _31171 = _31170 * texture(SPIRV_Cross_CombinedgTexgLinear, mix(_22618.xy, _22618.zw, (esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875))));
+            uint _23698 = max(uint(_239.gConv.z), 1u);
+            vec4 _23732 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23698) * 24u) + 18u), int(esia_v1 / _23698), 0).xy, 0);
+            _32874 = _23732;
+            _32623 = _32622 * texture(SPIRV_Cross_CombinedgTexgLinear, mix(_23732.xy, _23732.zw, (esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875))));
         }
         else
         {
-            _31409 = _28165;
-            _31171 = _31170;
+            _32874 = _29436;
+            _32623 = _32622;
         }
-        float _22626 = clamp(_31171.w * _28570, 0.0, 1.0);
-        _31197 = _31409;
-        _31195 = vec4(_31171.xyz * _22626, _22626) + (_31183 * (1.0 - _22626));
+        float _23740 = clamp(_32623.w * _29827, 0.0, 1.0);
+        _32651 = _32874;
+        _32647 = vec4(_32623.xyz * _23740, _23740) + (_32635 * (1.0 - _23740));
     }
     else
     {
-        _31197 = _28165;
-        _31195 = _31183;
+        _32651 = _29436;
+        _32647 = _32635;
     }
-    vec4 _32036;
+    vec4 _33525;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _3798) != 0u)
+    if ((esia_v7.x & _3949) != 0u)
     {
-        uint _22651 = max(uint(_226.gConv.z), 1u);
-        vec4 _22685 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22651) * 24u) + 21u), int(esia_v1 / _22651), 0).xy, 0);
-        uint _22692 = max(uint(_226.gConv.z), 1u);
-        vec4 _22726 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22692) * 24u) + 3u), int(esia_v1 / _22692), 0).xy, 0);
-        vec2 _5648 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
-        vec2 _5655 = (esia_v0 - esia_v2.xy) / _5648;
-        float _5666 = ((_22726.x >= 0.0) ? _22726.x : _226.gTime.x) * _22685.z;
-        float _5669 = _5655.x * 2.0;
-        float _5670 = _5669 - 1.0;
-        float _5675 = _5655.y * _5648.y;
-        float _5678 = max(_22685.w, 0.001000000047497451305389404296875);
-        float _5683 = clamp(1.0 - (_5670 * _5670), 0.0, 1.0);
-        float _5685 = pow(_5683, 1.2999999523162841796875);
-        float _5687 = pow(_5683, 0.699999988079071044921875);
-        float _5690 = clamp(_5666 * 1.4285714626312255859375, 0.0, 1.0);
-        float _5706 = (0.25 + (0.75 * ((_5690 * _5690) * (3.0 - (2.0 * _5690))))) * (0.85000002384185791015625 + (0.1500000059604644775390625 * sin(_5666 * 2.099999904632568359375)));
-        float _5715 = ((_22685.y * _5648.y) * _5706) * _5685;
-        float _5741 = (_5648.y * (0.5 + ((_22685.x * (0.5 - (_5670 * _5670))) * 0.5))) + (((0.14000000059604644775390625 * _5648.y) * _5685) * sin(((_5670 * 2.400000095367431640625) - (_5666 * 1.2000000476837158203125)) + 0.60000002384185791015625));
-        float _31189;
-        float _31190;
-        vec3 _31191;
-        _31191 = vec3(0.0);
-        _31190 = _5741;
-        _31189 = _5741;
-        vec3 _5813;
-        float _32967;
-        float _32968;
+        uint _23765 = max(uint(_239.gConv.z), 1u);
+        vec4 _23799 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23765) * 24u) + 21u), int(esia_v1 / _23765), 0).xy, 0);
+        uint _23806 = max(uint(_239.gConv.z), 1u);
+        vec4 _23840 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23806) * 24u) + 3u), int(esia_v1 / _23806), 0).xy, 0);
+        vec2 _5799 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
+        vec2 _5806 = (esia_v0 - esia_v2.xy) / _5799;
+        float _5817 = ((_23840.x >= 0.0) ? _23840.x : _239.gTime.x) * _23799.z;
+        float _5820 = _5806.x * 2.0;
+        float _5821 = _5820 - 1.0;
+        float _5826 = _5806.y * _5799.y;
+        float _5829 = max(_23799.w, 0.001000000047497451305389404296875);
+        float _5834 = clamp(1.0 - (_5821 * _5821), 0.0, 1.0);
+        float _5836 = pow(_5834, 1.2999999523162841796875);
+        float _5838 = pow(_5834, 0.699999988079071044921875);
+        float _5841 = clamp(_5817 * 1.4285714626312255859375, 0.0, 1.0);
+        float _5857 = (0.25 + (0.75 * ((_5841 * _5841) * (3.0 - (2.0 * _5841))))) * (0.85000002384185791015625 + (0.1500000059604644775390625 * sin(_5817 * 2.099999904632568359375)));
+        float _5866 = ((_23799.y * _5799.y) * _5857) * _5836;
+        float _5892 = (_5799.y * (0.5 + ((_23799.x * (0.5 - (_5821 * _5821))) * 0.5))) + (((0.14000000059604644775390625 * _5799.y) * _5836) * sin(((_5821 * 2.400000095367431640625) - (_5817 * 1.2000000476837158203125)) + 0.60000002384185791015625));
+        float _32641;
+        float _32642;
+        vec3 _32643;
+        _32643 = vec3(0.0);
+        _32642 = _5892;
+        _32641 = _5892;
+        vec3 _5964;
+        float _34483;
+        float _34484;
         SPIRV_CROSS_UNROLL
-        for (int _31188 = 0; _31188 < 4; _31191 = _5813, _31190 = _32968, _31189 = _32967, _31188++)
+        for (int _32640 = 0; _32640 < 4; _32643 = _5964, _32642 = _34484, _32641 = _34483, _32640++)
         {
-            float _5765 = _5741 + ((_5715 * _3960[_31188].x) * (0.800000011920928955078125 + (0.20000000298023223876953125 * sin((_5666 * 1.7000000476837158203125) + _3977[_31188].y))));
-            _32967 = (_31188 == 0) ? _5765 : _31189;
-            _32968 = (_31188 == 2) ? _5765 : _31190;
-            float _5780 = _5678 * _3960[_31188].y;
-            float _5785 = (_5675 - _5765) / _5780;
-            float _5790 = _5678 * _3960[_31188].z;
-            vec3 _32729;
-            _32729 = vec3(0.0);
+            float _5916 = _5892 + ((_5866 * _4111[_32640].x) * (0.800000011920928955078125 + (0.20000000298023223876953125 * sin((_5817 * 1.7000000476837158203125) + _4128[_32640].y))));
+            _34483 = (_32640 == 0) ? _5916 : _32641;
+            _34484 = (_32640 == 2) ? _5916 : _32642;
+            float _5931 = _5829 * _4111[_32640].y;
+            float _5936 = (_5826 - _5916) / _5931;
+            float _5941 = _5829 * _4111[_32640].z;
+            vec3 _34245;
+            _34245 = vec3(0.0);
             SPIRV_CROSS_UNROLL
-            for (int _32728 = 0; _32728 < 6; )
+            for (int _34244 = 0; _34244 < 6; )
             {
-                float _22749 = ((_5675 - _5765) - (_5790 * ((float(_32728) * 0.4000000059604644775390625) - 1.0))) / _5780;
-                _32729 += (_2344[_32728] * exp((-_22749) * _22749));
-                _32728++;
+                float _23863 = ((_5826 - _5916) - (_5941 * ((float(_34244) * 0.4000000059604644775390625) - 1.0))) / _5931;
+                _34245 += (_2493[_34244] * exp((-_23863) * _23863));
+                _34244++;
                 continue;
             }
-            _5813 = _31191 + (mix(_32729 * vec3(0.237529695034027099609375, 0.24630542099475860595703125, 0.27624309062957763671875), vec3(exp((-_5785) * _5785)), vec3(_3977[_31188].x)) * (_3960[_31188].w * _5687));
+            _5964 = _32643 + (mix(_34245 * vec3(0.237529695034027099609375, 0.24630542099475860595703125, 0.27624309062957763671875), vec3(exp((-_5936) * _5936)), vec3(_4128[_32640].x)) * (_4111[_32640].w * _5838));
         }
-        float _5819 = _5678 * 1.5;
-        float _5849 = clamp((_5675 - _31189) / max(_31190 - _31189, 0.001000000047497451305389404296875), 0.0, 1.0);
-        float _5877 = (_5675 - (_31190 - (_5678 * 3.0))) / (((_5648.y * 0.0900000035762786865234375) + (_5715 * 0.20000000298023223876953125)) + 0.001000000047497451305389404296875);
-        float _5880 = (_5669 - 1.0499999523162841796875) * 2.77777767181396484375;
-        float _5905 = ((_5675 - _31189) + (_5678 * 5.0)) / (_5678 * 7.0);
-        vec3 _5931 = vec3(1.0) - exp((-((((_31191 + (mix(vec3(0.7799999713897705078125, 0.800000011920928955078125, 1.0), vec3(1.0), vec3(_5849)) * ((((1.0 / (1.0 + exp((-((_5675 - _31189) - (_5678 * 2.0))) / _5819))) / (1.0 + exp((-(_31190 - _5675)) / _5819))) * (0.0599999986588954925537109375 + (0.3499999940395355224609375 * pow(_5849, 2.5)))) * _5687))) + (vec3(1.0, 0.980000019073486328125, 0.949999988079071044921875) * (exp(((-_5877) * _5877) - (_5880 * _5880)) * (0.5 + (1.10000002384185791015625 * _5706))))) + (vec3(1.0, 0.680000007152557373046875, 0.4199999868869781494140625) * ((exp((-_5905) * _5905) * _5685) * 0.100000001490116119384765625))) * mix(vec3(1.0, 0.9700000286102294921875, 0.939999997615814208984375), vec3(0.939999997615814208984375, 0.9700000286102294921875, 1.0), vec3(0.5 + (0.5 * sin(_5666 * 0.800000011920928955078125)))))) * 1.39999997615814208984375);
-        float _5941 = (esia_v4.w * smoothstep(0.0, 0.119999997317790985107421875, _5655.y)) * smoothstep(1.0, 0.87999999523162841796875, _5655.y);
-        float _5960 = (clamp(max(_5931.x, max(_5931.y, _5931.z)), 0.0, 1.0) * _5941) * _28570;
-        _32036 = vec4((_5931 * _5941) * _28570, _5960) + (_31195 * (1.0 - _5960));
+        float _5970 = _5829 * 1.5;
+        float _6000 = clamp((_5826 - _32641) / max(_32642 - _32641, 0.001000000047497451305389404296875), 0.0, 1.0);
+        float _6028 = (_5826 - (_32642 - (_5829 * 3.0))) / (((_5799.y * 0.0900000035762786865234375) + (_5866 * 0.20000000298023223876953125)) + 0.001000000047497451305389404296875);
+        float _6031 = (_5820 - 1.0499999523162841796875) * 2.77777767181396484375;
+        float _6056 = ((_5826 - _32641) + (_5829 * 5.0)) / (_5829 * 7.0);
+        vec3 _6082 = vec3(1.0) - exp((-((((_32643 + (mix(vec3(0.7799999713897705078125, 0.800000011920928955078125, 1.0), vec3(1.0), vec3(_6000)) * ((((1.0 / (1.0 + exp((-((_5826 - _32641) - (_5829 * 2.0))) / _5970))) / (1.0 + exp((-(_32642 - _5826)) / _5970))) * (0.0599999986588954925537109375 + (0.3499999940395355224609375 * pow(_6000, 2.5)))) * _5838))) + (vec3(1.0, 0.980000019073486328125, 0.949999988079071044921875) * (exp(((-_6028) * _6028) - (_6031 * _6031)) * (0.5 + (1.10000002384185791015625 * _5857))))) + (vec3(1.0, 0.680000007152557373046875, 0.4199999868869781494140625) * ((exp((-_6056) * _6056) * _5836) * 0.100000001490116119384765625))) * mix(vec3(1.0, 0.9700000286102294921875, 0.939999997615814208984375), vec3(0.939999997615814208984375, 0.9700000286102294921875, 1.0), vec3(0.5 + (0.5 * sin(_5817 * 0.800000011920928955078125)))))) * 1.39999997615814208984375);
+        float _6092 = (esia_v4.w * smoothstep(0.0, 0.119999997317790985107421875, _5806.y)) * smoothstep(1.0, 0.87999999523162841796875, _5806.y);
+        float _6111 = (clamp(max(_6082.x, max(_6082.y, _6082.z)), 0.0, 1.0) * _6092) * _29827;
+        _33525 = vec4((_6082 * _6092) * _29827, _6111) + (_32647 * (1.0 - _6111));
     }
     else
     {
-        _32036 = _31195;
+        _33525 = _32647;
     }
-    vec4 _32060;
+    vec4 _33549;
     SPIRV_CROSS_BRANCH
-    if (((esia_v7.x & _4229) != 0u) && ((esia_v7.x & _4233) != 0u))
+    if (((esia_v7.x & _4380) != 0u) && ((esia_v7.x & _4384) != 0u))
     {
-        uint _22782 = max(uint(_226.gConv.z), 1u);
-        vec4 _22816 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22782) * 24u) + 7u), int(esia_v1 / _22782), 0).xy, 0);
-        uint _22823 = max(uint(_226.gConv.z), 1u);
-        vec4 _22857 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _22823) * 24u) + 8u), int(esia_v1 / _22823), 0).xy, 0);
-        vec2 _22897 = _268.gDrawInfo.yz - ((esia_v2.xy + esia_v2.zw) * 0.5);
-        bvec2 _22901 = bvec2(_268.gDrawInfo.w > 1.0);
-        vec2 _22902 = vec2(_22901.x ? _22897.x : _268.gDrawInfo.yz.x, _22901.y ? _22897.y : _268.gDrawInfo.yz.y);
-        vec2 _22876 = (-(_22902 / vec2(max(length(_22902), 9.9999997473787516355514526367188e-05)))) * length(_22857.zw);
-        vec2 _22879 = _22857.zw;
-        bvec2 _22880 = bvec2(_268.gDrawInfo.w > 0.5);
-        vec2 _5993 = esia_v0 - vec2(_22880.x ? _22876.x : _22879.x, _22880.y ? _22876.y : _22879.y);
-        vec2 _22953 = (esia_v2.xy + esia_v2.zw) * 0.5;
-        vec2 _22962 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-        float _31960;
+        uint _23896 = max(uint(_239.gConv.z), 1u);
+        vec4 _23930 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23896) * 24u) + 7u), int(esia_v1 / _23896), 0).xy, 0);
+        uint _23937 = max(uint(_239.gConv.z), 1u);
+        vec4 _23971 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _23937) * 24u) + 8u), int(esia_v1 / _23937), 0).xy, 0);
+        vec2 _32648;
         SPIRV_CROSS_BRANCH
-        if ((esia_v7.x & _1742) != 0u)
+        if (_281.gDrawInfo.w > 0.5)
         {
-            float _23079 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
-            vec4 _23113 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_31197.xy, _31197.zw, (clamp(_5993, _28171.xy, _28171.zw) - _28171.xy) / max(_28171.zw - _28171.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
-            float _23137 = (_23113.w - 0.5) * esia_v3.y;
-            vec2 _23178 = abs(_5993 - ((_28171.xy + _28171.zw) * 0.5)) - max(((_28171.zw - _28171.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _23079), vec2(0.0));
-            _31960 = max((-mix((max(min(_23113.x, _23113.y), min(max(_23113.x, _23113.y), _23113.z)) - 0.5) * esia_v3.x, _23137, clamp(abs(_23137) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _23079, length(max(_23178, vec2(0.0))) + min(max(_23178.x, _23178.y), 0.0)) - esia_v5.w;
+            vec2 _24013 = _281.gDrawInfo.yz - ((esia_v2.xy + esia_v2.zw) * 0.5);
+            bvec2 _24017 = bvec2(_281.gDrawInfo.w > 1.0);
+            vec2 _24018 = vec2(_24017.x ? _24013.x : _281.gDrawInfo.yz.x, _24017.y ? _24013.y : _281.gDrawInfo.yz.y);
+            _32648 = (-(_24018 / vec2(max(length(_24018), 9.9999997473787516355514526367188e-05)))) * length(_23971.zw);
         }
         else
         {
-            float _31961;
-            if ((esia_v7.x & _1757) != 0u)
+            _32648 = _23971.zw;
+        }
+        vec2 _6144 = esia_v0 - _32648;
+        vec2 _24069 = (esia_v2.xy + esia_v2.zw) * 0.5;
+        vec2 _24078 = max((esia_v2.zw - esia_v2.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+        float _33445;
+        SPIRV_CROSS_BRANCH
+        if ((esia_v7.x & _1785) != 0u)
+        {
+            float _24195 = 1.0 / max(esia_v5.z, 9.9999999747524270787835121154785e-07);
+            vec4 _24229 = textureLod(SPIRV_Cross_CombinedgTexgLinear, mix(_32651.xy, _32651.zw, (clamp(_6144, _29442.xy, _29442.zw) - _29442.xy) / max(_29442.zw - _29442.xy, vec2(9.9999999747524270787835121154785e-07))), 0.0);
+            float _24253 = (_24229.w - 0.5) * esia_v3.y;
+            vec2 _24294 = abs(_6144 - ((_29442.xy + _29442.zw) * 0.5)) - max(((_29442.zw - _29442.xy) * 0.5) - vec2(((0.5 * esia_v3.y) + 1.0) * _24195), vec2(0.0));
+            _33445 = max((-mix((max(min(_24229.x, _24229.y), min(max(_24229.x, _24229.y), _24229.z)) - 0.5) * esia_v3.x, _24253, clamp(abs(_24253) - ((0.5 * esia_v3.x) - 1.5), 0.0, 1.0))) * _24195, length(max(_24294, vec2(0.0))) + min(max(_24294.x, _24294.y), 0.0)) - esia_v5.w;
+        }
+        else
+        {
+            float _33446;
+            if ((esia_v7.x & _1800) != 0u)
             {
-                float _31959;
+                float _33444;
                 do
                 {
-                    bool _23240 = esia_v3.w > 0.5;
-                    float _23244 = floor((esia_v3.z + 1.0) * 0.5);
-                    float _23248 = floor((_23244 + 127.0) * 0.0078125);
-                    float _23252 = floor((esia_v3.z - 1.0) * 0.5);
-                    float _23380 = floor(_23252 * 0.0625);
-                    uint _23385 = (esia_v1 + 1u) + uint(_23380);
-                    uint _23398 = max(uint(_226.gConv.z), 1u);
-                    vec4 _23432 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_23385 % _23398) * 24u) + uint(_23252 - (_23380 * 16.0))), int(_23385 / _23398), 0).xy, 0);
-                    vec2 _23264 = _23432.xy;
-                    vec2 _23266 = _23432.zw;
-                    bvec2 _23267 = bvec2(((esia_v3.z - 1.0) - (_23252 * 2.0)) < 0.5);
-                    vec2 _31936;
-                    if (_23240)
+                    bool _24356 = esia_v3.w > 0.5;
+                    float _24360 = floor((esia_v3.z + 1.0) * 0.5);
+                    float _24364 = floor((_24360 + 127.0) * 0.0078125);
+                    float _24368 = floor((esia_v3.z - 1.0) * 0.5);
+                    float _24496 = floor(_24368 * 0.0625);
+                    uint _24501 = (esia_v1 + 1u) + uint(_24496);
+                    uint _24514 = max(uint(_239.gConv.z), 1u);
+                    vec4 _24548 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_24501 % _24514) * 24u) + uint(_24368 - (_24496 * 16.0))), int(_24501 / _24514), 0).xy, 0);
+                    vec2 _24380 = _24548.xy;
+                    vec2 _24382 = _24548.zw;
+                    bvec2 _24383 = bvec2(((esia_v3.z - 1.0) - (_24368 * 2.0)) < 0.5);
+                    vec2 _33421;
+                    if (_24356)
                     {
-                        float _23440 = floor(0.0);
-                        uint _23445 = (esia_v1 + 1u) + uint(_23440);
-                        uint _23458 = max(uint(_226.gConv.z), 1u);
-                        _31936 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_23445 % _23458) * 24u) + uint(_23440 * (-16.0))), int(_23445 / _23458), 0).xy, 0).xy;
+                        float _24556 = floor(0.0);
+                        uint _24561 = (esia_v1 + 1u) + uint(_24556);
+                        uint _24574 = max(uint(_239.gConv.z), 1u);
+                        _33421 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_24561 % _24574) * 24u) + uint(_24556 * (-16.0))), int(_24561 / _24574), 0).xy, 0).xy;
                     }
                     else
                     {
-                        _31936 = vec2(_23267.x ? _23264.x : _23266.x, _23267.y ? _23264.y : _23266.y);
+                        _33421 = vec2(_24383.x ? _24380.x : _24382.x, _24383.y ? _24380.y : _24382.y);
                     }
-                    vec2 _31935;
-                    float _31938;
-                    float _31941;
-                    _31941 = 1.0;
-                    _31938 = 1000000015047466219876688855040.0;
-                    _31935 = _31936;
-                    vec2 _31934;
-                    float _31937;
-                    float _31940;
+                    vec2 _33420;
+                    float _33423;
+                    float _33426;
+                    _33426 = 1.0;
+                    _33423 = 1000000015047466219876688855040.0;
+                    _33420 = _33421;
+                    vec2 _33419;
+                    float _33422;
+                    float _33425;
                     SPIRV_CROSS_LOOP
-                    for (float _31931 = 0.0; _31931 < 16.0; _31941 = _31940, _31938 = _31937, _31935 = _31934, _31931 += 1.0)
+                    for (float _33416 = 0.0; _33416 < 16.0; _33426 = _33425, _33423 = _33422, _33420 = _33419, _33416 += 1.0)
                     {
-                        if (_31931 >= _23248)
+                        if (_33416 >= _24364)
                         {
                             break;
                         }
-                        _31940 = _31941;
-                        _31937 = _31938;
-                        _31934 = _31935;
-                        vec2 _32931;
-                        float _32933;
-                        float _32935;
+                        _33425 = _33426;
+                        _33422 = _33423;
+                        _33419 = _33420;
+                        vec2 _34447;
+                        float _34449;
+                        float _34451;
                         SPIRV_CROSS_LOOP
-                        for (float _31932 = 0.0; _31932 < 128.0; _31940 = _32935, _31937 = _32933, _31934 = _32931, _31932 += 1.0)
+                        for (float _33417 = 0.0; _33417 < 128.0; _33425 = _34451, _33422 = _34449, _33419 = _34447, _33417 += 1.0)
                         {
-                            float _23294 = (_31931 * 128.0) + _31932;
-                            if (_23294 >= _23244)
+                            float _24410 = (_33416 * 128.0) + _33417;
+                            if (_24410 >= _24360)
                             {
                                 break;
                             }
-                            float _23500 = floor(_23294 * 0.0625);
-                            uint _23505 = (esia_v1 + 1u) + uint(_23500);
-                            uint _23518 = max(uint(_226.gConv.z), 1u);
-                            vec4 _23552 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_23505 % _23518) * 24u) + uint(_23294 - (_23500 * 16.0))), int(_23505 / _23518), 0).xy, 0);
-                            vec2 _23306 = _23552.xy;
-                            vec2 _23563 = _31934 - _23306;
-                            vec2 _23566 = _5993 - _23306;
-                            vec2 _23579 = _23566 - (_23563 * clamp(dot(_23566, _23563) / max(dot(_23563, _23563), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                            float _23582 = dot(_23579, _23579);
-                            float _32969 = (_23582 < _31937) ? _23582 : _31937;
-                            bool _23594 = _5993.y >= _23552.y;
-                            bool _23599 = _5993.y < _31934.y;
-                            bool _23610 = (_23563.x * _23566.y) > (_23563.y * _23566.x);
-                            float _31946;
-                            if (((_23594 && _23599) && _23610) || (((!_23594) && (!_23599)) && (!_23610)))
+                            float _24616 = floor(_24410 * 0.0625);
+                            uint _24621 = (esia_v1 + 1u) + uint(_24616);
+                            uint _24634 = max(uint(_239.gConv.z), 1u);
+                            vec4 _24668 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((_24621 % _24634) * 24u) + uint(_24410 - (_24616 * 16.0))), int(_24621 / _24634), 0).xy, 0);
+                            vec2 _24422 = _24668.xy;
+                            vec2 _24679 = _33419 - _24422;
+                            vec2 _24682 = _6144 - _24422;
+                            vec2 _24695 = _24682 - (_24679 * clamp(dot(_24682, _24679) / max(dot(_24679, _24679), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                            float _24698 = dot(_24695, _24695);
+                            float _34485 = (_24698 < _33422) ? _24698 : _33422;
+                            bool _24710 = _6144.y >= _24668.y;
+                            bool _24715 = _6144.y < _33419.y;
+                            bool _24726 = (_24679.x * _24682.y) > (_24679.y * _24682.x);
+                            float _33431;
+                            if (((_24710 && _24715) && _24726) || (((!_24710) && (!_24715)) && (!_24726)))
                             {
-                                _31946 = -_31940;
+                                _33431 = -_33425;
                             }
                             else
                             {
-                                _31946 = _31940;
+                                _33431 = _33425;
                             }
-                            vec2 _23316 = _23552.xy;
-                            if (((2.0 * _23294) + 1.0) < esia_v3.z)
+                            vec2 _24432 = _24668.xy;
+                            if (((2.0 * _24410) + 1.0) < esia_v3.z)
                             {
-                                vec2 _23325 = _23552.zw;
-                                vec2 _23639 = _23316 - _23325;
-                                vec2 _23642 = _5993 - _23325;
-                                vec2 _23655 = _23642 - (_23639 * clamp(dot(_23642, _23639) / max(dot(_23639, _23639), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
-                                float _23658 = dot(_23655, _23655);
-                                bool _23670 = _5993.y >= _23552.w;
-                                bool _23675 = _5993.y < _23552.y;
-                                bool _23686 = (_23639.x * _23642.y) > (_23639.y * _23642.x);
-                                float _31950;
-                                if (((_23670 && _23675) && _23686) || (((!_23670) && (!_23675)) && (!_23686)))
+                                vec2 _24441 = _24668.zw;
+                                vec2 _24755 = _24432 - _24441;
+                                vec2 _24758 = _6144 - _24441;
+                                vec2 _24771 = _24758 - (_24755 * clamp(dot(_24758, _24755) / max(dot(_24755, _24755), 9.9999999600419720025001879548654e-13), 0.0, 1.0));
+                                float _24774 = dot(_24771, _24771);
+                                bool _24786 = _6144.y >= _24668.w;
+                                bool _24791 = _6144.y < _24668.y;
+                                bool _24802 = (_24755.x * _24758.y) > (_24755.y * _24758.x);
+                                float _33435;
+                                if (((_24786 && _24791) && _24802) || (((!_24786) && (!_24791)) && (!_24802)))
                                 {
-                                    _31950 = -_31946;
+                                    _33435 = -_33431;
                                 }
                                 else
                                 {
-                                    _31950 = _31946;
+                                    _33435 = _33431;
                                 }
-                                _32935 = _31950;
-                                _32933 = (_23658 < _32969) ? _23658 : _32969;
-                                _32931 = _23552.zw;
+                                _34451 = _33435;
+                                _34449 = (_24774 < _34485) ? _24774 : _34485;
+                                _34447 = _24668.zw;
                             }
                             else
                             {
-                                _32935 = _31946;
-                                _32933 = _32969;
-                                _32931 = _23316;
+                                _34451 = _33431;
+                                _34449 = _34485;
+                                _34447 = _24432;
                             }
                         }
                     }
-                    float _23346 = sqrt(_31938);
-                    if (_23240)
+                    float _24462 = sqrt(_33423);
+                    if (_24356)
                     {
-                        _31959 = _23346 - esia_v3.x;
+                        _33444 = _24462 - esia_v3.x;
                         break;
                     }
-                    _31959 = (_31941 * _23346) - esia_v3.x;
+                    _33444 = (_33426 * _24462) - esia_v3.x;
                     break;
                 } while(false);
-                _31961 = _31959;
+                _33446 = _33444;
             }
             else
             {
-                float _31962;
+                float _33447;
                 if (esia_v7.z == 1u)
                 {
-                    vec2 _22987 = _5993 - _22953;
-                    float _31930;
+                    vec2 _24103 = _6144 - _24069;
+                    float _33415;
                     do
                     {
                         if (esia_v5.w >= 6.282185077667236328125)
                         {
-                            _31930 = abs(length(_22987) - esia_v3.x) - esia_v3.y;
+                            _33415 = abs(length(_24103) - esia_v3.x) - esia_v3.y;
                             break;
                         }
-                        float _23729 = esia_v5.z + (esia_v5.w * 0.5);
-                        float _23731 = cos(_23729);
-                        float _23733 = sin(_23729);
-                        float _23742 = dot(_22987, vec2(-_23733, _23731));
-                        float _23745 = dot(_22987, vec2(_23731, _23733));
-                        vec2 _23746 = vec2(_23742, _23745);
-                        float _23749 = abs(_23742);
-                        _23746.x = _23749;
-                        float _23752 = esia_v5.w * 0.5;
-                        float _23754 = sin(_23752);
-                        float _23756 = cos(_23752);
-                        _31930 = (((_23756 * _23749) > (_23754 * _23745)) ? length(_23746 - (vec2(_23754, _23756) * esia_v3.x)) : abs(length(_23746) - esia_v3.x)) - esia_v3.y;
+                        float _24845 = esia_v5.z + (esia_v5.w * 0.5);
+                        float _24847 = cos(_24845);
+                        float _24849 = sin(_24845);
+                        float _24858 = dot(_24103, vec2(-_24849, _24847));
+                        float _24861 = dot(_24103, vec2(_24847, _24849));
+                        vec2 _24862 = vec2(_24858, _24861);
+                        float _24865 = abs(_24858);
+                        _24862.x = _24865;
+                        float _24868 = esia_v5.w * 0.5;
+                        float _24870 = sin(_24868);
+                        float _24872 = cos(_24868);
+                        _33415 = (((_24872 * _24865) > (_24870 * _24861)) ? length(_24862 - (vec2(_24870, _24872) * esia_v3.x)) : abs(length(_24862) - esia_v3.x)) - esia_v3.y;
                         break;
                     } while(false);
-                    _31962 = _31930;
+                    _33447 = _33415;
                 }
                 else
                 {
-                    float _31963;
+                    float _33448;
                     if (esia_v7.z == 2u)
                     {
-                        vec2 _23792 = _5993 - _28171.xy;
-                        vec2 _23795 = _28171.zw - _28171.xy;
-                        _31963 = length(_23792 - (_23795 * clamp(dot(_23792, _23795) / max(dot(_23795, _23795), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
+                        vec2 _24908 = _6144 - _29442.xy;
+                        vec2 _24911 = _29442.zw - _29442.xy;
+                        _33448 = length(_24908 - (_24911 * clamp(dot(_24908, _24911) / max(dot(_24911, _24911), 9.9999999747524270787835121154785e-07), 0.0, 1.0))) - esia_v3.x;
                     }
                     else
                     {
-                        vec2 _23014 = _5993 - _22953;
-                        float _23848 = min(_22962.x, _22962.y);
-                        float _23851 = min((_23014.x > 0.0) ? ((_23014.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_23014.y > 0.0) ? esia_v3.w : esia_v3.x), _23848);
-                        float _23857 = _23851 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                        float _31915;
-                        float _31916;
-                        if (_23857 > _23848)
+                        vec2 _24130 = _6144 - _24069;
+                        float _24976 = min(_24078.x, _24078.y);
+                        float _24979 = min((_24130.x > 0.0) ? ((_24130.y > 0.0) ? esia_v3.z : esia_v3.y) : ((_24130.y > 0.0) ? esia_v3.w : esia_v3.x), _24976);
+                        float _24985 = _24979 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                        float _33404;
+                        float _33405;
+                        if (_24985 > _24976)
                         {
-                            float _23871 = esia_v5.y * clamp((_23848 - _23851) / max(0.60000002384185791015625 * _23851, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                            _31916 = _23871;
-                            _31915 = _23851 * (1.0 + (0.60000002384185791015625 * _23871));
+                            float _24999 = esia_v5.y * clamp((_24976 - _24979) / max(0.60000002384185791015625 * _24979, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                            _33405 = _24999;
+                            _33404 = _24979 * (1.0 + (0.60000002384185791015625 * _24999));
                         }
                         else
                         {
-                            _31916 = esia_v5.y;
-                            _31915 = _23857;
+                            _33405 = esia_v5.y;
+                            _33404 = _24985;
                         }
-                        vec2 _23884 = (abs(_23014) - _22962) + vec2(_31915);
-                        vec2 _23886 = max(_23884, vec2(0.0));
-                        float _31917;
+                        vec2 _25028 = (abs(_24130) - _24078) + vec2(_33404);
+                        vec2 _25030 = max(_25028, vec2(0.0));
+                        float _33406;
                         SPIRV_CROSS_BRANCH
-                        if ((_23886.x > 0.0) && (_23886.y > 0.0))
+                        if ((_25030.x > 0.0) && (_25030.y > 0.0))
                         {
-                            float _31918;
-                            if ((_31916 > 0.001000000047497451305389404296875) && (_31915 > 9.9999997473787516355514526367188e-05))
+                            float _33407;
+                            if ((_33405 > 0.001000000047497451305389404296875) && (_33404 > 9.9999997473787516355514526367188e-05))
                             {
-                                float _23903 = 2.0 + (2.0 * _31916);
-                                vec2 _23908 = _23886 / vec2(max(_31915, 9.9999997473787516355514526367188e-05));
-                                _31918 = pow(pow(_23908.x, _23903) + pow(_23908.y, _23903), 1.0 / _23903) * _31915;
+                                float _25047 = 2.0 + (2.0 * _33405);
+                                vec2 _25052 = _25030 / vec2(max(_33404, 9.9999997473787516355514526367188e-05));
+                                _33407 = pow(pow(_25052.x, _25047) + pow(_25052.y, _25047), 1.0 / _25047) * _33404;
                             }
                             else
                             {
-                                _31918 = length(_23886);
+                                _33407 = length(_25030);
                             }
-                            _31917 = _31918;
+                            _33406 = _33407;
                         }
                         else
                         {
-                            _31917 = max(_23886.x, _23886.y);
+                            _33406 = max(_25030.x, _25030.y);
                         }
-                        float _23943 = (min(max(_23884.x, _23884.y), 0.0) + _31917) - _31915;
-                        float _31964;
+                        float _25087 = (min(max(_25028.x, _25028.y), 0.0) + _33406) - _33404;
+                        float _33449;
                         SPIRV_CROSS_BRANCH
-                        if ((esia_v7.x & _1828) != 0u)
+                        if ((esia_v7.x & _1871) != 0u)
                         {
-                            vec2 _23042 = max((_28171.zw - _28171.xy) * 0.5, vec2(0.001000000047497451305389404296875));
-                            vec2 _23045 = _5993 - ((_28171.xy + _28171.zw) * 0.5);
-                            float _23979 = min(_23042.x, _23042.y);
-                            float _23982 = min((_23045.x > 0.0) ? ((_23045.y > 0.0) ? _31419.x : _31419.x) : ((_23045.y > 0.0) ? _31419.x : _31419.x), _23979);
-                            float _23988 = _23982 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
-                            float _31921;
-                            float _31922;
-                            if (_23988 > _23979)
+                            vec2 _24158 = max((_29442.zw - _29442.xy) * 0.5, vec2(0.001000000047497451305389404296875));
+                            vec2 _24161 = _6144 - ((_29442.xy + _29442.zw) * 0.5);
+                            float _25135 = min(_24158.x, _24158.y);
+                            float _25138 = min((_24161.x > 0.0) ? ((_24161.y > 0.0) ? _32885.x : _32885.x) : ((_24161.y > 0.0) ? _32885.x : _32885.x), _25135);
+                            float _25144 = _25138 * (1.0 + (0.60000002384185791015625 * esia_v5.y));
+                            float _33408;
+                            float _33409;
+                            if (_25144 > _25135)
                             {
-                                float _24002 = esia_v5.y * clamp((_23979 - _23982) / max(0.60000002384185791015625 * _23982, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
-                                _31922 = _24002;
-                                _31921 = _23982 * (1.0 + (0.60000002384185791015625 * _24002));
+                                float _25158 = esia_v5.y * clamp((_25135 - _25138) / max(0.60000002384185791015625 * _25138, 9.9999997473787516355514526367188e-05), 0.0, 1.0);
+                                _33409 = _25158;
+                                _33408 = _25138 * (1.0 + (0.60000002384185791015625 * _25158));
                             }
                             else
                             {
-                                _31922 = esia_v5.y;
-                                _31921 = _23988;
+                                _33409 = esia_v5.y;
+                                _33408 = _25144;
                             }
-                            vec2 _24015 = (abs(_23045) - _23042) + vec2(_31921);
-                            vec2 _24017 = max(_24015, vec2(0.0));
-                            float _31923;
+                            vec2 _25187 = (abs(_24161) - _24158) + vec2(_33408);
+                            vec2 _25189 = max(_25187, vec2(0.0));
+                            float _33410;
                             SPIRV_CROSS_BRANCH
-                            if ((_24017.x > 0.0) && (_24017.y > 0.0))
+                            if ((_25189.x > 0.0) && (_25189.y > 0.0))
                             {
-                                float _31924;
-                                if ((_31922 > 0.001000000047497451305389404296875) && (_31921 > 9.9999997473787516355514526367188e-05))
+                                float _33411;
+                                if ((_33409 > 0.001000000047497451305389404296875) && (_33408 > 9.9999997473787516355514526367188e-05))
                                 {
-                                    float _24034 = 2.0 + (2.0 * _31922);
-                                    vec2 _24039 = _24017 / vec2(max(_31921, 9.9999997473787516355514526367188e-05));
-                                    _31924 = pow(pow(_24039.x, _24034) + pow(_24039.y, _24034), 1.0 / _24034) * _31921;
+                                    float _25206 = 2.0 + (2.0 * _33409);
+                                    vec2 _25211 = _25189 / vec2(max(_33408, 9.9999997473787516355514526367188e-05));
+                                    _33411 = pow(pow(_25211.x, _25206) + pow(_25211.y, _25206), 1.0 / _25206) * _33408;
                                 }
                                 else
                                 {
-                                    _31924 = length(_24017);
+                                    _33411 = length(_25189);
                                 }
-                                _31923 = _31924;
+                                _33410 = _33411;
                             }
                             else
                             {
-                                _31923 = max(_24017.x, _24017.y);
+                                _33410 = max(_25189.x, _25189.y);
                             }
-                            float _24074 = (min(max(_24015.x, _24015.y), 0.0) + _31923) - _31921;
-                            float _24079 = max(_31419.y, 9.9999997473787516355514526367188e-05);
-                            float _24088 = max(_24079 - abs(_23943 - _24074), 0.0) / _24079;
-                            _31964 = min(_23943, _24074) - (((_24088 * _24088) * _24079) * 0.25);
+                            float _25246 = (min(max(_25187.x, _25187.y), 0.0) + _33410) - _33408;
+                            float _25251 = max(_32885.y, 9.9999997473787516355514526367188e-05);
+                            float _25260 = max(_25251 - abs(_25087 - _25246), 0.0) / _25251;
+                            _33449 = min(_25087, _25246) - (((_25260 * _25260) * _25251) * 0.25);
                         }
                         else
                         {
-                            _31964 = _23943;
+                            _33449 = _25087;
                         }
-                        _31963 = _31964;
+                        _33448 = _33449;
                     }
-                    _31962 = _31963;
+                    _33447 = _33448;
                 }
-                _31961 = _31962;
+                _33446 = _33447;
             }
-            _31960 = _31961;
+            _33445 = _33446;
         }
-        float _6002 = (_31960 + _22857.y) / (max(_22857.x * 0.5, _4995 * 0.5) * 1.41421353816986083984375);
-        float _24105 = sign(_6002);
-        float _24107 = abs(_6002);
-        float _24118 = 1.0 + ((0.2783930003643035888671875 + ((0.23038899898529052734375 + (0.07810799777507781982421875 * (_24107 * _24107))) * _24107)) * _24107);
-        float _24121 = _24118 * _24118;
-        float _24136 = clamp(_22816.w * ((0.5 + (0.5 * (_24105 - (_24105 / (_24121 * _24121))))) * _28570), 0.0, 1.0);
-        vec3 _24140 = _22816.xyz * _24136;
-        _32060 = vec4(_24140, _24136) + (_32036 * (1.0 - _24136));
+        float _6153 = (_33445 + _23971.y) / (max(_23971.x * 0.5, _5146 * 0.5) * 1.41421353816986083984375);
+        float _25277 = sign(_6153);
+        float _25279 = abs(_6153);
+        float _25290 = 1.0 + ((0.2783930003643035888671875 + ((0.23038899898529052734375 + (0.07810799777507781982421875 * (_25279 * _25279))) * _25279)) * _25279);
+        float _25293 = _25290 * _25290;
+        float _25308 = clamp(_23930.w * ((0.5 + (0.5 * (_25277 - (_25277 / (_25293 * _25293))))) * _29827), 0.0, 1.0);
+        vec3 _25312 = _23930.xyz * _25308;
+        _33549 = vec4(_25312, _25308) + (_33525 * (1.0 - _25308));
     }
     else
     {
-        _32060 = _32036;
+        _33549 = _33525;
     }
-    vec4 _32097;
+    vec4 _33587;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _4293) != 0u)
+    if ((esia_v7.x & _4444) != 0u)
     {
-        uint _24161 = max(uint(_226.gConv.z), 1u);
-        vec4 _24195 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _24161) * 24u) + 9u), int(esia_v1 / _24161), 0).xy, 0);
-        uint _24202 = max(uint(_226.gConv.z), 1u);
-        vec4 _24236 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _24202) * 24u) + 10u), int(esia_v1 / _24202), 0).xy, 0);
-        float _6034 = max(-_28219, 0.0) / max(_24236.z, 0.001000000047497451305389404296875);
-        float _24244 = clamp(_24195.w * clamp((exp(((-_6034) * _6034) * 2.2000000476837158203125) * _24236.w) * _28570, 0.0, 1.0), 0.0, 1.0);
-        _32097 = vec4(_24195.xyz * _24244, _24244) + (_32060 * (1.0 - _24244));
+        uint _25333 = max(uint(_239.gConv.z), 1u);
+        vec4 _25367 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _25333) * 24u) + 9u), int(esia_v1 / _25333), 0).xy, 0);
+        uint _25374 = max(uint(_239.gConv.z), 1u);
+        vec4 _25408 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _25374) * 24u) + 10u), int(esia_v1 / _25374), 0).xy, 0);
+        float _6185 = max(-_29486, 0.0) / max(_25408.z, 0.001000000047497451305389404296875);
+        float _25416 = clamp(_25367.w * clamp((exp(((-_6185) * _6185) * 2.2000000476837158203125) * _25408.w) * _29827, 0.0, 1.0), 0.0, 1.0);
+        _33587 = vec4(_25367.xyz * _25416, _25416) + (_33549 * (1.0 - _25416));
     }
     else
     {
-        _32097 = _32060;
+        _33587 = _33549;
     }
-    vec3 _6065 = _32097.xyz + vec3(_32065 * clamp(_32097.w / max(_28570, 0.001000000047497451305389404296875), 0.0, 1.0));
-    vec4 _28057 = _32097;
-    _28057.x = _6065.x;
-    _28057.y = _6065.y;
-    _28057.z = _6065.z;
-    vec4 _32410;
+    vec3 _6216 = _33587.xyz + vec3(_33554 * clamp(_33587.w / max(_29827, 0.001000000047497451305389404296875), 0.0, 1.0));
+    vec4 _29328 = _33587;
+    _29328.x = _6216.x;
+    _29328.y = _6216.y;
+    _29328.z = _6216.z;
+    vec4 _33913;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _4362) != 0u)
+    if ((esia_v7.x & _4513) != 0u)
     {
-        uint _24269 = max(uint(_226.gConv.z), 1u);
-        vec4 _24303 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _24269) * 24u) + 5u), int(esia_v1 / _24269), 0).xy, 0);
-        uint _24310 = max(uint(_226.gConv.z), 1u);
-        vec4 _24344 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _24310) * 24u) + 6u), int(esia_v1 / _24310), 0).xy, 0);
-        float _6085 = _24344.x;
-        float _6087 = _24344.y;
-        vec4 _32406;
-        if (_24344.z < 0.999000012874603271484375)
+        uint _25441 = max(uint(_239.gConv.z), 1u);
+        vec4 _25475 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _25441) * 24u) + 5u), int(esia_v1 / _25441), 0).xy, 0);
+        uint _25482 = max(uint(_239.gConv.z), 1u);
+        vec4 _25516 = texelFetch(SPIRV_Cross_CombinedgFxDataSPIRV_Cross_DummySampler, ivec3(int(((esia_v1 % _25482) * 24u) + 6u), int(esia_v1 / _25482), 0).xy, 0);
+        float _6236 = _25516.x;
+        float _6238 = _25516.y;
+        vec4 _33909;
+        if (_25516.z < 0.999000012874603271484375)
         {
-            vec2 _6127 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
-            float _6138 = cos(_24344.w);
-            float _6141 = sin(_24344.w);
-            vec4 _28074 = _24303;
-            _28074.w = _24303.w * mix(1.0, _24344.z, clamp(((dot(esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5), vec2(_6138, _6141)) / max(0.5 * ((abs(_6138) * _6127.x) + (abs(_6141) * _6127.y)), 0.001000000047497451305389404296875)) * 0.5) + 0.5, 0.0, 1.0));
-            _32406 = _28074;
+            vec2 _6278 = max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
+            float _6289 = cos(_25516.w);
+            float _6292 = sin(_25516.w);
+            vec4 _29345 = _25475;
+            _29345.w = _25475.w * mix(1.0, _25516.z, clamp(((dot(esia_v0 - ((esia_v2.xy + esia_v2.zw) * 0.5), vec2(_6289, _6292)) / max(0.5 * ((abs(_6289) * _6278.x) + (abs(_6292) * _6278.y)), 0.001000000047497451305389404296875)) * 0.5) + 0.5, 0.0, 1.0));
+            _33909 = _29345;
         }
         else
         {
-            _32406 = _24303;
+            _33909 = _25475;
         }
-        float _24352 = clamp(_32406.w * ((_32108 >= 0.0) ? _32108 : (clamp(0.5 - ((_28219 - (_6085 * _6087)) / _4995), 0.0, 1.0) - clamp(0.5 - ((_28219 + (_6085 * (1.0 - _6087))) / _4995), 0.0, 1.0))), 0.0, 1.0);
-        _32410 = vec4(_32406.xyz * _24352, _24352) + (_28057 * (1.0 - _24352));
+        float _25524 = clamp(_33909.w * ((_33598 >= 0.0) ? _33598 : (clamp(0.5 - ((_29486 - (_6236 * _6238)) / _5146), 0.0, 1.0) - clamp(0.5 - ((_29486 + (_6236 * (1.0 - _6238))) / _5146), 0.0, 1.0))), 0.0, 1.0);
+        _33913 = vec4(_33909.xyz * _25524, _25524) + (_29328 * (1.0 - _25524));
     }
     else
     {
-        _32410 = _28057;
+        _33913 = _29328;
     }
-    vec4 _32411;
+    vec4 _33914;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _4496) != 0u)
+    if ((esia_v7.x & _4647) != 0u)
     {
-        vec2 _6202 = (esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
-        float _6224 = exp(-pow((((_6202.x * 0.85000002384185791015625) + (_6202.y * 0.1500000059604644775390625)) - ((fract(_226.gTime.x * esia_v6.w) * 1.7999999523162841796875) - 0.4000000059604644775390625)) * 9.09090900421142578125, 2.0));
-        _32411 = vec4(_32410.xyz + vec3(((_6224 * esia_v6.z) * _28570) * max(_32410.w, 0.3499999940395355224609375)), max(_32410.w, ((_6224 * esia_v6.z) * _28570) * 0.5));
+        vec2 _6353 = (esia_v0 - esia_v2.xy) / max(esia_v2.zw - esia_v2.xy, vec2(0.001000000047497451305389404296875));
+        float _6375 = exp(-pow((((_6353.x * 0.85000002384185791015625) + (_6353.y * 0.1500000059604644775390625)) - ((fract(_239.gTime.x * esia_v6.w) * 1.7999999523162841796875) - 0.4000000059604644775390625)) * 9.09090900421142578125, 2.0));
+        _33914 = vec4(_33913.xyz + vec3(((_6375 * esia_v6.z) * _29827) * max(_33913.w, 0.3499999940395355224609375)), max(_33913.w, ((_6375 * esia_v6.z) * _29827) * 0.5));
     }
     else
     {
-        _32411 = _32410;
+        _33914 = _33913;
     }
-    vec4 _32723;
+    vec4 _34239;
     SPIRV_CROSS_BRANCH
-    if ((esia_v7.x & _4578) != 0u)
+    if ((esia_v7.x & _4729) != 0u)
     {
-        vec3 _24377 = fract(floor(_28164).xyx * 0.103100001811981201171875);
-        vec3 _24386 = _24377 + vec3(dot(_24377, _24377.yzx + vec3(33.3300018310546875)));
-        vec3 _6275 = _32411.xyz + vec3(((fract((_24386.x + _24386.y) * _24386.z) - 0.5) * esia_v6.y) * _32411.w);
-        vec4 _28098 = _32411;
-        _28098.x = _6275.x;
-        _28098.y = _6275.y;
-        _28098.z = _6275.z;
-        _32723 = _28098;
+        vec3 _25549 = fract(floor(_29435).xyx * 0.103100001811981201171875);
+        vec3 _25558 = _25549 + vec3(dot(_25549, _25549.yzx + vec3(33.3300018310546875)));
+        vec3 _6426 = _33914.xyz + vec3(((fract((_25558.x + _25558.y) * _25558.z) - 0.5) * esia_v6.y) * _33914.w);
+        vec4 _29369 = _33914;
+        _29369.x = _6426.x;
+        _29369.y = _6426.y;
+        _29369.z = _6426.z;
+        _34239 = _29369;
     }
     else
     {
-        _32723 = _32411;
+        _34239 = _33914;
     }
-    float _32719;
-    if (_268.gFade.z > 0.0)
+    float _34235;
+    if (_281.gFade.z > 0.0)
     {
-        _32719 = smoothstep(0.0, 1.0, clamp((_28164.y - _268.gFade.x) / _268.gFade.z, 0.0, 1.0));
+        _34235 = smoothstep(0.0, 1.0, clamp((_29435.y - _281.gFade.x) / _281.gFade.z, 0.0, 1.0));
     }
     else
     {
-        _32719 = 1.0;
+        _34235 = 1.0;
     }
-    float _32720;
-    if (_268.gFade.w > 0.0)
+    float _34236;
+    if (_281.gFade.w > 0.0)
     {
-        _32720 = _32719 * smoothstep(0.0, 1.0, clamp((_268.gFade.y - _28164.y) / _268.gFade.w, 0.0, 1.0));
+        _34236 = _34235 * smoothstep(0.0, 1.0, clamp((_281.gFade.y - _29435.y) / _281.gFade.w, 0.0, 1.0));
     }
     else
     {
-        _32720 = _32719;
+        _34236 = _34235;
     }
-    vec4 _6292 = _32723 * ((esia_v6.x * _32423) * _32720);
-    vec4 _32724;
+    vec4 _6443 = _34239 * ((esia_v6.x * _33926) * _34236);
+    vec4 _34240;
     SPIRV_CROSS_BRANCH
-    if (((esia_v7.x & _4618) != 0u) || ((esia_v7.x & _4622) != 0u))
+    if (((esia_v7.x & _4769) != 0u) || ((esia_v7.x & _4773) != 0u))
     {
-        vec3 _24438 = fract((floor(_28164) + vec2(17.0)).xyx * 0.103100001811981201171875);
-        vec3 _24447 = _24438 + vec3(dot(_24438, _24438.yzx + vec3(33.3300018310546875)));
-        vec3 _6316 = _6292.xyz + vec3(((fract((_24447.x + _24447.y) * _24447.z) - 0.5) * 0.0039215688593685626983642578125) * clamp(_6292.w * 8.0, 0.0, 1.0));
-        vec4 _28110 = _6292;
-        _28110.x = _6316.x;
-        _28110.y = _6316.y;
-        _28110.z = _6316.z;
-        _32724 = _28110;
+        vec3 _25610 = fract((floor(_29435) + vec2(17.0)).xyx * 0.103100001811981201171875);
+        vec3 _25619 = _25610 + vec3(dot(_25610, _25610.yzx + vec3(33.3300018310546875)));
+        vec3 _6467 = _6443.xyz + vec3(((fract((_25619.x + _25619.y) * _25619.z) - 0.5) * 0.0039215688593685626983642578125) * clamp(_6443.w * 8.0, 0.0, 1.0));
+        vec4 _29381 = _6443;
+        _29381.x = _6467.x;
+        _29381.y = _6467.y;
+        _29381.z = _6467.z;
+        _34240 = _29381;
     }
     else
     {
-        _32724 = _6292;
+        _34240 = _6443;
     }
-    vec3 _6326 = max(_32724.xyz, vec3(0.0));
-    vec4 _28116 = _32724;
-    _28116.x = _6326.x;
-    _28116.y = _6326.y;
-    _28116.z = _6326.z;
-    vec4 _32725;
-    if ((_226.gTime.w > 0.5) && (_32724.w > 9.9999997473787516355514526367188e-06))
+    vec3 _6477 = max(_34240.xyz, vec3(0.0));
+    vec4 _29387 = _34240;
+    _29387.x = _6477.x;
+    _29387.y = _6477.y;
+    _29387.z = _6477.z;
+    vec4 _34241;
+    if ((_239.gTime.w > 0.5) && (_34240.w > 9.9999997473787516355514526367188e-06))
     {
-        vec3 _24491 = clamp(_28116.xyz / vec3(_32724.w), vec3(0.0), vec3(1.0));
-        vec3 _24497 = pow((_24491 + vec3(0.054999999701976776123046875)) * vec3(0.947867333889007568359375), vec3(2.400000095367431640625));
-        vec3 _24500 = _24491 * vec3(0.077399380505084991455078125);
-        bvec3 _24502 = lessThanEqual(_24491, vec3(0.040449999272823333740234375));
-        vec3 _24477 = vec3(_24502.x ? _24500.x : _24497.x, _24502.y ? _24500.y : _24497.y, _24502.z ? _24500.z : _24497.z) * _32724.w;
-        vec4 _28125 = _28116;
-        _28125.x = _24477.x;
-        _28125.y = _24477.y;
-        _28125.z = _24477.z;
-        _32725 = _28125;
+        vec3 _25663 = clamp(_29387.xyz / vec3(_34240.w), vec3(0.0), vec3(1.0));
+        vec3 _25669 = pow((_25663 + vec3(0.054999999701976776123046875)) * vec3(0.947867333889007568359375), vec3(2.400000095367431640625));
+        vec3 _25672 = _25663 * vec3(0.077399380505084991455078125);
+        bvec3 _25674 = lessThanEqual(_25663, vec3(0.040449999272823333740234375));
+        vec3 _25649 = vec3(_25674.x ? _25672.x : _25669.x, _25674.y ? _25672.y : _25669.y, _25674.z ? _25672.z : _25669.z) * _34240.w;
+        vec4 _29396 = _29387;
+        _29396.x = _25649.x;
+        _29396.y = _25649.y;
+        _29396.z = _25649.z;
+        _34241 = _29396;
     }
     else
     {
-        _32725 = _28116;
+        _34241 = _29387;
     }
-    _entryPointOutput = _32725;
+    _entryPointOutput = _34241;
 }
 

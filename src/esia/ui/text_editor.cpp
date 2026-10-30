@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <unordered_map>
+#include <optional>
 
 namespace esia::ui
 {
@@ -541,6 +542,9 @@ namespace esia::ui
         // ------------------------------------------------------------ the well
         Painter bg = GetPainter();
         const float focus = Anim(fid, 0x40, active ? 1.0f : 0.0f, SpringFast());
+        MemoKey wk;
+        wk.R(r).F(focus);
+        if (DrawMemo memo(wk); !memo.Replayed())
         {
             Style fs = Style().Radius(ItemRadius(Sc(12)));
             SurfaceFill(fs, FillOr(pc.tertiaryFill));
@@ -644,36 +648,59 @@ namespace esia::ui
         const int first = std::clamp((int)std::floor((view.min.y - origin.y) / lineH), 0, (int)L.lines.size());
         const int last = std::clamp((int)std::ceil((view.max.y - origin.y) / lineH) + 1, first, (int)L.lines.size());
         const Color fg = LabelOr(pc.label);
-        if (active && comp.empty() && selA != selB)
+        std::optional<DrawMemo> linesMemo;
+        if (!active && comp.empty() && last > first)
+        {
+            // the lines' bounds (from the first's start) and their text, as the memo's bytes
+            thread_local std::vector<std::uint8_t> bytes;
+            bytes.clear();
+            const std::uint32_t a = L.lines[(std::size_t)first].start, z = L.lines[(std::size_t)last - 1].end;
             for (int i = first; i < last; ++i)
             {
                 const VLine& v = L.lines[(std::size_t)i];
-                if (selB < v.start || selA > v.end)
-                    continue;
-                const float xa = CaretX(v, std::max(selA, v.start));
-                float xb = CaretX(v, std::min(selB, v.end));
-                if (selB > v.end && v.lastOfParagraph)
-                    xb += Sc(6);   // the line break is selected too
-                const float y = origin.y + (float)i * lineH;
-                if (xb > xa)
-                    p.Rect(Rect(textX + xa, y, textX + xb, y + lineH), Style().Radius(Sc(3)).Fill(Accent().Fade(0.28f)));
+                const std::uint32_t w[3] = {v.start - a, v.end - a, (std::uint32_t)v.paragraph | (v.firstOfParagraph ? 1u << 31 : 0u)};
+                bytes.insert(bytes.end(), reinterpret_cast<const std::uint8_t*>(w), reinterpret_cast<const std::uint8_t*>(w) + sizeof(w));
             }
-        for (int i = first; i < last; ++i)
-        {
-            const VLine& v = L.lines[(std::size_t)i];
-            const float y = origin.y + (float)i * lineH;
-            if (v.end > v.start)
-                p.Text(Vec2(textX, y), f, fg, std::string_view(L.text).substr(v.start, v.end - v.start));
-            if (o.lineNumbers && v.firstOfParagraph)
-            {
-                char num[16];
-                std::snprintf(num, sizeof(num), "%d", v.paragraph + 1);
-                const Vec2 ns = MeasureText(nf, num);
-                p.Text(Vec2(origin.x + gutter - Sc(10) - ns.x, y + (lineH - ns.y) * 0.5f), nf, pc.tertiaryLabel, num);
-            }
+            bytes.insert(bytes.end(), L.text.begin() + a, L.text.begin() + z);
+            MemoKey k;
+            k.F(textX).V(origin).F(lineH).R(view).F(gutter).U((std::uint32_t)first).U((std::uint32_t)last).U(o.lineNumbers ? 1u : 0u);
+            k.Data(bytes.data(), bytes.size());
+            linesMemo.emplace(k);
         }
-        if (o.lineNumbers)
-            p.FillRect(Rect(origin.x + gutter - Sc(5) - 0.5f, view.min.y, origin.x + gutter - Sc(5) + 0.5f, view.max.y), pc.separator.Fade(0.7f));
+        if (!linesMemo || !linesMemo->Replayed())
+        {
+            if (active && comp.empty() && selA != selB)
+                for (int i = first; i < last; ++i)
+                {
+                    const VLine& v = L.lines[(std::size_t)i];
+                    if (selB < v.start || selA > v.end)
+                        continue;
+                    const float xa = CaretX(v, std::max(selA, v.start));
+                    float xb = CaretX(v, std::min(selB, v.end));
+                    if (selB > v.end && v.lastOfParagraph)
+                        xb += Sc(6);   // the line break is selected too
+                    const float y = origin.y + (float)i * lineH;
+                    if (xb > xa)
+                        p.Rect(Rect(textX + xa, y, textX + xb, y + lineH), Style().Radius(Sc(3)).Fill(Accent().Fade(0.28f)));
+                }
+            for (int i = first; i < last; ++i)
+            {
+                const VLine& v = L.lines[(std::size_t)i];
+                const float y = origin.y + (float)i * lineH;
+                if (v.end > v.start)
+                    p.Text(Vec2(textX, y), f, fg, std::string_view(L.text).substr(v.start, v.end - v.start));
+                if (o.lineNumbers && v.firstOfParagraph)
+                {
+                    char num[16];
+                    std::snprintf(num, sizeof(num), "%d", v.paragraph + 1);
+                    const Vec2 ns = MeasureText(nf, num);
+                    p.Text(Vec2(origin.x + gutter - Sc(10) - ns.x, y + (lineH - ns.y) * 0.5f), nf, pc.tertiaryLabel, num);
+                }
+            }
+            if (o.lineNumbers)
+                p.FillRect(Rect(origin.x + gutter - Sc(5) - 0.5f, view.min.y, origin.x + gutter - Sc(5) + 0.5f, view.max.y), pc.separator.Fade(0.7f));
+        }
+        linesMemo.reset();
         if (!comp.empty())
         {
             // the composition, underlined (the clause being converted thicker), on whichever lines it wraps onto

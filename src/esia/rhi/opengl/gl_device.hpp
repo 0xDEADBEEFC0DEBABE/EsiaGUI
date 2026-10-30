@@ -115,11 +115,13 @@ namespace esia::rhi::opengl
         };
 
         // Everything the device changes, saved at BeginFrame (and around resource calls outside frames) and put
-        // back afterwards (Desc::restoreHostState).
+        // back afterwards (Desc::restoreHostState). A texture unit's bindings are saved when the device first binds
+        // something to it (SaveUnit): `savedUnits`.
         struct HostState
         {
             GLint drawFbo, readFbo, renderbuffer, program, vao, arrayBuffer, copyWriteBuffer, uniformBuffer, packBuffer, unpackBuffer;
             GLint activeTexture, tex[kUnits], sampler[kUnits];
+            std::uint32_t savedUnits;
             GLint ubo[3];
             GLint64 uboStart[3], uboSize[3];
             GLint viewport[4], scissor[4], polygonMode[2];
@@ -171,6 +173,7 @@ namespace esia::rhi::opengl
         void BindFramebuffer(GLenum target, GLuint fbo);
         void BindUnit(int unit, GLuint tex);
         void BindSampler(int unit, GLuint sampler);
+        void SaveUnit(int unit);
         void SetScissorTest(bool on);
         void SetSrgbWrite(bool on);
         void SetBlend(BlendMode mode);
@@ -230,6 +233,7 @@ namespace esia::rhi::opengl
         // frame / pass
         bool inFrame_ = false, inPass_ = false, hostTouched_ = false;
         HostState frameState_{};
+        bool savingUnits_ = false;   // frameState_ is being kept: a unit's bindings are saved before the first change
         const Tex* pass_ = nullptr;
         const Pipe* pipe_ = nullptr;
         GLuint vb_ = 0, ib_ = 0;

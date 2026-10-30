@@ -143,6 +143,10 @@ namespace esia::platform::win32
     {
         std::string title = "Esia";   // UTF-8
         int width = 1280, height = 800;   // client area in UI units (pixels at 100 % scale, times the monitor's scale)
+        // the monitor it opens on, at the top-left of its work area: 0 the primary, 1, 2 ... the others in the system's
+        // order; -1 (or one that is not there): where Windows puts a new window
+        int monitor = -1;
+        bool activate = true;   // false: shown without taking the focus from the window that has it
         bool resizable = true;
         bool darkTitleBar = true;
     };

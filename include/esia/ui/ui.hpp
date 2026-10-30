@@ -78,6 +78,19 @@ namespace esia::ui
         bool flat = false;
         // Draw the island (notifications, live activities) at the top of the display at EndFrame.
         bool island = true;
+        // Widgets whose drawing has nothing new to draw from - the same rect, state, colors, label, theme and style as
+        // last frame, at rest - append last frame's drawing again rather than drawing it (the same output, byte for
+        // byte). The ESIA_UI_MEMO environment variable overrides it: "off", or "verify" - every widget drawn and
+        // compared with what would have been appended (Ui::MemoStats().mismatches).
+        bool drawMemo = true;
+    };
+
+    // What the draw memos did (UiDesc::drawMemo), since the Ui began.
+    struct DrawMemoStats
+    {
+        std::uint64_t replayed = 0;     // widgets whose drawing was appended again
+        std::uint64_t drawn = 0;        // widgets drawn (and kept for the next frame when they can be)
+        std::uint64_t mismatches = 0;   // "verify": drawings that differed from what would have been appended
     };
 
     class ESIA_API Ui
@@ -116,6 +129,7 @@ namespace esia::ui
 
         // Something moved this frame (springs, the theme): an event-driven host renders another frame.
         bool Animating() const;
+        DrawMemoStats MemoStats() const;
 
         // ---- the island (any thread): a notification opens it for its duration, one after the other; live
         // activities (a download ...) stay in it until cleared. progress < 0: indeterminate.

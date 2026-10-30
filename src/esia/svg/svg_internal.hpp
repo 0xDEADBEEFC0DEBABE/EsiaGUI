@@ -229,6 +229,10 @@ namespace esia::svg::detail
         int Right() const { return right_; }     // past the last
         // Row y's coverage into `cells` (rows in increasing order from Top()).
         void Row(int y, Cells& cells);
+        // Row y passed over: the chains across it in the order Row leaves them, without its coverage. Where chains tie
+        // across a row, their order is the one the rows before left; an image of part of a drawing passes over the rows
+        // above it as the whole image draws them, so each of its rows is the whole image's.
+        void Pass(int y);
 
     private:
         struct Chain
@@ -270,5 +274,14 @@ namespace esia::svg::detail
         int width_ = 0;
     };
 
-    bool Render(const Tree& tree, int width, int height, const RasterOptions& options, Image& out);
+    // `frame`: the drawing made in the whole pixels around the viewport (its frame, up to 16384 x 16384 of them; the
+    // viewport may reach beyond the image) and the image holds the ones it covers - a viewport moved by whole pixels, its
+    // corners the same fractions after the move, gives the same pixels moved by as many. Else in the image's pixels.
+    bool Render(const Tree& tree, int width, int height, const RasterOptions& options, Image& out, bool frame = false);
+
+    // The image of a part of a drawing (Atlas::GetPart): Rasterize with the drawing's viewport moved by the part's corner,
+    // made in its frame (Render's `frame`) - the pixels the image of all of it has there, bit for bit, where that image's
+    // viewport is its frame (svg::Draw's: the whole pixels around where the drawing goes). With a border, the texels
+    // around the part are the drawing's there.
+    bool RasterizePart(const Document& doc, int width, int height, const RasterOptions& options, Image& out);
 }

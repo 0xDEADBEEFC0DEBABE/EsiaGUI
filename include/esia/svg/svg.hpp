@@ -1,5 +1,5 @@
 // Esia - SVG to textures: the SVG that icons and illustrations are made of, parsed once and rasterized at the size it is
-// drawn, kept in texture pages for Painter::Image.
+// drawn, kept in texture pages for Painter::Image - monochrome icons in the text's pages, drawn with the labels.
 //
 //   esia::svg::Document icon = esia::svg::Document::Parse(text);   // once: the drawing, ready to rasterize
 //   esia::svg::Atlas atlas(context.Textures());                     // once: pages in the TextureRegistry
@@ -35,6 +35,7 @@ namespace esia
 namespace esia::text
 {
     class GlyphAtlas;
+    class TextSystem;
     struct GlyphSlot;
 }
 
@@ -102,6 +103,7 @@ namespace esia::svg
     // needed, recycled as text::GlyphAtlas's - when they are full the frame still gets more, and the next BeginFrame
     // starts over: the lasting pages only when what is drawn frame after frame no longer fits in them, the recent ones
     // whenever animations fill them. A drawing larger than a page gets a texture of its own, kept while it is drawn.
+    // A mask of icon size that lasts goes into the text's pages instead (Tile): drawn with the text around it.
     // One per UI thread.
     class ESIA_API Atlas
     {
@@ -122,8 +124,26 @@ namespace esia::svg
         // `doc` at width x height pixels: from the cache, or rasterized now. Null for an empty document or what
         // Rasterize refuses. Valid until the next Get.
         const Entry* Get(const Document& doc, int width, int height, const RasterOptions& options = {});
+        // Only the part `part` (whole pixels inside the width x height) of what Get gives: the same pixels, cached as Get's
+        // drawings are, valid as Get's. The part of a drawing made last is kept while the drawing is drawn: a new part of
+        // it takes the pixels they share from that one and rasterizes only the rest - a large drawing moving through a
+        // view rasterizes what comes into view.
+        const Entry* GetPart(const Document& doc, int width, int height, const RasterOptions& options, const Rect& part);
 
-        int Rasterized() const { return rasterized_; }   // how many times Get rasterized (the rest came from the cache)
+        // The largest mask Tile takes (pixels a side): icons; a larger drawing would take the room of many glyphs.
+        static constexpr int kMaxTile = 128;
+        // A mask (RasterOptions::mask) of up to kMaxTile x kMaxTile pixels as a tile of `text`'s pages - its coverage
+        // under a key of its own (TextSystem::FindTile / AddTile), drawn with the text around it in one draw
+        // (Painter::UnscaledCoverage) - once it lasts: drawn in the frame before too, as Get puts a drawing into the
+        // lasting pages; from the pixels it was made with, else rasterized again. Null: not there - new this frame (an
+        // animation's sizes and places stay with Get's recent pages, never filling the text's), larger, or a text system
+        // without tiles: Get it. When the text's pages start over, a tile goes with the glyphs (until then the slot stays
+        // valid) and comes back the same way.
+        const text::GlyphSlot* Tile(text::TextSystem& text, const Document& doc, int width, int height, const RasterOptions& options);
+
+        // How many drawings the atlas made - Get, GetPart (a part made from the last one counts once) and Tile: the rest
+        // came from the cache.
+        int Rasterized() const { return rasterized_; }
 
     private:
         struct Own   // a drawing larger than a page
@@ -132,17 +152,40 @@ namespace esia::svg
             int width = 0, height = 0;   // with the border
             std::uint64_t frame = 0;     // the last frame it was drawn in
         };
+        // the part of a drawing made last (GetPart), its pixels kept for the next
+        struct Part
+        {
+            int x0 = 0, y0 = 0, x1 = 0, y1 = 0;   // in the whole drawing's pixels
+            Image img;                            // with the border
+            std::uint64_t frame = 0;              // the last frame a part of the drawing was drawn in
+        };
+        // a part to make: of which drawing (its key, its viewport in its pixels), where
+        struct PartOf
+        {
+            std::uint64_t whole = 0;
+            Rect viewport;
+            int x0 = 0, y0 = 0;
+        };
 
-        // a key the lasting pages do not have: from the last frame's pixels, the recent pages or rasterized now
-        const Entry* Make(const Document& doc, int width, int height, const RasterOptions& options, std::uint64_t key);
+        static std::uint64_t Key(const Document& doc, int width, int height, const RasterOptions& options);
+        // a key the lasting pages do not have: from the last frame's pixels, the recent pages or made now
+        const Entry* Make(const Document& doc, int width, int height, const RasterOptions& options, std::uint64_t key, const PartOf* part = nullptr);
+        // the pixels of `doc` (with the border): rasterized, or a part from the one made before where they share pixels
+        bool Pixels(const Document& doc, int width, int height, const RasterOptions& options, const PartOf* part, Image& img);
         const Entry* Placed(const text::GlyphSlot& slot);
         void Recycle(Image& img);
 
         TextureRegistry& textures_;
         std::unique_ptr<text::GlyphAtlas> lasting_, recent_;   // drawings drawn frame after frame; the others
         std::unordered_map<std::uint64_t, Image, IntHash> made_, madeBefore_;   // the pixels of this / the last frame's new ones
+        // masks Tile could take that Get found in its pages (not made) this / the last frame: they last
+        std::unordered_map<std::uint64_t, std::uint8_t, IntHash> found_, foundBefore_;
         std::vector<std::vector<std::uint8_t>> spare_;   // pixel buffers to rasterize into again
         std::unordered_map<std::uint64_t, Own, IntHash> own_;
+        std::unordered_map<std::uint64_t, Part, IntHash> parts_;   // by the whole drawing's key
+        Image band_;                            // a band of a part rasterized
+        Image tileImage_;                       // a tile rasterized again
+        std::vector<std::uint8_t> coverage_;    // a tile's coverage, on its way into the text's pages
         int pageSize_ = 0;
         int rasterized_ = 0;
         std::uint64_t frame_ = 0;
@@ -154,7 +197,12 @@ namespace esia::svg
     // Painter::PushScale, the drawing goes exactly where the scale puts it (to 1/64 pixel), rasterized there - every
     // frame of a scale animation has the pixels of its own geometry, never a stretched image. `color` is currentColor,
     // and its alpha fades the whole drawing. A monochrome document (Document::Monochrome), or any with `mask`, is
-    // rasterized once as a mask and drawn in `color`.
+    // rasterized once as a mask and drawn in `color` - an icon that lasts (outside Painter masks) as a tile of the text's
+    // pages (Atlas::Tile, the painter's PainterEnv::text), in the draw of the labels around it, with the image's pixels.
+    // Only what the draw list's clip rect shows is drawn: a drawing outside it is not rasterized, and of a large one
+    // reaching beyond it only the part inside is, when that is at most half of it - in steps of 256 pixels from its
+    // corner, so that it is found again while it moves less than that, a new part made from the last where they meet
+    // (Atlas::GetPart) - with the pixels the whole image has there.
     ESIA_API void Draw(Painter& painter, Atlas& atlas, const Document& doc, const Rect& r, Color color = Color::Black(),
                        bool mask = false);
 }

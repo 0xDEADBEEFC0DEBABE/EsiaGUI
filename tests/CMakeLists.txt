@@ -112,13 +112,20 @@ foreach(_b ${_esia_backends})
 endforeach()
 
 # the renderer on fixed workloads (tests/bench/esia_bench.cpp): build, submit and GPU time per frame, median and 99th
-# percentile. CTest only runs it a few frames on the null device, so that it keeps working.
+# percentile. CTest only runs it a few frames on the null device, in both modes, so that it keeps working.
 if(TARGET esia_text_ft)
     add_executable(esia_bench bench/esia_bench.cpp)
     target_link_libraries(esia_bench PRIVATE esia::render esia_text_ft esia::backends)
     target_compile_definitions(esia_bench PRIVATE ESIA_BENCH_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts")
     esia_target_defaults(esia_bench)
     add_test(NAME esia_bench_smoke COMMAND esia_bench --backend null --frames 3 --warmup 1 --size 640x400)
+    # text with new glyphs drawn from distance fields (tests/bench/field_bench.cpp): the draw that makes their fields
+    add_executable(esia_field_bench bench/field_bench.cpp)
+    target_link_libraries(esia_field_bench PRIVATE esia::render esia_text_ft esia::freetype esia::backends)
+    target_compile_definitions(esia_field_bench PRIVATE ESIA_BENCH_FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fonts")
+    esia_target_defaults(esia_field_bench)
+    add_test(NAME esia_field_bench_smoke COMMAND esia_field_bench --glyphs 20 --rounds 1 --parts)
+    add_test(NAME esia_bench_smoke_in_flight COMMAND esia_bench --backend null --frames 3 --warmup 1 --size 640x400 --in-flight)
 endif()
 
 esia_add_test(esia_shader_tests shaders/test_shader_library.cpp)
