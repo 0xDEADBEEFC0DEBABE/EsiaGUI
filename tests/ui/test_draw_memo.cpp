@@ -28,7 +28,7 @@ namespace
         bool rowToggle = true;
         bool check = false;
         bool airplane = false;
-        int count = 3, swatch = 1;
+        int count = 3, swatch = 1, pick = 1, tab = 0;
         int mode = 1;
         float rowValue = 40.0f;
 
@@ -117,7 +117,9 @@ namespace
             static const char* names[4] = {"alpha.png", "beta.wav", "gamma.txt", "delta.bin"};
             static const char* sizes[4] = {"12 KB", "3.4 MB", "1 KB", "88 KB"};
             static const char* kinds[4] = {"Image", "Sound", "Text", "Data"};
-            if (ui::BeginTable("files", std::span<const ui::TableColumn>(kCols)))
+            ui::TableOptions topts;
+            topts.flags = ui::TableFlags_Sortable | ui::TableFlags_Striped | ui::TableFlags_ColumnLines | ui::TableFlags_Resizable;
+            if (ui::BeginTable("files", std::span<const ui::TableColumn>(kCols), topts))
             {
                 const ui::TableRange range = ui::TableVisible(4);
                 for (int r = range.first; r < range.last; ++r)
@@ -153,6 +155,10 @@ namespace
                 ui::Image(0, Vec2(48, 32), 6.0f);
                 ui::EndCard();
             }
+            static const std::string_view kSizes[3] = {"Small", "Medium", "Large"};
+            ui::Picker("size", &a.pick, kSizes);
+            static const ui::TabItem kTabs[3] = {{(ui::Icon)'H', "Home"}, {(ui::Icon)'S', "Search"}, {(ui::Icon)'P', "Profile"}};
+            ui::TabBar("tabs", &a.tab, kTabs);
             ui::TextWrapped(ui::TextStyle::Body, Color(0.92f, 0.92f, 0.95f),
                             "Draw memos keep a widget's drawing from the frame before and append it again while nothing it "
                             "is drawn from has changed: the same output, byte for byte.");

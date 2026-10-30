@@ -229,18 +229,24 @@ namespace esia::ui
         if (header)
         {
             const Rect hr = Rect::FromSize(pos, Vec2(width, t.headerH));
-            p.Rect(hr, Style().Radius(Sc(9)).Fill(pc.fill.Fade(0.55f)));
+            {
+                MemoKey k;
+                k.R(hr);
+                DrawMemo memo(k);
+                if (!memo.Replayed())
+                    p.Rect(hr, Style().Radius(Sc(9)).Fill(pc.fill.Fade(0.55f)));
+            }
             const text::FontRef hf = Font(FontWeight::Semibold, th.type.size[(int)TextStyle::Footnote]);
             for (std::size_t i = 0; i < columns.size(); ++i)
             {
                 const Rect cell(t.x[i], hr.min.y, t.x[i + 1], hr.max.y);
                 const bool sortable = (o.flags & TableFlags_Sortable) && columns[i].sortable;
                 const bool sorted = st.sortColumn == (int)i;
+                float hover = 0.0f;
                 if (sortable)
                 {
                     const InteractState it = InteractImpl(Salt(t.id, 0x100 + (std::uint32_t)i), cell.Expanded(-Sc(4), 0.0f), InteractFlags_None);
-                    if (it.hover > 0.01f)
-                        p.Rect(cell.Expanded(-Sc(2), -Sc(3)), Style().Radius(Sc(7)).Fill(pc.highlight.Fade(it.hover * 0.8f)));
+                    hover = it.hover;
                     if (it.pressed)
                     {
                         if (sorted)
@@ -258,16 +264,23 @@ namespace esia::ui
                 const std::string_view label = VisibleLabel(columns[i].label);
                 const float arrowW = sorted ? Sc(16) : 0.0f;
                 const Rect tr(cell.min.x + padX, cell.min.y, cell.max.x - padX - arrowW, cell.max.y);
-                const Vec2 ls = MeasureText(hf, label);
+                const text::TextMetrics lm = MeasureMetrics(hf, label);
+                const Vec2 ls = lm.size;
                 const float ax = columns[i].align == Align::End ? 1.0f : columns[i].align == Align::Center ? 0.5f : 0.0f;
+                const float turn = sorted ? Anim(t.id, 0x200 + (std::uint32_t)i, st.ascending ? 0.0f : 1.0f, SpringStd()) : 0.0f;
+                // the column's drawing, after its interaction and spring
+                MemoKey k;
+                k.R(cell).F(hover).U((sorted ? 1u : 0u) | (sortable ? 2u : 0u)).F(turn).U64(lm.layout).F(ax).F(padX);
+                DrawMemo memo(k);
+                if (memo.Replayed())
+                    continue;
+                if (sortable && hover > 0.01f)
+                    p.Rect(cell.Expanded(-Sc(2), -Sc(3)), Style().Radius(Sc(7)).Fill(pc.highlight.Fade(hover * 0.8f)));
                 if (tr.Width() > 0.0f)
                     p.TextBox(Rect(tr.min.x, std::floor(cell.Center().y - ls.y * 0.5f + 0.5f), tr.max.x, std::floor(cell.Center().y - ls.y * 0.5f + 0.5f) + ls.y),
                               Vec2(ax, 0.0f), hf, sorted ? pc.label : pc.secondaryLabel, label, text::TextFlags_Ellipsis);
                 if (sorted)
-                {
-                    const float turn = Anim(t.id, 0x200 + (std::uint32_t)i, st.ascending ? 0.0f : 1.0f, SpringStd());
                     Chevron(p, Vec2(cell.max.x - padX - Sc(5), cell.Center().y), Sc(10), -kPi * 0.5f + kPi * turn, Accent());
-                }
             }
             // ---- column edges that drag
             if (o.flags & TableFlags_Resizable)
@@ -291,6 +304,11 @@ namespace esia::ui
                     }
                     if (gi.hovered || gi.held)
                         c.SetMouseCursor(MouseCursor::ResizeEW);
+                    MemoKey k;
+                    k.F(ex).F(hr.min.y).F(hr.max.y).F(gi.hover).U(gi.held ? 1u : 0u);
+                    DrawMemo memo(k);
+                    if (memo.Replayed())
+                        continue;
                     if (gi.hover > 0.01f || gi.held)
                         p.FillRect(Rect(ex - Sc(1), hr.min.y + Sc(6), ex + Sc(1), hr.max.y - Sc(6)), Accent().Fade(std::max(gi.hover, gi.held ? 1.0f : 0.0f)));
                     else
@@ -377,11 +395,24 @@ namespace esia::ui
             }
         }
 
+        const float hover = Anim(rid, 0xA1, b.hovered ? 1.0f : 0.0f, SpringFast());
+        const float selT = Anim(rid, 0x5E1, res.selected ? 1.0f : 0.0f, SpringFast(), res.selected ? 1.0f : 0.0f);
+        const bool lines = (t.options.flags & TableFlags_ColumnLines) != 0;
+        std::optional<DrawMemo> memo;
+        MemoKey k;
+        if (!lines || t.x.size() <= 18)
+        {
+            k.R(rr).F(hover).F(selT).U(((t.options.flags & TableFlags_Striped) && (index & 1) ? 1u : 0u) | (lines ? 2u : 0u));
+            if (lines)
+                for (const float x : t.x)
+                    k.F(x);
+            memo.emplace(k);
+            if (memo->Replayed())
+                return res;
+        }
         Painter p = GetPainter();
         if ((t.options.flags & TableFlags_Striped) && (index & 1))
             p.FillRect(rr, pc.fill.Fade(0.28f));
-        const float hover = Anim(rid, 0xA1, b.hovered ? 1.0f : 0.0f, SpringFast());
-        const float selT = Anim(rid, 0x5E1, res.selected ? 1.0f : 0.0f, SpringFast(), res.selected ? 1.0f : 0.0f);
         const Rect pill = rr.Expanded(-Sc(3), -Sc(1.5f));
         if (selT > 0.01f)
             p.Rect(pill, Style().Radius(Sc(8)).Fill(Accent().Fade(0.24f * selT)));
@@ -471,9 +502,21 @@ namespace esia::ui
         }
         if (t.options.flags & TableFlags_ColumnLines)
         {
-            Painter p = GetPainter();
-            for (std::size_t i = 1; i + 1 < t.x.size(); ++i)
-                p.FillRect(Rect(t.x[i] - 0.5f, t.outer.min.y + Sc(6), t.x[i] + 0.5f, t.outer.min.y + t.headerH - Sc(6)), C().separator);
+            std::optional<DrawMemo> memo;
+            MemoKey k;
+            if (t.x.size() <= 18)
+            {
+                k.F(t.outer.min.y).F(t.headerH);
+                for (const float x : t.x)
+                    k.F(x);
+                memo.emplace(k);
+            }
+            if (!memo || !memo->Replayed())
+            {
+                Painter p = GetPainter();
+                for (std::size_t i = 1; i + 1 < t.x.size(); ++i)
+                    p.FillRect(Rect(t.x[i] - 0.5f, t.outer.min.y + Sc(6), t.x[i] + 0.5f, t.outer.min.y + t.headerH - Sc(6)), C().separator);
+            }
         }
         // the table's height: fixed, or header + every row (this frame's count: the next frame lays it out so)
         c.SetCursorPos(t.outer.min);
@@ -624,10 +667,15 @@ namespace esia::ui
         st.childHeight = std::max(cur.y - f.top, 0.0f);
         // the guide line beside the children
         {
-            Painter p = GetPainter();
             const float h = st.childHeight * f.shown;
-            if (h > Sc(8))
+            MemoKey k;
+            k.F(f.x).F(f.top).F(h);
+            DrawMemo memo(k);
+            if (!memo.Replayed() && h > Sc(8))
+            {
+                Painter p = GetPainter();
                 p.FillRect(Rect(f.x - 0.5f, f.top + Sc(2), f.x + 0.5f, f.top + h - Sc(6)), C().separator.Fade(0.8f));
+            }
         }
         if (f.clipped)
             c.PopClipRect();

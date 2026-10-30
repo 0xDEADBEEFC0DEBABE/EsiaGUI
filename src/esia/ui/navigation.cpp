@@ -134,8 +134,16 @@ namespace esia::ui
         // the navigation bar: the title, and a back button titled after the page below
         Painter p = GetPainter();
         const text::FontRef tf = Font(TextStyle::Headline);
-        const Vec2 ts = MeasureText(tf, shownTitle);
-        p.Text(Vec2(std::floor(pr.Center().x - ts.x * 0.5f), std::floor(pr.min.y + barH * 0.5f - ts.y * 0.5f)), tf, pc.label, shownTitle);
+        const text::TextMetrics tm = MeasureMetrics(tf, shownTitle);
+        const Vec2 ts = tm.size;
+        {
+            const Vec2 at(std::floor(pr.Center().x - ts.x * 0.5f), std::floor(pr.min.y + barH * 0.5f - ts.y * 0.5f));
+            MemoKey k;
+            k.V(at).U64(tm.layout);
+            DrawMemo memo(k);
+            if (!memo.Replayed())
+                p.Text(at, tf, pc.label, shownTitle);
+        }
 
         const bool canGoBack = ns->stack.size() > 1 && isCurrent && ns->stack.front() != key;
         const bool showBack = canGoBack || (isOutgoing && ns->dir < 0) || (isOutgoing && ns->dir > 0 && ns->stack.size() > 2);
@@ -155,13 +163,19 @@ namespace esia::ui
                     backTitle = it->second;
             }
             const text::FontRef bf = Font(TextStyle::Body);
-            const Vec2 bs = MeasureText(bf, backTitle);
+            const text::TextMetrics bm = MeasureMetrics(bf, backTitle);
+            const Vec2 bs = bm.size;
             const float maxW = pr.Width() * 0.5f - ts.x * 0.5f - Sc(28);
             const Rect br(pr.min.x, pr.min.y, pr.min.x + std::min(bs.x, std::max(maxW, 0.0f)) + Sc(30), pr.min.y + barH);
             const InteractState it = InteractImpl(c.GetId("##back"), br, InteractFlags_None);
-            const Color accent = Accent().Fade(1.0f - 0.4f * it.press);
-            DrawIcon(p, Vec2(br.min.x + Sc(8), br.Center().y), icons::ChevronLeft, Sc(15), accent);
-            p.TextBox(Rect(br.min.x + Sc(22), br.min.y, br.max.x, br.max.y), Vec2(0.0f, 0.5f), bf, accent, backTitle, text::TextFlags_Ellipsis);
+            MemoKey k;
+            k.R(br).F(it.press).U64(bm.layout);
+            if (DrawMemo memo(k); !memo.Replayed())
+            {
+                const Color accent = Accent().Fade(1.0f - 0.4f * it.press);
+                DrawIcon(p, Vec2(br.min.x + Sc(8), br.Center().y), icons::ChevronLeft, Sc(15), accent);
+                p.TextBox(Rect(br.min.x + Sc(22), br.min.y, br.max.x, br.max.y), Vec2(0.0f, 0.5f), bf, accent, backTitle, text::TextFlags_Ellipsis);
+            }
             if (it.pressed && isCurrent && !ns->transitioning)
                 NavigationPop();
         }
@@ -206,9 +220,14 @@ namespace esia::ui
         c.EndChild();   // the scrolling content
         if (pe.clipped && pe.shadowAlpha > 0.0f)
         {
-            Painter p = GetPainter();
-            const Color s = C().shadow;
-            p.Rect(pe.edgeShadow, Style().Fill(Paint::Linear(s.Fade(0.0f), s.Fade(0.5f * pe.shadowAlpha), 0.0f)));
+            MemoKey k;
+            k.R(pe.edgeShadow).F(pe.shadowAlpha);
+            if (DrawMemo memo(k); !memo.Replayed())
+            {
+                Painter p = GetPainter();
+                const Color s = C().shadow;
+                p.Rect(pe.edgeShadow, Style().Fill(Paint::Linear(s.Fade(0.0f), s.Fade(0.5f * pe.shadowAlpha), 0.0f)));
+            }
         }
         c.EndChild();   // the page
         PopStyle();
@@ -263,6 +282,9 @@ namespace esia::ui
         const std::size_t from = dl.Mark();
         c.BeginChild(id, co);
         Painter p = GetPainter();
+        MemoKey bk;
+        bk.R(bar);
+        if (DrawMemo memo(bk); !memo.Replayed())
         {
             ScopedUnclip unclip(bar, ShadowExtent(Sc(24), Vec2(0, Sc(8))));
             DrawPill(p, bar, Style().Glass(LookMaterial(t.materials.bar)).Shadow(pc.shadow.Fade(0.6f), Sc(24), Vec2(0, Sc(8))));   // the material carries its veil
@@ -276,8 +298,13 @@ namespace esia::ui
         const ItemStyle& st = ResolvedStyle();
         if (solid > 0.01f)
         {
-            const Color selFill = st.Has(ItemStyle::kSelectedFill) ? st.selectedFill : pc.label.Fade(t.dark ? 0.14f : 0.08f);
-            p.Rect(pill, Style().Radius(pill.Height() * 0.5f).Fill(selFill.Fade(solid)));
+            MemoKey k;
+            k.R(pill).F(solid);
+            if (DrawMemo memo(k); !memo.Replayed())
+            {
+                const Color selFill = st.Has(ItemStyle::kSelectedFill) ? st.selectedFill : pc.label.Fade(t.dark ? 0.14f : 0.08f);
+                p.Rect(pill, Style().Radius(pill.Height() * 0.5f).Fill(selFill.Fade(solid)));
+            }
         }
         for (int i = 0; i < count; ++i)
         {
@@ -289,16 +316,27 @@ namespace esia::ui
             const Color col = Lerp(LabelOr(pc.label).Fade(0.85f + 0.15f * hov), st.Has(ItemStyle::kSelectedLabel) ? st.selectedLabel : Accent(), on);
             const std::string_view label = VisibleLabel(item.label);
             const float iconY = label.empty() ? ir.Center().y : ir.Center().y - Sc(8);
-            if (item.icon)
-                DrawIcon(p, Vec2(ir.Center().x, iconY), item.icon, Sc(19) * (1.0f + 0.06f * on), col);
-            if (!label.empty())
+            const text::FontRef f = Font(on > 0.5f ? FontWeight::Semibold : FontWeight::Regular, 10.5f);
+            const text::TextMetrics lm = MeasureMetrics(f, label);
+            MemoKey k;
+            k.R(ir).F(on).C(col).U(item.icon).U64(lm.layout);
+            if (DrawMemo memo(k); !memo.Replayed())
             {
-                const text::FontRef f = Font(on > 0.5f ? FontWeight::Semibold : FontWeight::Regular, 10.5f);
-                const Vec2 ts = MeasureText(f, label);
-                p.Text(Vec2(std::floor(ir.Center().x - ts.x * 0.5f), std::floor(ir.Center().y + Sc(7))), f, col, label);
+                if (item.icon)
+                    DrawIcon(p, Vec2(ir.Center().x, iconY), item.icon, Sc(19) * (1.0f + 0.06f * on), col);
+                if (!label.empty())
+                {
+                    const Vec2 ts = lm.size;
+                    p.Text(Vec2(std::floor(ir.Center().x - ts.x * 0.5f), std::floor(ir.Center().y + Sc(7))), f, col, label);
+                }
             }
         }
-        DrawSelectionLens(p, pill, sel, Sc(8), st.Has(ItemStyle::kMovingFill) ? st.movingFill : Color::Clear());
+        {
+            MemoKey k;
+            k.R(pill).F(sel.lens).F(sel.velocity).F(sel.pos).U(sel.held ? 1u : 0u);
+            if (DrawMemo memo(k); !memo.Replayed())
+                DrawSelectionLens(p, pill, sel, Sc(8), st.Has(ItemStyle::kMovingFill) ? st.movingFill : Color::Clear());
+        }
         c.EndChild();
         m.floats.push_back({&dl, from, dl.Mark()});   // drawn over the content at EndFrame
         // room below the content, so its end can scroll out from under the bar
@@ -326,6 +364,9 @@ namespace esia::ui
         co.rect = bar;
         c.BeginChild(id, co);
         Painter p = GetPainter();
+        MemoKey sk;
+        sk.R(bar).U((std::uint32_t)so.look | (so.base ? 1u << 8 : 0u)).C(so.fill);
+        if (DrawMemo memo(sk); !memo.Replayed())
         {
             // clear glass by default (no frost, no tint) with a soft base inside; a Clear look from the style makes it
             // fully transparent (no base), another look from the style overrides so.look
