@@ -145,6 +145,12 @@ namespace esia::rhi
         // HDR output (render::HdrOutput): the target's region into the working target, and back
         HdrDecode,        // FullscreenVS + HdrDecodePS: scRGB / PQ BT.2020 at t0 -> extended sRGB
         HdrEncode,        // FullscreenVS + HdrEncodePS: extended sRGB at t0 -> scRGB / PQ BT.2020
+        // Instanced quads among which plain shapes are (esia::QuadShape): a textured quad as the four quad programs draw
+        // it, a shape with its coverage. Batches of text alone keep the four above, which carry less per quad.
+        QuadShapeImage,   // QuadShapeVS + QuadImagePS
+        QuadShapeGray,    // QuadShapeVS + QuadGrayPS
+        QuadShapeLcd,     // QuadShapeVS + QuadLcdPS (BlendMode::DualSourceLcd)
+        QuadShapeLcdGray, // QuadShapeVS + QuadLcdGrayPS
         Count
     };
     ESIA_API const char* ShaderProgramName(ShaderProgram p);
@@ -157,12 +163,19 @@ namespace esia::rhi
     // quads (from instance-rate attributes instead on a device with Caps::quadAttributes).
     constexpr bool DrawsInstances(ShaderProgram p)
     {
-        return p == ShaderProgram::Fx || (p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray);
+        return p == ShaderProgram::Fx || (p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray) ||
+               (p >= ShaderProgram::QuadShapeImage && p <= ShaderProgram::QuadShapeLcdGray);
     }
-    // The programs that draw esia::QuadInstances (glyphs, flat tiles).
-    constexpr bool DrawsQuads(ShaderProgram p) { return p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray; }
+    // The programs that draw esia::QuadInstances (glyphs, flat tiles, plain shapes).
+    constexpr bool DrawsQuads(ShaderProgram p)
+    {
+        return (p >= ShaderProgram::QuadImage && p <= ShaderProgram::QuadLcdGray) || (p >= ShaderProgram::QuadShapeImage && p <= ShaderProgram::QuadShapeLcdGray);
+    }
     // The programs with a second color output, for BlendMode::DualSourceLcd (and only they may use it).
-    constexpr bool DualSourceProgram(ShaderProgram p) { return p == ShaderProgram::TextLcd || p == ShaderProgram::QuadLcd; }
+    constexpr bool DualSourceProgram(ShaderProgram p)
+    {
+        return p == ShaderProgram::TextLcd || p == ShaderProgram::QuadLcd || p == ShaderProgram::QuadShapeLcd;
+    }
 
     enum class VertexLayout : std::uint8_t
     {

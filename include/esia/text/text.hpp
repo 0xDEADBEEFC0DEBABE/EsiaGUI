@@ -46,6 +46,10 @@ namespace esia::text
         TextFlags_Ellipsis = 1u << 0,      // trim with "…" when wider than the wrap width (single line)
         TextFlags_AlignCenter = 1u << 1,   // paragraph alignment of wrapped lines
         TextFlags_AlignRight = 1u << 2,
+        // The text's origin on the pixel grid (the nearest pixel): a text drawn at a new place every frame (a label that
+        // moves with what it names) reuses its placed glyphs instead of placing them again at each new sub-pixel offset,
+        // and moves in whole pixels.
+        TextFlags_PixelSnap = 1u << 3,
     };
 
     struct TextMetrics

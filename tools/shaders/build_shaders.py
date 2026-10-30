@@ -63,8 +63,12 @@ PROGRAMS = [
     ('QuadLcdGray', 'esia_quad.hlsl', 'QuadVS', 'TextLcdGrayPS'),
     ('HdrDecode', 'esia_post.hlsl', 'FullscreenVS', 'HdrDecodePS'),
     ('HdrEncode', 'esia_post.hlsl', 'FullscreenVS', 'HdrEncodePS'),
+    ('QuadShapeImage', 'esia_quad.hlsl', 'QuadShapeVS', 'QuadImagePS'),
+    ('QuadShapeGray', 'esia_quad.hlsl', 'QuadShapeVS', 'QuadGrayPS'),
+    ('QuadShapeLcd', 'esia_quad.hlsl', 'QuadShapeVS', 'QuadLcdPS'),
+    ('QuadShapeLcdGray', 'esia_quad.hlsl', 'QuadShapeVS', 'QuadLcdGrayPS'),
 ]
-DUAL_SOURCE = {'TextLcdPS'}   # two color outputs for dual-source blending
+DUAL_SOURCE = {'TextLcdPS', 'QuadLcdPS'}   # two color outputs for dual-source blending
 
 # shaders::Format order (include/esia/render/shader_library.hpp): name -> FX instance storage
 FORMATS = [

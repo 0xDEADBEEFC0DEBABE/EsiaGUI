@@ -1,5 +1,6 @@
 // Painter: the fx::Instance encoding (it must stay WGT's: the shaders read it), culling, masks, scale, glow
 // containment, geometry primitives, layers and fades.
+#include "esia/core/cpu.hpp"
 #include "esia/render/painter.hpp"
 #include "esia/text/glyph_atlas.hpp"
 #include "esia_test.hpp"
@@ -14,6 +15,14 @@ using namespace esia;
 
 namespace
 {
+    // Tests of the FX instance encoding and of what is drawn from it: their plain shapes stay FX instances
+    // (PainterEnv::quadShapes; the quads have tests of their own)
+    PainterEnv Fx(PainterEnv env = {})
+    {
+        env.quadShapes = false;
+        return env;
+    }
+
     // Text stand-in: every character is a 6 x 10 quad on texture 42 (an instanced quad, as glyphs are).
     struct FakeText final : text::TextSystem
     {
@@ -102,7 +111,7 @@ namespace
 ESIA_TEST(Painter, RoundRectEncoding)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 20, 110, 70), Style().Fill(Paint::Linear(Color::Hex(0xFF0000), Color::Hex(0x0000FF), 45)).Radius(4, 5, 6, 7)
                                         .Stroke(2, Color::White(0.5f), 0.5f).Shadow(Color::Black(0.3f), 12, Vec2(0, 4)).Opacity(0.8f));
     ESIA_CHECK(dl.FxInstances().size() == 1 && dl.Commands().size() == 1 && dl.Commands()[0].kind == DrawCmdKind::Fx);
@@ -121,7 +130,7 @@ ESIA_TEST(Painter, RoundRectEncoding)
 ESIA_TEST(Painter, ShapeKinds)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Style s = Style().Fill(Color::White());
     p.Arc(Vec2(100, 100), 20, 4, 0.5f, -1.0f, s);   // a negative sweep is flipped
     p.Line(Vec2(10, 10), Vec2(50, 30), 6, s);
@@ -142,7 +151,7 @@ ESIA_TEST(Painter, GlassUsesTheMetricsScaleAndGetsARim)
     DrawList dl = MakeList();
     PainterEnv env;
     env.metricsScale = 1.5f;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     GlassMaterial g;
     g.blur = 10;
     g.refraction = 8;
@@ -161,7 +170,7 @@ ESIA_TEST(Painter, GlassUsesTheMetricsScaleAndGetsARim)
 ESIA_TEST(Painter, InvisibleAndClippedShapesAreDropped)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 20, 20), Style());                                 // nothing to draw
     p.Rect(Rect(10, 10, 20, 20), Style().Fill(Color::White()).Opacity(0));   // transparent
     p.Rect(Rect(500, 10, 520, 20), Style().Fill(Color::White()));             // outside the clip
@@ -172,7 +181,7 @@ ESIA_TEST(Painter, InvisibleAndClippedShapesAreDropped)
 ESIA_TEST(Painter, MasksAndScale)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.PushMask(Rect(0, 0, 100, 100), 12);
     p.PushScale(Vec2(50, 50), 0.5f);
     p.Rect(Rect(0, 0, 100, 100), Style().Fill(Color::White()).Radius(20).Glow(Color::White(), 10));
@@ -198,7 +207,7 @@ ESIA_TEST(Painter, TextUnderScaleIsRasterizedScaledNotStretched)
     FakeText text;
     PainterEnv env;
     env.text = &text;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.PushScale(Vec2(0, 0), 2.0f);
     const Vec2 size = p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::White(), "ab");
     p.PopScale();
@@ -215,6 +224,54 @@ ESIA_TEST(Painter, TextUnderScaleIsRasterizedScaledNotStretched)
     ESIA_CHECK(text.lastScale == 16.0f);
 }
 
+ESIA_TEST(Painter, UnscaledImagesStayWhereTheScalePutThem)
+{
+    DrawList dl = MakeList();
+    Painter p(dl, Fx());
+    ESIA_CHECK(p.Scaled(Vec2(30, 30)) == Vec2(30, 30) && p.ScaleFactor() == 1.0f);
+    p.PushScale(Vec2(10, 10), 2.0f);
+    p.PushScale(Vec2(20, 20), 0.5f);
+    // the inner scale first, then the outer: 30 -> 25 -> 40
+    ESIA_CHECK(p.Scaled(Vec2(30, 30)) == Vec2(40, 40) && p.ScaleFactor() == 1.0f);
+    p.PopScale();
+    ESIA_CHECK(p.Scaled(Vec2(30, 30)) == Vec2(50, 50) && p.ScaleFactor() == 2.0f);
+    // a hundred images at their final place, a rectangle of geometry after every 25: PopScale scales the rectangles
+    // and leaves the images (more of them than the ranges it can skip one by one: images in a row are one range)
+    for (int i = 0; i < 100; ++i)
+    {
+        p.UnscaledImage(7, Rect((float)i * 4.0f, 0.0f, (float)i * 4.0f + 2.0f, 2.0f));
+        if (i % 25 == 24)
+            dl.AddRectFilled(Rect(1, 1, 2, 2), 0xFFFFFFFFu);
+    }
+    p.PopScale();
+    const auto& vtx = dl.Vertices();
+    ESIA_CHECK(vtx.size() == 4 * 100 + 4 * 4);
+    bool placed = vtx.size() == 4 * 100 + 4 * 4;
+    std::size_t v = 0;
+    for (int i = 0; i < 100 && placed; ++i)
+    {
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        for (int k = 0; k < 4; ++k, ++v)
+            x0 = std::min(x0, vtx[v].pos.x), y0 = std::min(y0, vtx[v].pos.y), x1 = std::max(x1, vtx[v].pos.x), y1 = std::max(y1, vtx[v].pos.y);
+        placed = x0 == (float)i * 4.0f && x1 == (float)i * 4.0f + 2.0f && y0 == 0.0f && y1 == 2.0f;
+        if (i % 25 == 24)
+        {
+            // (1, 1) - (2, 2) twice as far from (10, 10): (-8, -8) - (-6, -6)
+            placed = placed && vtx[v].pos == Vec2(-8, -8) && vtx[v + 2].pos == Vec2(-6, -6);
+            v += 4;
+        }
+    }
+    ESIA_CHECK(placed);
+    // under a mask: an FX instance at `r`, not scaled
+    p.PushMask(Rect(0, 0, 100, 100), 4);
+    p.PushScale(Vec2(0, 0), 2.0f);
+    p.UnscaledImage(7, Rect(10, 10, 20, 20));
+    p.PopScale();
+    p.PopMask();
+    const fx::Instance& i = dl.FxInstances().back();
+    ESIA_CHECK((i.flags[0] & fx::kMask) && (i.flags[0] & fx::kImage) && i.rect[0] == 10 && i.rect[1] == 10 && i.rect[2] == 20 && i.rect[3] == 20);
+}
+
 ESIA_TEST(Painter, TextOutlinesGoUnderTheirTextAndIcons)
 {
     DrawList dl = MakeList();
@@ -222,7 +279,7 @@ ESIA_TEST(Painter, TextOutlinesGoUnderTheirTextAndIcons)
     PainterEnv env;
     env.text = &text;
     env.alpha = 0.5f;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     // none by default
     p.Text(Vec2(10, 10), text::FontRef{1, 10}, Color::White(), "ab");
     p.Icon(Vec2(50, 50), text::FontRef{2, 16}, U'\xE700', Color::White());
@@ -257,7 +314,7 @@ ESIA_TEST(Painter, GlowContainmentReportsRestGeometryAndHalo)
     FakeGlow glow;
     PainterEnv env;
     env.glow = &glow;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.PushScale(Vec2(0, 0), 1.1f);   // a press animation must not change what the layout reserves
     p.Rect(Rect(100, 100, 200, 140), Style().Fill(Color::White()).Glow(Color::White(), 20));
     p.PopScale();
@@ -275,7 +332,7 @@ ESIA_TEST(Painter, CheapPrimitives)
     DrawList dl = MakeList();
     PainterEnv env;
     env.pixelScale = 2.0f;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.FillRect(Rect(0, 0, 10, 10), Color::White());
     p.FillRect(Rect(0, 0, 10, 10), Color::White(), 4);   // rounded: an SDF instance
     p.HLine(0, 100, 10.3f, Color::White(), 0.5f);
@@ -291,7 +348,7 @@ ESIA_TEST(Painter, FillRectFollowsMasksAndScales)
 {
     DrawList dl = MakeList();
     PainterEnv env;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.PushMask(Rect(0, 0, 40, 20), 10.0f);
     p.FillRect(Rect(0, 0, 10, 20), Color::White());
     p.PopMask();
@@ -310,7 +367,7 @@ ESIA_TEST(Painter, SquareImagesOnThePixelGridAreQuads)
     DrawList dl = MakeList();
     PainterEnv env;
     env.pixelScale = 2.0f;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.SetAlpha(0.5f);
     p.Image(7, Rect(0, 0, 100, 50.5f), 0, Color::White(), Vec2(0.25f, 0), Vec2(0.75f, 1));   // whole pixels at 2x: a quad
     ESIA_CHECK(dl.FxInstances().empty() && dl.Vertices().size() == 4);
@@ -332,7 +389,7 @@ ESIA_TEST(Painter, SquareImagesOnThePixelGridAreQuads)
 ESIA_TEST(Painter, PolylineAndArea)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Vec2 pts[4] = {Vec2(0, 50), Vec2(40, 10), Vec2(80, 30), Vec2(120, 5)};
     p.Polyline(pts, 4, 3.0f, Style().Fill(Color::Hex(0x30D158)));
     const std::size_t n = dl.Vertices().size();
@@ -357,7 +414,7 @@ ESIA_TEST(Painter, LayersFadesAndStreaks)
     PainterEnv env;
     env.metricsScale = 2.0f;
     env.alpha = 0.5f;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.BeginGlowLayer(Color::Hex(0xFF00FF, 0.4f), 6.0f, 2.0f, 0.9f);
     p.EndGlowLayer();
     p.BeginEdgeFade(Rect(0, 40, 100, 240), 12, -3);
@@ -435,7 +492,7 @@ ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
     env.text = &tt;
     env.flat = true;
     env.flatSurface = Color(0.1f, 0.1f, 0.1f, 1.0f);
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     const Style button = Style().Radius(18).Fill(Color::Hex(0x0A84FF)).Shadow(Color::Black(0.3f), 12, Vec2(0, 4));
     p.Text(Vec2(10, 10), text::FontRef{1, 10.0f}, Color::White(), "Label");
     p.Rect(Rect(80, 4, 160, 40), button);
@@ -450,20 +507,20 @@ ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
 
     // a large fill: its middle from the white texture, the rim from the tile; a stroke's ring around it
     DrawList d2 = MakeList();
-    Painter q(d2, env);
+    Painter q(d2, Fx(env));
     q.Rect(Rect(10, 10, 310, 210), Style().Radius(20).Fill(Color(0.2f, 0.2f, 0.2f, 1)).Stroke(1.0f, Color::White(0.3f)));
     ESIA_CHECK(d2.FxInstances().empty() && QuadCommands(d2, 0) == 1 && QuadCommands(d2, 42) >= 1);
     ESIA_CHECK(tt.added == 4);
 
     // what geometry cannot do stays an FX shape, without the shadow and glow flat drawing leaves out
     DrawList d3 = MakeList();
-    Painter r(d3, env);
+    Painter r(d3, Fx(env));
     r.Rect(Rect(10, 10, 60, 60), Style().Radius(8).Fill(Paint::Linear(Color::White(), Color::Black())).Shadow(Color::Black(0.3f), 8).Glow(Color::White(), 6));
     ESIA_CHECK(d3.FxInstances().size() == 1 && !(d3.FxInstances()[0].flags[0] & (fx::kShadow | fx::kGlow)));
 
     // glass: a solid surface, flatSurface under its tint
     DrawList d4 = MakeList();
-    Painter g(d4, env);
+    Painter g(d4, Fx(env));
     GlassMaterial m;
     m.tint = Color(1, 1, 1, 0.5f);
     g.Rect(Rect(10, 10, 60, 60), Style().Radius(8).Glass(m));
@@ -476,7 +533,7 @@ ESIA_TEST(Painter, FlatShapesAreGeometryThatBatchesWithText)
     tt.tiles.clear();
     const int before = tt.added;
     DrawList d5 = MakeList();
-    Painter h(d5, env);
+    Painter h(d5, Fx(env));
     h.Rect(Rect(80, 4, 160, 40), button);
     ESIA_CHECK(tt.added == before + 1 && d5.FxInstances().empty());
 }
@@ -489,7 +546,7 @@ ESIA_TEST(Painter, FlatTilesCoverAsTheShaderDoes)
     PainterEnv env;
     env.text = &tt;
     env.flat = true;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.Circle(Vec2(50, 50), 10, Style().Fill(Color::White()));
     ESIA_CHECK(tt.bitmaps.size() == 1);
     if (tt.bitmaps.size() != 1)
@@ -513,7 +570,7 @@ ESIA_TEST(Painter, TextWithAStyleHandsItsMaterialToTheTextSystem)
     FakeText text;
     PainterEnv env;
     env.text = &text;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     const Style s = Style().Fill(Paint::Linear(Color::Hex(0xFF0000), Color::Hex(0x0000FF), 0)).Stroke(2, Color::Hex(0x00FF00), 1.0f).Shadow(Color::Black(0.5f), 4, Vec2(0, 2))
                         .Glow(Color::White(), 6).Image(9).Radius(5).Weight(0.75f).Opacity(0.5f);
     const Vec2 size = p.Text(Vec2(10, 20), text::FontRef{1, 10}, s, "abc");
@@ -537,7 +594,7 @@ ESIA_TEST(Painter, TextWithAStyleHandsItsMaterialToTheTextSystem)
     ESIA_CHECK(p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style(), "ab") == Vec2(12, 10) && text.calls.empty());
 
     env.flat = true;
-    Painter flat(dl, env);
+    Painter flat(dl, Fx(env));
     flat.Text(Vec2(0, 0), text::FontRef{1, 10}, s, "ab");
     ESIA_CHECK(text.lastMaterial.flags[0] == (fx::kFill | fx::kStroke));   // no shadow, no glow
 }
@@ -550,7 +607,7 @@ ESIA_TEST(Painter, LegibleTextAsksForItsHalo)
     FakeText text;
     PainterEnv env;
     env.text = &text;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     const fx::Instance& m = text.lastMaterial;
     p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Legible(0.75f, 4.0f), "ab");
     ESIA_CHECK(m.flags[0] == (fx::kFill | fx::kLegible) && m.radii[2] == 0.75f && m.radii[3] == 4.0f);
@@ -563,7 +620,7 @@ ESIA_TEST(Painter, LegibleTextAsksForItsHalo)
     p.PopScale();
     ESIA_CHECK(m.radii[2] == 1.0f && m.radii[3] == 8.0f && m.strokeParams[0] == 2.0f && m.glowParams[0] == 12.0f);
     env.flat = true;
-    Painter flat(dl, env);
+    Painter flat(dl, Fx(env));
     flat.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).Legible(), "ab");
     ESIA_CHECK(m.flags[0] == fx::kFill);
 }
@@ -573,7 +630,7 @@ ESIA_TEST(Painter, LegibleTextAsksForItsHalo)
 ESIA_TEST(Painter, MotionBlurIsTheShapesDisplacement)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Rect(Rect(10, 10, 50, 30), Style().Fill(Color::White()).MotionBlur(Vec2(12, -4)));
     const fx::Instance& a = dl.FxInstances()[0];
     ESIA_CHECK((a.flags[0] & fx::kMotion) && a.custom[0] == 12.0f && a.custom[1] == -4.0f);
@@ -587,11 +644,11 @@ ESIA_TEST(Painter, MotionBlurIsTheShapesDisplacement)
     FakeText text;
     PainterEnv env;
     env.text = &text;
-    Painter t(dl, env);
+    Painter t(dl, Fx(env));
     t.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color::White()).MotionBlur(Vec2(0, 6)), "ab");
     ESIA_CHECK((text.lastMaterial.flags[0] & fx::kMotion) && text.lastMaterial.custom[1] == 6.0f);
     env.flat = true;
-    Painter flat(dl, env);
+    Painter flat(dl, Fx(env));
     flat.Rect(Rect(10, 10, 50, 30), Style().Radius(4).Fill(Paint::Linear(Color::White(), Color::Black())).MotionBlur(Vec2(12, 0)));
     ESIA_CHECK(!(dl.FxInstances().back().flags[0] & fx::kMotion));
 }
@@ -617,7 +674,7 @@ ESIA_TEST(Painter, TextWithAStyleWithoutFieldsDrawsTheFillColor)
     DrawList dl = MakeList();
     PainterEnv env;
     env.text = &text;
-    Painter p(dl, env);
+    Painter p(dl, Fx(env));
     p.Text(Vec2(0, 0), text::FontRef{1, 10}, Style().Fill(Color(1, 0.5f, 0, 0.8f)).Opacity(0.5f), "ab");
     ESIA_CHECK(text.drawn.r == 1.0f && text.drawn.g == 0.5f && std::fabs(text.drawn.a - 0.4f) < 1e-6f);
 }
@@ -646,7 +703,7 @@ namespace
 ESIA_TEST(Painter, PolygonsArePathsWithTheirPointsAfterThem)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Vec2 tri[3] = {Vec2(50, 10), Vec2(90, 80), Vec2(10, 80)};
     p.Polygon(tri, 3, Style().Fill(Color::White()).Shadow(Color::Black(0.3f), 8, Vec2(0, 2)));
     const auto& in = dl.FxInstances();
@@ -683,7 +740,7 @@ ESIA_TEST(Painter, PolygonsArePathsWithTheirPointsAfterThem)
 ESIA_TEST(Painter, PolygonCornersAreRounded)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Vec2 box[4] = {Vec2(100, 100), Vec2(200, 100), Vec2(200, 150), Vec2(100, 150)};
     p.Polygon(box, 4, Style().Fill(Color::White()).Radius(10));
     const fx::Instance& r = dl.FxInstances()[0];
@@ -711,7 +768,7 @@ ESIA_TEST(Painter, PolygonCornersAreRounded)
 ESIA_TEST(Painter, ParallelogramsAreSlantedLikeCss)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     p.Parallelogram(Rect(100, 100, 200, 140), -20.0f, Style().Fill(Color::White()));
     const float shift = std::tan(Radians(20.0f)) * 20.0f;
     const fx::Instance& r = dl.FxInstances()[0];
@@ -738,7 +795,7 @@ ESIA_TEST(Painter, ParallelogramsAreSlantedLikeCss)
 ESIA_TEST(Painter, GlassBevelsComeNoDeeperThanTheShape)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     GlassMaterial g;
     g.bezel = 40;
     p.Ring(Vec2(100, 100), 30, 8, Style().Glass(g));
@@ -755,7 +812,7 @@ ESIA_TEST(Painter, GlassBevelsComeNoDeeperThanTheShape)
 ESIA_TEST(Painter, LinesAreasAndSectorsWithAMaterialArePaths)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Vec2 pts[4] = {Vec2(0, 50), Vec2(40, 10), Vec2(80, 30), Vec2(120, 5)};
     GlassMaterial g;
     p.Polyline(pts, 4, 6.0f, Style().Glass(g));
@@ -785,7 +842,7 @@ ESIA_TEST(Painter, LinesAreasAndSectorsWithAMaterialArePaths)
 ESIA_TEST(Painter, PathsFollowTheScaleAndAreCulledWhole)
 {
     DrawList dl = MakeList();
-    Painter p(dl);
+    Painter p(dl, Fx());
     const Vec2 tri[3] = {Vec2(0, 0), Vec2(100, 0), Vec2(0, 100)};
     p.PushScale(Vec2(0, 0), 0.5f);
     p.Polygon(tri, 3, Style().Fill(Color::White()).Radius(10).Shadow(Color::Black(0.3f), 8));
@@ -796,4 +853,243 @@ ESIA_TEST(Painter, PathsFollowTheScaleAndAreCulledWhole)
     const Vec2 far[3] = {Vec2(1000, 1000), Vec2(1100, 1000), Vec2(1000, 1100)};
     p.Polygon(far, 3, Style().Fill(Color::White()));
     ESIA_CHECK(dl.FxInstances().size() == 2);
+}
+
+// Plain shapes - a solid fill and / or a solid stroke on a rectangle with one radius on every corner, a circle, a
+// capsule, a segment - are quads (PainterEnv::quadShapes): the fill, then the stroke, each with what the FX shader
+// would read for it.
+ESIA_TEST(Painter, PlainShapesBecomeQuads)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.Rect(Rect(10, 20, 110, 70), Style().Fill(Color::Hex(0xFF0000)).Radius(6).Stroke(2, Color::White(), 0.5f));
+    p.Circle(Vec2(200, 200), 10, Style().Fill(Color::White(0.5f)));
+    p.Capsule(Rect(10, 100, 60, 120), Style().Stroke(1, Color::White()));
+    p.Line(Vec2(10, 10), Vec2(50, 30), 6, Style().Fill(Color::White()).Stroke(1, Color::Black(), 1.0f));
+    p.Rect(Rect(150, 20, 190, 60), Style().Fill(Color::White()).Opacity(0.5f));   // its opacity in the color
+    ESIA_CHECK(dl.FxInstances().empty() && dl.Commands().size() == 1 && dl.Quads().size() == 7);
+    if (dl.Quads().size() != 7)
+        return;
+    const QuadInstance* q = dl.Quads().data();
+    const std::uint32_t half = Color::White(0.5f).ToRgba8() >> 24;
+    ESIA_CHECK(q[0].Shape() == QuadShape::Fill && q[0].rect[0] == 10 && q[0].rect[3] == 70 && q[0].Radius() == 6);
+    ESIA_CHECK(std::fabs(q[0].Smoothing() - 0.6f) < 1e-3f);   // PainterEnv::cornerSmoothing
+    ESIA_CHECK(q[0].packed[2] == (float)(Color::Hex(0xFF0000).ToRgba8() & 0xFFFFFFu) && q[0].Alpha() == 255);
+    ESIA_CHECK(q[1].Shape() == QuadShape::Stroke && q[1].StrokeWidth() == 2 && q[1].StrokeAlign() == 0.5f && q[1].Radius() == 6);
+    ESIA_CHECK(q[2].Shape() == QuadShape::Fill && q[2].Radius() == 10 && q[2].Smoothing() == 0.0f && q[2].Alpha() == half);   // circles: circular corners
+    ESIA_CHECK(q[3].Shape() == QuadShape::Stroke && q[3].Radius() == 10 && q[3].StrokeWidth() == 1);   // a capsule: half its height
+    ESIA_CHECK(q[4].Shape() == QuadShape::SegmentFill && q[4].rect[0] == 10 && q[4].rect[2] == 50 && q[4].rect[3] == 30 && q[4].Radius() == 3);
+    ESIA_CHECK(q[5].Shape() == QuadShape::SegmentStroke && q[5].StrokeWidth() == 1 && q[5].StrokeAlign() == 1);
+    ESIA_CHECK(q[6].Alpha() == half);
+}
+
+// What only an FX instance draws keeps a shape one: another paint, a shadow, a glow, corners of different radii, a
+// stroke that fades, a fill and a stroke fading together, an arc, a mask, a scale - or quadShapes off. Invisible
+// shapes and shapes outside the clip are dropped as quads too.
+ESIA_TEST(Painter, RichShapesStayFxInstances)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Color c = Color::Hex(0x0A84FF);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(Paint::Linear(c, Color::White())));
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c).Shadow(Color::Black(0.3f), 8));
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c).Glow(c, 8));
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c).Radius(2, 4, 6, 8));
+    p.Rect(Rect(10, 10, 50, 50), Style().Stroke(2, c).StrokeFade(0.2f));
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c).Stroke(2, Color::White()).Opacity(0.5f));
+    p.Ring(Vec2(100, 100), 20, 3, Style().Fill(c));
+    p.PushMask(Rect(0, 0, 100, 100), 8);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c));
+    p.PopMask();
+    p.PushScale(Vec2(30, 30), 0.9f);
+    p.Rect(Rect(10, 10, 50, 50), Style().Fill(c));
+    p.PopScale();
+    Painter(dl, Fx()).Rect(Rect(10, 10, 50, 50), Style().Fill(c));
+    ESIA_CHECK(dl.FxInstances().size() == 10 && dl.Quads().empty());
+    DrawList dropped = MakeList();
+    Painter d(dropped);
+    d.Rect(Rect(10, 10, 20, 20), Style());                                   // nothing to draw
+    d.Rect(Rect(10, 10, 20, 20), Style().Fill(Color::White()).Opacity(0));   // transparent
+    d.Rect(Rect(500, 10, 520, 20), Style().Fill(Color::White()));             // outside the clip
+    d.Line(Vec2(-50, -50), Vec2(-20, -20), 2, Style().Fill(Color::White()));
+    ESIA_CHECK(dropped.Empty());
+}
+
+// FillRect and HLine without antialiasing are Solid quads over the pixels their geometry covered (geometry without
+// quadShapes); a rounded FillRect is a Fill shape
+ESIA_TEST(Painter, SolidRectanglesAreQuads)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    p.FillRect(Rect(10, 10, 30.5f, 20.25f), Color::White());
+    p.HLine(10, 50, 40.6f, Color::White(), 1.0f);
+    p.FillRect(Rect(10, 50, 30, 60), Color::White(), 3.0f);
+    ESIA_CHECK(dl.Vertices().empty() && dl.Quads().size() == 3 && dl.Commands().size() == 1);
+    if (dl.Quads().size() != 3)
+        return;
+    const QuadInstance* q = dl.Quads().data();
+    ESIA_CHECK(q[0].Shape() == QuadShape::Solid && q[0].rect[2] == 30.5f && q[0].rect[3] == 20.25f);
+    ESIA_CHECK(q[1].Shape() == QuadShape::Solid && q[1].rect[1] == 40.0f && q[1].rect[3] == 41.0f);   // on a pixel row
+    ESIA_CHECK(q[2].Shape() == QuadShape::Fill && q[2].Radius() == 3.0f && q[2].Smoothing() == 0.0f);
+    DrawList geo = MakeList();
+    Painter(geo, Fx()).FillRect(Rect(10, 10, 30, 20), Color::White());
+    ESIA_CHECK(geo.Quads().empty() && geo.Vertices().size() == 4);
+}
+
+// Polylines as quads (PainterEnv::quadShapes), translucent too: a piece per segment and an end per end, the joints'
+// lines shared - a piece's second joint is the next one's first, an end's its piece's - and reached along as far as the
+// sharpest miter goes; one glow layer round them. Geometry where quads cannot give its pixels: a turn sharper than 120
+// degrees (a clipped miter), a segment too short for the turns at its ends; under a scale; with quadShapes off.
+ESIA_TEST(Painter, PolylinesBecomeQuads)
+{
+    DrawList dl = MakeList();
+    Painter p(dl);
+    const Vec2 zig[4] = {Vec2(10, 40), Vec2(30, 20), Vec2(50, 40), Vec2(70, 20)};   // quarter turns
+    const Color half(1, 1, 1, 0.5f);
+    p.Polyline(zig, 4, 4.0f, Style().Fill(half));
+    ESIA_CHECK(dl.Vertices().empty() && dl.Quads().size() == 5 && dl.Commands().size() == 1);
+    if (dl.Quads().size() != 5)
+        return;
+    const QuadInstance* q = dl.Quads().data();
+    for (int i = 0; i < 5; ++i)
+    {
+        ESIA_CHECK(q[i].Shape() == (i < 3 ? QuadShape::LinePiece : QuadShape::LineCap) && q[i].Radius() == 2.0f);
+        ESIA_CHECK(q[i].Alpha() == half.ToRgba8() >> 24 && q[i].LineReach() == 7u);   // a quarter turn's miter: 1.41 half thicknesses
+    }
+    ESIA_CHECK(q[0].rect[0] == 10.0f && q[0].rect[3] == 20.0f && q[2].rect[2] == 70.0f);
+    // the ends' lines along the segments' normals (45 degrees), the miters' straight down (90)
+    ESIA_CHECK(q[0].LineJoint() == 16384u && q[0].LineOther() == 32768u && q[1].LineJoint() == 32768u && q[1].LineOther() == 32768u);
+    ESIA_CHECK(q[2].LineJoint() == 32768u && q[2].LineOther() == 16384u);
+    ESIA_CHECK(q[3].LineJoint() == q[0].LineJoint() && q[3].rect[0] == 10.0f && q[3].rect[2] == 30.0f && q[3].LineOther() == 3u);   // 3 sides
+    ESIA_CHECK(q[4].LineJoint() == q[2].LineOther() && q[4].rect[0] == 70.0f && q[4].rect[2] == 50.0f);
+    // many short pieces of a smooth line; one glow for the whole line
+    DrawList smooth = MakeList();
+    const Vec2 chart[5] = {Vec2(10, 100), Vec2(40, 80), Vec2(70, 110), Vec2(100, 70), Vec2(130, 95)};
+    Painter(smooth).Polyline(chart, 5, 2.0f, Style().Fill(Color::White()).Glow(Color::White(), 8), PolylineFlags_Smooth);
+    ESIA_CHECK(smooth.Vertices().empty() && smooth.Quads().size() > 20);
+    ESIA_CHECK(smooth.Commands().size() == 3 && smooth.Commands()[0].kind == DrawCmdKind::LayerBegin && smooth.Commands()[2].kind == DrawCmdKind::LayerEnd);
+    // geometry
+    auto geometry = [](const Vec2* pts, int n, float thickness, const PainterEnv& env, bool scaled) {
+        DrawList list = MakeList();
+        Painter g(list, env);
+        if (scaled)
+            g.PushScale(Vec2(0, 0), 2.0f);
+        g.Polyline(pts, n, thickness, Style().Fill(Color::White()));
+        if (scaled)
+            g.PopScale();
+        return list.Quads().empty() && !list.Vertices().empty();
+    };
+    const Vec2 back[3] = {Vec2(10, 10), Vec2(60, 10), Vec2(15, 30)};                   // turns 156 degrees
+    const Vec2 kink[4] = {Vec2(10, 60), Vec2(40, 60), Vec2(42, 63), Vec2(42, 90)};     // 3.6 long between turns the same way, 10 thick
+    ESIA_CHECK(geometry(back, 3, 4.0f, PainterEnv(), false) && geometry(kink, 4, 10.0f, PainterEnv(), false));
+    ESIA_CHECK(geometry(zig, 4, 4.0f, PainterEnv(), true) && geometry(zig, 4, 4.0f, Fx(), false));
+}
+
+// A solid line or polyline drawn with its Color (no Style built) is the one its Style().Fill(color) draws, quad for quad
+// and vertex for vertex: under an alpha, at a fractional pixel scale, outside the clip (nothing), thinner than a pixel,
+// with a repeated point and a turn sharper than 120 degrees (through the Style: BuildPath, the geometry), with
+// quadShapes off.
+ESIA_TEST(Painter, SolidLinesAreTheirStyledLines)
+{
+    const Color c(0.2f, 0.6f, 0.9f, 0.8f);
+    const Vec2 zig[5] = {Vec2(10, 40), Vec2(30, 20), Vec2(30, 20), Vec2(50, 40), Vec2(70, 20)};
+    const Vec2 wave[4] = {Vec2(10, 90), Vec2(40, 70), Vec2(70, 95), Vec2(100, 75)};
+    const Vec2 back[3] = {Vec2(10, 10), Vec2(60, 10), Vec2(15, 30)};
+    for (int k = 0; k < 4; ++k)
+    {
+        PainterEnv env;
+        env.alpha = k == 1 ? 0.5f : 1.0f;
+        env.quadShapes = k != 2;
+        env.pixelScale = k == 3 ? 1.5f : 1.0f;
+        DrawList a = MakeList(), b = MakeList();
+        Painter pa(a, env), pb(b, env);
+        pa.Line(Vec2(5, 5), Vec2(90, 60), 1.5f, c);
+        pb.Line(Vec2(5, 5), Vec2(90, 60), 1.5f, Style().Fill(c));
+        pa.Line(Vec2(500, 5), Vec2(600, 60), 1.5f, c);   // outside the clip
+        pb.Line(Vec2(500, 5), Vec2(600, 60), 1.5f, Style().Fill(c));
+        pa.Polyline(wave, 4, 3.0f, c);
+        pb.Polyline(wave, 4, 3.0f, Style().Fill(c));
+        pa.Polyline(wave, 4, 0.5f, c);
+        pb.Polyline(wave, 4, 0.5f, Style().Fill(c));
+        pa.Polyline(zig, 5, 3.0f, c);
+        pb.Polyline(zig, 5, 3.0f, Style().Fill(c));
+        pa.Polyline(back, 3, 4.0f, c);
+        pb.Polyline(back, 3, 4.0f, Style().Fill(c));
+        ESIA_CHECK(a.Quads().size() == b.Quads().size() && a.Vertices().size() == b.Vertices().size() && a.Indices().size() == b.Indices().size());
+        ESIA_CHECK(a.FxInstances().size() == b.FxInstances().size() && a.Commands().size() == b.Commands().size());
+        if (a.Quads().size() != b.Quads().size() || a.Vertices().size() != b.Vertices().size() || a.FxInstances().size() != b.FxInstances().size())
+            continue;
+        ESIA_CHECK(std::memcmp(a.Quads().data(), b.Quads().data(), a.Quads().size() * sizeof(QuadInstance)) == 0);
+        ESIA_CHECK(std::memcmp(a.Vertices().data(), b.Vertices().data(), a.Vertices().size() * sizeof(Vertex)) == 0);
+        ESIA_CHECK(std::memcmp(a.FxInstances().data(), b.FxInstances().data(), a.FxInstances().size() * sizeof(fx::Instance)) == 0);
+        ESIA_CHECK(k == 2 ? a.Quads().empty() : a.Quads().size() == 1 + 5 + 5 + 5);   // the line, the waves, the zigzag less its repeat; the turn geometry
+    }
+}
+
+// Every vector level this processor runs (esia::cpu: SSE2, AVX2, AVX-512, NEON) draws polylines bit for bit as plain C++
+// does - quads, the geometry of the ones left to it, the bounds: lines of 2 to 71 points (every length of the vector
+// loops' tails) turning either way, hairlines to thick ones, translucent ones, at whole and fractional scales, with
+// pieces short enough to be measured one by one, and long dense series (a pixel or two a point: every piece measured).
+ESIA_TEST(Painter, PolylineKernelsAgree)
+{
+    std::vector<std::vector<Vec2>> lines;
+    std::uint32_t seed = 12345u;
+    auto rnd = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return (float)(seed >> 8) / 16777216.0f;
+    };
+    for (int count = 2; count < 72; ++count)
+    {
+        std::vector<Vec2> pts;
+        float x = 5.0f + rnd() * 20.0f, y = 40.0f + rnd() * 200.0f;
+        for (int i = 0; i < count; ++i)
+        {
+            pts.push_back(Vec2(x, y));
+            x += 3.0f + rnd() * 9.0f;
+            y += (rnd() - 0.5f) * 10.0f;
+        }
+        lines.push_back(pts);
+    }
+    for (int k = 0; k < 4; ++k)
+    {
+        std::vector<Vec2> pts;
+        for (int i = 0; i < 300 + 7 * k; ++i)
+            pts.push_back(Vec2(4.0f + (float)i * (1.0f + 0.25f * (float)k), 150.0f + 30.0f * std::sin((float)i * 0.05f + (float)k) + 2.0f * rnd()));
+        lines.push_back(pts);
+    }
+    auto draw = [&](cpu::Simd level, float scale) {
+        cpu::Force(level);
+        DrawList dl = MakeList();
+        PainterEnv env;
+        env.pixelScale = scale;
+        Painter p(dl, env);
+        int k = 0;
+        for (const std::vector<Vec2>& pts : lines)
+        {
+            const Color c(0.2f, 0.7f, 1.0f, k % 3 == 0 ? 0.5f : 1.0f);
+            p.Polyline(pts.data(), (int)pts.size(), 0.6f + (float)(k % 5) * 1.7f, c);
+            ++k;
+        }
+        cpu::Unforce();
+        return dl;
+    };
+    for (const float scale : {1.0f, 1.25f})
+    {
+        const DrawList ref = draw(cpu::Simd::Scalar, scale);
+        ESIA_CHECK(ref.Quads().size() > 1000 && !ref.Vertices().empty());   // quads mostly, a few lines left to geometry
+        for (const cpu::Simd level : {cpu::Simd::Sse2, cpu::Simd::Avx2, cpu::Simd::Avx512, cpu::Simd::Neon})
+        {
+            if (!cpu::Runs(level))
+                continue;
+            const DrawList got = draw(level, scale);
+            ESIA_CHECK(got.Quads().size() == ref.Quads().size() && got.Vertices().size() == ref.Vertices().size());
+            ESIA_CHECK(got.Commands().size() == ref.Commands().size());
+            if (got.Quads().size() != ref.Quads().size() || got.Vertices().size() != ref.Vertices().size() || got.Commands().size() != ref.Commands().size())
+                continue;
+            ESIA_CHECK(std::memcmp(got.Quads().data(), ref.Quads().data(), ref.Quads().size() * sizeof(QuadInstance)) == 0);
+            ESIA_CHECK(std::memcmp(got.Vertices().data(), ref.Vertices().data(), ref.Vertices().size() * sizeof(Vertex)) == 0);
+            for (std::size_t i = 0; i < ref.Commands().size(); ++i)
+                ESIA_CHECK(got.Commands()[i].vtxBounds == ref.Commands()[i].vtxBounds && got.Commands()[i].count == ref.Commands()[i].count);
+        }
+    }
 }

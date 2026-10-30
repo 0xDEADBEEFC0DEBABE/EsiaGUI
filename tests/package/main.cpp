@@ -1,9 +1,10 @@
-// A program built against an installed Esia (find_package): the core, the renderer, the FreeType text system, the
+// A program built against an installed Esia (find_package): the core, the renderer, the FreeType text system, SVG, the
 // backends and (where the package has it) the widget layer link, and frames of a window with a button render on the
 // null device.
 #include "esia/core/context.hpp"
 #include "esia/render/renderer.hpp"
 #include "esia/rhi/backend_registry.hpp"
+#include "esia/svg/svg.hpp"
 #if defined(ESIA_PACKAGE_UI)
 #include "esia/ui/ui.hpp"
 #endif
@@ -71,6 +72,14 @@ int main()
             std::fprintf(stderr, "esia_package_user: the frame was refused\n");
             return 1;
         }
+    }
+    // SVG: a file parsed and rasterized
+    const esia::svg::Document icon = esia::svg::Document::Parse("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'><rect width='4' height='8'/></svg>");
+    esia::svg::Image image;
+    if (!esia::svg::Rasterize(icon, 8, 8, {}, image) || image.pixels[3] != 255 || image.pixels[7 * 4 + 3] != 0)
+    {
+        std::fprintf(stderr, "esia_package_user: the SVG did not rasterize\n");
+        return 1;
     }
     std::printf("esia_package_user: %d backends, 3 frames rendered (%d draws)\n", (int)esia::rhi::Backends().size(),
                 renderer.Stats().drawCalls);

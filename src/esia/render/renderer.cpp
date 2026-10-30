@@ -1116,22 +1116,24 @@ namespace esia::render
         {
             ProfileRun(RunGeometry);
             EnsureContentPass();
-            // the program of the texture's kind, of vertices or of instanced quads
-            const bool q = op.quads;
+            // the program of the texture's kind, of vertices or of instanced quads (with plain shapes among them: the
+            // shape quad programs)
+            const bool q = op.quads, s = q && op.shapes;
+            using P = rhi::ShaderProgram;
             rhi::Pipeline pipeline;
             if (op.lcd)
             {
                 // sub-pixel pages: per-channel alpha on an opaque target; inside glow layers (alpha targets), on targets
                 // that are not opaque and without dual-source blending, the grayscale coverage kept in A
                 if (caps.dualSourceBlend && subpixelText && !(layerDepth > 0 && layer))
-                    pipeline = GetPipeline(q ? rhi::ShaderProgram::QuadLcd : rhi::ShaderProgram::TextLcd, rhi::BlendMode::DualSourceLcd);
+                    pipeline = GetPipeline(s ? P::QuadShapeLcd : q ? P::QuadLcd : P::TextLcd, rhi::BlendMode::DualSourceLcd);
                 if (!pipeline)
-                    pipeline = GetPipeline(q ? rhi::ShaderProgram::QuadLcdGray : rhi::ShaderProgram::TextLcdGray, rhi::BlendMode::Straight);
+                    pipeline = GetPipeline(s ? P::QuadShapeLcdGray : q ? P::QuadLcdGray : P::TextLcdGray, rhi::BlendMode::Straight);
             }
             else if (op.coverage)
-                pipeline = GetPipeline(q ? rhi::ShaderProgram::QuadGray : rhi::ShaderProgram::TextGray, rhi::BlendMode::Straight);
+                pipeline = GetPipeline(s ? P::QuadShapeGray : q ? P::QuadGray : P::TextGray, rhi::BlendMode::Straight);
             else
-                pipeline = GetPipeline(q ? rhi::ShaderProgram::QuadImage : rhi::ShaderProgram::UiGeometry, rhi::BlendMode::Straight);
+                pipeline = GetPipeline(s ? P::QuadShapeImage : q ? P::QuadImage : P::UiGeometry, rhi::BlendMode::Straight);
             if (!BindPipeline(pipeline) || !SetScissor(op.clip))
                 return;
             EnsureFrame();

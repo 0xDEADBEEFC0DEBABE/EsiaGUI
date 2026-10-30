@@ -6,7 +6,7 @@ project(EsiaPackageUser LANGUAGES CXX)
 find_package(Esia 0.1 CONFIG REQUIRED)
 
 add_executable(esia_package_user main.cpp)
-target_link_libraries(esia_package_user PRIVATE esia::render esia::backends)
+target_link_libraries(esia_package_user PRIVATE esia::render esia::svg esia::backends)
 if(TARGET esia::ui)   # EsiaGUI's widget layer, where the package has it
     target_link_libraries(esia_package_user PRIVATE esia::ui)
     target_compile_definitions(esia_package_user PRIVATE ESIA_PACKAGE_UI)

@@ -95,6 +95,10 @@ namespace esia::shaders
         case rhi::ShaderProgram::QuadLcdGray: return {"esia_quad.hlsl", "QuadVS", "TextLcdGrayPS"};
         case rhi::ShaderProgram::HdrDecode: return {"esia_post.hlsl", "FullscreenVS", "HdrDecodePS"};
         case rhi::ShaderProgram::HdrEncode: return {"esia_post.hlsl", "FullscreenVS", "HdrEncodePS"};
+        case rhi::ShaderProgram::QuadShapeImage: return {"esia_quad.hlsl", "QuadShapeVS", "QuadImagePS"};
+        case rhi::ShaderProgram::QuadShapeGray: return {"esia_quad.hlsl", "QuadShapeVS", "QuadGrayPS"};
+        case rhi::ShaderProgram::QuadShapeLcd: return {"esia_quad.hlsl", "QuadShapeVS", "QuadLcdPS"};
+        case rhi::ShaderProgram::QuadShapeLcdGray: return {"esia_quad.hlsl", "QuadShapeVS", "QuadLcdGrayPS"};
         case rhi::ShaderProgram::Count: break;
         }
         return {nullptr, nullptr, nullptr};
