@@ -123,6 +123,8 @@ namespace metal
         return a;
     }
     template <class T> T atan2(T y, T) { return y; }
+    template <class T> bool all(T) { return true; }   // of a comparison's lanes
+    template <class T> bool any(T) { return true; }
     inline void discard_fragment() {}
 
     namespace fast
