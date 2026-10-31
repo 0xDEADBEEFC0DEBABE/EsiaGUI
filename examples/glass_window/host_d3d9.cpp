@@ -63,14 +63,19 @@ namespace glass
 
             void Resize(int width, int height) override
             {
-                // the wrapped targets hold the back buffers; with 9Ex every other resource survives ResetEx
-                for (const esia::rhi::Texture t : wrapped_)
-                    esia_->DestroyTexture(t);
-                wrapped_.clear();
-                target_ = {};
                 pp_.BackBufferWidth = (UINT)width;
                 pp_.BackBufferHeight = (UINT)height;
-                reset_ = SUCCEEDED(device_->ResetEx(&pp_, nullptr));
+                Reset();
+            }
+
+            // The presentation interval is the device's: ResetEx with the other one.
+            void SetVsync(bool on) override
+            {
+                if (on == vsync_)
+                    return;
+                vsync_ = on;
+                pp_.PresentationInterval = on ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+                Reset();
             }
 
             // The flip model rotates the back buffers: this frame's is buffer 0 now. Wrapping a buffer seen before
@@ -91,6 +96,16 @@ namespace glass
             void Present() override { device_->Present(nullptr, nullptr, nullptr, nullptr); }
 
         private:
+            void Reset()
+            {
+                // the wrapped targets hold the back buffers; with 9Ex every other resource survives ResetEx
+                for (const esia::rhi::Texture t : wrapped_)
+                    esia_->DestroyTexture(t);
+                wrapped_.clear();
+                target_ = {};
+                reset_ = SUCCEEDED(device_->ResetEx(&pp_, nullptr));
+            }
+
             ComPtr<IDirect3D9Ex> d3d_;
             ComPtr<IDirect3DDevice9Ex> device_;
             D3DPRESENT_PARAMETERS pp_ = {};

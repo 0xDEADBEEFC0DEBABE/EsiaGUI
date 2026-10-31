@@ -144,6 +144,16 @@ namespace glass
                 Recreate();
             }
 
+            // The present mode is the swapchain's: made again with the other one.
+            void SetVsync(bool on) override
+            {
+                if (on == vsync_)
+                    return;
+                vsync_ = on;
+                if (swapchain_)
+                    Recreate();
+            }
+
             void ReleaseWindow() override
             {
                 if (!device_)

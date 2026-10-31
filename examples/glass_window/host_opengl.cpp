@@ -73,8 +73,9 @@ namespace glass
                     error = "no OpenGL 3.3 core context (wglCreateContextAttribsARB)";
                     return false;
                 }
-                if (const auto swapInterval = Wgl<PFNWGLSWAPINTERVALEXTPROC>("wglSwapIntervalEXT"))
-                    swapInterval(o.vsync ? 1 : 0);
+                swapInterval_ = Wgl<PFNWGLSWAPINTERVALEXTPROC>("wglSwapIntervalEXT");
+                if (swapInterval_)
+                    swapInterval_(o.vsync ? 1 : 0);
                 if (const char* renderer = reinterpret_cast<const char*>(::glGetString(GL_RENDERER)))
                     adapter_ = renderer;
 
@@ -95,6 +96,14 @@ namespace glass
                 target_ = esia::rhi::opengl::WrapFramebuffer(*esia_, 0, width, height, esia::rhi::Format::RGBA8_UNORM);
             }
 
+            // The context's swap interval (current on this thread, the render thread).
+            void SetVsync(bool on) override
+            {
+                vsync_ = on;
+                if (swapInterval_)
+                    swapInterval_(on ? 1 : 0);
+            }
+
             bool BeginFrame() override { return (bool)target_; }
 
         protected:
@@ -103,6 +112,7 @@ namespace glass
         private:
             HDC dc_ = nullptr;
             HGLRC context_ = nullptr;
+            PFNWGLSWAPINTERVALEXTPROC swapInterval_ = nullptr;   // WGL_EXT_swap_control, where the driver has it
             std::unique_ptr<esia::rhi::Device> esia_;
         };
     }
