@@ -160,6 +160,15 @@ namespace glass
                 return true;
             }
 
+            // The swap interval of the surface current on this thread (the render thread); a surface made later
+            // (AttachWindow) takes vsync_ too.
+            void SetVsync(bool on) override
+            {
+                vsync_ = on;
+                if (surface_ != EGL_NO_SURFACE)
+                    ::eglSwapInterval(display_, on ? 1 : 0);
+            }
+
             bool BeginFrame() override { return (bool)target_ && surface_ != EGL_NO_SURFACE; }
 
         protected:

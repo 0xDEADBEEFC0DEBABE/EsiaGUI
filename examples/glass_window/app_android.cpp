@@ -494,7 +494,8 @@ namespace glass
         const Clock::time_point start = Clock::now();
         Clock::time_point fpsStart = start;
         int fpsFrames = 0, frame = 0, result = 0;
-        float fps = 0.0f, cpuMs = 0.0f;
+        float fps = 0.0f, cpuMs = 0.0f, renderMs = 0.0f;
+        bool vsync = host->Vsync();   // SceneInfo::vsync
         bool hasWindow = true;
         while (Poll(aapp, !hasWindow))
         {
@@ -526,6 +527,8 @@ namespace glass
                 height = fi.height;
                 host->Resize(width, height);
             }
+            if (vsync != host->Vsync())   // the app switched it last frame
+                host->SetVsync(vsync);
             if (!host->BeginFrame())
                 continue;
             const double now = std::chrono::duration<double>(Clock::now() - start).count();
@@ -534,14 +537,16 @@ namespace glass
                 text->NewFrame({fi.scale, ctx.Input().Time()});
             const Clock::time_point uiStart = Clock::now();
             if (app.frame)
-                app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats()});
+                app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats(), renderMs, &vsync});
             ctx.EndFrame();
             cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
             esia::render::RenderParams rp;
             rp.frame = host->Frame();
             rp.targetStatic = app.opaqueBackground;
+            const Clock::time_point renderStart = Clock::now();
             if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                 std::fprintf(stderr, "%s: the device refused frame %d\n", app.name, frame);
+            renderMs = std::chrono::duration<float, std::milli>(Clock::now() - renderStart).count();
             platform.ApplyRequests(ctx.Requests());
 
             ++frame;

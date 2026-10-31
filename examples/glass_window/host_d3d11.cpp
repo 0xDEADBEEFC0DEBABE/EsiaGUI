@@ -31,7 +31,7 @@ namespace glass
                     return false;
                 }
                 const DXGI_FORMAT format = o.hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
-                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, format, error))
+                if (!swap_.Create(a.factory.Get(), device_.Get(), hwnd, width, height, 2, format, error, true))
                     return false;
                 scRgb_ = o.hdr && swap_.SetScRgb();
                 esia::rhi::d3d11::Desc d;
@@ -57,7 +57,11 @@ namespace glass
                     CreateTarget();
             }
 
-            bool BeginFrame() override { return (bool)target_; }
+            bool BeginFrame() override
+            {
+                swap_.WaitForBuffer();
+                return (bool)target_;
+            }
 
         protected:
             void Present() override { swap_.Present(vsync_); }
