@@ -143,7 +143,8 @@ namespace glass
             int fpsFrames = 0, frame = 0, result = 0;
             std::vector<float> statCpu, statGpu;   // --stats
             int reused = 0, captures = 0;
-            float fps = 0.0f, cpuMs = 0.0f;
+            float fps = 0.0f, cpuMs = 0.0f, renderMs = 0.0f;
+            bool vsync = host->Vsync();   // SceneInfo::vsync
             int width = fi.width, height = fi.height;
             while (!platform.CloseRequested())
             {
@@ -159,6 +160,8 @@ namespace glass
                     height = fi.height;
                     host->Resize(width, height);
                 }
+                if (vsync != host->Vsync())   // the app switched it last frame
+                    host->SetVsync(vsync);
                 if (!host->BeginFrame())
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -185,7 +188,7 @@ namespace glass
                     text->NewFrame({fi.scale, ctx.Input().Time()});
                 const Clock::time_point uiStart = Clock::now();
                 if (app.frame)
-                    app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats()});
+                    app.frame(ctx, {host->Name(), host->Adapter(), width, height, fi.scale, fps, cpuMs, &renderer.Stats(), renderMs, &vsync});
                 ctx.EndFrame();
                 cpuMs = std::chrono::duration<float, std::milli>(Clock::now() - uiStart).count();
                 esia::render::RenderParams rp;
@@ -204,8 +207,10 @@ namespace glass
                     rp.text.clearTypeContrast = monitorText->enhancedContrast;
                     rp.text.clearTypeLevel = monitorText->clearTypeLevel;
                 }
+                const Clock::time_point renderStart = Clock::now();
                 if (!renderer.Render(ctx.GetDrawData(), &ctx.Textures(), host->Target(), rp))
                     std::fprintf(stderr, "%s: the device refused frame %d\n", app.name, frame);
+                renderMs = std::chrono::duration<float, std::milli>(Clock::now() - renderStart).count();
                 if (opt.stats)
                 {
                     const esia::render::RenderStats& s = renderer.Stats();
