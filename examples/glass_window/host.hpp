@@ -59,7 +59,13 @@ namespace glass
             error = "this host cannot change its window";
             return false;
         }
-        // Waits for a free buffer and wraps it; false: skip this frame (swap chain being recreated).
+        // Vertical sync switched while it runs (HostOptions::vsync at the start), from the next present on: the DXGI
+        // hosts present with it every frame, the others set their swap interval or make their swap chain again.
+        virtual void SetVsync(bool on) { vsync_ = on; }
+        bool Vsync() const { return vsync_; }
+        // Waits for a free buffer and wraps it; false: skip this frame (swap chain being recreated). Direct3D 10 to 12
+        // and Vulkan wait on the CPU, before the frame's GPU work: their RenderStats::gpu is the frame's own work.
+        // Direct3D 9 and OpenGL wait where their drivers do, which may be inside the frame's GPU times.
         virtual bool BeginFrame() = 0;
         esia::rhi::Texture Target() const { return target_; }
         // The target holds scRGB (HostOptions::hdr granted): the renderer encodes into it (RenderParams::hdr).

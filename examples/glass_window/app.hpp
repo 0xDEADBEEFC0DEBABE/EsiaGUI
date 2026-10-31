@@ -52,6 +52,10 @@ namespace glass
         float fps = 0.0f;
         float cpuMs = 0.0f;          // the last frame's UI build (App::frame), milliseconds
         const esia::render::RenderStats* stats = nullptr;   // the last frame the renderer drew
+        float renderMs = 0.0f;       // the last frame's Renderer::Render on the CPU (0 where the loop does not time it)
+        // The vertical sync the frame loop presents with (--vsync). The frame may set it to switch it, from the next
+        // frame on (Host::SetVsync). Null where the loop cannot switch it while it runs (Apple's).
+        bool* vsync = nullptr;
     };
 
     struct App
