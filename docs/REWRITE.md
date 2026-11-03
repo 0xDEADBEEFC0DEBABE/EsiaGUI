@@ -132,7 +132,7 @@ Rules at the boundaries:
    4. the ops run in passes: geometry, instanced quads (text, flat tiles), instanced FX batches, backdrop captures
       (end the pass, copy or read directly, pyramid passes - or, with `RenderParams::targetStatic` /
       `backdropReuseFrames`, an earlier frame's capture: still in the pyramid, or copied back from where it was kept
-      aside), glow layers, edge fades, host callbacks;
+      aside), glow and blur layers, edge fades, host callbacks;
    5. `Device::EndFrame`; GPU times per category arrive a few frames later.
 6. The platform applies the requests (cursor shape, IME candidate window at the caret, whether the game gets the
    mouse / keyboard) and presents.
@@ -195,6 +195,14 @@ the current Direct3D backends:
   legibility exposure (in the shader, unchanged);
 * **glow layers**: an RGBA16F layer cleared only in its region, a bloom pyramid, content + bloom composited with a
   soft shoulder;
+* **blur layers** (`Painter::BeginBlurLayer`, CSS's `filter: blur()` and `opacity` on a group): the same layer and
+  pyramid; `BlurComposite` reads the two levels around the gaussian's standard deviation and mixes them so that their
+  variance is the gaussian's (each level's own, after the 13-tap downsamples and the B-spline read, measured on an
+  impulse: 1.76, 3.75, 7.62, 15.3, 30.6 px; level 0 is the sharp layer, so the blur starts from it without a step).
+  Color and coverage are blurred alike, nothing is added; then the layer's opacity, the mask at its begin and the
+  union of its content's clips. Content is clipped and masked as it is drawn, before the blur; glass in a layer
+  refracts what lies behind the layer on the target, not what the layer drew under it. A backend whose shader library
+  has no `BlurComposite` draws a blur layer's content straight onto the target;
 * **GPU profile categories**: runs of capture / layer / FX / FX-with-glass / geometry are timed without nesting
   (`rhi::ProfileCategory`, `RenderStats::gpu`);
 * passes start lazily (a capture or a layer ends the current pass, and nothing is loaded / stored again until

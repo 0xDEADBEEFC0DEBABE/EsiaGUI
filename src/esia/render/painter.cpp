@@ -118,7 +118,8 @@ namespace esia
             }
         }
 
-        thread_local std::vector<Vec2> tPath;
+        thread_local std::vector<Vec2> tPath, tStrokesPath;
+        thread_local std::vector<int> tStrokeStarts;
 
         // Polyline's cross-section at `pixelScale`: half its width, its inside and its edge (a pixel of antialiasing
         // between them), the sides of its round ends; a line thinner than a pixel is a pixel wide and fainter (`fade`)
@@ -659,6 +660,67 @@ namespace esia
         EmitPath(pts, n, false, inset, depth, s);
     }
 
+    void Painter::Polylines(const Vec2* points, const int* strokeStart, int strokes, float thickness, const Style& s, std::uint32_t flags)
+    {
+        if (!points || !strokeStart || strokes <= 0 || thickness <= 0.0f)
+            return;
+        const auto each = [&] {
+            for (int k = 0; k < strokes; ++k)
+            {
+                const int a = strokeStart[k], n = strokeStart[k + 1] - a;
+                if (n == 1)
+                    Circle(points[a], thickness * 0.5f, s);   // a dot
+                else if (n >= 2)
+                    Polyline(points + a, n, thickness, s, flags);
+            }
+        };
+        if (!FxOnly(s))
+        {
+            each();
+            return;
+        }
+        // every stroke's path as Polyline builds it, each from a quarter of a data instance of its own: the stroke before
+        // ends in its last point repeated up to it (edges of no length), its first edge comes from its own first point
+        constexpr std::size_t kQuarter = fx::kPathPointsPerData / 4;
+        std::vector<Vec2>& all = tStrokesPath;
+        std::vector<int>& starts = tStrokeStarts;
+        all.clear();
+        starts.clear();
+        for (int k = 0; k < strokes; ++k)
+        {
+            const int a = strokeStart[k], n = strokeStart[k + 1] - a;
+            if (n <= 0)
+                continue;
+            if (n == 1)
+                tPath.assign(2, points[a]);   // a dot: a stroke of no length, round
+            else
+                BuildPath(points + a, n, flags, Pixel(), tPath);
+            if (tPath.empty())
+                continue;
+            while (all.size() % kQuarter != 0)
+                all.push_back(all.back());
+            starts.push_back((int)all.size());
+            all.insert(all.end(), tPath.begin(), tPath.end());
+        }
+        if (all.size() > fx::kPathMaxPoints)
+        {
+            each();
+            return;
+        }
+        if (all.size() < 2)
+            return;
+        // a material only an FX shape has: its color the polyline's (the fill, else the stroke's color, else white -
+        // glass alone stays clear), as Polyline's
+        Style line = s;
+        if (!line.hasFill && !line.hasGlass)
+        {
+            line.Fill(s.strokeColor.a > 0.0f ? s.strokeColor : Color::White());
+            line.strokeWidth = 0.0f;
+        }
+        const float h = thickness * 0.5f;
+        EmitPath(all.data(), (int)all.size(), true, h, h, line, &starts);
+    }
+
     void Painter::EmitPolyline(const Vec2* points, int count, float thickness, const Style& s)
     {
         if (!points || count < 2 || thickness <= 0.0f)
@@ -668,7 +730,7 @@ namespace esia
         EmitPath(points, count, true, h, h, s);
     }
 
-    void Painter::EmitPath(const Vec2* points, int count, bool open, float lessen, float depth, const Style& s)
+    void Painter::EmitPath(const Vec2* points, int count, bool open, float lessen, float depth, const Style& s, const std::vector<int>* strokes)
     {
         const int n = std::min(count, (int)fx::kPathMaxPoints);
         if (n < (open ? 2 : 3))
@@ -720,20 +782,42 @@ namespace esia
         inst.flags[2] = (std::uint32_t)fx::ShapeKind::Path;
         if (!Submit(inst, s, rest, restGlow))
             return;
-        // the points, two to a row of the data instances right after it (the same command: the same effect and texture)
-        static_assert(fx::kPathPointsPerData * 2 * sizeof(float) <= offsetof(fx::Instance, flags), "a data instance's points stay off its flags row");
-        float row[fx::kPathPointsPerData * 2];
+        // the points, two to a row of the data instances right after it (the same command: the same effect and texture);
+        // beside them each quarter's bounds with the point before it, so that an open path's distance passes over the
+        // quarters too far to hold the nearest edge (fx::kPathQuarterRow)
+        static_assert(fx::kPathPointsPerData * 2 <= fx::kPathQuarterRow * 4, "a data instance's points stay off its quarters' bounds");
+        static_assert((fx::kPathBeforeRow + 2) * 4 * sizeof(float) <= offsetof(fx::Instance, flags), "a data instance's rows stay off its flags row");
+        constexpr int kQuarter = (int)fx::kPathPointsPerData / 4;
+        float rows[(fx::kPathBeforeRow + 2) * 4];
         for (int first = 0; first < n; first += (int)fx::kPathPointsPerData)
         {
             const int m = std::min(n - first, (int)fx::kPathPointsPerData);
+            std::memset(rows, 0, sizeof(rows));
             for (int i = 0; i < m; ++i)
             {
-                row[i * 2] = placed[(std::size_t)(first + i)].x;
-                row[i * 2 + 1] = placed[(std::size_t)(first + i)].y;
+                rows[i * 2] = placed[(std::size_t)(first + i)].x;
+                rows[i * 2 + 1] = placed[(std::size_t)(first + i)].y;
             }
+            esia::Rect all;
+            for (int q = 0; q * kQuarter < m; ++q)
+            {
+                const int i0 = first + q * kQuarter, i1 = std::min(first + m, i0 + kQuarter);
+                // the point before the quarter; the path's first edge comes from its first point (open) or its last one,
+                // a stroke of its own from its own first point (Polylines: no edge into it)
+                const bool own = strokes && std::binary_search(strokes->begin(), strokes->end(), i0);
+                const Vec2 before = placed[own ? (std::size_t)i0 : i0 > 0 ? (std::size_t)i0 - 1 : open ? 0 : (std::size_t)n - 1];
+                esia::Rect box(before, before);
+                for (int i = i0; i < i1; ++i)
+                    box = box.Union(esia::Rect(placed[(std::size_t)i], placed[(std::size_t)i]));
+                SetRect(rows + (fx::kPathQuarterRow + (std::uint32_t)q) * 4, box);
+                rows[fx::kPathBeforeRow * 4 + (std::uint32_t)q * 2] = before.x;
+                rows[fx::kPathBeforeRow * 4 + (std::uint32_t)q * 2 + 1] = before.y;
+                all = q == 0 ? box : all.Union(box);
+            }
+            SetRect(rows + fx::kPathBoundsRow * 4, all);
             fx::Instance d;
             std::memset(&d, 0, sizeof(d));
-            std::memcpy(&d, row, (std::size_t)m * 2 * sizeof(float));
+            std::memcpy(&d, rows, sizeof(rows));
             d.flags[2] = (std::uint32_t)fx::ShapeKind::PathData;
             Emit(d, s.effect, s.image);
         }
@@ -2051,6 +2135,41 @@ namespace esia
     }
 
     void Painter::EndGlowLayer() { dl_->EndLayer(); }
+
+    void Painter::BeginBlurLayer(float radius, float opacity)
+    {
+        ESIA_ASSERT(blurDepth_ < 8);
+        const float sigma = std::max(radius, 0.0f) * env_.metricsScale * ScaleFactor();
+        const float a = Saturate(opacity);
+        // nothing to blur and nothing to fade: the content as it is, no layer (the last frame of a blur-in)
+        const bool layer = blurDepth_ < 8 && (sigma > 0.0f || a < 1.0f);
+        if (blurDepth_ < 8)
+            blurLayer_[blurDepth_] = layer;
+        ++blurDepth_;
+        if (!layer)
+            return;
+        fx::LayerParams p{};
+        p.kind = fx::LayerKind::Blur;
+        p.radius = sigma;
+        p.opacity = a;
+        if (maskDepth_ > 0)
+        {
+            SetRect(p.mask, masks_[maskDepth_ - 1]);
+            p.maskRadius = std::max(maskRadius_[maskDepth_ - 1], 0.0f);
+            p.maskSmoothing = env_.cornerSmoothing;
+        }
+        dl_->BeginLayer(p);
+    }
+
+    void Painter::EndBlurLayer()
+    {
+        ESIA_ASSERT(blurDepth_ > 0);
+        if (blurDepth_ <= 0)
+            return;
+        --blurDepth_;
+        if (blurDepth_ < 8 && blurLayer_[blurDepth_])
+            dl_->EndLayer();
+    }
 
     void Painter::BeginEdgeFade(const esia::Rect& region, float top, float bottom)
     {

@@ -69,6 +69,21 @@ namespace esia::render
         return std::clamp((int)std::floor(lv) + 2, 1, kBackdropLevels - 1);
     }
 
+    // The gaussian each pyramid level is, as the blur-layer composite reads it (BlurCompositePS, esia_post.hlsl, holds
+    // the same numbers): its standard deviation in render-target pixels, after the 13-tap downsamples and the cubic
+    // B-spline read - measured by running both on an impulse, the same at every phase. Level 0 is the sharp layer.
+    constexpr float kLevelSigma[kBackdropLevels] = {0.0f, 1.756f, 3.753f, 7.621f, 15.300f, 30.628f};
+    // Levels a blur layer of standard deviation `sigmaPx` reads: the two around it (none at 0: the sharp layer alone).
+    inline int LevelsForLayerBlur(float sigmaPx)
+    {
+        if (!(sigmaPx > 0.0f))
+            return 0;
+        int l = 1;
+        while (l < kBackdropLevels - 1 && sigmaPx > kLevelSigma[l])
+            ++l;
+        return l;
+    }
+
     // Pads + aligns a capture region to the coarsest pyramid level and clamps it to the target.
     inline PxRect AlignCaptureRegion(const PxRect& r, int width, int height)
     {

@@ -139,6 +139,8 @@ namespace esia::render
         int reusedCaptures = 0;           // captures an earlier frame's served (RenderParams::targetStatic, backdropReuseFrames)
         int restoredCaptures = 0;         // ... of them brought back from the copy kept aside (something wrote over them)
         int glowLayers = 0;
+        int blurLayers = 0;               // blur layers composed blurred (Painter::BeginBlurLayer)
+        int directBlurLayers = 0;         // ... drawn straight onto the target instead: no BlurComposite program here
         int vertices = 0;
         int indices = 0;
         int quads = 0;                    // instanced quads (QuadInstance: glyphs, flat tiles)
