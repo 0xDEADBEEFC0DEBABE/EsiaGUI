@@ -151,6 +151,38 @@ ESIA_BINDING(10) StructuredBuffer<float4> gFxData : register(t7);
 float4 FxFetch(uint instance, uint field) { return gFxData[instance * 24u + field]; }
 #endif
 
+// Open paths pass over the points too far to hold the nearest edge (SdPath, PathNearestOpen) - but on SM3, whose full
+// shader has no instruction slots to spare: every edge in turn there, as before.
+#ifndef ESIA_SM3
+#define ESIA_PATH_QUARTERS 1
+#endif
+
+#ifdef ESIA_PATH_QUARTERS
+// An instance's rows from its place (FX_AT: the texel of its row 0 in the instance texture, or its first row in the
+// buffer): a run of instances read without a division for each.
+#ifdef ESIA_FX_STORAGE_TEXTURE
+#define FX_AT int2
+FX_AT FxAt(uint instance)
+{
+    const uint perRow = max((uint)gConv.z, 1u);
+    return int2((int)((instance % perRow) * 24u), (int)(instance / perRow));
+}
+FX_AT FxAtNext(FX_AT at)
+{
+    at.x += 24;
+    if (at.x >= (int)(max((uint)gConv.z, 1u) * 24u))
+        at = int2(0, at.y + 1);
+    return at;
+}
+float4 FxFetchAt(FX_AT at, uint field) { return ESIA_LOAD(gFxData, int2(at.x + (int)field, at.y)); }
+#else
+#define FX_AT uint
+FX_AT FxAt(uint instance) { return instance * 24u; }
+FX_AT FxAtNext(FX_AT at) { return at + 24u; }
+float4 FxFetchAt(FX_AT at, uint field) { return gFxData[at + field]; }
+#endif
+#endif
+
 // ------------------------------------------------------------------ light ----
 // The UI light (RenderParams::light, in the Draw constants): gDrawInfo.yz its point (UI units) or direction, gDrawInfo.w
 // 0 none, 1 a direction, 1 + its height above the screen a point.
@@ -411,9 +443,122 @@ void PathEdge(float2 p, float2 a, float2 b, inout float best, inout float2 bestV
         side = -side;
 }
 
+#ifdef ESIA_PATH_QUARTERS
+// ---- an open path's distance over the quarters of its points that can hold the nearest edge (SdPathOpen)
+// fx::kPathQuarterRow, kPathBoundsRow, kPathBeforeRow: a data instance's rows beside its points
+#define PATH_QUARTER_ROW 16u
+#define PATH_BOUNDS_ROW  20u
+#define PATH_BEFORE_ROW  21u
+
+// how far `p` lies from the box (min.xy, max.xy), squared
+float PathBoxDistance2(float2 p, float4 box)
+{
+    const float2 d = max(max(box.xy - p, p - box.zw), 0.0);
+    return dot(d, d);
+}
+
+// Whether the box lies surely farther from `p` than the nearest edge so far (`best`, squared): no edge in it can come
+// nearer, nor as near. The margin - 1/32 unit, more far from the origin and at long distances - is far above the
+// rounding of the distances (a few units in the last place of the coordinates).
+bool PathBeyond(float2 p, float4 box, float best)
+{
+    const float reach = sqrt(best) * (1.0 + 1.0 / 262144.0) + 0.03125 + (abs(p.x) + abs(p.y)) * (1.0 / 262144.0);
+    return PathBoxDistance2(p, box) > reach * reach;
+}
+
+// The edge a -> b for the point p as PathEdge takes it - the same arithmetic - without the even-odd side an open path
+// does not read; `at` the edge's place on the path breaks ties, so that the first edge of the least distance wins, as
+// when every edge is taken in turn
+void PathEdgeAt(float2 p, float2 a, float2 b, uint at, inout float best, inout float2 bestV, inout uint bestAt)
+{
+    const float2 e = b - a, w = p - a;
+    const float2 v = w - e * saturate(dot(w, e) / max(dot(e, e), 1e-12));
+    const float dd = dot(v, v);
+    if (dd < best || (dd == best && at < bestAt))
+    {
+        best = dd;
+        bestV = v;
+        bestAt = at;
+    }
+}
+
+// The edges of the path's data instance `j` (at `at`) in the quarters not beyond the nearest edge so far
+void PathQuarters(float2 p, FX_AT at, uint j, uint n, inout float best, inout float2 bestV, inout uint bestAt)
+{
+    const uint first = j * 32u;
+    const uint count = min(n - first, 32u);
+    const float4 before01 = FxFetchAt(at, PATH_BEFORE_ROW), before23 = FxFetchAt(at, PATH_BEFORE_ROW + 1u);
+    [loop] for (uint q = 0u; q * 8u < count; ++q)
+    {
+        if (PathBeyond(p, FxFetchAt(at, PATH_QUARTER_ROW + q), best))
+            continue;
+        const float4 pair = q < 2u ? before01 : before23;
+        float2 prev = (q & 1u) != 0u ? pair.zw : pair.xy;
+        const uint end = min(count, q * 8u + 8u);
+        [loop] for (uint i = q * 8u; i < end; i += 2u)
+        {
+            const float4 row = FxFetchAt(at, i >> 1u);
+            PathEdgeAt(p, row.xy, prev, first + i, best, bestV, bestAt);
+            prev = row.xy;
+            if (i + 1u < end)
+            {
+                PathEdgeAt(p, row.zw, prev, first + i + 1u, best, bestV, bestAt);
+                prev = row.zw;
+            }
+        }
+    }
+}
+
+// An open path's nearest edge (its squared distance `best`, the vector from it `bestV`): the data instance whose
+// bounds lie nearest first - its edges make the distance to beat small - then the others in turn, each passed over
+// when its bounds lie beyond the nearest edge so far, and within each the quarters beyond it. The same distance from
+// the same edge as when every edge is taken in turn.
+void PathNearestOpen(float2 p, FxInst I, inout float best, inout float2 bestV)
+{
+    const uint n = (uint)I.radii.z;
+    const uint datas = (n + 31u) >> 5u;
+    FX_AT at = FxAt(I.index + 1u);
+    FX_AT nearAt = at;
+    uint nearJ = 0u;
+    float nearD = 3.0e38;
+    [loop] for (uint j = 0u; j < datas; ++j)
+    {
+        const float dj = PathBoxDistance2(p, FxFetchAt(at, PATH_BOUNDS_ROW));
+        if (dj < nearD)
+        {
+            nearD = dj;
+            nearJ = j;
+            nearAt = at;
+        }
+        at = FxAtNext(at);
+    }
+    uint bestAt = 0xFFFFFFFFu;
+    PathQuarters(p, nearAt, nearJ, n, best, bestV, bestAt);
+    at = FxAt(I.index + 1u);
+    [loop] for (uint k = 0u; k < datas; ++k)
+    {
+        if (k != nearJ && !PathBeyond(p, FxFetchAt(at, PATH_BOUNDS_ROW), best))
+            PathQuarters(p, at, k, n, best, bestV, bestAt);
+        at = FxAtNext(at);
+    }
+}
+#endif
+
+#ifdef ESIA_SM3
+// SM3 takes every edge in turn: a quarter of a data instance whose point before is its own first point starts a stroke
+// of its own (Painter::Polylines) - no edge into it. `r` a quarter's first row (fx::kPathBeforeRow: rows 21 and 22).
+float2 PathBeforeOf(uint index, float r)
+{
+    const float block = floor(r / 16.0);
+    const float q = floor((r - block * 16.0) * 0.25);
+    const float4 pair = FxFetch(index + 1u + (uint)block, (uint)(21.0 + floor(q * 0.5)));
+    return q - 2.0 * floor(q * 0.5) > 0.5 ? pair.zw : pair.xy;
+}
+#endif
+
 // The exact distance to a path, negative inside a closed one, less radii.x (its rounding, or half a polyline's
 // thickness); `grad` its gradient (the outward normal on the outline). Loops of at most 128 rows inside one of at most
-// 16 blocks (fx::kPathMaxPoints): SM3 runs a loop 255 times at most.
+// 16 blocks (fx::kPathMaxPoints): SM3 runs a loop 255 times at most. An open path past SM3: SdPathOpen.
 float SdPath(float2 p, FxInst I, out float2 grad)
 {
     const float n = I.radii.z;
@@ -423,28 +568,43 @@ float SdPath(float2 p, FxInst I, out float2 grad)
     float best = 1e30;
     float2 bestV = float2(0.0, -1.0);
     float side = 1.0;
-    // a closed outline starts with the edge from its last point into its first; an open one with its first point
-    const float lastRow = floor((n - 1.0) * 0.5);
-    const float4 last = PathRow(I.index, lastRow);
-    float2 prev = (n - 1.0) - lastRow * 2.0 < 0.5 ? last.xy : last.zw;
-    if (open)
-        prev = PathRow(I.index, 0.0).xy;
-    [loop] for (float b = 0.0; b < 16.0; b += 1.0)
+#ifdef ESIA_PATH_QUARTERS
+    [branch] if (open)
+        PathNearestOpen(p, I, best, bestV);
+    else
+#endif
     {
-        if (b >= blocks)
-            break;
-        [loop] for (float k = 0.0; k < 128.0; k += 1.0)
+        // a closed outline starts with the edge from its last point into its first; an open one with its first point
+        const float lastRow = floor((n - 1.0) * 0.5);
+        const float4 last = PathRow(I.index, lastRow);
+        float2 prev = (n - 1.0) - lastRow * 2.0 < 0.5 ? last.xy : last.zw;
+        if (open)
+            prev = PathRow(I.index, 0.0).xy;
+        [loop] for (float b = 0.0; b < 16.0; b += 1.0)
         {
-            const float r = b * 128.0 + k;
-            if (r >= rows)
+            if (b >= blocks)
                 break;
-            const float4 row = PathRow(I.index, r);
-            PathEdge(p, row.xy, prev, best, bestV, side);
-            prev = row.xy;
-            if (2.0 * r + 1.0 < n)
+            [loop] for (float k = 0.0; k < 128.0; k += 1.0)
             {
-                PathEdge(p, row.zw, prev, best, bestV, side);
-                prev = row.zw;
+                const float r = b * 128.0 + k;
+                if (r >= rows)
+                    break;
+                const float4 row = PathRow(I.index, r);
+#ifdef ESIA_SM3
+                [branch] if (r - 4.0 * floor(r * 0.25) < 0.5)
+                {
+                    const float2 before = PathBeforeOf(I.index, r);
+                    if (before.x == row.x && before.y == row.y)
+                        prev = row.xy;
+                }
+#endif
+                PathEdge(p, row.xy, prev, best, bestV, side);
+                prev = row.xy;
+                if (2.0 * r + 1.0 < n)
+                {
+                    PathEdge(p, row.zw, prev, best, bestV, side);
+                    prev = row.zw;
+                }
             }
         }
     }
@@ -455,6 +615,13 @@ float SdPath(float2 p, FxInst I, out float2 grad)
     grad *= side;
     return side * d - I.radii.x;
 }
+
+#ifdef ESIA_SM3
+// SM3's full shader has no room for a third copy of a path's loop: the gradient the coverage measured at the pixel's
+// own place (FxPS's first ShapeSD) serves the glass's normal there (ShapeNormal) - the same numbers
+static float2 gPathGrad = float2(0.0, -1.0);
+static bool gPathGradKept = false;
+#endif
 
 float ShapeSD(float2 p, FxInst I)
 {
@@ -470,6 +637,13 @@ float ShapeSD(float2 p, FxInst I)
     {
         float2 g;
         d = SdPath(p, I, g);
+#ifdef ESIA_SM3
+        if (!gPathGradKept)
+        {
+            gPathGrad = g;
+            gPathGradKept = true;
+        }
+#endif
     }
     else if (kind == SHAPE_ARC)
     {
@@ -498,9 +672,13 @@ float2 ShapeNormal(float2 p, FxInst I)
     // a path knows its gradient: the direction from its nearest point (one pass over the points, not four)
     [branch] if (FX_HAS(I.flags.x, F_PATH))
     {
+#ifdef ESIA_SM3
+        return gPathGrad;
+#else
         float2 g;
         SdPath(p, I, g);
         return g;
+#endif
     }
     const float e = 0.5;
     float2 g;

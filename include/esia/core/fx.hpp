@@ -79,6 +79,11 @@ namespace esia::fx
     constexpr std::uint32_t kPathPointsPerData = 32;
     // The most points one path carries (Painter thins longer outlines out).
     constexpr std::uint32_t kPathMaxPoints = 4096;
+    // Beside its points (rows 0 .. kPathPointsPerData / 2 - 1) a data instance holds what lets an open path's distance
+    // pass over points that cannot be the nearest (esia_fx.hlsl, SdPathOpen): rows kPathQuarterRow .. + 3 the bounds
+    // of its quarters (kPathPointsPerData / 4 points each) with the point before each quarter - its first edge's other
+    // end - row kPathBoundsRow the bounds of all four, rows kPathBeforeRow and + 1 those points before (two to a row).
+    constexpr std::uint32_t kPathQuarterRow = 16, kPathBoundsRow = 20, kPathBeforeRow = 21;
     enum class PaintKind : std::uint32_t { Solid = 0, Linear = 1, Radial = 2, Conic = 3, Spectrum = 4 };
 
     struct Instance
@@ -111,14 +116,24 @@ namespace esia::fx
     static_assert(sizeof(Instance) == 24 * 16, "fx::Instance must stay 24 float4");
     constexpr std::uint32_t kInstanceVec4Count = 24;
 
-    // Glow layer: everything drawn between LayerBegin / LayerEnd gets a bloom halo.
+    // A layer: everything drawn between LayerBegin / LayerEnd goes to an offscreen target first and is then composed
+    // onto the target - with a bloom halo (Glow), or blurred (Blur).
+    enum class LayerKind : std::uint32_t
+    {
+        Glow,   // the content and a bloom halo around it
+        Blur,   // the content blurred - a gaussian, as CSS's filter: blur() - and faded as one
+    };
     struct LayerParams
     {
-        float color[4];    // glow tint rgb, a = tint amount (0 keeps content colors)
-        float intensity;   // bloom gain
-        float radius;      // bloom radius (UI units)
-        float opacity;     // opacity of the sharp content
-        float reserved;
+        float color[4];    // Glow: tint rgb, a = tint amount (0 keeps content colors)
+        float intensity;   // Glow: bloom gain
+        float radius;      // Glow: bloom radius. Blur: the gaussian's standard deviation. UI units
+        float opacity;     // Glow: the sharp content's opacity. Blur: the whole layer's
+        LayerKind kind = LayerKind::Glow;
+        // Blur: a rounded mask the result is drawn inside (the one its shapes have; maskRadius < 0: none), UI units
+        float mask[4];
+        float maskRadius = -1.0f;
+        float maskSmoothing;
     };
 
     // Edge fade (scroll views): alpha falls to 0 over `top` / `bottom` towards the edges y0 / y1 (UI units).

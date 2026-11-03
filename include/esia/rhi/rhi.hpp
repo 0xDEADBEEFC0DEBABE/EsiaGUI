@@ -151,6 +151,7 @@ namespace esia::rhi
         QuadShapeGray,    // QuadShapeVS + QuadGrayPS
         QuadShapeLcd,     // QuadShapeVS + QuadLcdPS (BlendMode::DualSourceLcd)
         QuadShapeLcdGray, // QuadShapeVS + QuadLcdGrayPS
+        BlurComposite,    // FullscreenVS + BlurCompositePS: blur layer onto the target (Painter::BeginBlurLayer)
         Count
     };
     ESIA_API const char* ShaderProgramName(ShaderProgram p);

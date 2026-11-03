@@ -500,7 +500,7 @@ namespace esia::rhi
         // Metal / GL would read whatever an earlier draw left.
         const bool ui = UsesUiVertices(p.program) || DrawsInstances(p.program);
         const bool fx = p.program == ShaderProgram::Fx;
-        const bool composite = p.program == ShaderProgram::LayerComposite;
+        const bool composite = p.program == ShaderProgram::LayerComposite || p.program == ShaderProgram::BlurComposite;
         const bool hdr = p.program == ShaderProgram::HdrDecode || p.program == ShaderProgram::HdrEncode;
         const bool usesPass = p.program == ShaderProgram::Downsample || composite || hdr;
         if (!constantsSet_[(int)ConstantSlot::Frame])

@@ -42,6 +42,22 @@ screenshots.
 multi-line editor and docking, with the `workbench` example; the X11 frame as a library; Android with OpenGL ES and
 Vulkan; COLR color emoji; scrolling by touch from any item.
 
+**Blur layers** (2026-11-03, in Esia): `Painter::BeginBlurLayer` / `EndBlurLayer` draw a group blurred - CSS's
+`filter: blur()` and `opacity` on it - for blur-in and fade-in animations: color and coverage blurred alike, nothing
+added, the gaussian growing from the plain drawing without a step. Every other image of every backend byte for byte as
+before.
+
+**Several strokes as one shape** (2026-10-31, in Esia): `Painter::Polylines` draws strokes that cross or touch - a
+handwriting's crossed t, a capital's bar running on into its stem - as one surface: one glass, one shadow, one glow,
+where shapes drawn one after another lie over each other, rim over rim. Every other image of every backend byte for
+byte as before.
+
+**Open paths take only the points that can be nearest** (2026-10-31, in Esia): the distance to a long polyline in glass,
+with a shadow or a glow - a handwritten title of 650 points, every pixel of its strokes' quads measuring every point
+twice - passes over the quarters of its points too far to hold the nearest edge, with the same distance from the same
+edge: the intro title's glass 0.305 -> 0.091 ms a frame on an RTX 4080 SUPER, and on a 2008 GPU an estimated 63 - 78 ->
+6 - 11 ms. Every image of every backend byte for byte as before.
+
 **Draw memos: widgets at rest draw nothing** (2026-10-30): a widget whose drawing has nothing new to draw from - its
 rect, state, colors, label, the theme, the style - appends last frame's drawing again, byte for byte what drawing it
 makes; texts measured again the same way are not looked up. Flat plain widgets at last more than 20 % under Dear
@@ -177,6 +193,9 @@ shared their scroll state, menus too long for the display or creeping by a fract
 window, the wheel changing areas halfway, a field pushing the button after it out of view, a selection that stayed
 on a row index.
 
+* [Blur layers](#blur-layers)
+* [Several strokes as one shape](#several-strokes-as-one-shape)
+* [Open paths take only the points that can be nearest](#open-paths-take-only-the-points-that-can-be-nearest)
 * [Draw memos: widgets at rest draw nothing](#draw-memos-widgets-at-rest-draw-nothing)
 * [Draw lists recorded and appended again](#draw-lists-recorded-and-appended-again)
 * [Glass shading cost](#glass-shading-cost)
@@ -223,6 +242,127 @@ on a row index.
 * [7. Building and testing](#7-building-and-testing)
 * [8. Round 1: the core](#8-round-1-the-core)
 * [9. Next](#9-next)
+
+## Blur layers
+
+UIs bring content in from a blur (React Bits' Blur Text, Fade Content). The layers Esia had bloom: their composite adds
+light and keeps the sharp content's coverage, so on a light background the halo all but vanishes and the content itself
+never blurs. Glass blurs only what lies behind it (2026-11-03).
+
+### What changed
+
+* `Painter::BeginBlurLayer(radius, opacity)` / `EndBlurLayer()` on the glow layers' offscreen layer and pyramid
+  (`fx::LayerParams::kind`: Glow or Blur). `radius` is the gaussian's standard deviation (UI units at the metrics scale,
+  under the scales pushed), `opacity` the group's. Radius 0 at opacity 1 makes no layer: a blur-in ends on exactly the
+  plain drawing. A layer begun inside another draws into the outer one.
+* `BlurComposite` (`BlurCompositePS`): the two pyramid levels around the standard deviation, mixed so that their
+  variance is the gaussian's. Each level's own was measured by running the 13-tap downsamples and the B-spline read on
+  an impulse (1.756, 3.753, 7.621, 15.3, 30.628 px, the same at every phase); level 0 is the sharp layer. Then the
+  opacity and the rounded mask pushed at Begin.
+* Planning: the region reaches 3 standard deviations + 8 px past the content, and the result stays inside the union of
+  the clips of what the layer holds. Content is clipped and masked as it is drawn, before the blur.
+* A device without `BlurComposite` draws a blur layer's content straight onto the target
+  (`RenderStats::directBlurLayers`); `RenderStats::blurLayers` counts the composed ones.
+
+### Verified
+
+* Byte for byte: the existing scenes on Direct3D 9, 10, 11, 12, OpenGL and Vulkan (245 images) against the build
+  before. New scenes `blur_layer` (no blur to a wide one, a faded one, dark and light), `blur_layer_clip` (a clip, a
+  rounded mask, a scale, a scrolled view's rows under an edge fade, blurred text over glass) and `blur_layer_zero` (next
+  to no blur in a layer: within 1/255 of `blur_layer_plain`, the same content drawn plainly, on GPUs; 2/255 on
+  llvmpipe and lavapipe, whose 8-bit blending rounds a few pixels further). Goldens from Direct3D 11; the four
+  Direct3D backends within 1/255 of each other, OpenGL and Vulkan within 3/255.
+* `Painter.BlurLayers`, `FramePlan.BlurLayersReachTheirGaussianInsideTheirClip`, `Renderer.BlurLayer` (the fallback
+  included). MSVC `/W4 /WX`, the GNU flags on the changed files.
+
+### Not done
+
+* Glass drawn inside a layer (blur or glow) refracts what lies behind the layer on the target, not what the layer drew
+  under it: a glass panel over content in the same layer shows its tint over what is behind the layer, and changes when
+  the layer ends (radius 0: no layer). Draw the glass's backdrop outside the layer, or the glass outside and only what
+  lies on it inside. Glass in a layer could capture the layer's content composed over the target instead (found by a
+  client's blur-in of a whole glass panel, 2026-11-03).
+
+## Several strokes as one shape
+
+Strokes drawn one after another each have their own glass: where they cross, the one drawn later lies over the first
+with its own rim, bevel and shadow - two panes, not one surface (a handwriting's t and x, the bar of an H over its stems;
+2026-10-31). Glass that touches should melt together, as one piece.
+
+### What changed
+
+* `Painter::Polylines(points, strokeStart, strokes, thickness, style, flags)`: the strokes as one FX path. Each
+  stroke's path is the one `Polyline` builds; each starts on a quarter of a data instance of its own - the stroke
+  before ends in its last point repeated up to it (edges of no length: its round end as before) - and that quarter's
+  point before (`fx::kPathBeforeRow`) is its own first point, so no edge joins it to the stroke before. A stroke of one
+  point is a dot. Plain colors, and more than `fx::kPathMaxPoints` points in all: `Polyline` each.
+* Past shader model 3 the distance reads the quarters' points before as it did (`PathNearestOpen`). Shader model 3 takes
+  every edge in turn and starts a stroke afresh where a quarter's point before is its own first point (`PathBeforeOf`);
+  to keep its full shader within 4096 instruction slots, the glass's normal of a path there is the gradient its
+  coverage measured at the same pixel (`ShapeNormal`): the same numbers, one loop over the points fewer.
+
+### Verified
+
+* Byte for byte: the conformance suite's 39 scenes on Direct3D 9, 10, 11, 12, OpenGL, GLES and Vulkan (272 images)
+  against the build before, both with the shader library made by the same tools; new scenes `path_strokes` (a t, an x,
+  a loop with a line and a dot, a star with a glow, a lattice of 11 x 3 strokes, joined loops of handwriting) and
+  `path_stroke_rows` (the same, two instances to a row of the instance texture).
+* `Painter.PolylinesAreOneShape`: the path's points, the quarters' points before and bounds; plain colors a polyline
+  each. ctest 44 / 44 (clang-cl, every backend), MSVC `/W4 /WX`, the GNU flags on the changed files.
+
+### Not done
+
+* The shader library (`src/esia/shaders/generated`) is the Shaders workflow's to regenerate before a push.
+
+## Open paths take only the points that can be nearest
+
+An FX path's pixel measures its distance to every edge of the path (SdPath), twice for a shape with a shadow or glass
+(its coverage, then the shadow or the surface's normal), over the whole quad of the path - its bounds grown by the
+shadow's reach. A handwritten title in glass (Cipher's intro: three strokes of 181 - 265 points, 218 000 pixels of
+quads at 1080p) is 95 million edge distances a frame, 5.4 billion operations: 0.3 ms on an RTX 4080 SUPER, an estimated
+63 - 78 ms on a GeForce 9600 GT (64 shader cores at 1625 MHz, Direct3D 10; 2026-10-31).
+
+### What changed
+
+* A path's data instances hold, beside their 32 points, the bounds of each quarter of them (8 points) with the point
+  before it - all of the quarter's edges lie inside - the bounds of all four, and those points before
+  (`fx::kPathQuarterRow`, `kPathBoundsRow`, `kPathBeforeRow`: rows 16 - 22, which a data instance left empty). Painter
+  writes them for every path.
+* `SdPath` of an open path (`PathNearestOpen`): the data instance whose bounds lie nearest first - its edges make the
+  distance to beat small - then the others in turn, each passed over when its bounds lie farther than the nearest edge
+  so far, and within each the quarters that do. The margin (1/32 unit, more far from the origin and at long distances)
+  is far above the rounding of the distances, so no edge passed over could have come nearer, nor as near; an edge's place
+  breaks ties, so the edge chosen is the first of the least distance, as when every edge is taken in turn. A run of
+  instances is read from its first texel or row on (`FxAt` / `FxAtNext` / `FxFetchAt`: no division per row where the
+  instances are a texture); the edges skip the even-odd side an open path does not read.
+* Closed paths (their side needs every edge) and shader model 3 (whose full shader has no instruction slots to spare)
+  take every edge as before.
+
+### Verified
+
+* Byte for byte: the conformance suite's 39 scenes on Direct3D 9, 10, 11, 12, OpenGL, GLES and Vulkan (272 images)
+  against the build before, both with the shader library made by the same tools; a new scene, `path_lines` (a line of
+  joined loops, a figure crossing itself, a 600-point zigzag, a spiral, 31 / 32 / 33 points, repeated points, in glass
+  with shadows and glows) and `path_line_rows` (the same across rows of the instance texture). Cipher's intro title on
+  Direct3D 10, 11, 12, Vulkan and OpenGL, written, being written and being unwritten: no pixel differs.
+* `Painter.PathDataBoundsItsQuarters`: the quarters' bounds and points before, open and closed. ctest 44 / 44
+  (clang-cl, every backend), MSVC `/W4 /WX`, the GNU flags on the changed files.
+
+### Measured
+
+Cipher's intro title alone (`CIPHER_LOOK_NO_CHROME`), Direct3D 10, 1920 x 1080, RTX 4080 SUPER: the glass category
+0.305 -> 0.091 ms, the frame's GPU time 0.40 - 0.44 -> 0.185 ms. With every edge taken, the glass time was linear in the
+points (half of them 0.236 ms, a quarter 0.162): the path loop 0.285 ms of 0.375. Counted for the title (two
+evaluations a pixel): 12 851 -> 1 088 operations and 110 -> 37 reads an evaluation. A GeForce 9600 GT (8 multiprocessors
+of 8 cores at 1625 MHz, 4 - 5 warps of these shaders each: 67 - 83 % of its 104 G operations a second) from those
+counts: the title 63 - 78 -> 6 - 11 ms.
+
+### Not done
+
+* Closed paths still take every edge: their even-odd side needs each crossing (a quarter's bounds could stand for its
+  crossings where a pixel's row misses them).
+* The shader library (`src/esia/shaders/generated`) is the Shaders workflow's to regenerate: the SPIR-V, GLSL and MSL
+  of the new code come from it before a push.
 
 ## Draw memos: widgets at rest draw nothing
 

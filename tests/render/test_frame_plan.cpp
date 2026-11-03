@@ -439,6 +439,33 @@ ESIA_TEST(FramePlan, GlowLayersAndTheirBounds)
     ESIA_CHECK(plan.ops.back().type == RenderOp::LayerEnd);
 }
 
+ESIA_TEST(FramePlan, BlurLayersReachTheirGaussianInsideTheirClip)
+{
+    DrawList dl;
+    dl.Reset(Rect(0, 0, 400, 300));
+    Painter p(dl, Fx(PainterEnv{2.0f, 0.6f, 1.0f, 1.0f, nullptr, nullptr}));   // metrics scale 2
+    p.PushClip(Rect(50, 50, 120, 200));
+    p.PushMask(Rect(60, 70, 240, 190), 10);
+    p.BeginBlurLayer(5.0f, 0.8f);
+    p.Rect(Rect(100, 100, 140, 120), Style().Fill(Color::White()));
+    p.EndBlurLayer();
+    p.PopMask();
+    p.PopClip();
+    FramePlan plan;
+    plan.Build(Data({&dl}, {400, 300}, {2, 2}), {});   // 2 render-target pixels a UI unit
+    ESIA_CHECK(plan.anyLayer && plan.ops.size() == 3);
+    const RenderOp& begin = plan.ops[0];
+    const RenderOp& end = plan.ops[2];
+    ESIA_CHECK(begin.type == RenderOp::LayerBegin && end.type == RenderOp::LayerEnd && end.layer.kind == fx::LayerKind::Blur);
+    ESIA_CHECK(end.blurPx == 20.0f && end.layer.opacity == 0.8f);   // 5 UI units, metrics scale 2, 2 pixels a unit
+    // as far as the gaussian reaches - 3 standard deviations - and the clip at its begin, in pixels
+    ESIA_CHECK(end.bounds == begin.bounds && end.bounds.Contains(plan.ops[1].bounds.Expand(20.0f * 3.0f)));
+    ESIA_CHECK(end.clip == (PxRect{100, 100, 240, 400}) && begin.clip == end.clip);
+    // the mask in pixels
+    ESIA_CHECK(end.layer.mask[0] == 120 && end.layer.mask[1] == 140 && end.layer.mask[2] == 480 && end.layer.mask[3] == 380);
+    ESIA_CHECK(end.layer.maskRadius == 20.0f && end.layer.maskSmoothing == 0.6f);
+}
+
 ESIA_TEST(FramePlan, EdgeFadesInPixelsAndNeverMixed)
 {
     DrawList dl;
