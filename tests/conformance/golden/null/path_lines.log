@@ -1,0 +1,248 @@
+create texture #1 320x240 RGBA8_UNORM usage=7 host-target
+begin frame 1
+create texture #2 320x240 RGBA8_UNORM usage=d backdrop-copy
+create texture #3 160x120 RGBA16_FLOAT usage=f pyramid-1
+create texture #4 80x60 RGBA16_FLOAT usage=f pyramid-2
+create texture #5 40x30 RGBA16_FLOAT usage=f pyramid-3
+create texture #6 20x15 RGBA16_FLOAT usage=f pyramid-4
+create texture #7 10x8 RGBA16_FLOAT usage=f pyramid-5
+create texture #8 320x240 RGBA16_FLOAT usage=3 glow-layer
+create texture #9 1x1 RGBA8_UNORM usage=1 white
+create buffer #10 vertex 73500 bytes
+create buffer #11 index 65304 bytes
+update buffer #10 49000 bytes
+update buffer #11 43536 bytes
+create buffer #12 fx 22560 bytes
+update buffer #12 15040 bytes
+pass #1 load ui
+create pipeline #13 Fx strip premul RGBA8_UNORM
+pipeline #13
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+texture t0 #9
+texture t1 #2
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+fx buffer #12
+constants draw: 0 0 0 0 | 0 0 0 0
+draw instanced 4 x 1
+create pipeline #14 QuadShapeImage strip straight RGBA8_UNORM
+pipeline #14
+draw instanced 4 x 2
+create pipeline #15 UiGeometry list straight RGBA8_UNORM
+pipeline #15
+vertex buffer #10
+index buffer #11
+draw indexed 48 from 0
+end pass
+copy #1 -> #2 at 0,0 [0,0 320x128]
+pass #3 dont-care pyramid
+create pipeline #16 Downsample list opaque RGBA16_FLOAT
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 160x120]
+constants pass: 0.003125 0.00416667 0 0 | 0.0015625 0.00208333 0.998438 0.997917
+texture t0 #1
+draw 3 from 0
+end pass
+pass #4 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 80x60]
+constants pass: 0.00625 0.00833333 0 0 | 0.003125 0.00416667 0.996875 0.995833
+texture t0 #3
+draw 3 from 0
+end pass
+pass #5 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 40x30]
+constants pass: 0.0125 0.0166667 0 0 | 0.00625 0.00833333 0.99375 0.991667
+texture t0 #4
+draw 3 from 0
+end pass
+pass #6 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 20x15]
+constants pass: 0.025 0.0333333 0 0 | 0.0125 0.0166667 0.9875 0.983333
+texture t0 #5
+draw 3 from 0
+end pass
+pass #1 load ui
+pipeline #13
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+texture t0 #9
+texture t1 #2
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+fx buffer #12
+constants draw: 0 0 0 0 | 1 0 0 0
+draw instanced 4 x 11
+constants draw: 0 0 0 0 | 12 0 0 0
+draw instanced 4 x 10
+end pass
+pass #8 dont-care glow-layer
+create pipeline #17 Clear list opaque RGBA16_FLOAT
+pipeline #17
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+draw 3 from 0
+create pipeline #18 UiGeometry list straight RGBA16_FLOAT
+pipeline #18
+texture t0 #9
+constants draw: 0 0 0 0 | 0 0 0 0
+vertex buffer #10
+index buffer #11
+draw indexed 10836 from 48
+end pass
+pass #3 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 160x120]
+constants pass: 0.003125 0.00416667 0 0 | 0.0015625 0.00208333 0.998438 0.997917
+texture t0 #8
+draw 3 from 0
+end pass
+pass #4 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 80x60]
+constants pass: 0.00625 0.00833333 0 0 | 0.003125 0.00416667 0.996875 0.995833
+texture t0 #3
+draw 3 from 0
+end pass
+pass #5 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 40x30]
+constants pass: 0.0125 0.0166667 0 0 | 0.00625 0.00833333 0.99375 0.991667
+texture t0 #4
+draw 3 from 0
+end pass
+pass #6 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 20x15]
+constants pass: 0.025 0.0333333 0 0 | 0.0125 0.0166667 0.9875 0.983333
+texture t0 #5
+draw 3 from 0
+end pass
+pass #1 load ui
+create pipeline #19 LayerComposite list premul RGBA8_UNORM
+pipeline #19
+scissor [0,85 320x93]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+constants pass: 0.25098 0.784314 0.878431 0 | 2.8 8 1 0
+texture t0 #8
+texture t1 #2
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+draw 3 from 0
+end pass
+pass #3 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [30,0 130x120]
+constants pass: 0.003125 0.00416667 0 0 | 0.201562 0.00208333 0.998438 0.997917
+texture t0 #1
+draw 3 from 0
+end pass
+pass #4 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [14,0 66x60]
+constants pass: 0.00625 0.00833333 0 0 | 0.190625 0.00416667 0.996875 0.995833
+texture t0 #3
+draw 3 from 0
+end pass
+pass #5 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [6,0 34x30]
+constants pass: 0.0125 0.0166667 0 0 | 0.18125 0.00833333 0.99375 0.991667
+texture t0 #4
+draw 3 from 0
+end pass
+pass #6 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [2,0 18x15]
+constants pass: 0.025 0.0333333 0 0 | 0.1625 0.0166667 0.9875 0.983333
+texture t0 #5
+draw 3 from 0
+end pass
+pass #1 load ui
+pipeline #13
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+texture t0 #9
+texture t1 #2
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+fx buffer #12
+constants draw: 0 0 0 0 | 22 0 0 0
+draw instanced 4 x 14
+end pass
+copy #1 -> #2 at 160,160 [160,160 64x80]
+pass #3 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,14 160x106]
+constants pass: 0.003125 0.00416667 0 0 | 0.0015625 0.135417 0.998438 0.997917
+texture t0 #1
+draw 3 from 0
+end pass
+pass #4 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,6 80x54]
+constants pass: 0.00625 0.00833333 0 0 | 0.003125 0.120833 0.996875 0.995833
+texture t0 #3
+draw 3 from 0
+end pass
+pass #5 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,2 40x28]
+constants pass: 0.0125 0.0166667 0 0 | 0.00625 0.108333 0.99375 0.991667
+texture t0 #4
+draw 3 from 0
+end pass
+pass #6 dont-care pyramid
+pipeline #16
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+scissor [0,0 20x15]
+constants pass: 0.025 0.0333333 0 0 | 0.0125 0.0833333 0.9875 0.983333
+texture t0 #5
+draw 3 from 0
+end pass
+pass #1 load ui
+pipeline #13
+scissor [0,0 320x240]
+constants frame: 0.00625 -0.00833333 -1 1 | 320 240 0.003125 0.00416667 | 0 0 1 1 | 1.25 0.0166667 1 0 | 320 240 0.003125 0.00416667 | 160 120 0.00625 0.00833333 | 80 60 0.0125 0.0166667 | 40 30 0.025 0.0333333 | 20 15 0.05 0.0666667 | 10 8 0.1 0.125 | 1.8 0.5 0.5 1 | 0 0 0 936
+texture t0 #9
+texture t1 #2
+texture t2 #3
+texture t3 #4
+texture t4 #5
+texture t5 #6
+texture t6 #7
+fx buffer #12
+constants draw: 0 0 0 0 | 36 0 0 0
+draw instanced 4 x 3
+end pass
+end frame

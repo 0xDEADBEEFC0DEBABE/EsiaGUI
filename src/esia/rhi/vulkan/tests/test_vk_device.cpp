@@ -72,7 +72,8 @@ namespace
         d.layout = UsesUiVertices(p) ? VertexLayout::UiVertex : VertexLayout::None;
         d.topology = DrawsInstances(p) ? Topology::TriangleStrip : Topology::TriangleList;
         d.blend = DualSourceProgram(p)                                              ? BlendMode::DualSourceLcd
-                  : p == ShaderProgram::Fx || p == ShaderProgram::LayerComposite    ? BlendMode::Premultiplied
+                  : p == ShaderProgram::Fx || p == ShaderProgram::LayerComposite ||
+                            p == ShaderProgram::BlurComposite                       ? BlendMode::Premultiplied
                   : p == ShaderProgram::Downsample || p == ShaderProgram::Clear     ? BlendMode::Opaque
                                                                                     : BlendMode::Straight;
         d.targetFormat = format;

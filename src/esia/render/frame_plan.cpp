@@ -181,11 +181,14 @@ namespace esia::render
         {
             RenderOp o;
             o.type = RenderOp::LayerEnd;
-            o.layer = ops[(std::size_t)begin].layer;
-            // the halo extends beyond the content
-            ops[(std::size_t)begin].bounds = ops[(std::size_t)begin].bounds.Expand(ops[(std::size_t)begin].layer.radius * scale * 2.5f + 8.0f);
-            o.bounds = ops[(std::size_t)begin].bounds;
-            o.blurPx = ops[(std::size_t)begin].layer.radius * scale;
+            RenderOp& b = ops[(std::size_t)begin];
+            o.layer = b.layer;
+            o.clip = b.clip;
+            // the halo extends beyond the content; a blur as far as the gaussian reaches (3 standard deviations)
+            const float px = b.layer.radius * scale;
+            b.bounds = b.bounds.Expand(b.layer.kind == fx::LayerKind::Blur ? px * 3.0f + 8.0f : px * 2.5f + 8.0f);
+            o.bounds = b.bounds;
+            o.blurPx = px;
             ops.push_back(o);
         }
 
@@ -261,9 +264,16 @@ namespace esia::render
         const Mapper map{dd.displayPos, dd.framebufferScale};
 
         std::vector<int>& layerStack = layerStack_;   // kept from frame to frame, as every buffer here: no allocation
-        auto addToLayers = [&](const PxRect& b) {
+        // what the open layers hold: its bounds, and the clip it is drawn in - a blur layer's result stays inside the clips
+        // of what it holds (a control's unclipped shadow among them is not cut while it is blurred)
+        auto addToLayers = [&](const PxRect& b, const PxRect& clip) {
             for (int li : layerStack)
-                ops[(std::size_t)li].bounds = ops[(std::size_t)li].bounds.Union(b);
+            {
+                RenderOp& l = ops[(std::size_t)li];
+                l.bounds = l.bounds.Union(b);
+                if (l.layer.kind == fx::LayerKind::Blur && !b.Empty())
+                    l.clip = l.clip.Union(clip);
+            }
         };
 
         // What each op draws is a chain of pieces (runs of instances or indices), laid out op by op at the end: a
@@ -472,7 +482,7 @@ namespace esia::render
                         link(k, Piece{&in, nullptr, 1 + data, 0, kNoPiece});
                         touch(k, jr);
                         fxCount += 1 + (int)data;
-                        addToLayers(b);
+                        addToLayers(b, clip);
                         ii += data;
                     }
                     break;
@@ -494,6 +504,15 @@ namespace esia::render
                     RenderOp o;
                     o.type = RenderOp::LayerBegin;
                     o.layer = dl->Layers()[cmd.payload];
+                    if (o.layer.kind == fx::LayerKind::Blur && o.layer.maskRadius >= 0.0f)
+                    {
+                        const PxRect m = map(o.layer.mask[0], o.layer.mask[1], o.layer.mask[2], o.layer.mask[3]);
+                        o.layer.mask[0] = m.x0;
+                        o.layer.mask[1] = m.y0;
+                        o.layer.mask[2] = m.x1;
+                        o.layer.mask[3] = m.y1;
+                        o.layer.maskRadius *= map.scale.x;
+                    }
                     ops.push_back(o);
                     layerStack.push_back((int)ops.size() - 1);
                     anyLayer = true;
@@ -506,7 +525,7 @@ namespace esia::render
                         const int begin = layerStack.back();
                         layerStack.pop_back();
                         CloseLayer(ops, begin, map.scale.x);
-                        addToLayers(ops.back().bounds);
+                        addToLayers(ops.back().bounds, PxRect{});   // its content's clips are in the outer layers already
                         barrier = (int)ops.size();
                     }
                     break;
@@ -578,7 +597,7 @@ namespace esia::render
                     pc.next = kNoPiece;
                     link(k, pc);
                     touch(k, o.bounds);
-                    addToLayers(o.bounds);
+                    addToLayers(o.bounds, clip);
                     break;
                 }
                 case DrawCmdKind::Geometry:
@@ -620,7 +639,7 @@ namespace esia::render
                     }
                     link(k, Piece{nullptr, dl->Indices().data() + cmd.first, cmd.count, vtxBase, kNoPiece, idxBase + cmd.first});
                     touch(k, o.bounds);
-                    addToLayers(o.bounds);
+                    addToLayers(o.bounds, clip);
                     break;
                 }
                 }

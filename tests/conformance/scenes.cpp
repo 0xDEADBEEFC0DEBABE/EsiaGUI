@@ -312,6 +312,139 @@ namespace esia::conformance
             p.Sector(Vec2(282, 200), 16, 38, kPi, kPi * 0.75f, Style().Radius(4).Glass(sector), 2.0f);
         }
 
+        // Open paths of many points - a line of joined loops (a handwriting's rhythm), a figure crossing itself, a
+        // dense zigzag past 256 points, a spiral, lines of 31, 32 and 33 points and one with points repeated - in glass
+        // with shadows, glows and filled with a shadow: every pixel's nearest edge among hundreds
+        void PathLines(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            Wallpaper(p, dl, Rect(0, 0, 320, 240));
+            std::vector<Vec2> pts;
+            GlassMaterial tube = Glass(0.5f, 16.0f, 3.0f);
+            tube.dispersion = 0.9f;
+            tube.specular = 1.0f;
+            tube.tint = Color(1, 1, 1, 0.16f);
+            tube.rim = Color::White(0.85f);
+            const Style glass = Style().Glass(tube).Shadow(Color::Black(0.35f), 8, Vec2(0, 4));
+            // joined loops, left to right: 300 points
+            for (int i = 0; i < 300; ++i)
+            {
+                const float t = (float)i / 299.0f;
+                pts.push_back(Vec2(16.0f + 170.0f * t + 9.0f * std::sin(t * 41.0f), 44.0f - 17.0f * std::cos(t * 41.0f) + 5.0f * std::sin(t * 6.3f)));
+            }
+            p.Polyline(pts.data(), (int)pts.size(), 6.5f, glass);
+            // a figure crossing itself (3 : 2), 257 points
+            pts.clear();
+            for (int i = 0; i < 257; ++i)
+            {
+                const float t = (float)i / 256.0f * 2.0f * kPi;
+                pts.push_back(Vec2(258.5f + 46.0f * std::sin(3.0f * t + 0.4f), 62.25f + 44.0f * std::sin(2.0f * t)));
+            }
+            p.Polyline(pts.data(), (int)pts.size(), 4.0f, Style().Glass(Glass(2, 10, 2)).Shadow(Color::Black(0.4f), 10, Vec2(2, 5)));
+            // a dense zigzag: 600 points
+            pts.clear();
+            for (int i = 0; i < 600; ++i)
+                pts.push_back(Vec2(14.0f + 0.48f * (float)i, 132.0f + ((i & 1) ? 9.0f : -9.0f) + 6.0f * std::sin((float)i * 0.05f)));
+            p.Polyline(pts.data(), (int)pts.size(), 1.5f, Style().Fill(kTeal.WithAlpha(0.7f)).Glow(kTeal, 8, 0.7f));
+            // a spiral in from its outside: 180 points
+            pts.clear();
+            for (int i = 0; i < 180; ++i)
+            {
+                const float t = (float)i / 179.0f, a = t * 5.0f * 2.0f * kPi, r = 42.0f * (1.0f - 0.85f * t);
+                pts.push_back(Vec2(270.0f + r * std::cos(a), 190.0f + r * std::sin(a)));
+            }
+            p.Polyline(pts.data(), (int)pts.size(), 3.0f, Style().Glass(Glass(4, 12, 2)).Glow(kBlue, 10, 0.6f));
+            // 31, 32 and 33 points: one data instance, a full one, one more
+            for (int k = 0; k < 3; ++k)
+            {
+                pts.clear();
+                const int n = 31 + k;
+                for (int i = 0; i < n; ++i)
+                {
+                    const float t = (float)i / (float)(n - 1);
+                    pts.push_back(Vec2(18.0f + 52.0f * (float)k + 44.0f * t, 172.0f + 22.0f * std::sin(t * 9.0f) + 6.0f * t));
+                }
+                p.Polyline(pts.data(), n, 4.0f, Style().Fill(kOrange.WithAlpha(0.85f)).Shadow(Color::Black(0.45f), 6, Vec2(1, 3)));
+            }
+            // points repeated (edges of no length) and turning back on itself
+            pts.clear();
+            for (int i = 0; i < 70; ++i)
+            {
+                const float t = (float)(i / 2) / 34.0f;
+                pts.push_back(Vec2(176.0f + 40.0f * t + ((i % 7) == 3 ? -12.0f : 0.0f), 214.0f - 18.0f * std::sin(t * 7.0f)));
+            }
+            p.Polyline(pts.data(), (int)pts.size(), 5.0f, Style().Glass(Glass(1, 8, 2.5f)).Shadow(Color::Black(0.3f), 8, Vec2(0, 4)));
+        }
+
+        // Strokes crossing as one shape (Painter::Polylines): a t, an x, a loop through a line, three strokes through one
+        // point, a dot beside a line, a lattice of short strokes over many data instances - in glass with a shadow, with a
+        // glow, filled with a shadow: one surface where they cross, no edge from a stroke to the next
+        void PathStrokes(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            Wallpaper(p, dl, Rect(0, 0, 320, 240));
+            std::vector<Vec2> pts;
+            std::vector<int> starts;
+            const auto stroke = [&](std::initializer_list<Vec2> s) {
+                starts.push_back((int)pts.size());
+                pts.insert(pts.end(), s.begin(), s.end());
+            };
+            const auto draw = [&](float width, const Style& s) {
+                starts.push_back((int)pts.size());
+                p.Polylines(pts.data(), starts.data(), (int)starts.size() - 1, width, s);
+                pts.clear();
+                starts.clear();
+            };
+            GlassMaterial tube = Glass(0.5f, 14.0f, 3.0f);
+            tube.dispersion = 0.8f;
+            tube.tint = Color(1, 1, 1, 0.16f);
+            const Style glass = Style().Glass(tube).Shadow(Color::Black(0.35f), 8, Vec2(0, 4));
+            // a t: a stem with a turn at its foot, its cross-bar
+            stroke({Vec2(40, 14), Vec2(37, 50), Vec2(36, 70), Vec2(44, 78), Vec2(56, 72)});
+            stroke({Vec2(22, 38), Vec2(40, 36.5f), Vec2(58, 38)});
+            draw(7.0f, glass);
+            // an x
+            stroke({Vec2(76, 22), Vec2(96, 46), Vec2(118, 76)});
+            stroke({Vec2(118.5f, 21.5f), Vec2(97, 48), Vec2(74.25f, 77)});
+            draw(7.0f, glass);
+            // a loop through a line, and a dot beside it
+            for (int i = 0; i <= 40; ++i)
+            {
+                const float a = (float)i / 40.0f * 2.0f * kPi;
+                pts.push_back(Vec2(168.0f + 22.0f * std::cos(a) + 0.4f * (float)i, 48.0f + 22.0f * std::sin(a)));
+            }
+            starts.push_back(0);
+            stroke({Vec2(134, 64), Vec2(170, 46), Vec2(214, 30)});
+            stroke({Vec2(214, 66)});
+            draw(6.0f, glass);
+            // three strokes through one point, glowing
+            stroke({Vec2(250, 18), Vec2(274, 50), Vec2(296, 80)});
+            stroke({Vec2(298, 22), Vec2(274, 50), Vec2(248, 78)});
+            stroke({Vec2(240, 50), Vec2(274, 50), Vec2(308, 50)});
+            draw(5.0f, Style().Fill(kTeal.WithAlpha(0.85f)).Glow(kTeal, 10, 0.7f));
+            // a lattice of short strokes, 11 x 3 of them, over many data instances: filled, with a shadow
+            for (int j = 0; j < 3; ++j)
+                for (int i = 0; i < 11; ++i)
+                {
+                    const float x = 18.0f + 26.0f * (float)i + 3.0f * (float)j, y = 112.0f + 24.0f * (float)j;
+                    stroke({Vec2(x, y), Vec2(x + 12.0f, y + 10.0f), Vec2(x + 26.0f, y + 6.0f)});
+                    stroke({Vec2(x + 20.0f, y - 6.0f), Vec2(x + 10.0f, y + 16.0f)});
+                }
+            draw(4.0f, Style().Fill(kOrange.WithAlpha(0.9f)).Shadow(Color::Black(0.5f), 6, Vec2(1, 3)));
+            // handwriting's crossings in glass over light: a loop of a letter over the next one's stem
+            for (int i = 0; i <= 60; ++i)
+            {
+                const float t = (float)i / 60.0f;
+                pts.push_back(Vec2(30.0f + 120.0f * t + 14.0f * std::sin(t * 25.0f), 205.0f - 18.0f * std::cos(t * 25.0f)));
+            }
+            starts.push_back(0);
+            stroke({Vec2(60, 180), Vec2(150, 196), Vec2(176, 214)});
+            stroke({Vec2(120, 222), Vec2(126, 176)});
+            draw(5.0f, Style().Glass(Glass(1, 10, 2.5f)).Shadow(Color::Black(0.3f), 8, Vec2(0, 4)));
+        }
+
         void CountCallback(const DrawList&, const DrawCmd& cmd, void*) { ++*static_cast<int*>(cmd.userData); }
 
         // The glass scene with a host callback between the backdrop's content and the first glass: the pass the host
@@ -346,6 +479,126 @@ namespace esia::conformance
             p.EndGlowLayer();
             const Vec2 pts[6] = {Vec2(20, 200), Vec2(70, 150), Vec2(120, 190), Vec2(170, 140), Vec2(220, 185), Vec2(300, 145)};
             p.Polyline(pts, 6, 3.0f, Style().Fill(kGreen).Glow(kGreen, 10, 0.9f), PolylineFlags_Smooth);
+        }
+
+        // What blur layers blur: a card, a translucent circle over it, text and a line, in dark or light ink
+        void BlurContent(Painter& p, DrawList& dl, TextureId atlas, Vec2 o, bool light)
+        {
+            const Color ink = light ? Color::Black() : Color::White();
+            p.Rect(Rect(o.x, o.y, o.x + 70, o.y + 40), Style().Fill(light ? kOrange : kBlue).Radius(10));
+            const Color c = light ? kTeal : kPink;
+            p.Circle(Vec2(o.x + 70, o.y + 12), 14, Style().Fill(Color(c.r, c.g, c.b, 0.7f)));
+            Glyphs(dl, atlas, Vec2(o.x + 8, o.y + 9), "abcd", 22, ink);
+            p.Line(Vec2(o.x + 96, o.y + 6), Vec2(o.x + 130, o.y + 38), 3, Style().Fill(ink));
+        }
+
+        // Blur layers (CSS's filter: blur() on a group) from no blur to a wide one, and a faded one, on dark and light
+        void BlurLayers(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            const TextureId atlas = MakeAtlas(f.textures);
+            p.Rect(Rect(0, 0, 160, 240), Style().Fill(Color::Hex(0x1C1C1E)));
+            p.Rect(Rect(160, 0, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
+            const float radius[4] = {0.0f, 2.0f, 5.0f, 10.0f};
+            const float opacity[4] = {1.0f, 1.0f, 1.0f, 0.6f};
+            for (int col = 0; col < 2; ++col)
+                for (int row = 0; row < 4; ++row)
+                {
+                    p.BeginBlurLayer(radius[row], opacity[row]);
+                    BlurContent(p, dl, atlas, Vec2(12.0f + 160.0f * (float)col, 10.0f + 58.0f * (float)row), col == 1);
+                    p.EndBlurLayer();
+                }
+        }
+
+        // Blur layers where a clip, a rounded mask and a scale are, rows of a scrolled view under an edge fade (a layer
+        // each), and blurred text over glass
+        void BlurLayersClipped(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            const TextureId atlas = MakeAtlas(f.textures);
+            p.Rect(Rect(0, 0, 320, 240), Style().Fill(Paint::Linear(Color::Hex(0x2C2C2E), Color::Hex(0x636366), 90)));
+            // the clip cuts the content and its blur alike
+            p.PushClip(Rect(10, 10, 100, 110));
+            p.BeginBlurLayer(6);
+            p.Rect(Rect(30, 0, 120, 60), Style().Fill(kBlue).Radius(12));
+            Glyphs(dl, atlas, Vec2(20, 70), "abcd", 24, Color::White());
+            p.EndBlurLayer();
+            p.PopClip();
+            // the mask: rounded corners on the blurred result
+            p.PushMask(Rect(115, 10, 205, 110), 24);
+            p.BeginBlurLayer(6);
+            p.Rect(Rect(105, 30, 215, 90), Style().Fill(kOrange));
+            Glyphs(dl, atlas, Vec2(125, 45), "efgh", 24, Color::Black());
+            p.EndBlurLayer();
+            p.PopMask();
+            // under a scale: the content and its blur scaled together
+            p.PushScale(Vec2(265, 60), 1.4f);
+            p.BeginBlurLayer(3);
+            p.Rect(Rect(230, 35, 300, 85), Style().Fill(kPink).Radius(10));
+            Glyphs(dl, atlas, Vec2(238, 48), "ab", 22, Color::White());
+            p.EndBlurLayer();
+            p.PopScale();
+            // a scrolled view (rows cut at both edges) under an edge fade
+            const Rect view(10, 125, 150, 230);
+            p.PushClip(view);
+            p.BeginEdgeFade(view, 20, 20);
+            for (int i = 0; i < 5; ++i)
+            {
+                const float y = view.min.y - 12.0f + (float)i * 28.0f;
+                p.BeginBlurLayer(1.0f + (float)i, 1.0f - 0.1f * (float)i);
+                p.Rect(Rect(view.min.x + 6, y, view.max.x - 6, y + 22), Style().Fill(i % 2 ? kIndigo : kTeal).Radius(6));
+                Glyphs(dl, atlas, Vec2(view.min.x + 14, y + 4), "abcd", 14, Color::White());
+                p.EndBlurLayer();
+            }
+            p.EndEdgeFade();
+            p.PopClip();
+            // over glass
+            p.Rect(Rect(165, 125, 310, 230), Style().Radius(18).Glass(Glass(8, 8, 18)));
+            p.BeginBlurLayer(4, 0.8f);
+            Glyphs(dl, atlas, Vec2(182, 160), "hgfe", 28, Color::White());
+            p.EndBlurLayer();
+        }
+
+        // What blur_layer_zero draws in a layer of almost no blur, drawn plainly: overlapping translucent shapes and text
+        void BlurZeroContent(Painter& p, DrawList& dl, TextureId atlas)
+        {
+            for (int col = 0; col < 2; ++col)
+            {
+                const float x = 12.0f + 160.0f * (float)col;
+                const Color ink = col ? Color::Black() : Color::White();
+                p.Rect(Rect(x, 20, x + 110, 90), Style().Fill(Color(kBlue.r, kBlue.g, kBlue.b, 0.6f)).Radius(14));
+                p.Circle(Vec2(x + 90, 40), 30, Style().Fill(Color(kPink.r, kPink.g, kPink.b, 0.5f)));
+                p.Rect(Rect(x + 20, 60, x + 130, 130), Style().Fill(Color(kGreen.r, kGreen.g, kGreen.b, 0.4f)).Radius(8).Stroke(2, ink));
+                Glyphs(dl, atlas, Vec2(x + 6, 150), "abcdefgh", 18, ink);
+                p.Line(Vec2(x, 200), Vec2(x + 130, 230), 2.5f, Style().Fill(Color(ink.r, ink.g, ink.b, 0.8f)));
+            }
+        }
+
+        void BlurZeroBackground(Painter& p)
+        {
+            p.Rect(Rect(0, 0, 160, 240), Style().Fill(Color::Hex(0x1C1C1E)));
+            p.Rect(Rect(160, 0, 320, 240), Style().Fill(Color::Hex(0xF2F2F7)));
+        }
+
+        void BlurLayerPlain(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            BlurZeroBackground(p);
+            BlurZeroContent(p, dl, MakeAtlas(f.textures));
+        }
+
+        void BlurLayerZero(SceneFrame& f)
+        {
+            DrawList& dl = f.NewList();
+            Painter p(dl, Env());
+            BlurZeroBackground(p);
+            const TextureId atlas = MakeAtlas(f.textures);
+            p.BeginBlurLayer(1e-4f);   // a layer, and next to no blur: what the last frames of a blur-in draw
+            BlurZeroContent(p, dl, atlas);
+            p.EndBlurLayer();
         }
 
         void Text(SceneFrame& f)
@@ -1026,6 +1279,21 @@ namespace esia::conformance
             Scene& glow = add("glow_layer", "glow layers: region clears, bloom pyramid, tinted / untinted composite, text and polylines in layers", &GlowLayers);
             glow.tolerance.channel = 10;
             glow.tolerance.fraction = 0.01;
+            add("blur_layer", "blur layers (filter: blur() on a group): no blur to a wide one, a faded one, on dark and light - color and coverage "
+                              "blurred alike, no light added",
+                &BlurLayers)
+                .tolerance = glassTolerance;
+            add("blur_layer_clip", "blur layers inside a clip, a rounded mask and a scale, a layer for each row of a scrolled view under an edge "
+                                   "fade, blurred text over glass",
+                &BlurLayersClipped)
+                .tolerance = glassTolerance;
+            add("blur_layer_plain", "what blur_layer_zero draws in a layer, drawn plainly: overlapping translucent shapes, text", &BlurLayerPlain);
+            // within 1/255 on GPUs (Direct3D 9 - 12, OpenGL, Vulkan on an RTX 4080 SUPER); llvmpipe's and lavapipe's 8-bit
+            // blending rounds a few pixels to 2/255: the default sameTolerance
+            Scene& blurZero = add("blur_layer_zero", "a blur layer of next to no blur: the content's own pixels (within 2/255 of blur_layer_plain)",
+                                  &BlurLayerZero);
+            blurZero.golden = "blur_layer_plain";
+            blurZero.sameAs = "blur_layer_plain";
             add("text", "text quads from an Alpha8 test atlas (grayscale text program, gamma / contrast composition) on dark and light", &Text);
             Scene& lcd = add("text_lcd", "sub-pixel text pages (dual-source blending) and their grayscale fallback inside glow layers", &TextLcd);
             lcd.needsDualSource = true;
@@ -1126,6 +1394,31 @@ namespace esia::conformance
             pathRows.golden = "paths";
             pathRows.tolerance = glassTolerance;
             pathRows.fxInstancesPerRow = 2;
+            Scene& pathLines = add("path_lines", "open paths of many points (a line of joined loops, a figure crossing itself, a 600-point zigzag, a "
+                                                 "spiral, 31 / 32 / 33 points, repeated points) in glass, with shadows and glows: every pixel's "
+                                                 "nearest edge among hundreds",
+                                   &PathLines);
+            pathLines.tolerance = glassTolerance;
+            // the figure crossing itself bends a stripe's sharp edge: where two of its edges lie as near, a rasterizer's
+            // rounding takes the other's normal for a few pixels on that edge (llvmpipe 61, WARP 74, Apple's 51)
+            pathLines.tolerance.maxDelta = 80;
+            Scene& pathStrokes = add("path_strokes", "strokes crossing as one shape (Painter::Polylines): a t, an x, a loop through a line, "
+                                                     "three strokes through a point, a dot, a lattice over many data instances - glass, "
+                                                     "glow, a fill with a shadow - one surface where they cross",
+                                     &PathStrokes);
+            pathStrokes.tolerance = glassTolerance;
+            Scene& pathStrokeRows = add("path_stroke_rows", "the path_strokes scene with 2 FX instances per row of the instance texture",
+                                        &PathStrokes);
+            pathStrokeRows.golden = "path_strokes";
+            pathStrokeRows.tolerance = glassTolerance;
+            pathStrokeRows.fxInstancesPerRow = 2;
+            Scene& pathLineRows = add("path_line_rows", "the path_lines scene with 2 FX instances per row of the instance texture (FxStorage::Texture: "
+                                                        "the data instances of long paths across rows)",
+                                      &PathLines);
+            pathLineRows.golden = "path_lines";
+            pathLineRows.tolerance = glassTolerance;
+            pathLineRows.tolerance.maxDelta = 80;
+            pathLineRows.fxInstancesPerRow = 2;
             Scene& reused = add("glass_reused", "the glass scene three times with RenderParams::targetStatic: the third frame's captures come from the "
                                                 "pyramid or from the copies kept aside (temporal reuse), with the same pixels",
                                 &GlassScene);

@@ -67,6 +67,7 @@ namespace esia::rhi
         case ShaderProgram::QuadShapeGray: return "QuadShapeGray";
         case ShaderProgram::QuadShapeLcd: return "QuadShapeLcd";
         case ShaderProgram::QuadShapeLcdGray: return "QuadShapeLcdGray";
+        case ShaderProgram::BlurComposite: return "BlurComposite";
         case ShaderProgram::Count: break;
         }
         return "?";
