@@ -80,7 +80,7 @@ namespace esia::render
                                      // effect's whole region
         PxRect glassShape;           // liquid glass shapes the batch draws (without shadows / glows)
         float blurPx = 0.0f;         // largest backdrop blur read by the batch (px), < 0 = unknown (user effect)
-                                     // LayerEnd: bloom radius (px)
+                                     // LayerEnd: bloom radius, or a blur layer's standard deviation (px)
         bool readsLevel0 = false;    // glass batch: something reads the full-resolution backdrop (clear glass, a frost
                                      // under 4 px, user effects) - frosted glass only reads blurred levels
         PxRect level0Region;         // glass batch: where it reads level 0 (the regions of those instances)
@@ -97,7 +97,9 @@ namespace esia::render
         // content that animates on the shader's clock, too much to hash). The renderer reuses last frame's capture of
         // the same key (RenderParams::targetStatic). captureShape: the region and pyramid alone.
         std::uint64_t captureKey = 0, captureShape = 0;
-        // LayerBegin / LayerEnd
+        // LayerBegin / LayerEnd: the layer (a blur layer's mask in render-target pixels); `bounds` the region it uses
+        // (its content and the halo or blur around it); a blur layer's `clip` the union of the clips of what it holds,
+        // which the result stays inside
         fx::LayerParams layer{};
         // Callback
         const DrawList* list = nullptr;

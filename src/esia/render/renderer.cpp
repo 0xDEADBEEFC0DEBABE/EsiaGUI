@@ -134,6 +134,7 @@ namespace esia::render
         bool subpixelText = true;       // RenderParams::subpixelText
         bool layerPending = false;      // the open layer has not been cleared yet (its pass did not start)
         PxRect layerRegion;             // ... and the region to clear then
+        bool layerDirect = false;       // the open layer is a blur layer drawn straight onto the target (no BlurComposite)
         fx::LayerParams activeLayer{};
         int captures = 0, budget = 64;
         // where glass gets this target's backdrop: a copy (CopySrc), a direct read (Sampled), or nowhere
@@ -643,7 +644,7 @@ namespace esia::render
         // store on tile-based GPUs). Content goes to the open glow layer or to the target.
         void EnsureContentPass()
         {
-            const bool toLayer = layerDepth > 0 && layer;
+            const bool toLayer = layerDepth > 0 && layer && !layerDirect;
             const rhi::Texture want = toLayer ? layer : target;
             if (inPass && passTarget == want)
                 return;
@@ -678,7 +679,14 @@ namespace esia::render
         rhi::Pipeline GetPipeline(rhi::ShaderProgram program, rhi::BlendMode blend, EffectId effect = 0, std::uint32_t features = 0,
                                   bool background = false)
         {
-            const PipelineKey key{program, blend, passFormat, passSamples, effect, features};
+            return PipelineFor(program, blend, passFormat, passSamples, effect, features, background);
+        }
+
+        // ... for passes on a target of `format` and `samples` (GetPipeline: the current pass's)
+        rhi::Pipeline PipelineFor(rhi::ShaderProgram program, rhi::BlendMode blend, rhi::Format format, int samples, EffectId effect = 0,
+                                  std::uint32_t features = 0, bool background = false)
+        {
+            const PipelineKey key{program, blend, format, samples, effect, features};
             auto it = pipelines.find(key);
             if (it != pipelines.end() && (it->second || effect == 0))
                 return it->second;   // built-in programs are asked once; a refusal is final
@@ -697,8 +705,8 @@ namespace esia::render
                                                                           : rhi::VertexLayout::None;
             d.topology = rhi::DrawsInstances(program) ? rhi::Topology::TriangleStrip : rhi::Topology::TriangleList;
             d.blend = blend;
-            d.targetFormat = passFormat;
-            d.samples = passSamples;
+            d.targetFormat = format;
+            d.samples = samples;
             d.fxFeatures = features;
             d.background = background;
             if (effect != 0)
@@ -1059,12 +1067,21 @@ namespace esia::render
         {
             if (layerDepth++ > 0 || !layer)
                 return;   // nested layers draw into the outer one; without a layer the content draws unbloomed
+            activeLayer = op.layer;
+            // a blur layer whose composite this device does not have (a backend whose shader library predates it, a
+            // refused compile): its content drawn straight onto the target - sharp, not faded as one, but never lost
+            layerDirect = op.layer.kind == fx::LayerKind::Blur &&
+                          !PipelineFor(rhi::ShaderProgram::BlurComposite, rhi::BlendMode::Premultiplied, targetDesc.format, targetDesc.samples);
+            if (layerDirect)
+            {
+                ++stats.directBlurLayers;
+                return;
+            }
             ProfileRun(RunNone);
             // the layer pass starts with its first draw; only the region the layer is sampled in gets cleared (the
             // pyramid clamps to it)
             layerPending = true;
             layerRegion = AlignCaptureRegion(op.bounds, W, H);
-            activeLayer = op.layer;
         }
 
         void EndLayer(const RenderOp& op)
@@ -1073,6 +1090,11 @@ namespace esia::render
                 return;
             if (--layerDepth > 0 || !layer)
                 return;
+            if (layerDirect)
+            {
+                layerDirect = false;   // its content went to the target
+                return;
+            }
             if (layerPending)
             {
                 layerPending = false;   // nothing was drawn into it: nothing to bloom
@@ -1081,6 +1103,11 @@ namespace esia::render
             ProfileRun(RunLayer);
             EndPass();
             const PxRect region = AlignCaptureRegion(op.bounds, W, H);
+            if (activeLayer.kind == fx::LayerKind::Blur)
+            {
+                ComposeBlur(op, region);
+                return;
+            }
             BuildPyramid(layer, region, LevelsForBloom(op.blurPx));
             Wrote(region, nullptr);   // the bloom pyramid is the backdrop's
             EnsureContentPass();
@@ -1095,6 +1122,37 @@ namespace esia::render
                 dev.Draw(3, 0);
                 ++stats.drawCalls;
                 ++stats.glowLayers;
+            }
+        }
+
+        // A blur layer onto the target: the pyramid levels its blur reads, then BlurComposite over its region inside
+        // the clip it began in (a blurred line in a scroll view stays in the view)
+        void ComposeBlur(const RenderOp& op, const PxRect& region)
+        {
+            if (activeLayer.opacity <= 0.0f)
+                return;   // faded out: nothing shows
+            const float sigma = std::max(op.blurPx, 0.0f);
+            const int read = LevelsForLayerBlur(sigma);   // pyramid levels its blur reads
+            if (read > 0)
+            {
+                BuildPyramid(layer, region, read);
+                Wrote(region, nullptr);   // the pyramid is the backdrop's
+            }
+            const PxRect scissor = op.bounds.Intersect(op.clip);
+            if (scissor.Empty())
+                return;
+            EnsureContentPass();
+            if (BindPipeline(GetPipeline(rhi::ShaderProgram::BlurComposite, rhi::BlendMode::Premultiplied)) && SetScissor(scissor))
+            {
+                EnsureFrame();
+                const fx::LayerParams& l = activeLayer;
+                const PassConstants pc = {{l.mask[0], l.mask[1], l.mask[2], l.mask[3]}, {l.maskRadius, sigma, l.opacity, l.maskSmoothing}};
+                dev.SetConstants(rhi::ConstantSlot::Pass, &pc, sizeof(pc));
+                BindTexture(rhi::kSlotTexture, layer);
+                BindBackdrop();
+                dev.Draw(3, 0);
+                ++stats.drawCalls;
+                ++stats.blurLayers;
             }
         }
 
@@ -1296,6 +1354,7 @@ namespace esia::render
                 RenderOp end;
                 end.type = RenderOp::LayerEnd;
                 end.bounds = {0, 0, (float)W, (float)H};
+                end.clip = end.bounds;
                 end.blurPx = activeLayer.radius * frameMain.display[2];
                 layerDepth = 1;
                 EndLayer(end);

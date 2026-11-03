@@ -459,6 +459,49 @@ ESIA_TEST(Painter, LayersFadesAndStreaks)
     ESIA_CHECK(s.flags[0] == fx::kCaustic && s.fill0[3] == 1.0f && s.fill1[0] == -1.0f && s.misc[0] == 0.5f);
 }
 
+ESIA_TEST(Painter, BlurLayers)
+{
+    DrawList dl = MakeList();
+    PainterEnv env;
+    env.metricsScale = 2.0f;
+    Painter p(dl, Fx(env));
+    // radius 0 at opacity 1: the content as it is, no layer (the last frame of a blur-in)
+    p.BeginBlurLayer(0.0f);
+    p.Rect(Rect(10, 10, 20, 20), Style().Fill(Color::White()));
+    p.EndBlurLayer();
+    ESIA_CHECK(dl.Layers().empty());
+    // radius 0 below opacity 1: a layer, faded as one
+    p.BeginBlurLayer(0.0f, 0.5f);
+    p.EndBlurLayer();
+    // the radius at the metrics scale and under the scales pushed, as the shapes' lengths; the mask pushed at begin
+    p.PushMask(Rect(50, 60, 250, 160), 12);
+    p.PushScale(Vec2(100, 100), 1.5f);
+    p.BeginBlurLayer(4.0f, 2.0f);
+    p.Rect(Rect(80, 80, 120, 120), Style().Fill(Color::White()));
+    p.EndBlurLayer();
+    p.PopScale();
+    p.PopMask();
+    ESIA_CHECK(dl.Layers().size() == 2);
+    const fx::LayerParams& faded = dl.Layers()[0];
+    ESIA_CHECK(faded.kind == fx::LayerKind::Blur && faded.radius == 0.0f && faded.opacity == 0.5f && faded.maskRadius < 0.0f);
+    const fx::LayerParams& b = dl.Layers()[1];
+    ESIA_CHECK(b.kind == fx::LayerKind::Blur && b.radius == 12.0f && b.opacity == 1.0f);   // 4 x 2 x 1.5; opacity at most 1
+    ESIA_CHECK(b.mask[0] == 50 && b.mask[1] == 60 && b.mask[2] == 250 && b.mask[3] == 160 && b.maskRadius == 12 && b.maskSmoothing == 0.6f);
+    int begins = 0, ends = 0;
+    for (const DrawCmd& c : dl.Commands())
+    {
+        if (c.kind == DrawCmdKind::LayerBegin)
+            ++begins;
+        if (c.kind == DrawCmdKind::LayerEnd)
+            ++ends;
+    }
+    ESIA_CHECK(begins == 2 && ends == 2);   // an end only where a layer began
+    // glow layers stay glow layers
+    p.BeginGlowLayer(Color::White(), 4.0f);
+    p.EndGlowLayer();
+    ESIA_CHECK(dl.Layers().size() == 3 && dl.Layers()[2].kind == fx::LayerKind::Glow);
+}
+
 namespace
 {
     // FakeText with the coverage tiles of flat drawing: they sit on the text's texture (42), as in the FreeType system
@@ -765,6 +808,100 @@ ESIA_TEST(Painter, PolygonsArePathsWithTheirPointsAfterThem)
     p.Polygon(line, 3, Style().Fill(Color::White()));
     p.Polygon(tri, 3, Style());
     ESIA_CHECK(in.size() == 7);
+}
+
+namespace
+{
+    // Whether the data instances after the path at `path` bound each quarter of their points with the point before it
+    // (fx::kPathQuarterRow ..): the path's first edge comes from its first point when open, its last when closed
+    bool QuartersBounded(const DrawList& dl, std::size_t path)
+    {
+        const std::vector<Vec2> pts = PathPoints(dl, path);
+        const int n = (int)pts.size();
+        const bool open = dl.FxInstances()[path].radii[3] > 0.5f;
+        bool ok = n > 0;
+        for (int first = 0; first < n; first += (int)fx::kPathPointsPerData)
+        {
+            float rows[(fx::kPathBeforeRow + 2) * 4];
+            std::memcpy(rows, &dl.FxInstances()[path + 1 + (std::size_t)first / fx::kPathPointsPerData], sizeof(rows));
+            Rect all;
+            for (int q = 0; q < 4 && first + q * 8 < n; ++q)
+            {
+                const int i0 = first + q * 8, i1 = std::min(n, i0 + 8);
+                const Vec2 before = pts[(std::size_t)(i0 > 0 ? i0 - 1 : open ? 0 : n - 1)];
+                Rect box(before, before);
+                for (int i = i0; i < i1; ++i)
+                    box = box.Union(Rect(pts[(std::size_t)i], pts[(std::size_t)i]));
+                const float* b = rows + (fx::kPathQuarterRow + (std::uint32_t)q) * 4;
+                const float* at = rows + fx::kPathBeforeRow * 4 + q * 2;
+                ok = ok && b[0] == box.min.x && b[1] == box.min.y && b[2] == box.max.x && b[3] == box.max.y && at[0] == before.x && at[1] == before.y;
+                all = q == 0 ? box : all.Union(box);
+            }
+            const float* b = rows + fx::kPathBoundsRow * 4;
+            ok = ok && b[0] == all.min.x && b[1] == all.min.y && b[2] == all.max.x && b[3] == all.max.y;
+        }
+        return ok;
+    }
+}
+
+// Beside its points a data instance carries each quarter's bounds with the point before it (its first edge's other
+// end), all four's bounds and those points: an open path's distance passes over the quarters too far to hold the
+// nearest edge (esia_fx.hlsl, SdPathOpen).
+ESIA_TEST(Painter, PathDataBoundsItsQuarters)
+{
+    DrawList dl = MakeList();
+    Painter p(dl, Fx());
+    std::vector<Vec2> wave;
+    for (int i = 0; i < 70; ++i)
+        wave.push_back(Vec2(10.0f + 3.0f * (float)i, 50.0f + 20.0f * std::sin((float)i * 0.3f)));
+    p.Polyline(wave.data(), 70, 4.0f, Style().Glass(GlassMaterial()));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in.size() == 4 && (in[0].flags[0] & fx::kPath) && in[0].radii[2] == 70 && in[0].radii[3] == 1.0f);
+    ESIA_CHECK(QuartersBounded(dl, 0));
+    // closed: its first quarter's point before is its last point
+    std::vector<Vec2> ring;
+    for (int i = 0; i < 40; ++i)
+        ring.push_back(Vec2(200, 150) + Vec2(std::cos(kTau * (float)i / 40.0f), std::sin(kTau * (float)i / 40.0f)) * 50.0f);
+    p.Polygon(ring.data(), 40, Style().Fill(Color::White()));
+    ESIA_CHECK(in.size() == 7 && in[4].radii[3] == 0.0f && QuartersBounded(dl, 4));
+    // a short line: one quarter of two points
+    const Vec2 two[2] = {Vec2(5, 5), Vec2(30, 9)};
+    p.Polyline(two, 2, 3.0f, Style().Glass(GlassMaterial()));
+    ESIA_CHECK(in.size() == 9 && QuartersBounded(dl, 7));
+}
+
+// Several strokes as one shape (Polylines): one FX path, each stroke from a quarter of a data instance of its own -
+// the stroke before ends in its last point repeated up to it, the quarter's point before is its own first point (no
+// edge into it). Plain colors: a polyline each.
+ESIA_TEST(Painter, PolylinesAreOneShape)
+{
+    DrawList dl = MakeList();
+    Painter p(dl, Fx());
+    // a t: its stem with a turn at its foot, its cross-bar; a dot
+    const Vec2 pts[] = {Vec2(20, 10), Vec2(20, 60), Vec2(30, 70), Vec2(8, 30), Vec2(34, 30), Vec2(50, 12)};
+    const int starts[] = {0, 3, 5, 6};
+    p.Polylines(pts, starts, 3, 4.0f, Style().Glass(GlassMaterial()).Shadow(Color::Black(0.3f), 6, Vec2(0, 2)));
+    const auto& in = dl.FxInstances();
+    ESIA_CHECK(in.size() == 2 && (in[0].flags[0] & fx::kPath) && in[0].radii[3] == 1.0f && in[0].radii[0] == 2.0f);
+    const std::vector<Vec2> path = PathPoints(dl, 0);
+    ESIA_CHECK(path.size() == 18);   // 3 + 5 repeats, 2 + 6 repeats, the dot's 2
+    ESIA_CHECK(path[0] == pts[0] && path[2] == pts[2] && path[7] == pts[2] && path[8] == pts[3] && path[9] == pts[4] && path[15] == pts[4] &&
+               path[16] == pts[5] && path[17] == pts[5]);
+    float rows[(fx::kPathBeforeRow + 2) * 4];
+    std::memcpy(rows, &in[1], sizeof(rows));
+    const float* before = rows + fx::kPathBeforeRow * 4;   // quarters 0 .. 3: two to a row
+    ESIA_CHECK(before[0] == pts[0].x && before[1] == pts[0].y);   // the path's first: its first point
+    ESIA_CHECK(before[2] == pts[3].x && before[3] == pts[3].y);   // the bar's: its own first point
+    ESIA_CHECK(before[4] == pts[5].x && before[5] == pts[5].y);   // the dot's
+    const float* bar = rows + (fx::kPathQuarterRow + 1) * 4;    // the bar's quarter bounds the bar alone
+    ESIA_CHECK(bar[0] == 8.0f && bar[1] == 30.0f && bar[2] == 34.0f && bar[3] == 30.0f);
+    // one stroke: Polyline's path; plain colors: a polyline each (and a circle for a dot), no path
+    p.Polylines(pts, starts, 1, 4.0f, Style().Glass(GlassMaterial()));
+    ESIA_CHECK(in.size() == 4 && PathPoints(dl, 2).size() == 3);
+    const std::size_t drawn = dl.Vertices().size() + dl.Quads().size() + in.size();
+    p.Polylines(pts, starts, 3, 4.0f, Style().Fill(Color::White()));
+    const auto paths = std::count_if(in.begin(), in.end(), [](const fx::Instance& i) { return (i.flags[0] & fx::kPath) != 0; });
+    ESIA_CHECK(paths == 2 && dl.Vertices().size() + dl.Quads().size() + in.size() > drawn);
 }
 
 // Rounded corners: the outline is inset by the radius and the shader takes the radius off its distance again - convex

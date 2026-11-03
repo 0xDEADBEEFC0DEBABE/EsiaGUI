@@ -292,6 +292,57 @@ ESIA_TEST(Renderer, GlowLayer)
     ESIA_CHECK(Lines(s.dev, "backdrop-copy") == 0);        // no glass: no copy texture
 }
 
+ESIA_TEST(Renderer, BlurLayer)
+{
+    {
+        Setup s;
+        DrawList dl = MakeList();
+        Painter p(dl, Fx());
+        p.PushClip(Rect(50, 50, 150, 200));
+        p.BeginBlurLayer(6.0f, 0.75f);
+        p.Rect(Rect(100, 100, 200, 140), Style().Fill(Color::White()).Radius(8));
+        p.EndBlurLayer();
+        p.PopClip();
+        Renderer r(s.dev);
+        r.Render(Data({&dl}), nullptr, s.target);
+        ESIA_CHECK(NoErrors(s.dev));
+        ESIA_CHECK(r.Stats().blurLayers == 1 && r.Stats().directBlurLayers == 0 && r.Stats().glowLayers == 0);
+        ESIA_CHECK(Lines(s.dev, "dont-care glow-layer") == 1);
+        ESIA_CHECK(Lines(s.dev, "BlurComposite list premul RGBA8_UNORM") == 1);
+        ESIA_CHECK(Lines(s.dev, "dont-care pyramid") == 3);   // 6 px: between levels 2 and 3
+        ESIA_CHECK(Lines(s.dev, "constants pass: 0 0 0 0 | -1 6 0.75 0") == 1);   // no mask, 6 px, its opacity
+        ESIA_CHECK(Lines(s.dev, "scissor [72,72 78x96]") == 1);   // the shape (+2 px) + 3 x 6 + 8, inside the clip it began in
+    }
+    {
+        // nothing to blur: the sharp layer alone, faded as one - no pyramid
+        Setup s;
+        DrawList dl = MakeList();
+        Painter p(dl, Fx());
+        p.BeginBlurLayer(0.0f, 0.5f);
+        p.Rect(Rect(100, 100, 200, 140), Style().Fill(Color::White()));
+        p.EndBlurLayer();
+        Renderer r(s.dev);
+        r.Render(Data({&dl}), nullptr, s.target);
+        ESIA_CHECK(NoErrors(s.dev) && r.Stats().blurLayers == 1 && Lines(s.dev, "dont-care pyramid") == 0);
+    }
+    {
+        // a backend without the program (a shader library from before it): the content straight onto the target
+        NullOptions o;
+        o.refusePrograms = 1u << (unsigned)ShaderProgram::BlurComposite;
+        NullDevice dev(o);
+        const Texture target = dev.CreateHostTarget(400, 300, Format::RGBA8_UNORM, true);
+        DrawList dl = MakeList();
+        Painter p(dl, Fx());
+        p.BeginBlurLayer(6.0f);
+        p.Rect(Rect(100, 100, 200, 140), Style().Fill(Color::White()));
+        p.EndBlurLayer();
+        Renderer r(dev);
+        r.Render(Data({&dl}), nullptr, target);
+        ESIA_CHECK(NoErrors(dev) && r.Stats().blurLayers == 0 && r.Stats().directBlurLayers == 1);
+        ESIA_CHECK(Lines(dev, "refused: BlurComposite") == 1 && Lines(dev, "dont-care glow-layer") == 0 && Lines(dev, "Fx strip premul RGBA8_UNORM") == 1);
+    }
+}
+
 ESIA_TEST(Renderer, TextDrawsWithTheGrayscaleProgram)
 {
     // on the target and inside glow layers (RGBA16F) alike

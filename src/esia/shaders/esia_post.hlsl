@@ -1,5 +1,7 @@
-// Esia - full-screen passes: backdrop pyramid downsampling, glow-layer compositing, scissored clears, HDR output.
-// Programs Downsample, LayerComposite, Clear, HdrDecode, HdrEncode (FullscreenVS: 3 vertices, no vertex buffer).
+// Esia - full-screen passes: backdrop pyramid downsampling, glow- and blur-layer compositing, scissored clears, HDR
+// output.
+// Programs Downsample, LayerComposite, BlurComposite, Clear, HdrDecode, HdrEncode (FullscreenVS: 3 vertices, no vertex
+// buffer).
 #include "esia_common.hlsli"
 
 struct FsOut
@@ -80,6 +82,44 @@ float4 LayerCompositePS(FsOut i) : SV_Target
     if (gTime.w > 0.5)
         outc.rgb = WgtSrgbToLinear(outc.rgb);
     return outc;
+}
+
+// The gaussian each pyramid level is as read here (WgtSampleLevel: 13-tap downsamples, then the cubic B-spline): its
+// standard deviation in render-target pixels, measured on an impulse - the same at every phase (kLevelSigma in
+// gpu_constants.hpp). Level 0 is the sharp layer.
+float WgtLevelSigma(int l)
+{
+    return l <= 0 ? 0.0 : l == 1 ? 1.756 : l == 2 ? 3.753 : l == 3 ? 7.621 : l == 4 ? 15.300 : 30.628;
+}
+
+// Blur layer composite (Painter::BeginBlurLayer): the layer itself blurred - premultiplied color and coverage alike,
+// no light added - by a gaussian of standard deviation gPass1.y render-target pixels: the two levels around it, mixed
+// so that their variance is the gaussian's (gTex the sharp layer, level 0; t2..t6 the pyramid built from it). At 0 it
+// is the sharp layer, and it grows from there without a step. Then gPass1.z, the layer's opacity, and the rounded mask
+// gPass0 (render-target pixels) of radius gPass1.x (< 0: none) and corner smoothing gPass1.w.
+float4 BlurCompositePS(FsOut i) : SV_Target
+{
+    const float2 pos = WgtPixelPos(i.pos);
+    const float2 uv = pos * gTarget.zw;
+    float4 c = ESIA_SAMPLE_LEVEL(gTex, gPoint, WgtRtUv(uv));
+    const float sigma = gPass1.y;
+    [branch] if (sigma > 0.0)
+    {
+        const int l = (sigma > 1.756 ? 1 : 0) + (sigma > 3.753 ? 1 : 0) + (sigma > 7.621 ? 1 : 0) + (sigma > 15.300 ? 1 : 0);
+        const float s0 = WgtLevelSigma(l), s1 = WgtLevelSigma(l + 1);
+        const float f = saturate((sigma * sigma - s0 * s0) / (s1 * s1 - s0 * s0));
+        float4 a = c;
+        [branch] if (l > 0)
+            a = WgtSampleLevel(l, uv);
+        c = lerp(a, WgtSampleLevel(l + 1, uv), f);
+    }
+    [branch] if (gPass1.x >= 0.0)
+    {
+        const float2 mc = (gPass0.xy + gPass0.zw) * 0.5;
+        const float2 mh = max((gPass0.zw - gPass0.xy) * 0.5, 1e-3);
+        c *= saturate(0.5 - SdRoundRect(pos - mc, mh, gPass1.xxxx, gPass1.w));
+    }
+    return WgtOutputPremul(c * gPass1.z);
 }
 
 // Scissored clear to transparent black (glow layers clear only the region they use). A draw instead of an API
