@@ -11,9 +11,9 @@
   exits 77 (no device for the backend) shows as skipped in CTest, and a job must not pass by skipping the backends
   it exists to run;
 * fails when a test failed, unless every scene it failed is a --known-failure 'TEST_REGEX:SCENE:REASON' (SCENE '*'
-  for a test that fails without scene lines, e.g. a crash): those are listed with their reason and the scene's
-  numbers, and a known failure that no longer fails is reported so its entry can go. The job's ctest step leaves
-  the verdict to this script (it reads the JUnit file, which has every result);
+  for a test that fails without scene lines, e.g. a crash; several scenes separated by '|'): those are listed with
+  their reason and the scene's numbers, and a known failure that no longer fails is reported so its entry can go. The
+  job's ctest step leaves the verdict to this script (it reads the JUnit file, which has every result);
 * for a test that failed without scene lines (a crash, a build in a test such as esia_package), its output's error
   lines go into the summary and the job's annotation: both can be read without signing in, the log cannot;
 * lists the tests a job does not run at all (--not-run 'TEST_REGEX:REASON', the same regex as its ctest -E).
@@ -96,7 +96,7 @@ def main():
 
     def known_for(test, scene):
         for rx, sc, reason, used in known:
-            if rx.fullmatch(test) and sc == scene:
+            if rx.fullmatch(test) and scene in sc.split('|'):
                 used[0] = True
                 return reason
         return None

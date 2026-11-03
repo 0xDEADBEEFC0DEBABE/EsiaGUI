@@ -36,6 +36,12 @@ env:
     esia_conformance_d3d12(_frames)?:glow_layer:WARP's D3D12 only - a 1-pixel column (x 133, y 42-111) of glow from
     elsewhere in the layer, max delta 235 on 0.081 % of the pixels; D3D10 / D3D11 on the same WARP are within 1, and
     D3D12 on NVIDIA passes
+  KNOWN_WARP_PATHS: >-
+    esia_conformance_d3d12(_frames)?:path_strokes|path_stroke_rows|path_lines|path_line_rows:WARP's D3D12 only, as in
+    glow_layer - glow from elsewhere in the layer: dashed 1-pixel columns along a stripe under path_strokes' glow (max
+    delta 118, 127 with frames in flight, on 0.08 - 0.12 % of the pixels) and with frames in flight one row (y 85)
+    under path_lines' (max delta 217 on 0.28 %); D3D10 / D3D11 on the same WARP have none of it, nor D3D12 on NVIDIA
+    or on a newer WARP
   VULKAN_SDK_VERSION: 1.3.296.0
   MESA_DIST_WIN_VERSION: 26.2.3          # github.com/pal1000/mesa-dist-win release
   VCPKG_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-archives
@@ -302,7 +308,7 @@ jobs:
           --require 'esia_conformance_(null|d3d10|d3d11|d3d12|opengl|gles)(_frames)?'
           --require 'esia_rhi_d3d(9|10|11|12|_shader|_device)_tests' --require 'esia_rhi_opengl_tests'
           --require 'esia_text_ft_tests'
-          --known-failure "$env:KNOWN_WARP"
+          --known-failure "$env:KNOWN_WARP" --known-failure "$env:KNOWN_WARP_PATHS"
           --not-run "$env:NOT_RUN_D3D9" --not-run "$env:NOT_RUN_VULKAN"
 
       - name: Upload conformance images and logs
